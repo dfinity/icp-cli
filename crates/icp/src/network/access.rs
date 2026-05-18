@@ -9,19 +9,14 @@ use crate::{
 #[derive(Clone)]
 pub struct NetworkAccess {
     /// Network's root-key
-    pub root_key: Option<Vec<u8>>,
+    pub root_key: Vec<u8>,
 
     /// Routing configuration
-    pub url: Url,
-}
+    pub api_url: Url,
+    pub http_gateway_url: Option<Url>,
 
-impl NetworkAccess {
-    pub fn new(url: &Url) -> Self {
-        Self {
-            root_key: None,
-            url: url.clone(),
-        }
-    }
+    /// If true, use friendly canister names with the gateway url
+    pub use_friendly_domains: bool,
 }
 
 #[derive(Debug, Snafu)]
@@ -49,11 +44,6 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("failed to load network descriptor"))]
     LoadNetworkDescriptor { source: LoadNetworkFileError },
-    #[snafu(display("failed to parse URL {url}"))]
-    ParseUrl {
-        url: String,
-        source: url::ParseError,
-    },
 }
 
 pub async fn get_managed_network_access(
@@ -88,10 +78,12 @@ pub async fn get_managed_network_access(
             .fail();
         }
     }
-
+    let http_gateway_url = Url::parse(&format!("http://{}:{port}", desc.gateway.host)).unwrap();
     Ok(NetworkAccess {
-        root_key: Some(desc.root_key),
-        url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+        root_key: desc.root_key,
+        api_url: http_gateway_url.clone(),
+        http_gateway_url: Some(http_gateway_url),
+        use_friendly_domains: desc.use_friendly_domains,
     })
 }
 
@@ -102,8 +94,8 @@ pub async fn get_connected_network_access(
 
     Ok(NetworkAccess {
         root_key,
-        url: Url::parse(&connected.url).context(ParseUrlSnafu {
-            url: connected.url.clone(),
-        })?,
+        api_url: connected.api_url.clone(),
+        http_gateway_url: connected.http_gateway_url.clone(),
+        use_friendly_domains: false,
     })
 }

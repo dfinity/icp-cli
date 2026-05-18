@@ -77,6 +77,8 @@ pub async fn mint_cycles(
     agent: &Agent,
     icp_amount: Option<&BigDecimal>,
     cycles_amount: Option<u128>,
+    from_subaccount: Option<[u8; 32]>,
+    to_subaccount: Option<[u8; 32]>,
 ) -> Result<MintInfo, MintCyclesError> {
     // Get user principal
     let user_principal = agent
@@ -123,7 +125,7 @@ pub async fn mint_cycles(
         memo,
         amount: Tokens::from_e8s(icp_e8s_to_deposit),
         fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
-        from_subaccount: None,
+        from_subaccount: from_subaccount.map(Subaccount),
         to: account_id,
         created_at_time: None,
     };
@@ -176,7 +178,7 @@ pub async fn mint_cycles(
             Encode!(&NotifyMintArgs {
                 block_index,
                 deposit_memo: None,
-                to_subaccount: None,
+                to_subaccount: to_subaccount.map(Vec::from),
             })
             .expect("Failed to encode notify mint cycles args"),
         )

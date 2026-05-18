@@ -70,6 +70,14 @@ struct GlobalSoftHsmState {
     library_path: PathBuf,
     config_path: PathBuf,
     pkcs11: Pkcs11,
+    /// Serializes key-pair generation across threads.
+    ///
+    /// Concurrent `C_GenerateKeyPair` calls from parallel test threads intermittently
+    /// return `CKR_FUNCTION_FAILED` on Windows with SoftHSM2's file-based object store.
+    /// This may be a locking bug in SoftHSM2's Windows port or a file-system-level
+    /// interference (e.g. antivirus briefly locking token files). Serializing key
+    /// generation eliminates the issue regardless of the exact cause.
+    keygen_lock: std::sync::Mutex<()>,
     // Keep the temp dir alive for the duration of the process
     _token_dir: camino_tempfile::Utf8TempDir,
 }
@@ -133,6 +141,7 @@ fn ensure_global_softhsm_initialized() -> &'static GlobalSoftHsmState {
             library_path,
             config_path,
             pkcs11,
+            keygen_lock: std::sync::Mutex::new(()),
             _token_dir: token_dir,
         }
     })
@@ -168,6 +177,10 @@ impl SoftHsmContext {
         let key_num = KEY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let key_id_bytes = key_num.to_be_bytes();
         let key_id_hex = hex::encode(key_id_bytes);
+
+        // Serialize key generation to prevent intermittent CKR_FUNCTION_FAILED on Windows.
+        // See `keygen_lock` field documentation for details.
+        let _keygen_guard = global.keygen_lock.lock().unwrap();
 
         // Use the shared PKCS#11 instance from global state
         let all_slots = global.pkcs11.get_all_slots().expect("failed to get slots");

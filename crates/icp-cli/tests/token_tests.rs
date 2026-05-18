@@ -190,3 +190,60 @@ async fn token_transfer_to_account_identifier() {
         110_000_000_u128
     );
 }
+
+#[tokio::test]
+async fn token_balance_with_subaccount() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    let principal = icp_client.use_new_random_identity();
+
+    let subaccount: [u8; 32] = {
+        let mut s = [0u8; 32];
+        s[31] = 1;
+        s
+    };
+    let subaccount_hex = hex::encode(subaccount);
+
+    // Fund the subaccount via the ledger
+    let icp_ledger = clients::ledger(&ctx);
+    icp_ledger
+        .acquire_icp(principal, Some(subaccount), 500_000_000_u128)
+        .await;
+
+    // Default account shows 0
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["token", "balance", "--environment", "random-environment"])
+        .assert()
+        .stdout(contains("Balance: 0 ICP"))
+        .success();
+
+    // Subaccount shows the funded balance
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "balance",
+            "--subaccount",
+            &subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Balance: 5.00000000 ICP"))
+        .success();
+}

@@ -7,26 +7,42 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          # With 'every', a changed file is matched only when it satisfies
+          # ALL rules: the positive pattern AND every negated pattern.
+          predicate-quantifier: 'every'
+          filters: |
+            src:
+              - '**'
+              - '!**.md'
+              - '!docs-site/**'
+              - '!npm/**'
+
   compile:
     name: compile:required
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup image (Linux)
         run: ./.github/scripts/provision-linux-build.sh
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-checks
 
       - name: build
         run: cargo build
@@ -35,25 +51,19 @@ jobs:
 
   lint:
     name: lint:required
-    needs: compile # Run after compilation to use the cache
+    needs: [changes, compile]
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup image (Linux)
         run: ./.github/scripts/provision-linux-build.sh
 
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-checks
 
       - name: Run Lint
         run: cargo clippy --verbose --tests --benches -- -D warnings
@@ -62,31 +72,41 @@ jobs:
 
   format:
     name: fmt:required
-    needs: compile
+    needs: [changes, compile]
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup image (Linux)
         run: ./.github/scripts/provision-linux-build.sh
 
-      - name: Install Rust toolchain from rust-toolchain.toml
-        run: rustup show
-
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-checks
 
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+  toml-format:
+    name: toml-fmt:required
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install taplo
+        run: |
+          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-linux-x86_64.gz \
+            | gunzip -c > taplo
+          chmod +x taplo
+          sudo mv taplo /usr/local/bin/taplo
+
+      - name: Check TOML formatting
+        run: taplo fmt --check
 
   #
   # Runs a series of checks to make sure that all the docs
@@ -99,28 +119,19 @@ jobs:
     # generate the CLI reference file and check if it is up to date
     #
     name: cli-ref:required
-    needs: compile
+    needs: [changes, compile]
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup image (Linux)
         run: ./.github/scripts/provision-linux-build.sh
 
-      - name: Show Rust toolchain
-        run: rustup show
-
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-checks
 
       - name: generate docs
         run: ./scripts/generate-cli-docs.sh
@@ -143,28 +154,19 @@ jobs:
     # generate config schemas and check if they are up to date
     #
     name: icp-yaml-schema:required
-    needs: compile
+    needs: [changes, compile]
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup image (Linux)
         run: ./.github/scripts/provision-linux-build.sh
 
-      - name: Show Rust toolchain
-        run: rustup show
-
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
-          path: |
-            ~/.rustup/
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ubuntu-latest-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-shared-key: ${{ runner.os }}-checks
 
       - name: generate schemas
         run: ./scripts/generate-config-schemas.sh

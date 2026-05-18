@@ -1,16 +1,36 @@
+use std::sync::{Arc, OnceLock};
+
 use anyhow::{Context as _, bail};
+use candid::Principal;
 use clap::Args;
+use icp::network::ManagedMode;
 use icp::prelude::*;
 use icp::{
     identity::manifest::IdentityList,
-    network::{Configuration, run_network},
+    network::{
+        Configuration,
+        managed::cache::{
+            check_launcher_update_available, download_launcher_version,
+            get_cached_launcher_version_if_fresh,
+        },
+        run_network,
+    },
+    settings::Settings,
 };
-use tracing::debug;
+use tracing::{debug, info, warn};
+
+use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
 
-/// Run a given network
+/// Run a given network.
+///
+/// The gateway binds to port 8000 by default. To use a different port, set
+/// `gateway.port` in `icp.yaml`. If port 8000 is already in use by another
+/// icp-cli project, stop that network first:
+///
+///     icp network stop --project-root-override <path>
 #[derive(Args, Debug)]
 #[command(after_long_help = "\
 Examples:
@@ -68,8 +88,23 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     nd.ensure_exists()
         .context("failed to create network directory")?;
 
-    if nd.load_network_descriptor().await?.is_some() {
-        bail!("network '{}' is already running", network.name);
+    if let Some(descriptor) = nd.load_network_descriptor().await? {
+        debug!(
+            "Found network descriptor for {} in: {}",
+            nd.network_name, nd.network_root
+        );
+        if descriptor.child_locator.is_alive().await {
+            bail!("network '{}' is already running", network.name);
+        } else {
+            warn!(
+                "Found stale network descriptor for '{}' (process is no longer running). \
+                 Cleaning up and starting fresh.",
+                network.name
+            );
+            nd.cleanup_port_descriptor(descriptor.gateway_port())
+                .await?;
+            nd.cleanup_project_network_descriptor().await?;
+        }
     }
 
     // Clean up any existing canister ID mappings of which environment is on this network
@@ -81,58 +116,108 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     }
 
     // Identities
-    let ids = ctx
+    let (ids, defaults) = ctx
         .dirs
         .identity()?
-        .with_read(async |dirs| IdentityList::load_from(dirs))
+        .with_read(async |dirs| {
+            let ids = IdentityList::load_from(dirs)?;
+            let defaults = icp::identity::manifest::IdentityDefaults::load_from(dirs)?;
+            Ok::<_, anyhow::Error>((ids, defaults))
+        })
         .await??;
 
-    // Determine ICP accounts to seed
-    let seed_accounts = ids.identities.values().map(|id| id.principal());
+    let all_identities: Vec<Principal> = ids
+        .identities
+        .values()
+        .filter_map(|id| id.principal())
+        .collect();
+
+    let default_identity = ids
+        .identities
+        .get(&defaults.default)
+        .and_then(|id| id.principal());
 
     debug!("Project root: {pdir}");
     debug!("Network root: {}", nd.network_root);
 
     let candid_ui_wasm = crate::artifacts::get_candid_ui_wasm();
+    let proxy_wasm = crate::artifacts::get_proxy_wasm();
 
+    let settings = ctx
+        .dirs
+        .settings()?
+        .with_read(async |dirs| Settings::load_from(dirs))
+        .await??;
+
+    // On Windows, always use Docker since the native launcher doesn't run there
+    let autocontainerize = cfg!(windows) || settings.autocontainerize;
+
+    // Acquire network launcher path, downloading it if necessary
+    let debug = ctx.debug;
     let network_launcher_path = if let Ok(var) = std::env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
+        // The user is overriding the launcher
+        debug!("Network launcher path overridden by ICP_CLI_NETWORK_LAUNCHER_PATH={var}");
         Some(PathBuf::from(var))
-    } else {
-        #[cfg(windows)]
-        {
-            None
-        }
-        #[cfg(unix)]
-        {
-            use icp::network::managed::cache::{
-                download_launcher_version, get_cached_launcher_version,
-            };
-            ctx.dirs
-                .package_cache()?
-                .with_write(async |pkg| {
-                    if let Some(path) = get_cached_launcher_version(pkg.read(), "latest")? {
-                        anyhow::Ok(Some(path))
-                    } else {
-                        debug!("Downloading icp-cli-network-launcher version `latest`");
-                        let client = reqwest::Client::new();
-                        let (_ver, path) =
-                            download_launcher_version(pkg, "latest", &client).await?;
-                        Ok(Some(path))
+    } else if !autocontainerize && let ManagedMode::Launcher(managed_cfg) = &cfg.mode {
+        let version = managed_cfg.version.as_deref().unwrap_or("latest");
+        let client = reqwest::Client::new();
+        ctx.dirs
+            .package_cache()?
+            .with_write(async |pkg| {
+                // Resolve the declared version to a real version, if it's fresh
+                // A fresh version is one that is either specified exactly, or was last updated since icp-cli was updated
+                if let Some((resolved, path)) =
+                    get_cached_launcher_version_if_fresh(pkg.read(), version)?
+                {
+                    // The version has already been downloaded. Use it, but first, check for updates and nag if so
+                    if let Some(update) = check_launcher_update_available(pkg, &resolved, &client).await {
+                        info!("A newer network launcher version is available: {update} (current: {resolved}). Run `icp network update` to update.");
                     }
-                })
-                .await??
-        }
+                    anyhow::Ok(Some(path))
+                } else {
+                    // The version is not fresh or not cached, download it
+                    debug!("Downloading icp-cli-network-launcher version `{version}`");
+                    let progress_manager =
+                        ProgressManager::new(ProgressManagerSettings { hidden: debug });
+                    let pb = progress_manager.create_independent_progress_bar();
+                    pb.set_message(format!("Downloading icp-cli-network-launcher {version}..."));
+                    let version_slot: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
+                    let version_capture = version_slot.clone();
+                    let path = ProgressManager::execute_with_progress(
+                        &pb,
+                        async {
+                            let (ver, path) =
+                                download_launcher_version(pkg, version, &client).await?;
+                            let _ = version_capture.set(ver);
+                            anyhow::Ok(path)
+                        },
+                        move || {
+                            let ver = version_slot.get().map(String::as_str).unwrap();
+                            format!("Downloaded icp-cli-network-launcher {ver}")
+                        },
+                        |err| format!("Failed to download icp-cli-network-launcher: {err}"),
+                    )
+                    .await?;
+                    Ok(Some(path))
+                }
+            })
+            .await??
+    } else {
+        None
     };
 
     run_network(
         cfg,
         nd,
         pdir,
-        seed_accounts,
+        all_identities,
+        default_identity,
         Some(candid_ui_wasm),
+        Some(proxy_wasm),
         args.background,
         ctx.debug,
         network_launcher_path.as_deref(),
+        autocontainerize,
     )
     .await?;
     Ok(())

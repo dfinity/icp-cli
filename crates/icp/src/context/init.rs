@@ -5,7 +5,7 @@ use snafu::prelude::*;
 use crate::canister::build::Builder;
 use crate::canister::recipe::handlebars::Handlebars;
 use crate::canister::sync::Syncer;
-use crate::context::{Context, TermWriter};
+use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
 use crate::store_artifact::ArtifactStore;
@@ -28,24 +28,50 @@ pub enum ContextInitError {
 
     #[snafu(display("failed to lock identity directory"))]
     IdentityDirectory { source: crate::fs::lock::LockError },
+
+    #[snafu(display("failed to lock package cache directory"))]
+    PackageCache { source: crate::fs::lock::LockError },
 }
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    term: TermWriter,
     debug: bool,
     password_func: PasswordFunc,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
 
-    // Project Root
+    // Project Root. On Unix, prefer $PWD (the logical path the user cd'd
+    // through) over getcwd(3), which resolves symlinks to the physical path
+    // and would break upward traversal when the user is inside a symlinked
+    // directory whose manifest sits above the symlink's location.
+    //
+    // Guard with an inode check: if $PWD was inherited from a parent process
+    // that used chdir(2) without updating $PWD, the two paths point to
+    // different inodes and we fall back to getcwd(). Because `metadata()`
+    // follows symlinks, a symlinked $PWD still resolves to the same inode as
+    // getcwd(), so the symlink case still works.
+    #[cfg(unix)]
+    let cwd: PathBuf = {
+        let real = PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
+        match std::env::var("PWD")
+            .ok()
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .filter(|p| same_inode(p.as_path(), real.as_path()))
+        {
+            Some(logical) => logical,
+            None => real,
+        }
+    };
+
+    #[cfg(not(unix))]
+    let cwd: PathBuf =
+        PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
+
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        dunce::canonicalize(current_dir().context(CwdSnafu)?)
-            .context(CwdSnafu)?
-            .try_into()
-            .context(Utf8PathSnafu)?, // cwd
-        project_root_override, // dir
+        cwd,
+        project_root_override,
     ));
 
     // Canister ID Store
@@ -57,8 +83,14 @@ pub fn initialize(
     // Prepare http client
     let http_client = reqwest::Client::new();
 
+    // Package cache
+    let pkg_cache = dirs.package_cache().context(PackageCacheSnafu)?;
+
     // Recipes
-    let recipe = Arc::new(Handlebars { http_client });
+    let recipe = Arc::new(Handlebars {
+        http_client,
+        pkg_cache,
+    });
 
     // Canister builder
     let builder = Arc::new(Builder);
@@ -75,11 +107,15 @@ pub fn initialize(
     let pload = Lazy::new(pload);
     let pload = Arc::new(pload);
 
+    // Telemetry data bag (written by subsystems, read at session finish)
+    let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());
+
     // Identity loader
-    let idload = Arc::new(identity::Loader {
-        dir: dirs.identity().context(IdentityDirectorySnafu)?,
+    let idload = Arc::new(identity::Loader::new(
+        dirs.identity().context(IdentityDirectorySnafu)?,
         password_func,
-    });
+        telemetry_data.clone(),
+    ));
     if let Ok(mockdir) = std::env::var("ICP_CLI_KEYRING_MOCK_DIR") {
         keyring::set_default_credential_builder(Box::new(
             crate::identity::keyring_mock::MockKeyring {
@@ -99,7 +135,6 @@ pub fn initialize(
 
     // Setup environment
     Ok(Context {
-        term,
         dirs,
         ids,
         artifacts,
@@ -110,5 +145,60 @@ pub fn initialize(
         builder,
         syncer,
         debug,
+        telemetry_data,
     })
+}
+
+#[cfg(unix)]
+fn same_inode(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(ma), Ok(mb)) => ma.dev() == mb.dev() && ma.ino() == mb.ino(),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests {
+    use std::sync::Mutex;
+
+    use camino_tempfile::Utf8TempDir;
+
+    use super::*;
+
+    // Serializes tests that mutate $PWD, since cargo test runs tests in parallel.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn stale_pwd_is_ignored() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let stale = Utf8TempDir::new().unwrap();
+        let real = PathBuf::try_from(std::env::current_dir().unwrap()).unwrap();
+
+        let old_pwd = std::env::var("PWD").ok();
+        // SAFETY: ENV_MUTEX serializes all tests that mutate $PWD.
+        unsafe { std::env::set_var("PWD", stale.path()) };
+
+        let resolved = match std::env::var("PWD")
+            .ok()
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .filter(|p| same_inode(p.as_path(), real.as_path()))
+        {
+            Some(logical) => logical,
+            None => real.clone(),
+        };
+
+        match old_pwd {
+            Some(v) => unsafe { std::env::set_var("PWD", v) },
+            None => unsafe { std::env::remove_var("PWD") },
+        }
+
+        assert_eq!(
+            resolved, real,
+            "stale $PWD should be ignored in favour of getcwd()"
+        );
+    }
 }

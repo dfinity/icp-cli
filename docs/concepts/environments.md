@@ -1,4 +1,7 @@
-# Environments and Networks
+---
+title: Environments and Networks
+description: Learn how networks and environments relate to control where and how canisters are deployed.
+---
 
 Understanding the relationship between networks and environments is key to effective deployment management.
 
@@ -18,7 +21,7 @@ networks:
     mode: managed
     ii: true
     gateway:
-      host: 127.0.0.1
+      bind: 127.0.0.1
       port: 8000
 ```
 
@@ -26,10 +29,11 @@ Managed networks can run natively on your machine or inside a [docker container]
 
 Unless a custom Docker image is used, the following settings can be specified:
 
-* `ii` (bool): Enable the Internet Identity canister
+* `ii` (bool): Enable Internet Identity
 * `nns` (bool): Enable the NNS and SNS system
 * `artificial-delay-ms` (int): Add artificial latency to update calls to simulate mainnet conditions
 * `subnets` ([]string): Configure the subnet layout (by default, one application subnet is created). See [Deploying to Specific Subnets](../guides/deploying-to-specific-subnets.md) for mainnet subnet selection.
+* `version` (string): Select a specific version for the network launcher
 
 Use managed networks for local development and testing.
 
@@ -45,6 +49,18 @@ networks:
 ```
 
 Use connected networks for shared testnets and production.
+
+There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. For most custom connected networks there isn't a difference, so you can specify both using `url`. But when they differ (as on ICP mainnet where the API is at `icp-api.io` and the HTTP gateway at `icp0.io`), specify them separately:
+
+```yaml
+networks:
+  - name: custom-testnet
+    mode: connected
+    api-url: https://api.testnet.example.com
+    http-gateway-url: https://testnet.example.com
+```
+
+If `http-gateway-url` is omitted, canister URLs will not be printed during deploy operations.
 
 ### Implicit Networks
 
@@ -67,7 +83,7 @@ networks:
     mode: managed
     gateway:
       port: 9999  # Different port
-    ii: true # Use the Internet Identity canister
+    ii: true # Enable Internet Identity canisters
     artificial-delay-ms: 1000 # Slow down the network to simulate mainnet latency
 ```
 
@@ -124,7 +140,7 @@ environments:
     settings:
       backend:
         compute_allocation: 20
-        freezing_threshold: 7776000
+        freezing_threshold: 90d
 ```
 
 ### Environment-Specific Settings

@@ -9,6 +9,7 @@ use crate::{
     identity::{IdentityDirectories, IdentityPaths},
     package::PackageCache,
     prelude::*,
+    settings::{SettingsDirectories, SettingsPaths},
 };
 use directories::ProjectDirs;
 use snafu::prelude::*;
@@ -23,6 +24,15 @@ pub trait Access: Sync + Send {
 
     /// Returns the path to the package cache for managed packages.
     fn package_cache(&self) -> Result<PackageCache, LockError>;
+
+    /// Returns the path to the user settings directory.
+    fn settings(&self) -> Result<SettingsDirectories, LockError>;
+
+    /// Returns the path to the telemetry data directory.
+    fn telemetry_data(&self) -> PathBuf;
+
+    /// Returns the path to the CLI update-nag timestamp file.
+    fn cli_update_nag_timestamp(&self) -> PathBuf;
 }
 
 /// Inner structure holding data and cache directory paths.
@@ -31,6 +41,8 @@ pub trait Access: Sync + Send {
 /// system conventions via the `directories` crate.
 #[derive(Debug, Clone)]
 pub struct DirectoriesInner {
+    /// Path to the config directory for storing user preferences.
+    config: PathBuf,
     /// Path to the data directory for storing user data.
     data: PathBuf,
     /// Path to the data directory for storing machine-specific data,
@@ -51,6 +63,7 @@ impl DirectoriesInner {
     /// Returns `FromPathBufError` if the paths contain non-UTF-8 characters.
     pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, FromPathBufError> {
         Ok(Self {
+            config: dirs.config_dir().to_owned().try_into()?,
             data: dirs.data_dir().to_owned().try_into()?,
             data_local: dirs.data_local_dir().to_owned().try_into()?,
             cache: dirs.cache_dir().to_owned().try_into()?,
@@ -118,6 +131,17 @@ impl Directories {
 
 /// Implementation providing access to specific directory paths.
 impl Directories {
+    /// Returns the base config directory path.
+    ///
+    /// For standard directories, this is the system config directory.
+    /// For overridden directories, this is the custom path.
+    fn config(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.config.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
     /// Returns the base data directory path.
     ///
     /// For standard directories, this is the system data directory.
@@ -171,6 +195,29 @@ impl Access for Directories {
     fn package_cache(&self) -> Result<PackageCache, LockError> {
         PackageCache::new(self.data_local().join("pkg"))
     }
+
+    /// Returns the path to the user settings directory.
+    ///
+    /// This directory stores user preferences and configuration.
+    fn settings(&self) -> Result<SettingsDirectories, LockError> {
+        SettingsPaths::new(self.config().join("settings"))
+    }
+
+    /// Returns the path to the telemetry data directory.
+    ///
+    /// This directory stores telemetry events and state files.
+    ///
+    /// Unlike [`Self::settings`] or [`Self::identity`], this intentionally
+    /// returns a plain path without a directory lock. Telemetry files are
+    /// append-only or write-once, so concurrent access is harmless and
+    /// locking would risk blocking the CLI on a best-effort subsystem.
+    fn telemetry_data(&self) -> PathBuf {
+        self.data().join("telemetry")
+    }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        self.cache().join(".cli-update-nag-timestamp")
+    }
 }
 
 #[cfg(test)]
@@ -191,5 +238,17 @@ impl Access for UnimplementedMockDirs {
 
     fn package_cache(&self) -> Result<PackageCache, LockError> {
         unimplemented!("UnimplementedMockDirs::package_cache")
+    }
+
+    fn settings(&self) -> Result<SettingsDirectories, LockError> {
+        unimplemented!("UnimplementedMockDirs::settings")
+    }
+
+    fn telemetry_data(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::telemetry_data")
+    }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::cli_update_nag_timestamp")
     }
 }

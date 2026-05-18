@@ -1,18 +1,25 @@
+use candid::Principal;
 use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use tracing::info;
 
 use crate::{
     operations::sync::sync_many,
     options::{EnvironmentOpt, IdentityOpt},
 };
 
+/// Synchronize canisters
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
     /// Canister names (if empty, sync all canisters in environment)
     pub(crate) canisters: Vec<String>,
+
+    /// Principal of a proxy canister to route sync plugin calls to the target canister through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
@@ -70,20 +77,29 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .collect();
 
     if sync_canisters.is_empty() {
-        let _ = ctx
-            .term
-            .write_line("No canisters have sync steps configured");
+        info!("No canisters have sync steps configured");
         return Ok(());
     }
 
-    let _ = ctx.term.write_line("Syncing canisters:");
+    info!("Syncing canisters:");
 
+    let canister_ids: BTreeMap<String, Principal> = ctx
+        .ids_by_environment(&environment_selection)
+        .await?
+        .into_iter()
+        .collect();
+
+    let pkg_cache = ctx.dirs.package_cache()?;
     sync_many(
         ctx.syncer.clone(),
         agent,
-        Arc::new(ctx.term.clone()),
         sync_canisters,
+        environment_selection.name().to_owned(),
+        env.network.name.clone(),
+        canister_ids,
+        args.proxy,
         ctx.debug,
+        &pkg_cache,
     )
     .await?;
 

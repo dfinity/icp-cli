@@ -1,1 +1,5 @@
-pub const MAINNET_CANDID_UI_CID: &str = "a4gq6-oaaaa-aaaab-qaa4q-cai";
+use candid::Principal;
+
+// a4gq6-oaaaa-aaaab-qaa4q-cai
+pub const MAINNET_CANDID_UI_CID: Principal =
+    Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x39, 0x01, 0x01]);

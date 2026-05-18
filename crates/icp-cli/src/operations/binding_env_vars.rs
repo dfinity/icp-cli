@@ -1,17 +1,16 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, HashSet};
 
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError, export::Principal};
-use ic_utils::interfaces::{
-    ManagementCanister, management_canister::builders::EnvironmentVariable,
-};
-use icp::{Canister, context::TermWriter};
+use ic_agent::{Agent, export::Principal};
+use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
+use icp::Canister;
 use snafu::Snafu;
+use tracing::error;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
+
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 pub enum BindingEnvVarsOperationError {
@@ -21,8 +20,8 @@ pub enum BindingEnvVarsOperationError {
         canister_names: Vec<String>,
     },
 
-    #[snafu(display("agent error: {source}"))]
-    Agent { source: AgentError },
+    #[snafu(transparent)]
+    UpdateOrProxy { source: UpdateOrProxyError },
 }
 
 #[derive(Debug, Snafu)]
@@ -39,7 +38,8 @@ struct BindingEnvVarsFailure {
 }
 
 pub(crate) async fn set_env_vars_for_canister(
-    mgmt: &ManagementCanister<'_>,
+    agent: &Agent,
+    proxy: Option<Principal>,
     canister_id: &Principal,
     canister_info: &Canister,
     binding_vars: &[(String, String)],
@@ -59,10 +59,20 @@ pub(crate) async fn set_env_vars_for_canister(
         .into_iter()
         .map(|(name, value)| EnvironmentVariable { name, value })
         .collect::<Vec<_>>();
-    mgmt.update_settings(canister_id)
-        .with_environment_variables(environment_variables)
-        .await
-        .map_err(|source| BindingEnvVarsOperationError::Agent { source })?;
+
+    proxy_management::update_settings(
+        agent,
+        proxy,
+        UpdateSettingsArgs {
+            canister_id: *canister_id,
+            settings: CanisterSettings {
+                environment_variables: Some(environment_variables),
+                ..Default::default()
+            },
+            sender_canister_version: None,
+        },
+    )
+    .await?;
 
     Ok(())
 }
@@ -70,14 +80,12 @@ pub(crate) async fn set_env_vars_for_canister(
 /// Orchestrates setting environment variables for multiple canisters with progress tracking
 pub(crate) async fn set_binding_env_vars_many(
     agent: Agent,
+    proxy: Option<Principal>,
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), SetBindingEnvVarsManyError> {
-    let mgmt = ManagementCanister::create(&agent);
-
     // Check that all the canisters in this environment have an id
     // We need to have all the ids to generate environment variables
     // for the bindings
@@ -95,15 +103,12 @@ pub(crate) async fn set_binding_env_vars_many(
         .collect();
 
     if !missing_canisters.is_empty() {
-        let _ = term.write_line("");
-        let _ = term.write_line("");
-        let _ = term.write_line(&format!(
-            " ----- Error: Could not find canister id(s) for {} in environment '{}' -----",
+        error!(
+            "----- Error: Could not find canister id(s) for {} in environment '{}' -----",
             missing_canisters.join(", "),
             environment_name
-        ));
-        let _ = term.write_line("Make sure they are created first");
-        let _ = term.write_line("");
+        );
+        error!("Make sure they are created first");
 
         return SetBindingEnvVarsManySnafu {
             names: missing_canisters,
@@ -124,13 +129,13 @@ pub(crate) async fn set_binding_env_vars_many(
         let canister_name = info.name.clone();
 
         let settings_fn = {
-            let mgmt = mgmt.clone();
+            let agent = agent.clone();
             let pb = pb.clone();
             let binding_vars = binding_vars.clone();
 
             async move {
                 pb.set_message("Updating environment variables...");
-                set_env_vars_for_canister(&mgmt, &cid, &info, &binding_vars).await
+                set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await
             }
         };
 
@@ -163,14 +168,11 @@ pub(crate) async fn set_binding_env_vars_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
-                " ----- Failed to update environment variables for canister '{}': {} -----",
+            error!(
+                "----- Failed to update environment variables for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            let _ = term.write_line("");
+            );
+            error!("'{}'", failure.error);
         }
 
         return SetBindingEnvVarsManySnafu {

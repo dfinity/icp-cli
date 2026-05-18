@@ -1,12 +1,19 @@
+use std::io::stdout;
+
 use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::{CyclesAmount, parse_token_amount};
+use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
-use crate::commands::parsers::{parse_cycles_amount, parse_token_amount};
+use crate::commands::parsers::parse_subaccount;
 use crate::operations::token::mint::mint_cycles;
 
+/// Convert ICP to cycles.
+///
+/// Exactly one of --icp or --cycles must be provided.
 #[derive(Debug, Args)]
 pub(crate) struct MintArgs {
     /// Amount of ICP to mint to cycles.
@@ -16,11 +23,23 @@ pub(crate) struct MintArgs {
 
     /// Amount of cycles to mint. Automatically determines the amount of ICP needed.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, conflicts_with = "icp", value_parser = parse_cycles_amount)]
-    pub(crate) cycles: Option<u128>,
+    #[arg(long, conflicts_with = "icp")]
+    pub(crate) cycles: Option<CyclesAmount>,
+
+    /// Subaccount to withdraw the ICP from.
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) from_subaccount: Option<[u8; 32]>,
+
+    /// Subaccount to deposit the cycles to.
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) to_subaccount: Option<[u8; 32]>,
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::Error> {
@@ -41,13 +60,35 @@ pub(crate) async fn exec(ctx: &Context, args: &MintArgs) -> Result<(), anyhow::E
         .await?;
 
     // Execute mint operation
-    let mint_info = mint_cycles(&agent, args.icp.as_ref(), args.cycles).await?;
+    let mint_info = mint_cycles(
+        &agent,
+        args.icp.as_ref(),
+        args.cycles.as_ref().map(|c| c.get()),
+        args.from_subaccount,
+        args.to_subaccount,
+    )
+    .await?;
 
-    // Display results
-    let _ = ctx.term.write_line(&format!(
-        "Minted {} to your account, new balance: {}.",
-        mint_info.deposited, mint_info.new_balance
-    ));
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonMint {
+                deposited: mint_info.deposited.to_string(),
+                new_balance: mint_info.new_balance.to_string(),
+            },
+        )?;
+    } else {
+        println!(
+            "Minted {} to your account, new balance: {}.",
+            mint_info.deposited, mint_info.new_balance
+        );
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonMint {
+    deposited: String,
+    new_balance: String,
 }

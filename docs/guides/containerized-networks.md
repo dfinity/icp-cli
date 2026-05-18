@@ -1,4 +1,7 @@
-# Using Containerized Networks
+---
+title: Using Containerized Networks
+description: Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
+---
 
 Run ICP test networks in Docker containers for isolated, reproducible development environments.
 
@@ -158,6 +161,32 @@ networks:
       - POCKET_IC_MUTE_SERVER=false
 ```
 
+### Passing Arguments to the Container
+
+Use the `args` field to pass command-line arguments to the container's entrypoint. This is how you configure image-specific behavior such as enabling Internet Identity, NNS, Bitcoin integration, or other flags supported by the image:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    args:
+      - "--ii"
+```
+
+The `args` field passes values directly to the container entrypoint with no processing. The Docker image determines what arguments it accepts — see the image's documentation for available options.
+
+**Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher.
+
+> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, add the `extra-hosts` option to ensure it resolves:
+>
+> ```yaml
+> extra-hosts:
+>   - "host.docker.internal:host-gateway"
+> ```
+
 ### Remove Container on Exit
 
 Automatically delete the container when stopped:
@@ -174,6 +203,36 @@ networks:
 
 Useful for CI/CD or temporary testing.
 
+### Pinning a Launcher Version
+
+Pin the native network launcher to a specific version for reproducible environments across your team and CI:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    version: "v1.0.0"
+```
+
+If omitted, the latest released version is used. To update the launcher when no version is pinned:
+
+```bash
+icp network update
+```
+
+When `autocontainerize` is enabled (see [Always Use Containers](#always-use-containers)), the launcher `version` is used as the Docker image tag.
+
+For explicit Docker image configurations, specify the version as part of the image tag:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher:v1.0.0
+    port-mapping:
+      - "8000:4943"
+```
+
 ## Image Contract
 
 When using a containerized network, the Docker image must fulfill a specific contract with icp-cli. The official `ghcr.io/dfinity/icp-cli-network-launcher` image implements this contract. If you're building a custom image, see [Advanced: Custom Images](#advanced-custom-images) for full details.
@@ -183,11 +242,11 @@ When using a containerized network, the Docker image must fulfill a specific con
 The container must write a status file to `/app/status/status.json` (configurable via `status-dir`) when the network is ready. This file tells icp-cli how to connect to the network.
 
 **Required fields:**
-| Field          | Type   | Description                                      |
-|----------------|--------|--------------------------------------------------|
-| `v`            | string | Must be `"1"` (status file format version)       |
-| `gateway_port` | number | Container port where the HTTP gateway listens    |
-| `root_key`     | string | Hex-encoded root key of the network              |
+| Field          | Type   | Description                                   |
+|----------------|--------|-----------------------------------------------|
+| `v`            | string | Must be `"1"` (status file format version)    |
+| `gateway_port` | number | Container port where the HTTP gateway listens |
+| `root_key`     | string | Hex-encoded root key of the network           |
 
 **Example:**
 ```json
@@ -212,9 +271,9 @@ The anonymous principal must have sufficient ICP balance to fund all identities 
 ### Required System Canisters
 
 The network must include these system canisters:
-- **ICP ledger** - For ICP token transfers during seeding
-- **Cycles ledger** - For cycles management
-- **Cycles minting canister (CMC)** - For converting ICP to cycles
+- **ICP ledger** — For ICP token transfers during seeding
+- **Cycles ledger** — For cycles management
+- **Cycles minting canister (CMC)** — For converting ICP to cycles
 
 ## Troubleshooting
 
@@ -283,7 +342,7 @@ All available configuration options for containerized networks:
 |----------------|----------|----------|--------------------------------------------------------------------------------|
 | `name`         | string   | Yes      | Unique network identifier                                                      |
 | `mode`         | string   | Yes      | Must be `managed`                                                              |
-| `image`        | string   | Yes      | Docker image to use                                                            |
+| `image`        | string   | Yes      | Docker image to use (append `:tag` for version pinning)                        |
 | `port-mapping` | string[] | Yes      | Port mappings in `[host-ip:]host-port:container-port` format                   |
 | `rm-on-exit`   | bool     | No       | Delete container when stopped (default: `false`)                               |
 | `volumes`      | string[] | No       | Docker volumes in `name:container_path[:options]` format                       |
@@ -295,6 +354,7 @@ All available configuration options for containerized networks:
 | `user`         | string   | No       | User to run as in `user[:group]` format (group is optional)                    |
 | `shm-size`     | number   | No       | Size of `/dev/shm` in bytes                                                    |
 | `status-dir`   | string   | No       | Status directory path (default: `/app/status`)                                 |
+| `extra-hosts`  | string[] | No       | Extra hosts entries (e.g., `host.docker.internal:host-gateway`)                |
 
 Example with multiple options:
 
@@ -396,9 +456,9 @@ ENTRYPOINT ["/app/start-network.sh"]
 Your custom network must include the system canisters and pre-funded accounts described in [Image Contract](#image-contract). In summary:
 
 **Required system canisters:**
-- **ICP ledger canister** (`ryjl3-tyaaa-aaaaa-aaaba-cai`) - For ICP token transfers
-- **Cycles ledger canister** (`um5iw-rqaaa-aaaaq-qaaba-cai`) - For cycles management
-- **Cycles minting canister** (`rkp4c-7iaaa-aaaaa-aaaca-cai`) - For converting ICP to cycles
+- **ICP ledger canister** (`ryjl3-tyaaa-aaaaa-aaaba-cai`) — For ICP token transfers
+- **Cycles ledger canister** (`um5iw-rqaaa-aaaaq-qaaba-cai`) — For cycles management
+- **Cycles minting canister** (`rkp4c-7iaaa-aaaaa-aaaca-cai`) — For converting ICP to cycles
 
 **Pre-funded anonymous principal:**
 
@@ -462,6 +522,23 @@ port-mapping:
 If you're on Windows and want to use a manually instantiated `dockerd` in a WSL2 instance instead of Docker Desktop, set these environment variables:
 - `ICP_CLI_DOCKER_WSL2_DISTRO=<distro>` — the WSL2 distribution name running dockerd
 - `DOCKER_HOST=tcp://<ip>:<port>` — the TCP address where dockerd is listening
+
+## Always Use Containers
+
+If you prefer containers for all local networks without configuring each one individually, enable the `autocontainerize` setting:
+
+```bash
+icp settings autocontainerize true
+```
+
+This makes all managed networks (including the implicit `local` network) run in Docker containers automatically. To check the current value or disable it:
+
+```bash
+icp settings autocontainerize       # Print current value
+icp settings autocontainerize false # Disable
+```
+
+Note that this is the default behavior on Windows, where the setting will be ignored.
 
 ## Related Documentation
 

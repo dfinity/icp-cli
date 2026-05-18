@@ -1,4 +1,7 @@
-# Command-Line Help for `icp`
+---
+title: CLI Reference
+description: Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+---
 
 This document contains the help content for the `icp` command-line program.
 
@@ -12,7 +15,9 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister delete`↴](#icp-canister-delete)
 * [`icp canister install`↴](#icp-canister-install)
 * [`icp canister list`↴](#icp-canister-list)
+* [`icp canister logs`↴](#icp-canister-logs)
 * [`icp canister metadata`↴](#icp-canister-metadata)
+* [`icp canister migrate-id`↴](#icp-canister-migrate-id)
 * [`icp canister settings`↴](#icp-canister-settings)
 * [`icp canister settings show`↴](#icp-canister-settings-show)
 * [`icp canister settings update`↴](#icp-canister-settings-update)
@@ -20,8 +25,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister snapshot`↴](#icp-canister-snapshot)
 * [`icp canister snapshot create`↴](#icp-canister-snapshot-create)
 * [`icp canister snapshot delete`↴](#icp-canister-snapshot-delete)
+* [`icp canister snapshot download`↴](#icp-canister-snapshot-download)
 * [`icp canister snapshot list`↴](#icp-canister-snapshot-list)
 * [`icp canister snapshot restore`↴](#icp-canister-snapshot-restore)
+* [`icp canister snapshot upload`↴](#icp-canister-snapshot-upload)
 * [`icp canister start`↴](#icp-canister-start)
 * [`icp canister status`↴](#icp-canister-status)
 * [`icp canister stop`↴](#icp-canister-stop)
@@ -36,6 +43,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
+* [`icp identity delegation`↴](#icp-identity-delegation)
+* [`icp identity delegation request`↴](#icp-identity-delegation-request)
+* [`icp identity delegation sign`↴](#icp-identity-delegation-sign)
+* [`icp identity delegation use`↴](#icp-identity-delegation-use)
 * [`icp identity delete`↴](#icp-identity-delete)
 * [`icp identity export`↴](#icp-identity-export)
 * [`icp identity import`↴](#icp-identity-import)
@@ -55,6 +66,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp new`↴](#icp-new)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
+* [`icp settings`↴](#icp-settings)
+* [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
+* [`icp settings telemetry`↴](#icp-settings-telemetry)
+* [`icp settings update-check`↴](#icp-settings-update-check)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -75,6 +90,7 @@ This document contains the help content for the `icp` command-line program.
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
 * `project` — Display information about the current project
+* `settings` — Configure user settings
 * `sync` — Synchronize canisters
 * `token` — Perform token transactions
 
@@ -117,7 +133,9 @@ Perform canister operations against a network
 * `delete` — Delete a canister from a network
 * `install` — Install a built WASM to a canister on a network
 * `list` — List the canisters in an environment
+* `logs` — Fetch and display canister logs
 * `metadata` — Read a metadata section from a canister
+* `migrate-id` — Migrate a canister ID from one subnet to another
 * `settings` — Commands to manage canister settings
 * `snapshot` — Commands to manage canister snapshots
 * `start` — Start a canister on a network
@@ -131,27 +149,33 @@ Perform canister operations against a network
 
 Make a canister call
 
-**Usage:** `icp canister call [OPTIONS] <CANISTER> <METHOD> [ARGS]`
+**Usage:** `icp canister call [OPTIONS] <CANISTER> [METHOD] [ARGS]`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
-* `<METHOD>` — Name of canister method to call into
-* `<ARGS>` — Canister call arguments. Can be:
-
-   - Hex-encoded bytes (e.g., `4449444c00`)
-
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-
-   If not provided, an interactive prompt will be launched to help build the arguments.
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+* `<METHOD>` — Name of canister method to call into. If not provided, an interactive prompt will be launched
+* `<ARGS>` — Call arguments, interpreted per `--args-format` (Candid by default). If not provided, an interactive prompt will be launched
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--args-file <ARGS_FILE>` — Path to a file containing call arguments
+* `--args-format <ARGS_FORMAT>` — Format of the call arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 * `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
 
    When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.
@@ -160,6 +184,24 @@ Make a canister call
    Only used when --proxy is specified. Defaults to 0.
 
   Default value: `0`
+* `--query` — Sends a query request to a canister instead of an update request.
+
+   Query calls are faster but return uncertified responses. Cannot be used with --proxy (proxy calls are always update calls).
+* `-o`, `--output <OUTPUT>` — How to interpret and display the response
+
+  Default value: `auto`
+
+  Possible values:
+  - `auto`:
+    Try Candid, then UTF-8, then fall back to hex
+  - `candid`:
+    Parse as Candid and pretty-print; error if parsing fails
+  - `text`:
+    Parse as UTF-8 text; error if invalid
+  - `hex`:
+    Print raw response as hex
+
+* `--json` — Output command results as JSON
 
 
 
@@ -167,27 +209,48 @@ Make a canister call
 
 Create a canister on a network
 
-**Usage:** `icp canister create [OPTIONS] <CANISTER>`
+**Usage:** `icp canister create [OPTIONS] <CANISTER|--detached>`
+
+This command can be used to create canisters defined in a project
+or a "detached" canister on a network.
+
+Examples:
+
+    # Create on a network by url
+    icp canister create -n http://localhost:8000 -k $ROOT_KEY --detached
+
+    # Create on mainnet outside of a project context
+    icp canister create -n ic --detached
+
+    # Create a detached canister inside the scope of a project
+    icp canister create -n mynetwork --detached
+
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Optional compute allocation (0 to 100). Represents guaranteed compute capacity
-* `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically
-* `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold in seconds. Controls how long a canister can be inactive before being frozen
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional reserved cycles limit. If set, the canister cannot consume more than this many cycles
+* `--memory-allocation <MEMORY_ALLOCATION>` — Optional memory allocation in bytes. If unset, memory is allocated dynamically. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
+* `--freezing-threshold <FREEZING_THRESHOLD>` — Optional freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Optional upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-q`, `--quiet` — Suppress human-readable output; print only canister IDs, one per line, to stdout
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
+
+   When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy's `proxy` method.
+* `--detached` — Create a canister detached from any project configuration. The canister id will be printed out but not recorded in the project configuration. Not valid if `Canister` is provided
+* `--json` — Output command results as JSON
 
 
 
@@ -199,13 +262,15 @@ Delete a canister from a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -217,7 +282,7 @@ Install a built WASM to a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
@@ -242,28 +307,69 @@ Install a built WASM to a canister on a network
     Discard canister main memory; only `stable` variables survive. Dangerous — heap state is lost
 
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
-* `--args <ARGS>` — Initialization arguments for the canister. Can be:
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
 
-   - Hex-encoded bytes (e.g., `4449444c00`)
+  Default value: `candid`
 
-   - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
 
-   - File path (e.g., `args.txt` or `./path/to/args.candid`) The file should contain either hex or Candid format arguments.
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
 ## `icp canister list`
 
-List the canisters in an environment
+List the canisters in an environment.
+
+Prints canister names, one per line. Use --json for machine-readable output (returns {"canisters": ["name1", "name2", ...]})
 
 **Usage:** `icp canister list [OPTIONS]`
 
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output command results as JSON
+
+
+
+## `icp canister logs`
+
+Fetch and display canister logs
+
+**Usage:** `icp canister logs [OPTIONS] <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
+* `--interval <INTERVAL>` — Polling interval in seconds when following logs (requires --follow)
+
+  Default value: `2`
+* `--since <TIMESTAMP>` — Show logs at or after this timestamp (inclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+* `--until <TIMESTAMP>` — Show logs before this timestamp (exclusive). Accepts nanoseconds since Unix epoch or RFC3339 (e.g. '2024-01-01T00:00:00Z'). Cannot be used with --follow
+* `--since-index <INDEX>` — Show logs at or after this log index (inclusive). Cannot be used with --follow
+* `--until-index <INDEX>` — Show logs before this log index (exclusive). Cannot be used with --follow
+* `--json` — Output command results as JSON
 
 
 
@@ -275,14 +381,40 @@ Read a metadata section from a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<METADATA_NAME>` — The name of the metadata section to read
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+
+
+
+## `icp canister migrate-id`
+
+Migrate a canister ID from one subnet to another
+
+**Usage:** `icp canister migrate-id [OPTIONS] --replace <REPLACE> <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--replace <REPLACE>` — The canister to replace with the source canister's ID
+* `-y`, `--yes` — Skip confirmation prompts
+* `--resume-watch` — Resume watching an already-initiated migration (skips validation and initiation)
+* `--skip-watch` — Exit as soon as the migrated canister is deleted (don't wait for full completion)
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -294,7 +426,7 @@ Commands to manage canister settings
 
 ###### **Subcommands:**
 
-* `show` — Show the status of a canister
+* `show` — Show the settings of a canister
 * `update` — Change a canister's settings to specified values
 * `sync` — Synchronize a canister's settings with those defined in the project
 
@@ -302,24 +434,24 @@ Commands to manage canister settings
 
 ## `icp canister settings show`
 
-Show the status of a canister.
+Show the settings of a canister.
 
-By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
+Queries the canister_status endpoint of the management canister and displays only the settings fields. Requires the caller to be a controller.
 
 **Usage:** `icp canister settings show [OPTIONS] <CANISTER>`
 
 ###### **Arguments:**
 
-* `<CANISTER>` — canister name or principal to target. When using a name, an enviroment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `-i`, `--id-only` — Only print the canister ids
-* `--json` — Format output in json
-* `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--json` — Format output as JSON
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -331,11 +463,12 @@ Change a canister's settings to specified values
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--force` — Force the operation without confirmation prompts
@@ -346,18 +479,20 @@ Change a canister's settings to specified values
 * `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
 
    Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
-* `--compute-allocation <COMPUTE_ALLOCATION>`
-* `--memory-allocation <MEMORY_ALLOCATION>`
-* `--freezing-threshold <FREEZING_THRESHOLD>`
-* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Reserved cycles limit for the canister. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `--wasm-memory-limit <WASM_MEMORY_LIMIT>`
-* `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>`
-* `--log-visibility <LOG_VISIBILITY>`
-* `--add-log-viewer <ADD_LOG_VIEWER>`
-* `--remove-log-viewer <REMOVE_LOG_VIEWER>`
-* `--set-log-viewer <SET_LOG_VIEWER>`
-* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>`
-* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>`
+* `--compute-allocation <COMPUTE_ALLOCATION>` — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity
+* `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
+* `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
+* `--reserved-cycles-limit <RESERVED_CYCLES_LIMIT>` — Upper limit on cycles reserved for future resource payments. Memory allocations that would push the reserved balance above this limit will fail. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `--wasm-memory-limit <WASM_MEMORY_LIMIT>` — Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
+* `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
+* `--log-memory-limit <LOG_MEMORY_LIMIT>` — Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value. Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes
+* `--log-visibility <LOG_VISIBILITY>` — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer. Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead
+* `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list
+* `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list
+* `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>` — Add a canister environment variable in KEY=VALUE format
+* `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>` — Remove a canister environment variable by key name
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -369,13 +504,15 @@ Synchronize a canister's settings with those defined in the project
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -389,8 +526,10 @@ Commands to manage canister snapshots
 
 * `create` — Create a snapshot of a canister's state
 * `delete` — Delete a canister snapshot
+* `download` — Download a snapshot to local disk
 * `list` — List all snapshots for a canister
 * `restore` — Restore a canister from a snapshot
+* `upload` — Upload a snapshot from local disk
 
 
 
@@ -402,14 +541,18 @@ Create a snapshot of a canister's state
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -421,14 +564,39 @@ Delete a canister snapshot
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<SNAPSHOT_ID>` — The snapshot ID to delete (hex-encoded)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
+
+
+
+## `icp canister snapshot download`
+
+Download a snapshot to local disk
+
+**Usage:** `icp canister snapshot download [OPTIONS] --output <OUTPUT> <CANISTER> <SNAPSHOT_ID>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+* `<SNAPSHOT_ID>` — The snapshot ID to download (hex-encoded)
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
+* `--resume` — Resume a previously interrupted download
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -440,13 +608,17 @@ List all snapshots for a canister
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot IDs
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -458,14 +630,41 @@ Restore a canister from a snapshot
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 * `<SNAPSHOT_ID>` — The snapshot ID to restore (hex-encoded)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
+
+
+
+## `icp canister snapshot upload`
+
+Upload a snapshot from local disk
+
+**Usage:** `icp canister snapshot upload [OPTIONS] --input <INPUT> <CANISTER>`
+
+###### **Arguments:**
+
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
+
+###### **Options:**
+
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-i`, `--input <INPUT>` — Input directory containing the snapshot files
+* `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one
+* `--resume` — Resume a previously interrupted upload
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only snapshot ID
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
 
 
 
@@ -477,13 +676,15 @@ Start a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -495,18 +696,35 @@ By default this queries the status endpoint of the management canister. If the c
 
 **Usage:** `icp canister status [OPTIONS] [CANISTER]`
 
+Examples:
+
+    # Status of all canisters in the local environment
+    icp canister status
+
+    # Status of one canister by name
+    icp canister status backend -e local
+
+    # Print only canister IDs (useful for scripting)
+    icp canister status -i
+
+    # JSON output for all canisters
+    icp canister status --json
+
+
 ###### **Arguments:**
 
-* `<CANISTER>` — An optional canister name or principal to target. When using a name, an enviroment must be specified
+* `<CANISTER>` — An optional canister name or principal to target. When using a name, an environment must be specified. If omitted, shows status for all canisters in the environment
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
 * `--json` — Format output in json
 * `-p`, `--public` — Show the only the public information. Skips trying to get the status from the management canister and looks up public information from the state tree
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -518,13 +736,15 @@ Stop a canister on a network
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
 
 
 
@@ -536,12 +756,13 @@ Top up a canister with cycles
 
 ###### **Arguments:**
 
-* `<CANISTER>` — Name or principal of canister to target When using a name an environment must be specified
+* `<CANISTER>` — Name or principal of canister to target. When using a name an environment must be specified
 
 ###### **Options:**
 
 * `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -556,7 +777,7 @@ Mint and manage cycles
 ###### **Subcommands:**
 
 * `balance` — Display the cycles balance
-* `mint` — Convert icp to cycles
+* `mint` — Convert ICP to cycles
 * `transfer` — Transfer cycles to another principal
 
 
@@ -569,15 +790,22 @@ Display the cycles balance
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
 ## `icp cycles mint`
 
-Convert icp to cycles
+Convert ICP to cycles.
+
+Exactly one of --icp or --cycles must be provided.
 
 **Usage:** `icp cycles mint [OPTIONS]`
 
@@ -585,9 +813,13 @@ Convert icp to cycles
 
 * `--icp <ICP>` — Amount of ICP to mint to cycles. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--cycles <CYCLES>` — Amount of cycles to mint. Automatically determines the amount of ICP needed. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--from-subaccount <FROM_SUBACCOUNT>` — Subaccount to withdraw the ICP from
+* `--to-subaccount <TO_SUBACCOUNT>` — Subaccount to deposit the cycles to
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
 
 
 
@@ -604,9 +836,14 @@ Transfer cycles to another principal
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
+* `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer cycles from
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 
@@ -615,6 +852,19 @@ Transfer cycles to another principal
 Deploy a project to an environment
 
 **Usage:** `icp deploy [OPTIONS] [NAMES]...`
+
+When deploying a single canister, you can pass arguments to the install call
+using --args or --args-file:
+
+    # Pass inline Candid arguments
+    icp deploy my_canister --args '(42 : nat)'
+
+    # Pass arguments from a file
+    icp deploy my_canister --args-file ./args.did
+
+    # Pass raw bytes
+    icp deploy my_canister --args-file ./args.bin --args-format bin
+
 
 ###### **Arguments:**
 
@@ -629,12 +879,29 @@ Deploy a project to an environment
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
-* `--cycles <CYCLES>` — Cycles to fund canister creation (in cycles)
+* `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--json` — Output command results as JSON
+* `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
+* `--args-file <ARGS_FILE>` — Path to a file containing arguments
+* `--args-format <ARGS_FORMAT>` — Format of the arguments
+
+  Default value: `candid`
+
+  Possible values:
+  - `hex`:
+    Hex-encoded bytes
+  - `candid`:
+    Candid text format
+  - `bin`:
+    Raw binary (only valid for file references)
+
 
 
 
@@ -646,13 +913,15 @@ Show information about the current project environments
 
 ###### **Subcommands:**
 
-* `list` — Display a list of enviroments
+* `list` — List the environments defined in this project, one per line
 
 
 
 ## `icp environment list`
 
-Display a list of enviroments
+List the environments defined in this project, one per line.
+
+Use `icp project show` to see the fully expanded configuration including implicit environments (local, ic) and their network and canister assignments.
 
 **Usage:** `icp environment list`
 
@@ -666,8 +935,9 @@ Manage your identities
 
 ###### **Subcommands:**
 
-* `account-id` — Display the ICP ledger account identifier for the current identity
-* `default` — Display the currently selected identity
+* `account-id` — Display the ICP ledger or ICRC-1 account identifier for the current identity
+* `default` — Display or set the currently selected identity
+* `delegation` — Manage delegations for identities
 * `delete` — Delete an identity
 * `export` — Print the PEM file for the identity
 * `import` — Import a new identity
@@ -681,7 +951,7 @@ Manage your identities
 
 ## `icp identity account-id`
 
-Display the ICP ledger account identifier for the current identity
+Display the ICP ledger or ICRC-1 account identifier for the current identity
 
 **Usage:** `icp identity account-id [OPTIONS]`
 
@@ -689,18 +959,100 @@ Display the ICP ledger account identifier for the current identity
 
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--of-principal <OF_PRINCIPAL>` — Convert this Principal instead of the current identity's Principal
+* `--of-subaccount <OF_SUBACCOUNT>` — Specify a subaccount
+* `--format <FORMAT>` — Account identifier format to display
+
+  Default value: `ledger`
+
+  Possible values:
+  - `ledger`:
+    ICP ledger account identifier
+  - `icrc1`:
+    ICRC-1 account identifier
+
 
 
 
 ## `icp identity default`
 
-Display the currently selected identity
+Display or set the currently selected identity
 
 **Usage:** `icp identity default [NAME]`
 
 ###### **Arguments:**
 
 * `<NAME>` — Identity to set as default. If omitted, prints the current default
+
+
+
+## `icp identity delegation`
+
+Manage delegations for identities
+
+**Usage:** `icp identity delegation <COMMAND>`
+
+###### **Subcommands:**
+
+* `request` — Create a pending delegation identity with a new P256 session key
+* `sign` — Sign a delegation from the selected identity to a target key
+* `use` — Complete a pending delegation identity by providing a signed delegation chain
+
+
+
+## `icp identity delegation request`
+
+Create a pending delegation identity with a new P256 session key
+
+Prints the session public key as a PEM-encoded SPKI to stdout. Pass this to `icp identity delegation sign --key-pem` on another machine to obtain a delegation chain, then complete the identity with `icp identity delegation use`.
+
+**Usage:** `icp identity delegation request [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name for the new identity
+
+###### **Options:**
+
+* `--storage <STORAGE>` — Where to store the session private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
+
+
+
+## `icp identity delegation sign`
+
+Sign a delegation from the selected identity to a target key
+
+**Usage:** `icp identity delegation sign [OPTIONS] --key-pem <FILE> --duration <DURATION>`
+
+###### **Options:**
+
+* `--key-pem <FILE>` — Public key PEM file of the key to delegate to
+* `--duration <DURATION>` — Delegation validity duration (e.g. "30d", "24h", "3600s", or plain seconds)
+* `--canisters <CANISTERS>` — Canister principals to restrict the delegation to (comma-separated)
+* `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp identity delegation use`
+
+Complete a pending delegation identity by providing a signed delegation chain
+
+Reads the JSON output of `icp identity delegation sign` from a file and attaches it to the named identity, making it usable for signing.
+
+**Usage:** `icp identity delegation use --from-json <FILE> <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the pending delegation identity to complete
+
+###### **Options:**
+
+* `--from-json <FILE>` — Path to the delegation chain JSON file (output of `icp identity delegation sign`)
 
 
 
@@ -729,6 +1081,8 @@ Print the PEM file for the identity
 ###### **Options:**
 
 * `--password-file <FILE>` — Read the password from a file instead of prompting (only required for identities created or imported with --storage password)
+* `--encrypt` — Encrypt the exported PEM with a password
+* `--encryption-password-file <FILE>` — Read the encryption password from a file instead of prompting
 
 
 
@@ -756,6 +1110,15 @@ Import a new identity
 * `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
+* `--seed-curve <SEED_CURVE>` — Curve for SLIP-0010 key derivation from a seed phrase
+
+  Default value: `secp256k1`
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
 
 
 
@@ -796,7 +1159,12 @@ Link an HSM key to a new identity
 
 List the identities
 
-**Usage:** `icp identity list`
+**Usage:** `icp identity list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only identity names
 
 
 
@@ -820,6 +1188,8 @@ Create a new identity
 
 * `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
 * `--output-seed <FILE>` — Write the seed phrase to a file instead of printing to stdout
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the seed phrase
 
 
 
@@ -918,7 +1288,11 @@ Examples:
 
 ## `icp network start`
 
-Run a given network
+Run a given network.
+
+The gateway binds to port 8000 by default. To use a different port, set `gateway.port` in `icp.yaml`. If port 8000 is already in use by another icp-cli project, stop that network first:
+
+icp network stop --project-root-override <path>
 
 **Usage:** `icp network start [OPTIONS] [NAME]`
 
@@ -1055,11 +1429,11 @@ Create a new ICP project from a template
 
 Under the hood templates are generated with `cargo-generate`. See the cargo-generate docs for a guide on how to write your own templates: https://docs.rs/cargo-generate/0.23.7/cargo_generate/
 
-**Usage:** `icp new [OPTIONS] <NAME>`
+**Usage:** `icp new [OPTIONS] [NAME]`
 
 ###### **Arguments:**
 
-* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given
+* `<NAME>` — Directory to create / project name; if the name isn't in kebab-case, it will be converted to kebab-case unless `--force` is given. Optional when `--init` is used: defaults to the name of the current directory
 
 ###### **Options:**
 
@@ -1074,11 +1448,11 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 * `-f`, `--force` — Don't convert the project name to kebab-case before creating the directory. Note that `icp-cli` won't overwrite an existing directory, even if `--force` is given
 * `-q`, `--quiet` — Opposite of verbose, suppresses errors & warning in output Conflicts with --debug, and requires the use of --continue-on-error
 * `--continue-on-error` — Continue if errors in templates are encountered
-* `-s`, `--silent` — If silent mode is set all variables will be extracted from the template_values_file. If a value is missing the project generation will fail
+* `-s`, `--silent` — Non-interactive mode: suppresses all prompts. Unset variables fall back to their template-defined defaults; generation fails if a required variable has no default. Combine with --define to supply values for variables that have no default in the template. Use for CI or automated/agent contexts
 * `--vcs <VCS>` — Specify the VCS used to initialize the generated template
 * `-i`, `--identity <IDENTITY>` — Use a different ssh identity
 * `--gitconfig <GITCONFIG_FILE>` — Use a different gitconfig file, if omitted the usual $HOME/.gitconfig will be used
-* `-d`, `--define <DEFINE>` — Define a value for use during template expansion. E.g `--define foo=bar`
+* `-d`, `--define <DEFINE>` — Set a template variable in KEY=VALUE format (e.g. --define project_name=my-app). Variable names are template-specific. Suppresses the interactive prompt for that variable. Required in --silent mode for any template variable that has no default value
 * `--init` — Generate the template directly into the current dir. No subfolder will be created and no vcs is initialized
 * `--destination <PATH>` — Generate the template directly at the given path
 * `--force-git-init` — Will enforce a fresh git init on the generated project
@@ -1115,6 +1489,65 @@ The effective yaml configuration includes:
 
 
 
+## `icp settings`
+
+Configure user settings
+
+**Usage:** `icp settings [OPTIONS] <SETTING> [VALUE]`
+
+###### **Subcommands:**
+
+* `autocontainerize` — Use Docker for the network launcher even when native mode is requested
+* `telemetry` — Enable or disable anonymous usage telemetry
+* `update-check` — Enable or disable the CLI update check
+
+
+
+## `icp settings autocontainerize`
+
+Use Docker for the network launcher even when native mode is requested
+
+**Usage:** `icp settings autocontainerize [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
+
+
+
+## `icp settings telemetry`
+
+Enable or disable anonymous usage telemetry
+
+**Usage:** `icp settings telemetry [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to true or false. If omitted, prints the current value
+
+  Possible values: `true`, `false`
+
+
+
+
+## `icp settings update-check`
+
+Enable or disable the CLI update check
+
+**Usage:** `icp settings update-check [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Set to releases, betas, or disabled. If omitted, prints the current value
+
+  Possible values: `releases`, `betas`, `disabled`
+
+
+
+
 ## `icp sync`
 
 Synchronize canisters
@@ -1127,6 +1560,7 @@ Synchronize canisters
 
 ###### **Options:**
 
+* `--proxy <PROXY>` — Principal of a proxy canister to route sync plugin calls to the target canister through
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -1159,9 +1593,14 @@ Display the token balance on the ledger (default token: icp)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
+* `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the balance
 
 
 
@@ -1174,13 +1613,18 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 ###### **Arguments:**
 
 * `<AMOUNT>` — Token amount to transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
-* `<RECEIVER>` — The receiver of the token transfer. Can be a Principal or an AccountIdentifier hex string (only for ICP ledger)
+* `<RECEIVER>` — The receiver of the token transfer. Can be a principal, an ICRC1 account ID, or an ICP ledger account ID (hex)
 
 ###### **Options:**
 
-* `-n`, `--network <NETWORK>` — Name of the network to target, conflicts with environment argument
+* `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
+* `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer from
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
 
 

@@ -44,7 +44,7 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a Pre-built canister build adapter.",
+      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
       "properties": {
         "sha256": {
           "description": "Optional sha256 checksum of the WASM",
@@ -88,6 +88,69 @@
         }
       ],
       "type": "object"
+    },
+    "Adapter4": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LocalSource",
+          "description": "Local path on-disk to read a WASM file from"
+        },
+        {
+          "$ref": "#/$defs/RemoteSource",
+          "description": "Remote url to fetch a WASM file from"
+        }
+      ],
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
+      "properties": {
+        "dirs": {
+          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "Files (relative to canister directory) the host reads and passes to\nthe plugin as part of `sync-exec-input.files`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sha256": {
+          "description": "Optional sha256 checksum of the wasm file.\nOptional for `path`; required for `url`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ArgsFormat": {
+      "description": "Format specifier for canister call/install args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
     },
     "BuildStep": {
       "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
@@ -137,6 +200,32 @@
       ],
       "type": "object"
     },
+    "CyclesAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
+    },
+    "DurationAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A duration in seconds.\n\nDeserializes from a number (seconds) or a string with duration suffix (s, m, h, d, w)\nand optional underscore separators.\n\nSuffixes (case-insensitive):\n- `s` — seconds\n- `m` — minutes (×60)\n- `h` — hours (×3600)\n- `d` — days (×86400)\n- `w` — weeks (×604800)\n\nA bare number without suffix is treated as seconds."
+    },
     "LocalSource": {
       "properties": {
         "path": {
@@ -180,6 +269,60 @@
         }
       ]
     },
+    "ManifestInitArgs": {
+      "anyOf": [
+        {
+          "description": "Plain string shorthand — treated as Candid.",
+          "type": "string"
+        },
+        {
+          "description": "File reference with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/ArgsFormat",
+              "default": "candid"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Inline value with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/ArgsFormat",
+              "default": "candid"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+    },
+    "MemoryAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
+    },
     "Recipe": {
       "properties": {
         "configuration": {
@@ -198,7 +341,7 @@
           ]
         },
         "type": {
-          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>[@<version>]` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` regitry at https://github.com/dfinity/icp-cli-recipes\n`version` is optional and defaults to `latest`\n\nIt is always recommended to pin the version and provide a hash for it in the `sha256` field",
+          "description": "An identifier for a recipe, it can have one of the following formats:\n\n`file://<path_to_recipe>` - point to a local recipe template\n\n`http://<url_to_recipe>` - point to a remote recipe template\n\n`@<registry>/<recipe_name>@<version>` - Point to a recipe in a known registry.\n\nFor now the only registry is the `dfinity` registry at https://github.com/dfinity/icp-cli-recipes\n\nIt is recommended to also provide a hash in the `sha256` field",
           "type": "string"
         }
       },
@@ -242,13 +385,26 @@
           ]
         },
         "freezing_threshold": {
-          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DurationAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.\nSupports duration suffixes in YAML: s, m, h, d, w (e.g. \"30d\" or \"4w\")."
+        },
+        "log_memory_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.\nSupports suffixes in YAML: kb, kib, mb, mib (e.g. \"2mib\" or \"256kib\"). Canister default is 4096 bytes."
         },
         "log_visibility": {
           "anyOf": [
@@ -262,40 +418,49 @@
           "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
-          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "reserved_cycles_limit": {
-          "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CyclesAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
-          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "wasm_memory_threshold": {
-          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         }
       },
       "type": "object"
@@ -323,6 +488,20 @@
           "properties": {
             "type": {
               "const": "assets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Adapter4",
+          "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
+          "properties": {
+            "type": {
+              "const": "plugin",
               "type": "string"
             }
           },
@@ -390,11 +569,15 @@
   "description": "Schema for CanisterManifest",
   "properties": {
     "init_args": {
-      "description": "Initialization arguments passed to the canister during installation.\nCan be hex-encoded bytes or Candid text format.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManifestInitArgs"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Initialization arguments passed to the canister during installation."
     },
     "name": {
       "description": "The unique name of the canister as defined in this manifest.",
@@ -413,6 +596,7 @@
         "compute_allocation": null,
         "environment_variables": null,
         "freezing_threshold": null,
+        "log_memory_limit": null,
         "log_visibility": null,
         "memory_allocation": null,
         "reserved_cycles_limit": null,

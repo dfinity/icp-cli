@@ -1,18 +1,27 @@
+use std::io::IsTerminal;
+
 use anyhow::{Context as _, anyhow, bail};
+use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
+use ic_management_canister_types::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
 use icp::fs;
 use icp::prelude::*;
+use tracing::{info, warn};
 
 use crate::{
-    commands::args,
+    commands::args::{self, ArgsOpt},
     operations::{
-        install::{WasmMemoryPersistenceOpt, install_canister, is_eop_canister},
-        misc::{ParsedArguments, parse_args},
+        candid_compat::{CandidCompatibility, check_candid_compatibility},
+        install::{
+            WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
+            resolve_install_mode_and_status,
+        },
     },
 };
 
+/// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
     /// Specifies the mode of canister installation.
@@ -32,29 +41,24 @@ pub(crate) struct InstallArgs {
     #[arg(long, value_enum)]
     pub(crate) wasm_memory_persistence: Option<WasmMemoryPersistenceOpt>,
 
-    /// Skip the interactive confirmation prompt for dangerous operations
-    /// (currently: `--wasm-memory-persistence replace`).
-    #[arg(long, short = 'y')]
-    pub(crate) yes: bool,
-
     /// Path to the WASM file to install. Uses the build output if not explicitly provided.
     #[arg(long)]
     pub(crate) wasm: Option<PathBuf>,
 
-    /// Initialization arguments for the canister.
-    /// Can be:
-    ///
-    /// - Hex-encoded bytes (e.g., `4449444c00`)
-    ///
-    /// - Candid text format (e.g., `(42)` or `(record { name = "Alice" })`)
-    ///
-    /// - File path (e.g., `args.txt` or `./path/to/args.candid`)
-    ///   The file should contain either hex or Candid format arguments.
-    #[arg(long)]
-    pub(crate) args: Option<String>,
+    #[command(flatten)]
+    pub(crate) args_opt: ArgsOpt,
+
+    /// Skip confirmation prompts, including the Candid interface compatibility check and
+    /// the dangerous-operation prompt for `--wasm-memory-persistence replace`.
+    #[arg(long, short)]
+    pub(crate) yes: bool,
 
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow::Error> {
@@ -94,22 +98,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         )
         .await?;
 
-    let init_args_bytes = args
-        .args
-        .as_ref()
-        .map(|s| {
-            let cwd =
-                dunce::canonicalize(".").context("Failed to get current working directory")?;
-            let cwd =
-                PathBuf::try_from(cwd).context("Current directory path is not valid UTF-8")?;
-            match parse_args(s, &cwd)? {
-                ParsedArguments::Hex(bytes) => Ok(bytes),
-                ParsedArguments::Candid(args) => args
-                    .to_bytes()
-                    .context("Failed to encode Candid args to bytes"),
-            }
-        })
-        .transpose()?;
+    // If you add .did support to this code, consider extracting/unifying with the logic from call.rs
+    let init_args_bytes = args.args_opt.resolve_bytes()?;
 
     // Validate --wasm-memory-persistence: only meaningful for upgrades of EOP canisters.
     if let Some(persistence) = args.wasm_memory_persistence {
@@ -128,17 +118,16 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
             );
         }
         if persistence == WasmMemoryPersistenceOpt::Replace {
-            ctx.term.write_line(
-                "Warning: --wasm-memory-persistence=replace will DISCARD the canister's \
-                 main (Wasm) memory.",
-            )?;
-            ctx.term.write_line(
+            warn!(
+                "--wasm-memory-persistence=replace will DISCARD the canister's \
+                 main (Wasm) memory."
+            );
+            warn!(
                 "Only state held in `stable` variables survives. Heap state is lost \
-                 and cannot be recovered.",
-            )?;
+                 and cannot be recovered."
+            );
             if args.yes {
-                ctx.term
-                    .write_line("Proceeding without confirmation (--yes).")?;
+                info!("Proceeding without confirmation (--yes).");
             } else {
                 let confirmed = Confirm::new()
                     .with_prompt("Do you want to proceed?")
@@ -152,20 +141,58 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     }
 
     let canister_display = args.cmd_args.canister.to_string();
+    let (install_mode, status) = resolve_install_mode_and_status(
+        &agent,
+        args.proxy,
+        &canister_display,
+        &canister_id,
+        &args.mode,
+    )
+    .await?;
+
+    // Candid interface compatibility check for upgrades
+    if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
+        match check_candid_compatibility(&agent, &canister_id, &wasm).await {
+            CandidCompatibility::Compatible | CandidCompatibility::Skipped(_) => {}
+            CandidCompatibility::Incompatible(details) => {
+                let warning = format!(
+                    "Candid interface compatibility check failed for canister \
+                     '{canister_display}'.\n\
+                     You are making a BREAKING change. Other canisters or frontend clients \
+                     relying on your canister may stop working.\n\n\
+                     {details}"
+                );
+
+                if std::io::stdin().is_terminal() {
+                    warn!("{warning}");
+                    let confirmed = Confirm::new()
+                        .with_prompt("Do you want to proceed anyway?")
+                        .default(false)
+                        .interact()?;
+                    if !confirmed {
+                        bail!("Installation cancelled.");
+                    }
+                } else {
+                    bail!("{warning}\n\nUse --yes to bypass this check.");
+                }
+            }
+        }
+    }
+
     install_canister(
         &agent,
+        args.proxy,
         &canister_id,
         &canister_display,
         &wasm,
-        &args.mode,
+        install_mode,
+        status,
         init_args_bytes.as_deref(),
         args.wasm_memory_persistence,
     )
     .await?;
 
-    let _ = ctx.term.write_line(&format!(
-        "Canister {canister_display} installed successfully"
-    ));
+    info!("Canister {canister_display} installed successfully");
 
     Ok(())
 }

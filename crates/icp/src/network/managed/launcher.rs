@@ -1,6 +1,5 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
-use camino_tempfile::Utf8TempDir;
 use candid::Principal;
 use notify::{EventHandler, Watcher};
 use serde::Deserialize;
@@ -8,6 +7,7 @@ use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
+use tracing::{info, warn};
 
 use crate::{
     network::{ManagedLauncherConfig, Port, config::ChildLocator},
@@ -19,12 +19,11 @@ pub struct NetworkInstance {
     pub root_key: Vec<u8>,
     pub pocketic_config_port: Option<u16>,
     pub pocketic_instance_id: Option<usize>,
+    pub use_friendly_domains: bool,
 }
 
 #[derive(Debug, Snafu)]
 pub enum SpawnNetworkLauncherError {
-    #[snafu(display("failed to create status directory"))]
-    CreateStatusDir { source: std::io::Error },
     #[snafu(display("failed to create stdio log at {path}"))]
     CreateStdioFile {
         source: std::io::Error,
@@ -66,6 +65,7 @@ pub async fn spawn_network_launcher(
     verbose: bool,
     launcher_config: &ManagedLauncherConfig,
     state_dir: &Path,
+    status_dir: &Path,
 ) -> Result<
     (
         AsyncDropper<ChildSignalOnDrop>,
@@ -77,20 +77,20 @@ pub async fn spawn_network_launcher(
     let mut cmd = tokio::process::Command::new(network_launcher_path);
     cmd.args([
         "--interface-version",
-        "1.0.0",
+        "1.1.0",
         "--state-dir",
         state_dir.as_str(),
     ]);
+    cmd.args(["--bind", &launcher_config.gateway.bind]);
     if let Port::Fixed(port) = launcher_config.gateway.port {
         cmd.args(["--gateway-port", &port.to_string()]);
     }
-    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    cmd.args(["--status-dir", status_dir.path().as_str()]);
+    cmd.args(["--status-dir", status_dir.as_str()]);
     cmd.args(launcher_settings_flags(launcher_config));
     if background {
-        eprintln!("For background mode, network output will be redirected:");
-        eprintln!("  stdout: {}", stdout_file);
-        eprintln!("  stderr: {}", stderr_file);
+        info!("For background mode, network output will be redirected:");
+        info!("  stdout: {stdout_file}");
+        info!("  stderr: {stderr_file}");
         let stdout = std::fs::File::create(stdout_file)
             .context(CreateStdioFileSnafu { path: &stdout_file })?;
         let stderr = std::fs::File::create(stderr_file)
@@ -104,7 +104,7 @@ pub async fn spawn_network_launcher(
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
     }
-    let watcher = wait_for_launcher_status(status_dir.as_ref()).context(WatchStatusDirSnafu)?;
+    let watcher = wait_for_launcher_status(status_dir).context(WatchStatusDirSnafu)?;
     let child = cmd.spawn().context(SpawnLauncherSnafu {
         network_launcher_path,
     })?;
@@ -143,6 +143,10 @@ pub async fn spawn_network_launcher(
             })?,
             pocketic_config_port: launcher_status.config_port,
             pocketic_instance_id: launcher_status.instance_id,
+            use_friendly_domains: launcher_status
+                .supported_features
+                .iter()
+                .any(|f| f == CUSTOM_DOMAINS_FEATURE),
         },
         ChildLocator::Pid { pid, start_time },
     ))
@@ -158,7 +162,7 @@ pub async fn stop_launcher(pid: Pid) {
             None => break,
             Some(_) => {
                 if Instant::now() >= expire {
-                    eprintln!("process {pid} did not exit within 10 seconds");
+                    warn!("process {pid} did not exit within 10 seconds");
                     break;
                 }
             }
@@ -169,11 +173,14 @@ pub async fn stop_launcher(pid: Pid) {
 
 pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
     let ManagedLauncherConfig {
-        gateway: _,
+        gateway,
+        version: _,
         artificial_delay_ms,
         ii,
         nns,
         subnets,
+        bitcoind_addr,
+        dogecoind_addr,
     } = config;
     let mut flags = vec![];
     if *ii {
@@ -189,6 +196,22 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
         for subnet in subnets {
             flags.push(format!("--subnet={subnet}"));
         }
+    }
+    if let Some(addrs) = &bitcoind_addr {
+        for addr in addrs {
+            flags.push(format!("--bitcoind-addr={addr}"));
+        }
+    }
+    if let Some(addrs) = &dogecoind_addr {
+        for addr in addrs {
+            flags.push(format!("--dogecoind-addr={addr}"));
+        }
+    }
+    for domain in &gateway.domains {
+        flags.push(format!("--domain={domain}"));
+    }
+    if gateway.domains.is_empty() {
+        flags.push(format!("--domain={}", gateway.bind));
     }
     flags
 }
@@ -340,7 +363,11 @@ pub struct LauncherStatus {
     pub gateway_port: u16,
     pub root_key: String,
     pub default_effective_canister_id: Option<Principal>,
+    #[serde(default)]
+    pub supported_features: Vec<String>,
 }
+
+pub const CUSTOM_DOMAINS_FEATURE: &str = "custom-domains";
 
 struct WatchRecv(Sender<notify::Result<notify::Event>>);
 

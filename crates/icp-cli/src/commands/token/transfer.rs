@@ -1,11 +1,16 @@
+use std::io::stdout;
+
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
+use icp::parsers::parse_token_amount;
+use serde::Serialize;
 
-use crate::commands::args::TokenCommandArgs;
-use crate::commands::parsers::parse_token_amount;
+use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
+use crate::commands::parsers::parse_subaccount;
 use crate::operations::token::transfer::transfer;
 
+/// Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 #[derive(Debug, Args)]
 #[command(override_usage = "icp token [TOKEN|LEDGER_ID] transfer [OPTIONS] <AMOUNT> <RECEIVER>")]
 pub(crate) struct TransferArgs {
@@ -15,11 +20,27 @@ pub(crate) struct TransferArgs {
     pub(crate) amount: BigDecimal,
 
     /// The receiver of the token transfer.
-    /// Can be a Principal or an AccountIdentifier hex string (only for ICP ledger).
-    pub(crate) receiver: String,
+    /// Can be a principal, an ICRC1 account ID, or an ICP ledger account ID (hex).
+    pub(crate) receiver: FlexibleAccountId,
+
+    /// The subaccount to transfer to (only if the receiver is a principal)
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) to_subaccount: Option<[u8; 32]>,
+
+    /// The subaccount to transfer from
+    #[arg(long, value_parser = parse_subaccount)]
+    pub(crate) from_subaccount: Option<[u8; 32]>,
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only the block index
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
 }
 
 pub(crate) async fn exec(
@@ -27,6 +48,19 @@ pub(crate) async fn exec(
     token: &str,
     args: &TransferArgs,
 ) -> Result<(), anyhow::Error> {
+    let mut receiver = args.receiver;
+    if let Some(subaccount) = args.to_subaccount {
+        if let FlexibleAccountId::Icrc1(account) = &mut receiver
+            && account.subaccount.is_none()
+        {
+            account.subaccount = Some(subaccount);
+        } else {
+            return Err(anyhow::anyhow!(
+                "Cannot use --to-subaccount with an account ID. Use a plain principal if you want to specify a subaccount."
+            ));
+        }
+    }
+
     let selections = args.token_command_args.selections();
 
     // Agent
@@ -39,13 +73,29 @@ pub(crate) async fn exec(
         .await?;
 
     // Execute transfer
-    let transfer_info = transfer(&agent, token, &args.amount, &args.receiver).await?;
+    let transfer_info =
+        transfer(&agent, args.from_subaccount, token, &args.amount, &receiver).await?;
 
-    // Output information
-    let _ = ctx.term.write_line(&format!(
-        "Transferred {} to {} in block {}",
-        transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
-    ));
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonTransfer {
+                block_index: transfer_info.block_index.to_string(),
+            },
+        )?;
+    } else if args.quiet {
+        println!("{}", transfer_info.block_index);
+    } else {
+        println!(
+            "Transferred {} to {} in block {}",
+            transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
+        );
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonTransfer {
+    block_index: String,
 }

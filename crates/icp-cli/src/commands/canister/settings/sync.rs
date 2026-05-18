@@ -1,14 +1,19 @@
 use anyhow::bail;
+use candid::Principal;
 use clap::Args;
-use ic_utils::interfaces::ManagementCanister;
 use icp::context::{CanisterSelection, Context};
 
 use crate::commands::args::CanisterCommandArgs;
 
+/// Synchronize a canister's settings with those defined in the project
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
     #[command(flatten)]
     cmd_args: CanisterCommandArgs,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::Error> {
@@ -36,8 +41,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
-
-    crate::operations::settings::sync_settings(&mgmt, &cid, &canister).await?;
+    crate::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister).await?;
     Ok(())
 }

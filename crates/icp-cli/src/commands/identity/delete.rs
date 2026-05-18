@@ -1,7 +1,9 @@
 use clap::Args;
 use icp::context::Context;
 use icp::identity::key::delete_identity;
+use tracing::info;
 
+/// Delete an identity
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     /// Name of the identity to delete
@@ -13,9 +15,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
 
     dirs.with_write(async |dirs| {
         delete_identity(dirs, &args.name)?;
-        let _ = ctx
-            .term
-            .write_line(&format!("Deleted identity `{}`", args.name));
+        info!("Deleted identity `{}`", args.name);
         Ok(())
     })
     .await?

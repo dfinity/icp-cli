@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use snafu::prelude::*;
@@ -14,7 +16,9 @@ pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {
-    canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
+    canister::{ArgsFormat, CanisterManifest, ManifestInitArgs},
+    environment::EnvironmentManifest,
+    network::NetworkManifest,
     project::ProjectManifest,
 };
 
@@ -27,7 +31,7 @@ pub const CANISTER_MANIFEST: &str = "canister.yaml";
 // - CanisterManifest: path or glob pattern to the directory containing "canister.yaml"
 // - NetworkManifest: path to network manifest
 // - EnvironmentManifest: path to environment manifest
-#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema)]
 #[serde(untagged)]
 pub enum Item<T> {
     /// Path to a manifest
@@ -35,6 +39,52 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
+}
+
+impl<'de, T> Deserialize<'de> for Item<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
+        use std::fmt;
+
+        struct ItemVisitor<T>(PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ItemVisitor<T> {
+            type Value = Item<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string path or a manifest object")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v.to_owned()))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Item::Path(v))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                T::deserialize(MapAccessDeserializer::new(map)).map(Item::Manifest)
+            }
+        }
+
+        deserializer.deserialize_any(ItemVisitor(PhantomData))
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -125,4 +175,69 @@ where
         path: path.to_path_buf(),
     })?;
     Ok(m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino_tempfile::Utf8TempDir;
+
+    fn write_manifest(dir: &Path) {
+        std::fs::write(dir.join(PROJECT_MANIFEST), "").unwrap();
+    }
+
+    #[test]
+    fn locate_returns_cwd_when_manifest_present() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_manifest(tmp.path());
+
+        let locator = ProjectRootLocateImpl::new(tmp.path().to_path_buf(), None);
+        assert_eq!(locator.locate().unwrap(), tmp.path());
+    }
+
+    #[test]
+    fn locate_walks_up_to_manifest() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_manifest(tmp.path());
+
+        let nested = tmp.path().join("a/b/c");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let locator = ProjectRootLocateImpl::new(nested, None);
+        assert_eq!(locator.locate().unwrap(), tmp.path());
+    }
+
+    #[test]
+    fn locate_returns_not_found_when_no_manifest_anywhere() {
+        let tmp = Utf8TempDir::new().unwrap();
+        let nested = tmp.path().join("a/b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        // Host filesystem contains no icp.yaml above the tempdir (assumed in CI).
+        let locator = ProjectRootLocateImpl::new(nested, None);
+        assert!(matches!(
+            locator.locate(),
+            Err(ProjectRootLocateError::NotFound { .. })
+        ));
+    }
+
+    // When cwd is a symlinked directory, locate() walks up via the symlink's
+    // lexical parents
+    #[cfg(unix)]
+    #[test]
+    fn locate_walks_up_through_symlink() {
+        // target/ has no manifest anywhere above it within the test's scope.
+        let target = Utf8TempDir::new().unwrap();
+
+        // project/ contains the manifest; `project/link` is a symlink to target/.
+        let project = Utf8TempDir::new().unwrap();
+        write_manifest(project.path());
+        let link = project.path().join("link");
+        std::os::unix::fs::symlink(target.path().as_std_path(), link.as_std_path()).unwrap();
+
+        // cwd is the symlink path; its lexical parent is `project`,
+        // which contains the manifest.
+        let locator = ProjectRootLocateImpl::new(link, None);
+        assert_eq!(locator.locate().unwrap(), project.path());
+    }
 }

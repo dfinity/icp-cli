@@ -1,17 +1,20 @@
 use anyhow::bail;
-use byte_unit::{Byte, Unit};
+use candid::Nat;
 use clap::{ArgAction, Args};
 use dialoguer::Confirm;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable, LogVisibility,
+    UpdateSettingsArgs,
+};
 use icp::ProjectLoadError;
-use icp::context::{CanisterSelection, Context, TermWriter};
+use icp::context::{CanisterSelection, Context};
+use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
+use tracing::warn;
 
-use crate::commands::args;
-use crate::commands::parsers::parse_cycles_amount;
+use crate::{commands::args, operations::proxy_management};
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -41,6 +44,9 @@ impl ControllerOpt {
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct LogVisibilityOpt {
+    /// Set log visibility to a fixed policy [possible values: controllers, public].
+    /// Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer.
+    /// Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead.
     #[arg(
         long,
         value_parser = log_visibility_parser,
@@ -50,12 +56,15 @@ pub(crate) struct LogVisibilityOpt {
     )]
     log_visibility: Option<LogVisibility>,
 
+    /// Add a principal to the allowed log viewers list
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     add_log_viewer: Option<Vec<Principal>>,
 
+    /// Remove a principal from the allowed log viewers list
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     remove_log_viewer: Option<Vec<Principal>>,
 
+    /// Replace the allowed log viewers list with the specified principals
     #[arg(long, action = ArgAction::Append)]
     set_log_viewer: Option<Vec<Principal>>,
 }
@@ -68,9 +77,11 @@ impl LogVisibilityOpt {
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct EnvironmentVariableOpt {
+    /// Add a canister environment variable in KEY=VALUE format
     #[arg(long, value_parser = environment_variable_parser, action = ArgAction::Append)]
     add_environment_variable: Option<Vec<EnvironmentVariable>>,
 
+    /// Remove a canister environment variable by key name
     #[arg(long, action = ArgAction::Append)]
     remove_environment_variable: Option<Vec<String>>,
 }
@@ -81,6 +92,7 @@ impl EnvironmentVariableOpt {
     }
 }
 
+/// Change a canister's settings to specified values
 #[derive(Debug, Args)]
 pub(crate) struct UpdateArgs {
     #[command(flatten)]
@@ -93,31 +105,48 @@ pub(crate) struct UpdateArgs {
     #[command(flatten)]
     controllers: Option<ControllerOpt>,
 
+    /// Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity.
     #[arg(long, value_parser = compute_allocation_parser)]
     compute_allocation: Option<u8>,
 
-    #[arg(long, value_parser = memory_parser)]
-    memory_allocation: Option<Byte>,
+    /// Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    memory_allocation: Option<MemoryAmount>,
 
-    #[arg(long, value_parser = freezing_threshold_parser)]
-    freezing_threshold: Option<u64>,
+    /// Freezing threshold. Controls how long a canister can be inactive before being frozen.
+    /// Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks).
+    /// A bare number is treated as seconds.
+    #[arg(long)]
+    freezing_threshold: Option<DurationAmount>,
 
-    /// Reserved cycles limit for the canister.
+    /// Upper limit on cycles reserved for future resource payments.
+    /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_parser = parse_cycles_amount)]
-    reserved_cycles_limit: Option<u128>,
+    #[arg(long)]
+    reserved_cycles_limit: Option<CyclesAmount>,
 
-    #[arg(long, value_parser = memory_parser)]
-    wasm_memory_limit: Option<Byte>,
+    /// Wasm memory limit in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    wasm_memory_limit: Option<MemoryAmount>,
 
-    #[arg(long, value_parser = memory_parser)]
-    wasm_memory_threshold: Option<Byte>,
+    /// Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[arg(long)]
+    wasm_memory_threshold: Option<MemoryAmount>,
+
+    /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
+    /// Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    #[arg(long)]
+    log_memory_limit: Option<MemoryAmount>,
 
     #[command(flatten)]
     log_visibility: Option<LogVisibilityOpt>,
 
     #[command(flatten)]
     environment_variables: Option<EnvironmentVariableOpt>,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
@@ -152,12 +181,16 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         <_>::default()
     };
 
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
-
     let mut current_status: Option<CanisterStatusResult> = None;
     if require_current_settings(args) {
-        current_status = Some(mgmt.canister_status(&cid).await?.0);
+        current_status = Some(
+            proxy_management::canister_status(
+                &agent,
+                args.proxy,
+                CanisterIdRecord { canister_id: cid },
+            )
+            .await?,
+        );
     }
 
     // TODO(VZ): Ask for consent if the freezing threshold is too long or too short.
@@ -167,17 +200,25 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     if let Some(controllers_opt) = &args.controllers {
         controllers = get_controllers(controllers_opt, current_status.as_ref());
 
-        // Check if the caller is being removed from controllers
+        // Check if the effective controller is being removed from the controller list.
+        // When --proxy is set, the proxy canister is the one making management calls and
+        // is the effective controller. Without --proxy, it's the caller's identity.
+        let effective_controller = args.proxy.unwrap_or(caller_principal);
         if let Some(new_controllers) = &controllers
-            && !new_controllers.contains(&caller_principal)
+            && !new_controllers.contains(&effective_controller)
             && !args.force
         {
-            ctx.term.write_line(
-                "Warning: You are about to remove yourself from the controllers list.",
-            )?;
-            ctx.term.write_line(
-                "This will cause you to lose control of the canister and cannot be undone.",
-            )?;
+            if args.proxy.is_some() {
+                warn!(
+                    "You are about to remove the proxy canister ({effective_controller}) from the controllers list."
+                );
+                warn!(
+                    "This will prevent further management calls through this proxy and cannot be undone."
+                );
+            } else {
+                warn!("You are about to remove yourself from the controllers list.");
+                warn!("This will cause you to lose control of the canister and cannot be undone.");
+            }
 
             let confirmed = Confirm::new()
                 .with_prompt("Do you want to proceed?")
@@ -199,78 +240,82 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
     if let Some(environment_variables_opt) = &args.environment_variables {
-        maybe_warn_on_env_vars_change(&ctx.term, &configured_settings, environment_variables_opt)?;
+        maybe_warn_on_env_vars_change(&configured_settings, environment_variables_opt);
         environment_variables =
             get_environment_variables(environment_variables_opt, current_status.as_ref());
     }
 
-    // Update settings.
-    let mut update = mgmt.update_settings(&cid);
-    if let Some(controllers) = controllers {
-        for controller in controllers {
-            update = update.with_controller(controller);
-        }
+    // Build settings with warnings for configured values
+    if args.compute_allocation.is_some() && configured_settings.compute_allocation.is_some() {
+        warn!(
+            "Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(compute_allocation) = args.compute_allocation {
-        if configured_settings.compute_allocation.is_some() {
-            ctx.term.write_line(
-                "Warning: Compute allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_compute_allocation(compute_allocation);
+    if args.memory_allocation.is_some() && configured_settings.memory_allocation.is_some() {
+        warn!(
+            "Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(memory_allocation) = args.memory_allocation {
-        if configured_settings.memory_allocation.is_some() {
-            ctx.term.write_line(
-                "Warning: Memory allocation is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_memory_allocation(memory_allocation.as_u64());
+    if args.freezing_threshold.is_some() && configured_settings.freezing_threshold.is_some() {
+        warn!(
+            "Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(freezing_threshold) = args.freezing_threshold {
-        if configured_settings.freezing_threshold.is_some() {
-            ctx.term.write_line(
-                "Warning: Freezing threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_freezing_threshold(freezing_threshold);
+    if args.reserved_cycles_limit.is_some() && configured_settings.reserved_cycles_limit.is_some() {
+        warn!(
+            "Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(reserved_cycles_limit) = args.reserved_cycles_limit {
-        if configured_settings.reserved_cycles_limit.is_some() {
-            ctx.term.write_line(
-                "Warning: Reserved cycles limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_reserved_cycles_limit(reserved_cycles_limit);
+    if args.wasm_memory_limit.is_some() && configured_settings.wasm_memory_limit.is_some() {
+        warn!(
+            "Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(wasm_memory_limit) = args.wasm_memory_limit {
-        if configured_settings.wasm_memory_limit.is_some() {
-            ctx.term.write_line(
-                "Warning: Wasm memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_wasm_memory_limit(wasm_memory_limit.as_u64());
+    if args.wasm_memory_threshold.is_some() && configured_settings.wasm_memory_threshold.is_some() {
+        warn!(
+            "Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(wasm_memory_threshold) = args.wasm_memory_threshold {
-        if configured_settings.wasm_memory_threshold.is_some() {
-            ctx.term.write_line(
-                "Warning: Wasm memory threshold is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_wasm_memory_threshold(wasm_memory_threshold.as_u64());
+    if args.log_memory_limit.is_some() && configured_settings.log_memory_limit.is_some() {
+        warn!(
+            "Log memory limit is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(log_visibility) = log_visibility {
-        if configured_settings.log_visibility.is_some() {
-            ctx.term.write_line(
-                "Warning: Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
-            )?
-        }
-        update = update.with_log_visibility(log_visibility);
+    if log_visibility.is_some() && configured_settings.log_visibility.is_some() {
+        warn!(
+            "Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
     }
-    if let Some(environment_variables) = environment_variables {
-        update = update.with_environment_variables(environment_variables);
-    }
-    update.await?;
+
+    let settings = CanisterSettings {
+        controllers,
+        compute_allocation: args.compute_allocation.map(|v| Nat::from(v as u64)),
+        memory_allocation: args.memory_allocation.as_ref().map(|m| Nat::from(m.get())),
+        freezing_threshold: args.freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
+        reserved_cycles_limit: args
+            .reserved_cycles_limit
+            .as_ref()
+            .map(|r| Nat::from(r.get())),
+        wasm_memory_limit: args.wasm_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        wasm_memory_threshold: args
+            .wasm_memory_threshold
+            .as_ref()
+            .map(|m| Nat::from(m.get())),
+        log_memory_limit: args.log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        log_visibility,
+        environment_variables,
+    };
+
+    proxy_management::update_settings(
+        &agent,
+        args.proxy,
+        UpdateSettingsArgs {
+            canister_id: cid,
+            settings,
+            sender_canister_version: None,
+        },
+    )
+    .await?;
 
     Ok(())
 }
@@ -282,23 +327,6 @@ fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
         return Ok(num);
     }
     Err("Must be a percent between 0 and 100".to_string())
-}
-
-fn memory_parser(memory_allocation: &str) -> Result<Byte, String> {
-    let limit = Byte::from_u64_with_unit(256, Unit::TiB).expect("256 TiB is a valid byte unit");
-    if let Ok(byte) = memory_allocation.parse::<Byte>()
-        && byte <= limit
-    {
-        return Ok(byte);
-    }
-    Err("Must be a value between 0..256 TiB inclusive, (e.g. '2GiB')".to_string())
-}
-
-fn freezing_threshold_parser(freezing_threshold: &str) -> Result<u64, String> {
-    if let Ok(num) = freezing_threshold.parse::<u64>() {
-        return Ok(num);
-    }
-    Err("Must be a value between 0..2^64-1 inclusive".to_string())
 }
 
 fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> {
@@ -452,33 +480,28 @@ fn get_environment_variables(
 }
 
 fn maybe_warn_on_env_vars_change(
-    mut term: &TermWriter,
     configured_settings: &icp::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
-) -> Result<(), anyhow::Error> {
+) {
     if let Some(configured_vars) = &configured_settings.environment_variables {
         if let Some(to_add) = &environment_variables_opt.add_environment_variable {
             for add_var in to_add {
                 if configured_vars.contains_key(&add_var.name) {
-                    writeln!(
-                        term,
-                        "Warning: Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
+                    warn!(
+                        "Environment variable '{}' is already set in icp.yaml; this new value will be overridden on next settings sync",
                         add_var.name
-                    )?;
+                    );
                 }
             }
         }
         if let Some(to_remove) = &environment_variables_opt.remove_environment_variable {
             for remove_var in to_remove {
                 if configured_vars.contains_key(remove_var) {
-                    writeln!(
-                        term,
-                        "Warning: Environment variable '{}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
-                        remove_var
-                    )?;
+                    warn!(
+                        "Environment variable '{remove_var}' is already set in icp.yaml; removing it here will be overridden on next settings sync",
+                    );
                 }
             }
         }
     }
-    Ok(())
 }

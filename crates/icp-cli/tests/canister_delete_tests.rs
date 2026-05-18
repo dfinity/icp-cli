@@ -116,3 +116,95 @@ async fn canister_delete() {
         .failure()
         .stderr(contains("could not find ID for canister"));
 }
+
+#[tokio::test]
+async fn canister_delete_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify canister ID exists in id store
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("random-environment.ids.json");
+    let id_mapping_before =
+        std::fs::read_to_string(&id_mapping_path).expect("ID mapping file should exist");
+    assert!(
+        id_mapping_before.contains("my-canister"),
+        "ID mapping should contain my-canister before deletion"
+    );
+
+    // Stop canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Delete canister through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "delete",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify canister ID is removed from the id store
+    let id_mapping_after =
+        std::fs::read_to_string(&id_mapping_path).expect("ID mapping file should still exist");
+    assert!(
+        !id_mapping_after.contains("my-canister"),
+        "ID mapping should NOT contain my-canister after deletion"
+    );
+}

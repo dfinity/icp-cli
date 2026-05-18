@@ -54,7 +54,12 @@ pub enum GetBalanceError {
 ///
 /// # Returns
 ///
-pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetBalanceError> {
+pub async fn get_balance(
+    agent: &Agent,
+    token: &str,
+    owner: Principal,
+    subaccount: Option<[u8; 32]>,
+) -> Result<TokenAmount, GetBalanceError> {
     // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
         // Given token matched known token names
@@ -74,7 +79,7 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetB
     let (balance, decimals, symbol) = tokio::join!(
         //
         // Obtain token balance
-        get_raw_balance(agent, cid),
+        get_raw_balance(agent, cid, owner, subaccount),
         //
         // Obtain the number of decimals the token uses
         async {
@@ -112,20 +117,16 @@ pub async fn get_balance(agent: &Agent, token: &str) -> Result<TokenAmount, GetB
     Ok(TokenAmount { amount, symbol })
 }
 
-pub async fn get_raw_balance(agent: &Agent, ledger: Principal) -> Result<Nat, GetBalanceError> {
-    let owner = agent
-        .get_principal()
-        .map_err(|err| GetBalanceError::GetPrincipal { err })?;
+pub async fn get_raw_balance(
+    agent: &Agent,
+    ledger: Principal,
+    owner: Principal,
+    subaccount: Option<[u8; 32]>,
+) -> Result<Nat, GetBalanceError> {
     // Perform query
     let resp = agent
         .query(&ledger, "icrc1_balance_of")
-        .with_arg(
-            Encode!(&Account {
-                owner,
-                subaccount: None
-            })
-            .expect("failed to encode arg"),
-        )
+        .with_arg(Encode!(&Account { owner, subaccount }).expect("failed to encode arg"))
         .await
         .context(QueryBalanceSnafu)?;
 

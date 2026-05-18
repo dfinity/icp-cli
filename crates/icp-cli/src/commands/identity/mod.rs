@@ -2,46 +2,34 @@ use clap::{Subcommand, ValueEnum};
 
 pub(crate) mod account_id;
 pub(crate) mod default;
+pub(crate) mod delegation;
 pub(crate) mod delete;
 pub(crate) mod export;
 pub(crate) mod import;
 pub(crate) mod link;
 pub(crate) mod list;
+pub(crate) mod login;
 pub(crate) mod new;
 pub(crate) mod principal;
 pub(crate) mod rename;
 
+/// Manage your identities
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Display the ICP ledger account identifier for the current identity
     AccountId(account_id::AccountIdArgs),
-
-    /// Display the currently selected identity
     Default(default::DefaultArgs),
-
-    /// Delete an identity
+    #[command(subcommand)]
+    Delegation(delegation::Command),
     Delete(delete::DeleteArgs),
-
-    /// Print the PEM file for the identity
     Export(export::ExportArgs),
-
-    /// Import a new identity
     Import(import::ImportArgs),
-
-    /// Link an external key to a new identity
     #[command(subcommand)]
     Link(link::Command),
-
-    /// List the identities
     List(list::ListArgs),
-
-    /// Create a new identity
+    #[command(hide = true)] // todo remove when II login is out of beta
+    Login(login::LoginArgs),
     New(new::NewArgs),
-
-    /// Display the principal for the current identity
     Principal(principal::PrincipalArgs),
-
-    /// Rename an identity
     Rename(rename::RenameArgs),
 }
 

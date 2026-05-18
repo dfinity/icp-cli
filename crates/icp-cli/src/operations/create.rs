@@ -1,17 +1,26 @@
+use std::sync::Arc;
+
 use candid::{Decode, Encode, Nat, Principal};
-use ic_agent::{Agent, AgentError};
+use ic_agent::{
+    Agent, AgentError,
+    agent::{Subnet, SubnetType},
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
+};
 use icp_canister_interfaces::{
     cycles_ledger::{
-        CYCLES_LEDGER_PRINCIPAL, CanisterSettingsArg, CreateCanisterArgs, CreateCanisterResponse,
-        CreationArgs, SubnetSelectionArg,
+        CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
+        SubnetSelectionArg,
     },
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
-    registry::{GetSubnetForCanisterRequest, GetSubnetForCanisterResult, REGISTRY_PRINCIPAL},
 };
 use rand::seq::IndexedRandom;
-use snafu::{ResultExt, Snafu};
-use std::sync::Arc;
+use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::sync::OnceCell;
+
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 pub enum CreateOperationError {
@@ -44,11 +53,27 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to resolve subnet: {message}"))]
     SubnetResolution { message: String },
+
+    #[snafu(transparent)]
+    UpdateOrProxyCall { source: UpdateOrProxyError },
+}
+
+/// Determines how a new canister is created.
+pub enum CreateTarget {
+    /// Create the canister on a specific subnet, chosen by the caller.
+    Subnet(Principal),
+    /// Create the canister via a proxy canister. The `create_canister` call is
+    /// forwarded through the proxy's `proxy` method to the management canister,
+    /// so the new canister will be placed on the same subnet as the proxy.
+    Proxy(Principal),
+    /// No explicit target. The subnet is resolved automatically: either from an
+    /// existing canister in the project or by picking a random available subnet.
+    None,
 }
 
 struct CreateOperationInner {
     agent: Agent,
-    subnet: Option<Principal>,
+    target: CreateTarget,
     cycles: u128,
     existing_canisters: Vec<Principal>,
     resolved_subnet: OnceCell<Result<Principal, String>>,
@@ -69,14 +94,14 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         agent: Agent,
-        subnet: Option<Principal>,
+        target: CreateTarget,
         cycles: u128,
         existing_canisters: Vec<Principal>,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
                 agent,
-                subnet,
+                target,
                 cycles,
                 existing_canisters,
                 resolved_subnet: OnceCell::new(),
@@ -90,14 +115,38 @@ impl CreateOperation {
     /// - `Err(CreateOperationError)` if an error occurred.
     pub async fn create(
         &self,
-        settings: &CanisterSettingsArg,
+        settings: &CanisterSettings,
+    ) -> Result<Principal, CreateOperationError> {
+        if let CreateTarget::Proxy(proxy) = self.inner.target {
+            return self.create_proxy(settings, proxy).await;
+        }
+
+        let selected_subnet = self
+            .get_subnet()
+            .await
+            .map_err(|e| CreateOperationError::SubnetResolution { message: e })?;
+        let subnet_info = self
+            .inner
+            .agent
+            .get_subnet_by_id(&selected_subnet)
+            .await
+            .context(GetSubnetSnafu)?;
+        let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
+            self.create_mgmt(settings, &subnet_info).await?
+        } else {
+            self.create_ledger(settings, selected_subnet).await?
+        };
+        Ok(cid)
+    }
+
+    async fn create_ledger(
+        &self,
+        settings: &CanisterSettings,
+        selected_subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
         let creation_args = CreationArgs {
             subnet_selection: Some(SubnetSelectionArg::Subnet {
-                subnet: self
-                    .get_subnet()
-                    .await
-                    .map_err(|e| CreateOperationError::SubnetResolution { message: e })?,
+                subnet: selected_subnet,
             }),
             settings: Some(settings.clone()),
         };
@@ -128,8 +177,59 @@ impl CreateOperation {
                 .fail();
             }
         };
-
         Ok(cid)
+    }
+
+    async fn create_mgmt(
+        &self,
+        settings: &CanisterSettings,
+        selected_subnet: &Subnet,
+    ) -> Result<Principal, CreateOperationError> {
+        let arg = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        };
+
+        // Call management canister create_canister
+        let resp = self
+            .inner
+            .agent
+            .update(&Principal::management_canister(), "create_canister")
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
+            .with_effective_canister_id(
+                *selected_subnet
+                    .iter_canister_ranges()
+                    .next()
+                    .context(CreateCanisterSnafu {
+                        message: "subnet did not contain canister ranges",
+                    })?
+                    .start(),
+            )
+            .await
+            .context(AgentSnafu)?;
+        let resp: CanisterIdRecord = Decode!(&resp, CanisterIdRecord).context(CandidDecodeSnafu)?;
+        Ok(resp.canister_id)
+    }
+
+    async fn create_proxy(
+        &self,
+        settings: &CanisterSettings,
+        proxy: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let args = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        };
+
+        let result = proxy_management::create_canister(
+            &self.inner.agent,
+            Some(proxy),
+            self.inner.cycles,
+            args,
+        )
+        .await?;
+
+        Ok(result.canister_id)
     }
 
     /// 1. If a subnet is explicitly provided, use it
@@ -143,15 +243,18 @@ impl CreateOperation {
             .resolved_subnet
             .get_or_init(|| async {
                 // If subnet is explicitly provided, use it
-                if let Some(subnet) = self.inner.subnet {
+                if let CreateTarget::Subnet(subnet) = self.inner.target {
                     return Ok(subnet);
                 }
 
                 if let Some(canister) = self.inner.existing_canisters.first() {
-                    let subnet = get_canister_subnet(&self.inner.agent, *canister)
+                    let subnet = &self
+                        .inner
+                        .agent
+                        .get_subnet_by_canister(canister)
                         .await
                         .map_err(|e| e.to_string())?;
-                    Ok(subnet)
+                    Ok(subnet.id())
                 } else {
                     // If no canisters exist, pick a random available subnet
                     let subnets = get_available_subnets(&self.inner.agent)
@@ -168,31 +271,6 @@ impl CreateOperation {
 
         result.clone()
     }
-}
-
-async fn get_canister_subnet(
-    agent: &Agent,
-    canister: Principal,
-) -> Result<Principal, CreateOperationError> {
-    let args = &GetSubnetForCanisterRequest {
-        principal: Some(canister),
-    };
-
-    let bs = agent
-        .query(&REGISTRY_PRINCIPAL, "get_subnet_for_canister")
-        .with_arg(Encode!(args).context(CandidEncodeSnafu)?)
-        .call()
-        .await
-        .context(GetSubnetSnafu)?;
-
-    let resp = Decode!(&bs, GetSubnetForCanisterResult).context(CandidDecodeSnafu)?;
-
-    let out = resp
-        .map_err(|err| CreateOperationError::Registry { message: err })?
-        .subnet_id
-        .ok_or(CreateOperationError::MissingSubnetId)?;
-
-    Ok(out)
 }
 
 async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {

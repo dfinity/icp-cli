@@ -1,16 +1,21 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
+import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
+import agentDocs from './plugins/astro-agent-docs.mjs';
+
+const SITE = (process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org').replace(/\/$/, '');
 
 // https://astro.build/config
 export default defineConfig({
-  site: process.env.PUBLIC_SITE,
-  // For versioned deployments: /icp-cli/0.1/, /icp-cli/0.2/, etc.
-  // For non-versioned: /icp-cli/ in production, / in development
-  // Defaults are set in the workflow, not here
-  base: process.env.PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? process.env.PUBLIC_BASE_PREFIX + '/' : '/'),
+  site: SITE,
+  // For versioned deployments: /0.1/, /0.2/, etc.
+  // PUBLIC_BASE_PATH is set per-version in CI (e.g., /0.2/, /main/)
+  base: process.env.PUBLIC_BASE_PATH || '/',
   markdown: {
     rehypePlugins: [
+      // Rewrite relative .md links for Astro's directory-based output
+      rehypeRewriteLinks,
       // Open external links in new tab
       [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
     ],
@@ -22,8 +27,73 @@ export default defineConfig({
       favicon: '/favicon.png',
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
+        Banner: './src/components/Banner.astro',
+        Footer: './src/components/Footer.astro',
       },
       head: [
+        {
+          // Agent-friendly docs: surface llms.txt directive early in <head>
+          // so crawlers find it before the content area (agentdocsspec.com)
+          tag: 'link',
+          attrs: {
+            rel: 'help',
+            href: '/llms.txt',
+            type: 'text/plain',
+            title: 'LLM-friendly documentation index',
+          },
+        },
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'alternate',
+            type: 'application/rss+xml',
+            title: 'ICP CLI Documentation',
+            href: '/feed.xml',
+          },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'author', content: 'DFINITY Foundation' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: `${SITE}/og-image.png` },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:alt', content: 'ICP CLI Documentation — Build on Internet Computer' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:image', content: `${SITE}/og-image.png` },
+        },
+        {
+          tag: 'script',
+          attrs: { type: 'application/ld+json' },
+          content: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@graph': [
+              {
+                '@type': 'WebSite',
+                '@id': `${SITE}/#website`,
+                'name': 'ICP CLI',
+                'description': 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
+                'url': SITE,
+                'publisher': { '@id': `${SITE}/#organization` },
+              },
+              {
+                '@type': 'Organization',
+                '@id': `${SITE}/#organization`,
+                'name': 'DFINITY Foundation',
+                'url': 'https://dfinity.org',
+              },
+            ],
+          }),
+        },
         {
           tag: 'script',
           attrs: {},
@@ -36,6 +106,12 @@ export default defineConfig({
               });
             });
           `,
+        },
+        // Matomo analytics — loaded from root so the site ID is defined once,
+        // not baked into each versioned build
+        {
+          tag: 'script',
+          attrs: { src: '/matomo.js', async: true },
         },
       ],
       social: [
@@ -67,6 +143,8 @@ export default defineConfig({
             { label: 'Local Development', slug: 'guides/local-development' },
             { label: 'Deploying to Mainnet', slug: 'guides/deploying-to-mainnet' },
             { label: 'Deploying to Specific Subnets', slug: 'guides/deploying-to-specific-subnets' },
+            { label: 'Canister Snapshots', slug: 'guides/canister-snapshots' },
+            { label: 'Canister Migration', slug: 'guides/canister-migration' },
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
@@ -82,6 +160,8 @@ export default defineConfig({
             { label: 'Project Model', slug: 'concepts/project-model' },
             { label: 'Build, Deploy, Sync', slug: 'concepts/build-deploy-sync' },
             { label: 'Environments and Networks', slug: 'concepts/environments' },
+            { label: 'Canister Discovery', slug: 'concepts/canister-discovery' },
+            { label: 'Binding Generation', slug: 'concepts/binding-generation' },
             { label: 'Recipes', slug: 'concepts/recipes' },
           ],
         },
@@ -95,12 +175,16 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Migration',
+          label: 'Other',
           items: [
-            { label: 'From dfx', slug: 'migration/from-dfx' },
+            { label: 'Migrating from dfx', slug: 'migration/from-dfx' },
+            { label: 'Telemetry', slug: 'telemetry' },
           ],
         },
       ],
     }),
+    // Generate .md endpoints, llms.txt, and agent signaling for agent-friendly docs.
+    // Listed after starlight() so the astro:build:done hook runs after sitemap generation.
+    agentDocs(),
   ],
 });

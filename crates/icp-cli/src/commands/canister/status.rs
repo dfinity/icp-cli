@@ -1,7 +1,9 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
 use ic_agent::{Agent, AgentError, export::Principal};
-use ic_management_canister_types::{CanisterStatusResult, EnvironmentVariable, LogVisibility};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
+};
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
@@ -10,17 +12,42 @@ use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
 
-use crate::{commands::args, options};
+use crate::{
+    commands::args,
+    operations::{proxy::UpdateOrProxyError, proxy_management},
+    options,
+};
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";
 /// Error code returned by the replica if the caller is not a controller
 const E_NOT_A_CONTROLLER: &str = "IC0512";
 
+/// Show the status of canister(s).
+///
+/// By default this queries the status endpoint of the management canister.
+/// If the caller is not a controller, falls back on fetching public
+/// information from the state tree.
 #[derive(Debug, Args)]
+#[command(after_long_help = "\
+Examples:
+
+    # Status of all canisters in the local environment
+    icp canister status
+
+    # Status of one canister by name
+    icp canister status backend -e local
+
+    # Print only canister IDs (useful for scripting)
+    icp canister status -i
+
+    # JSON output for all canisters
+    icp canister status --json
+")]
 pub(crate) struct StatusArgs {
     /// An optional canister name or principal to target.
-    /// When using a name, an enviroment must be specified.
+    /// When using a name, an environment must be specified.
+    /// If omitted, shows status for all canisters in the environment.
     pub(crate) canister: Option<args::Canister>,
 
     #[command(flatten)]
@@ -51,6 +78,10 @@ pub(crate) struct StatusArgsOptions {
     /// looks up public information from the state tree.
     #[arg(short, long)]
     pub public: bool,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub proxy: Option<Principal>,
 }
 
 /// Fetch the list of canister ids from the id_store
@@ -185,7 +216,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
     if args.options.id_only {
         for (_, cid) in cids.iter() {
-            let _ = ctx.term.write_line(&format!("{cid}"));
+            println!("{cid}");
         }
         return Ok(());
     }
@@ -197,9 +228,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
-
-    // Management Interface
-    let mgmt = ic_utils::interfaces::ManagementCanister::create(&agent);
 
     for (i, (maybe_name, cid)) in cids.iter().enumerate() {
         let output = match args.options.public {
@@ -217,8 +245,14 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             }
             false => {
                 // Retrieve canister status from management canister
-                match mgmt.canister_status(cid).await {
-                    Ok((result,)) => {
+                match proxy_management::canister_status(
+                    &agent,
+                    args.options.proxy,
+                    CanisterIdRecord { canister_id: *cid },
+                )
+                .await
+                {
+                    Ok(result) => {
                         let status = SerializableCanisterStatusResult::from(
                             cid.to_owned(),
                             maybe_name.clone(),
@@ -232,17 +266,18 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                                 .expect("Failed to build canister status output"),
                         }
                     }
-                    Err(AgentError::UncertifiedReject {
-                        reject,
-                        operation: _,
+                    Err(UpdateOrProxyError::DirectUpdateCall {
+                        source:
+                            AgentError::UncertifiedReject {
+                                reject,
+                                operation: _,
+                            },
                     }) => {
                         if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
-                            // The canister does not exist
                             bail!("Canister {cid} was not found.");
                         }
 
                         if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
-                            // We don't know this error code
                             bail!(
                                 "Error looking up canister {cid}: {:?} - {}",
                                 reject.error_code,
@@ -270,13 +305,9 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
 
         // Space records out to make things more readable
         if i > 0 && !args.options.json_format {
-            ctx.term
-                .write_line("")
-                .expect("Failed to write output to terminal");
+            println!();
         }
-        ctx.term
-            .write_line(output.trim())
-            .expect("Failed to write output to the terminal");
+        println!("{}", output.trim());
     }
 
     Ok(())
@@ -320,6 +351,7 @@ struct SerializableCanisterSettings {
     reserved_cycles_limit: String,
     wasm_memory_limit: String,
     wasm_memory_threshold: String,
+    log_memory_limit: String,
     log_visibility: SerializableLogVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
@@ -372,6 +404,7 @@ impl SerializableCanisterSettings {
             reserved_cycles_limit: settings.reserved_cycles_limit.to_string(),
             wasm_memory_limit: settings.wasm_memory_limit.to_string(),
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
+            log_memory_limit: settings.log_memory_limit.to_string(),
             log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
             environment_variables: settings.environment_variables.clone(),
         }
@@ -465,6 +498,11 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         &mut buf,
         "  Wasm memory threshold: {}",
         settings.wasm_memory_threshold
+    )?;
+    writeln!(
+        &mut buf,
+        "  Log memory limit: {}",
+        settings.log_memory_limit
     )?;
 
     let log_visibility = match settings.log_visibility.clone() {

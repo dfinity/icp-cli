@@ -1,4 +1,7 @@
-# Creating Recipes
+---
+title: Creating Recipes
+description: Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+---
 
 Recipes are reusable build templates that you can create to encode your team's build conventions or share them with the community.
 
@@ -142,6 +145,23 @@ canisters:
 ### Default Values
 
 Use `{{#if}}` with `{{else}}` for defaults, refer to the examples above.
+
+## Environment Variables
+
+Recipe scripts have access to runtime environment variables set by icp-cli.
+
+**Build script steps** receive:
+
+- `ICP_WASM_OUTPUT_PATH` — Where to write the compiled WASM file
+
+**Sync script steps** receive:
+
+- `ICP_CLI_ENVIRONMENT` — The current environment name (e.g. `local`, `staging`)
+- `ICP_CLI_NETWORK` — The current network name (e.g. `local`, `ic`)
+- `ICP_CLI_CID` — The canister ID of the canister being synced
+- `ICP_CLI_CID_<NAME>` — The canister ID of every canister with a registered ID in the current environment
+
+See [Environment Variables Reference](../reference/environment-variables.md) for full details.
 
 ## Testing Recipes
 

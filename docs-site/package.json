@@ -4,20 +4,24 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prepare-docs": "../scripts/prepare-docs.sh ../docs .docs-temp",
-    "dev": "npm run clean && npm run prepare-docs && astro dev",
-    "build": "npm run prepare-docs && astro build",
-    "preview": "astro preview",
-    "clean": "rm -rf .docs-temp dist .astro"
+    "dev": "npm run clean && astro dev",
+    "build": "astro build",
+    "preview": "npm run build && astro preview",
+    "clean": "rm -rf dist .astro",
+    "test:versions": "./test-version-switcher.sh"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
-    "@astrojs/starlight": "^0.37.3",
-    "astro": "^5.6.1",
+    "@astrojs/starlight": "^0.38.3",
+    "astro": "^6.3.2",
+    "gray-matter": "^4.0.3",
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@fontsource/inter": "^5.1.1",
+    "@resvg/resvg-js": "^2.6.2",
     "rehype-external-links": "^3.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "unist-util-visit": "^5.1.0"
   }
 }

@@ -30,6 +30,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
+            ArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -168,10 +169,34 @@ mod tests {
             }
             Err(err) => {
                 let err_msg = format!("{err}");
-                if !err_msg.contains("data did not match any variant of untagged enum Item") {
+                if !err_msg.contains("Canister my-canister failed to parse build/sync instructions")
+                {
                     panic!(
-                        "expected 'data did not match any variant of untagged enum Item' error but got: {err}"
+                        "expected 'Canister my-canister failed to parse build/sync instructions' error but got: {err}"
                     );
+                }
+            }
+        };
+    }
+
+    #[test]
+    fn project_with_invalid_recipe_type_should_fail() {
+        // Test that errors from nested deserialization are properly propagated
+        // through the custom Item<T> deserializer
+        match serde_yaml::from_str::<ProjectManifest>(indoc! {r#"
+                canisters:
+                  - name: my-canister
+                    recipe:
+                      type: blabla
+            "#})
+        {
+            Ok(_) => {
+                panic!("A project manifest with an invalid canister manifest should be invalid");
+            }
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Invalid recipe type: `blabla`") {
+                    panic!("expected 'Invalid recipe type: `blabla`' error but got: {err}");
                 }
             }
         };
@@ -265,7 +290,10 @@ mod tests {
                             artificial_delay_ms: None,
                             ii: None,
                             nns: None,
-                            subnets: None
+                            subnets: None,
+                            bitcoind_addr: None,
+                            dogecoind_addr: None,
+                            version: None,
                         }),
                     }),
                 })],
@@ -410,7 +438,9 @@ mod tests {
                       - name: my-environment
                         init_args:
                           canister-1: "(42)"
-                          canister-2: "4449444c0000"
+                          canister-2:
+                            value: "4449444c0000"
+                            format: hex
                 "#}),
             ProjectManifest {
                 canisters: vec![],
@@ -421,8 +451,17 @@ mod tests {
                     canisters: CanisterSelection::Everything,
                     settings: None,
                     init_args: Some(HashMap::from([
-                        ("canister-1".to_string(), "(42)".to_string()),
-                        ("canister-2".to_string(), "4449444c0000".to_string()),
+                        (
+                            "canister-1".to_string(),
+                            ManifestInitArgs::String("(42)".to_string()),
+                        ),
+                        (
+                            "canister-2".to_string(),
+                            ManifestInitArgs::Value {
+                                value: "4449444c0000".to_string(),
+                                format: ArgsFormat::Hex,
+                            },
+                        ),
                     ])),
                 })],
             },

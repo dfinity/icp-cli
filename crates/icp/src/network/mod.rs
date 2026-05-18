@@ -8,22 +8,25 @@ use snafu::prelude::*;
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
+use url::Url;
 
 use crate::{
     CACHE_DIR, ICP_BASE, Network,
     manifest::{
         ProjectRootLocate, ProjectRootLocateError,
-        network::{Connected as ManifestConnected, Gateway as ManifestGateway, Mode},
+        network::{Connected as ManifestConnected, Endpoints, Gateway as ManifestGateway, Mode},
     },
     network::access::{
         GetNetworkAccessError, NetworkAccess, get_connected_network_access,
         get_managed_network_access,
     },
     prelude::*,
+    project::DEFAULT_LOCAL_NETWORK_PORT,
 };
 
 pub mod access;
 pub mod config;
+pub mod custom_domains;
 pub mod directory;
 pub mod managed;
 
@@ -48,24 +51,28 @@ impl<'de> Deserialize<'de> for Port {
     }
 }
 
-fn default_host() -> String {
-    "localhost".to_string()
+fn default_bind() -> String {
+    "127.0.0.1".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Gateway {
-    #[serde(default = "default_host")]
-    pub host: String,
+    #[serde(default = "default_bind")]
+    pub bind: String,
 
     #[serde(default)]
     pub port: Port,
+
+    #[serde(default)]
+    pub domains: Vec<String>,
 }
 
 impl Default for Gateway {
     fn default() -> Self {
         Self {
-            host: default_host(),
+            bind: default_bind(),
             port: Default::default(),
+            domains: Default::default(),
         }
     }
 }
@@ -90,6 +97,9 @@ pub struct ManagedLauncherConfig {
     pub ii: bool,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
+    pub bitcoind_addr: Option<Vec<String>>,
+    pub dogecoind_addr: Option<Vec<String>>,
+    pub version: Option<String>,
 }
 
 #[derive(
@@ -109,7 +119,7 @@ pub enum SubnetKind {
 
 impl Default for ManagedMode {
     fn default() -> Self {
-        Self::default_for_port(0)
+        Self::default_for_port(DEFAULT_LOCAL_NETWORK_PORT)
     }
 }
 
@@ -117,17 +127,21 @@ impl ManagedMode {
     pub fn default_for_port(port: u16) -> Self {
         ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
             gateway: Gateway {
-                host: default_host(),
+                bind: default_bind(),
                 port: if port == 0 {
                     Port::Random
                 } else {
                     Port::Fixed(port)
                 },
+                domains: vec![],
             },
             artificial_delay_ms: None,
             ii: false,
             nns: false,
             subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
         }))
     }
 }
@@ -146,16 +160,22 @@ pub struct ManagedImageConfig {
     pub shm_size: Option<i64>,
     pub status_dir: String,
     pub mounts: Vec<String>,
+    pub extra_hosts: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
-    /// The URL this network can be reached at.
-    pub url: String,
+    /// The URL this network's API can be reached at.
+    pub api_url: Url,
+
+    /// The URL this network's HTTP gateway can be reached at.
+    pub http_gateway_url: Option<Url>,
 
     /// The root key of this network
-    pub root_key: Option<Vec<u8>>,
+    #[serde(with = "hex::serde")]
+    #[schemars(with = "String")]
+    pub root_key: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -187,21 +207,49 @@ impl Default for Configuration {
 
 impl From<ManifestGateway> for Gateway {
     fn from(value: ManifestGateway) -> Self {
-        let host = value.host.unwrap_or("localhost".to_string());
-        let port = match value.port {
+        let ManifestGateway {
+            bind,
+            domains,
+            port,
+        } = value;
+        let bind = bind.unwrap_or("127.0.0.1".to_string());
+        let port = match port {
             Some(0) => Port::Random,
             Some(p) => Port::Fixed(p),
-            None => Port::Random,
+            None => Port::default(),
         };
-        Gateway { host, port }
+        let mut domains = domains.unwrap_or_default();
+        if bind == "127.0.0.1" || bind == "0.0.0.0" || bind == "::1" || bind == "::" {
+            domains.insert(0, "localhost".to_string());
+        }
+        Gateway {
+            bind,
+            port,
+            domains,
+        }
     }
 }
 
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
-        let url = value.url.clone();
-        let root_key = value.root_key.map(|rk| rk.0);
-        Connected { url, root_key }
+        let root_key = value
+            .root_key
+            .map_or_else(|| crate::context::IC_ROOT_KEY.to_vec(), |rk| rk.0);
+        match value.endpoints {
+            Endpoints::Implicit { url } => Connected {
+                api_url: url.clone(),
+                http_gateway_url: Some(url),
+                root_key,
+            },
+            Endpoints::Explicit {
+                api_url,
+                http_gateway_url,
+            } => Connected {
+                api_url,
+                http_gateway_url,
+                root_key,
+            },
+        }
     }
 }
 
@@ -215,10 +263,23 @@ impl From<Mode> for Configuration {
                     ii,
                     nns,
                     subnets,
+                    bitcoind_addr,
+                    dogecoind_addr,
+                    version,
                 } => {
                     let gateway: Gateway = match gateway {
                         Some(g) => g.into(),
                         None => Gateway::default(),
+                    };
+                    let version = match version {
+                        Some(v) => {
+                            if v.starts_with('v') {
+                                Some(v)
+                            } else {
+                                Some(format!("v{v}"))
+                            }
+                        }
+                        None => None,
                     };
                     Configuration::Managed {
                         managed: Managed {
@@ -228,6 +289,9 @@ impl From<Mode> for Configuration {
                                 ii: ii.unwrap_or(false),
                                 nns: nns.unwrap_or(false),
                                 subnets,
+                                bitcoind_addr,
+                                dogecoind_addr,
+                                version,
                             })),
                         },
                     }
@@ -245,6 +309,7 @@ impl From<Mode> for Configuration {
                     shm_size,
                     status_dir,
                     mounts: mount,
+                    extra_hosts,
                 } => Configuration::Managed {
                     managed: Managed {
                         mode: ManagedMode::Image(Box::new(ManagedImageConfig {
@@ -260,6 +325,7 @@ impl From<Mode> for Configuration {
                             shm_size,
                             status_dir: status_dir.unwrap_or_else(|| "/app/status".to_string()),
                             mounts: mount.unwrap_or_default(),
+                            extra_hosts: extra_hosts.unwrap_or_default(),
                         })),
                     },
                 },
@@ -375,5 +441,53 @@ impl Access for MockNetworkAccessor {
                     network: network.name.clone(),
                 },
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::network::{
+        Gateway as ManifestGateway, Managed as ManifestManaged, ManagedMode as ManifestManagedMode,
+        Mode,
+    };
+
+    #[test]
+    fn from_mode_launcher_with_bitcoind_addr() {
+        let mode = Mode::Managed(ManifestManaged {
+            mode: Box::new(ManifestManagedMode::Launcher {
+                gateway: Some(ManifestGateway {
+                    bind: None,
+                    port: Some(8000),
+                    domains: None,
+                }),
+                artificial_delay_ms: None,
+                ii: None,
+                nns: None,
+                subnets: None,
+                bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                dogecoind_addr: None,
+                version: None,
+            }),
+        });
+
+        let config: Configuration = mode.into();
+        match config {
+            Configuration::Managed {
+                managed:
+                    Managed {
+                        mode: ManagedMode::Launcher(launcher_config),
+                    },
+            } => {
+                assert_eq!(
+                    launcher_config.bitcoind_addr,
+                    Some(vec!["127.0.0.1:18444".to_string()])
+                );
+                assert_eq!(launcher_config.dogecoind_addr, None);
+                assert!(!launcher_config.ii);
+                assert!(!launcher_config.nns);
+            }
+            _ => panic!("expected ManagedMode::Launcher"),
+        }
     }
 }

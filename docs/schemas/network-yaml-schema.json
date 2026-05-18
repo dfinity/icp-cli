@@ -1,6 +1,42 @@
 {
   "$defs": {
     "Connected": {
+      "anyOf": [
+        {
+          "properties": {
+            "api-url": {
+              "description": "The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).",
+              "format": "uri",
+              "type": "string"
+            },
+            "http-gateway-url": {
+              "description": "The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,\notherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.\n\nIf no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.",
+              "format": "uri",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "api-url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "url": {
+              "description": "The URL this network can be reached at.\n\nAssumed to be the URL of both the HTTP gateway (canister-id.domain.com) and API (domain.com/api/v3).",
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
       "properties": {
         "root-key": {
           "description": "The root key of this network",
@@ -9,26 +45,31 @@
             "string",
             "null"
           ]
-        },
-        "url": {
-          "description": "The URL this network can be reached at.",
-          "type": "string"
         }
       },
-      "required": [
-        "url"
-      ],
       "type": "object"
     },
     "Gateway": {
       "properties": {
-        "host": {
+        "bind": {
+          "description": "Network interface for the gateway. Defaults to 127.0.0.1",
           "type": [
             "string",
             "null"
           ]
         },
+        "domains": {
+          "description": "Domains the gateway should respond to. Automatically includes localhost if applicable.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "port": {
+          "description": "Port for the gateway to listen on. Defaults to 8000",
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,
@@ -66,6 +107,16 @@
             },
             "environment": {
               "description": "Environment variables to set in the container in VAR=VALUE format (or VAR to inherit from host)",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "extra-hosts": {
+              "description": "Extra hosts entries for Docker networking (e.g. \"host.docker.internal:host-gateway\")",
               "items": {
                 "type": "string"
               },
@@ -159,6 +210,26 @@
                 "null"
               ]
             },
+            "bitcoind-addr": {
+              "description": "Bitcoin P2P node addresses to connect to (e.g. \"127.0.0.1:18444\")",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "dogecoind-addr": {
+              "description": "Dogecoin P2P node addresses to connect to",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "gateway": {
               "anyOf": [
                 {
@@ -171,7 +242,7 @@
               "description": "HTTP gateway configuration"
             },
             "ii": {
-              "description": "Set up the Internet Identity canister",
+              "description": "Set up the Internet Identity canister. Makes internet identity available at\nid.ai.localhost:<port>",
               "type": [
                 "boolean",
                 "null"
@@ -191,6 +262,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "version": {
+              "description": "The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.",
+              "type": [
+                "string",
                 "null"
               ]
             }

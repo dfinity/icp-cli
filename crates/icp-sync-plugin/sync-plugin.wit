@@ -1,0 +1,86 @@
+package icp:sync-plugin@0.1.0;
+
+/// Types shared between the host runtime and sync plugins.
+interface types {
+    /// Whether a canister call is an update or a query.
+    enum call-type { update, query }
+
+    /// A file the host read on behalf of the plugin.
+    record file-input {
+        /// Path of the file as declared in the manifest (relative to
+        /// the canister directory).
+        name: string,
+        /// UTF-8 contents of the file.
+        content: string,
+    }
+
+    /// Input passed by the runtime to the plugin's exec() export.
+    record sync-exec-input {
+        /// Textual principal of the canister being synced.
+        canister-id: string,
+        /// Name of the environment being synced (e.g. "production", "local").
+        environment: string,
+        /// Directories declared in the manifest step's `dirs` setting.
+        /// The host preopens each entry via WASI; the plugin can traverse
+        /// them with standard `wasi:filesystem` (e.g. Rust's `std::fs`).
+        dirs: list<string>,
+        /// Files declared in the manifest step's `files` setting, read by
+        /// the host and passed inline. The plugin decides how to use them.
+        files: list<file-input>,
+        /// Textual principal of the signing identity used for canister calls.
+        identity-principal: string,
+        /// Textual principal of the proxy canister, if one was configured via
+        /// `--proxy`. None when no proxy is in use.
+        proxy-canister-id: option<string>,
+    }
+
+    /// A request to call a method on the target canister.
+    record canister-call-request {
+        /// The canister method to call.
+        method: string,
+        /// Candid-encoded argument bytes. The plugin is responsible for
+        /// encoding; the host forwards these bytes unchanged.
+        arg: list<u8>,
+        /// Whether to perform an `update` or `query` call.
+        call-type: call-type,
+        /// When true, the call bypasses any proxy canister configured via
+        /// `--proxy`, going directly to the target canister. When false
+        /// (the default), update calls are routed through the proxy if one
+        /// is configured; query calls always go directly to the target
+        /// canister regardless of this flag.
+        direct: bool,
+        /// Cycles to attach to a proxied update call. Only meaningful when
+        /// `direct` is `false`, a proxy canister is configured, and
+        /// `call-type` is `update`; silently ignored for direct calls and
+        /// for query calls.
+        cycles: u64,
+    }
+}
+
+/// The complete interface of a sync plugin.
+world sync-plugin {
+    use types.{sync-exec-input, canister-call-request, file-input};
+
+    // -------------------------------------------------------------------------
+    // Host functions (imports) — provided by icp-cli, called by the plugin
+    // -------------------------------------------------------------------------
+
+    /// Make an update or query call to the canister being synced.
+    /// The host always calls the canister from sync-exec-input.canister-id;
+    /// the plugin does not choose the target.
+    /// Returns the raw Candid-encoded response bytes on success or an error
+    /// message on failure. The plugin is responsible for decoding.
+    import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    // The plugin's stdout and stderr are captured by the host and forwarded
+    // to the CLI's progress output, so plugins can simply print (e.g.
+    // Rust's `println!` / `eprintln!`) instead of calling a host import.
+
+    // -------------------------------------------------------------------------
+    // Plugin exports — implemented by the plugin, called by the host
+    // -------------------------------------------------------------------------
+
+    /// Execute the sync plugin for the canister being synced.
+    /// Returns optional output text on success or an error message on failure.
+    export exec: func(input: sync-exec-input) -> result<option<string>, string>;
+}

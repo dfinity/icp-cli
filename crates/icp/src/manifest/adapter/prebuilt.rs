@@ -27,7 +27,8 @@ pub enum SourceField {
     Remote(RemoteSource),
 }
 
-/// Configuration for a Pre-built canister build adapter.
+/// Configuration for a wasm source — used by adapters that load a `.wasm` file
+/// either from a local path or from a remote URL.
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     #[serde(flatten)]

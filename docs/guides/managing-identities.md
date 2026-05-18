@@ -1,4 +1,7 @@
-# Managing Identities
+---
+title: Managing Identities
+description: Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+---
 
 This is a detailed reference for identity management. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
@@ -86,6 +89,12 @@ Display your account identifier:
 icp identity account-id
 ```
 
+By default, the ICP ledger format is displayed. Use `--format icrc1` for the ICRC-1 format:
+
+```bash
+icp identity account-id --format icrc1
+```
+
 For a specific identity:
 
 ```bash
@@ -153,6 +162,26 @@ If you don't provide a password file, you'll be prompted to enter the password i
 
 **Security Note:** The exported PEM file contains your private key in plaintext. Store it securely and delete it after importing if no longer needed.
 
+### Encrypted Export
+
+Encrypt the exported PEM with a password for secure storage or transfer:
+
+```bash
+icp identity export my-identity --encrypt
+```
+
+You'll be prompted for an encryption password. For automation, provide it via file:
+
+```bash
+icp identity export my-identity --encrypt --encryption-password-file ./pw.txt > backup.pem
+```
+
+The encrypted PEM can be re-imported:
+
+```bash
+icp identity import restored-identity --from-pem backup.pem --decryption-password-from-file ./pw.txt
+```
+
 ## Renaming and Deleting Identities
 
 ### Renaming an Identity
@@ -195,7 +224,7 @@ Encrypts the key with a password:
 icp identity new my-identity --storage password
 ```
 
-You'll be prompted for the password when using this identity.
+You'll be prompted for the password when using this identity. Passwords must be at least 8 characters.
 
 ### Plaintext (Not Recommended)
 

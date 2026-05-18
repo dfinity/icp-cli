@@ -8,6 +8,7 @@ pub(crate) mod status;
 pub(crate) mod stop;
 pub(crate) mod update;
 
+/// Launch and manage local test networks
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
     List(list::ListArgs),

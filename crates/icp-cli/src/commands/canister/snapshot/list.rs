@@ -1,14 +1,32 @@
+use std::io::stdout;
+
 use byte_unit::{Byte, UnitType};
+use candid::Principal;
 use clap::Args;
-use ic_utils::interfaces::ManagementCanister;
+use ic_management_canister_types::CanisterIdRecord;
 use icp::context::Context;
+use itertools::Itertools;
+use serde::Serialize;
 
-use crate::{commands::args, operations::misc::format_timestamp};
+use crate::{commands::args, operations::misc::format_timestamp, operations::proxy_management};
 
+/// List all snapshots for a canister
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
     #[command(flatten)]
     pub(crate) cmd_args: args::CanisterCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only snapshot IDs
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    pub(crate) proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
@@ -29,26 +47,60 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
-
-    let (snapshots,) = mgmt.list_canister_snapshots(&cid).await?;
+    let snapshots = proxy_management::list_canister_snapshots(
+        &agent,
+        args.proxy,
+        CanisterIdRecord { canister_id: cid },
+    )
+    .await?;
 
     let name = &args.cmd_args.canister;
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonSnapshotList {
+                snapshots: snapshots
+                    .into_iter()
+                    .map(|snapshot| JsonSnapshotListEntry {
+                        snapshot_id: hex::encode(snapshot.id),
+                        taken_at_timestamp: snapshot.taken_at_timestamp,
+                        total_size_bytes: snapshot.total_size,
+                    })
+                    .collect(),
+            },
+        )?;
+        return Ok(());
+    } else if args.quiet {
+        println!(
+            "{}",
+            snapshots.iter().map(|s| hex::encode(&s.id)).format("\n")
+        );
+    }
     if snapshots.is_empty() {
-        ctx.term
-            .write_line(&format!("No snapshots found for canister {name} ({cid})"))?;
+        println!("No snapshots found for canister {name} ({cid})");
     } else {
-        ctx.term
-            .write_line(&format!("Snapshots for canister {name} ({cid}):"))?;
+        println!("Snapshots for canister {name} ({cid}):");
         for snapshot in snapshots {
-            ctx.term.write_line(&format!(
+            println!(
                 "  {id}: {size}, taken at {timestamp}",
                 id = hex::encode(&snapshot.id),
                 size = Byte::from_u64(snapshot.total_size).get_appropriate_unit(UnitType::Binary),
                 timestamp = format_timestamp(snapshot.taken_at_timestamp),
-            ))?;
+            );
         }
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonSnapshotList {
+    snapshots: Vec<JsonSnapshotListEntry>,
+}
+
+#[derive(Serialize)]
+struct JsonSnapshotListEntry {
+    snapshot_id: String,
+    taken_at_timestamp: u64,
+    total_size_bytes: u64,
 }

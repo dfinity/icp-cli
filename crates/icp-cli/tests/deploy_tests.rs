@@ -1,11 +1,20 @@
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
+    prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
+use test_tag::tag;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use crate::common::{
+    ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
+    TestContext, clients,
+};
+use icp::{
+    fs::{create_dir_all, write_string},
+    prelude::*,
+    store_id::IdMapping,
+};
 
 mod common;
 
@@ -61,7 +70,7 @@ fn deploy_canister_not_found() {
         .args(["deploy", "my-canister", "--subnet", common::SUBNET_ID])
         .assert()
         .failure()
-        .stderr(eq("Error: project does not contain a canister named 'my-canister'").trim());
+        .stderr(contains("Error: project does not contain a canister named 'my-canister'").trim());
 }
 
 #[tokio::test]
@@ -401,4 +410,718 @@ async fn deploy_prints_canister_urls() {
         .stdout(contains("my-canister (Candid UI):"))
         .stdout(contains(".localhost:"))
         .stdout(contains("?id="));
+}
+
+#[tokio::test]
+async fn deploy_prints_friendly_url_for_asset_canister() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+    let assets_dir = project_dir.join("www");
+    create_dir_all(&assets_dir).expect("failed to create assets directory");
+    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
+
+    // Project manifest with a pre-built asset canister
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                  sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+            sync:
+              steps:
+                - type: assets
+                  dirs:
+                    - {assets_dir}
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deploy and check that the friendly URL is printed (not the Candid UI form)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Deployed canisters:"))
+        .stdout(contains(
+            "my-canister: http://my-canister.random-environment.localhost:",
+        ));
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_upgrade_rejects_incompatible_candid() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Write mops.toml for the Motoko toolchain
+    write_string(
+        &project_dir.join("mops.toml"),
+        indoc! {r#"
+            [dependencies]
+            base = "0.16.0"
+
+            [toolchain]
+            moc = "0.16.3"
+        "#},
+    )
+    .expect("failed to write mops.toml");
+
+    // Initial version: greet takes Text
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {"
+            persistent actor {
+                public query func greet(name : Text) : async Text {
+                    return \"Hello, \" # name # \"!\";
+                };
+            };
+        "},
+    )
+    .expect("failed to write main.mo");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network and deploy initial version
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify initial version works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // Breaking change: greet now takes Nat instead of Text
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {"
+            import Nat \"mo:base/Nat\";
+
+            persistent actor {
+                public query func greet(n : Nat) : async Text {
+                    return \"Hello, \" # Nat.toText(n) # \"!\";
+                };
+            };
+        "},
+    )
+    .expect("failed to write updated main.mo");
+
+    // Deploy upgrade should fail with candid incompatibility error
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Candid interface compatibility check failed"));
+
+    // Deploy with --yes should succeed
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    // Verify updated version works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(42)",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, 42!\")").trim());
+}
+
+#[tag(docker)]
+#[tokio::test]
+async fn deploy_cloud_engine() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_DOCKER_ENGINE}
+        {ENVIRONMENT_DOCKER_ENGINE}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.docker_pull_engine_network();
+    let _guard = ctx
+        .start_network_in(&project_dir, "docker-engine-network")
+        .await;
+    ctx.ping_until_healthy(&project_dir, "docker-engine-network");
+
+    // Find the CloudEngine subnet by querying the topology endpoint
+    // TODO replace with a subnet selection parameter once we have one
+    let topology_url = ctx.gateway_url().join("/_/topology").unwrap();
+    let topology: serde_json::Value = reqwest::get(topology_url)
+        .await
+        .expect("failed to fetch topology")
+        .json()
+        .await
+        .expect("failed to parse topology");
+
+    let subnet_configs = topology["subnet_configs"]
+        .as_object()
+        .expect("subnet_configs should be an object");
+    let cloud_engine_subnet_id = subnet_configs
+        .iter()
+        .find_map(|(id, config)| {
+            (config["subnet_kind"].as_str()? == "CloudEngine").then_some(id.clone())
+        })
+        .expect("no CloudEngine subnet found in topology");
+
+    // Deploy to the CloudEngine subnet
+    // Only the admin can do this. In local envs, the admin is the anonymous principal
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--subnet",
+            &cloud_engine_subnet_id,
+            "--environment",
+            "docker-engine-environment",
+        ])
+        .assert()
+        .success();
+
+    // Query canister to verify it works
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "docker-engine-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_with_inline_args_candid() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--args",
+            "(opt (42 : nat8))",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"42\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_with_args_overrides_manifest_init_args() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    // Manifest sets init_args to 7; CLI --args should override it with 42
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            init_args: "(opt (7 : nat8))"
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--args",
+            "(opt (42 : nat8))",
+        ])
+        .assert()
+        .success();
+
+    // CLI --args (42) should take priority over manifest init_args (7)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"42\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_with_args_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+    write_string(&project_dir.join("args.txt"), "(opt (42 : nat8))")
+        .expect("failed to write args file");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--args-file",
+            "args.txt",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"42\")").trim());
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_with_args_hex_format() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Hex encoding of "(opt 100 : opt nat8)" — didc encode '(opt 100 : opt nat8)'
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--args",
+            "4449444c016e7b01000164",
+            "--args-format",
+            "hex",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"100\")").trim());
+}
+
+#[test]
+fn deploy_with_args_multiple_canisters_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = indoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "canister-a",
+            "canister-b",
+            "--subnet",
+            common::SUBNET_ID,
+            "--args",
+            "()",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "--args and --args-file can only be used when deploying a single canister",
+        ));
+}
+
+#[tokio::test]
+async fn deploy_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify canister works by calling it through proxy (proxy is the controller)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"proxy\")",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, proxy!\")").trim());
+
+    // Verify canister status through proxy shows the proxy as controller
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Running").and(contains(&proxy_cid)));
+}
+
+#[tokio::test]
+async fn deploy_sync_script_icp_env_vars() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // canister-a verifies env/network vars during deploy; canister-b verifies cross-canister
+    // CID visibility during the explicit sync step.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "ENV=$ICP_CLI_ENVIRONMENT NET=$ICP_CLI_NETWORK CID=$ICP_CLI_CID B_CID=$ICP_CLI_CID_CANISTER_B"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "B_SEES_A=$ICP_CLI_CID_CANISTER_A"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "--debug",
+            "deploy",
+            "--subnet",
+            common::SUBNET_ID,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("ENV=random-environment"))
+        .stderr(contains("NET=random-network"));
+
+    // Read the assigned canister IDs and verify CID vars and cross-canister visibility.
+    let id_mapping: IdMapping = icp::fs::json::load(
+        &project_dir
+            .join(".icp")
+            .join("cache")
+            .join("mappings")
+            .join("random-environment.ids.json"),
+    )
+    .expect("failed to read ID mapping");
+
+    let cid_a = id_mapping
+        .get("canister-a")
+        .expect("canister-a ID not found")
+        .to_text();
+
+    let cid_b = id_mapping
+        .get("canister-b")
+        .expect("canister-b ID not found")
+        .to_text();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["--debug", "sync", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stderr(contains(format!("CID={cid_a}")))
+        .stderr(contains(format!("B_CID={cid_b}")))
+        .stderr(contains(format!("B_SEES_A={cid_a}")));
 }

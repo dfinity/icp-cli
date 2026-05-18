@@ -3,11 +3,14 @@ use std::collections::{HashMap, HashSet, hash_map::Entry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, Network, Project,
+    Canister, Environment, InitArgs, Network, Project,
     canister::recipe,
+    context::IC_ROOT_KEY,
+    fs,
     manifest::{
-        CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item, LoadManifestFromPathError,
-        NetworkManifest, ProjectManifest, ProjectRootLocateError,
+        ArgsFormat, CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item,
+        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
+        ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
@@ -19,9 +22,8 @@ use crate::{
     prelude::*,
 };
 
-pub const DEFAULT_LOCAL_NETWORK_HOST: &str = "localhost";
+pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
 pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
-pub const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {
@@ -66,7 +68,8 @@ pub enum ConsolidateManifestError {
 
     #[snafu(display("failed to resolve canister recipe: {recipe_type:?}"))]
     Recipe {
-        source: recipe::ResolveError,
+        #[snafu(source(from(recipe::ResolveError, Box::new)))]
+        source: Box<recipe::ResolveError>,
         recipe_type: RecipeType,
     },
 
@@ -79,8 +82,59 @@ pub enum ConsolidateManifestError {
     #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
+    #[snafu(display("failed to read init_args file for canister '{canister}'"))]
+    ReadInitArgs {
+        source: fs::IoError,
+        canister: String,
+    },
+
+    #[snafu(display(
+        "init_args for canister '{canister}' uses format 'bin' with inline content; \
+         binary format requires a file path"
+    ))]
+    BinFormatInlineContent { canister: String },
+
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
+}
+
+/// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
+/// any file references relative to `base_path`.
+fn resolve_manifest_init_args(
+    manifest_init_args: &ManifestInitArgs,
+    base_path: &Path,
+    canister: &str,
+) -> Result<InitArgs, ConsolidateManifestError> {
+    match manifest_init_args {
+        ManifestInitArgs::String(content) => Ok(InitArgs::Text {
+            content: content.trim().to_owned(),
+            format: ArgsFormat::Candid,
+        }),
+        ManifestInitArgs::Path { path, format } => {
+            let file_path = base_path.join(path);
+            match format {
+                ArgsFormat::Bin => {
+                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Binary(bytes))
+                }
+                fmt => {
+                    let content =
+                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
+                    Ok(InitArgs::Text {
+                        content: content.trim().to_owned(),
+                        format: fmt.clone(),
+                    })
+                }
+            }
+        }
+        ManifestInitArgs::Value { value, format } => match format {
+            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
+            fmt => Ok(InitArgs::Text {
+                content: value.trim().to_owned(),
+                format: fmt.clone(),
+            }),
+        },
+    }
 }
 
 fn is_glob(s: &str) -> bool {
@@ -179,6 +233,16 @@ pub async fn consolidate_manifest(
         };
 
         for (cdir, m) in ms {
+            let registry_recipe = match &m.instructions {
+                Instructions::BuildSync { .. } => None,
+                Instructions::Recipe { recipe } => match &recipe.recipe_type {
+                    crate::manifest::recipe::RecipeType::Registry { .. } => {
+                        Some(recipe.recipe_type.to_string())
+                    }
+                    _ => None,
+                },
+            };
+
             let (build, sync) = match &m.instructions {
                 // Build/Sync
                 Instructions::BuildSync { build, sync } => (
@@ -210,6 +274,12 @@ pub async fn consolidate_manifest(
 
                 // Ok
                 Entry::Vacant(e) => {
+                    let init_args = m
+                        .init_args
+                        .as_ref()
+                        .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                        .transpose()?;
+
                     e.insert((
                         //
                         // Canister root
@@ -221,7 +291,8 @@ pub async fn consolidate_manifest(
                             settings: m.settings.to_owned(),
                             build,
                             sync,
-                            init_args: m.init_args.to_owned(),
+                            init_args,
+                            registry_recipe,
                         },
                     ));
                 }
@@ -239,10 +310,9 @@ pub async fn consolidate_manifest(
             name: IC.to_string(),
             configuration: Configuration::Connected {
                 connected: Connected {
-                    url: IC_MAINNET_NETWORK_URL.to_string(),
-                    // Will use the IC Root key hard coded in agent-rs.
-                    // https://github.com/dfinity/agent-rs/blob/b77f1fc5fe05d8de1065ee4cec837bc3f2ce9976/ic-agent/src/agent/mod.rs#L82
-                    root_key: None,
+                    api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                    http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
+                    root_key: IC_ROOT_KEY.to_vec(),
                 },
             },
         },
@@ -311,13 +381,17 @@ pub async fn consolidate_manifest(
                     managed: Managed {
                         mode: ManagedMode::Launcher(Box::new(ManagedLauncherConfig {
                             gateway: Gateway {
-                                host: DEFAULT_LOCAL_NETWORK_HOST.to_string(),
+                                bind: DEFAULT_LOCAL_NETWORK_BIND.to_string(),
                                 port: Port::Fixed(DEFAULT_LOCAL_NETWORK_PORT),
+                                domains: vec![],
                             },
                             artificial_delay_ms: None,
                             ii: false,
                             nns: false,
                             subnets: None,
+                            bitcoind_addr: None,
+                            dogecoind_addr: None,
+                            version: None,
                         })),
                     },
                 },
@@ -414,9 +488,13 @@ pub async fn consolidate_manifest(
 
                         // Apply init_args overrides if specified
                         if let Some(ref init_args_overrides) = m.init_args {
-                            for (canister_name, init_args) in init_args_overrides {
-                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
-                                    canister.init_args = Some(init_args.clone());
+                            for (canister_name, manifest_init_args) in init_args_overrides {
+                                if let Some((canister_path, canister)) = cs.get_mut(canister_name) {
+                                    canister.init_args = Some(resolve_manifest_init_args(
+                                        manifest_init_args,
+                                        canister_path,
+                                        canister_name,
+                                    )?);
                                 }
                             }
                         }

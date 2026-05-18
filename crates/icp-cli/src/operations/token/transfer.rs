@@ -2,7 +2,7 @@ use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{Agent, AgentError};
 use ic_ledger_types::{
-    AccountIdentifier, Memo, Tokens, TransferArgs as IcpTransferArgs,
+    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs as IcpTransferArgs,
     TransferError as IcpTransferError,
 };
 use icp_canister_interfaces::icp_ledger::ICP_LEDGER_CID;
@@ -13,18 +13,15 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 
+use crate::commands::args::FlexibleAccountId;
+
 use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum TokenTransferError {
-    #[snafu(display("failed to parse canister id '{canister_id}': {source}"))]
+    #[snafu(display("failed to parse canister id '{canister_id}'"))]
     ParseCanisterId {
         canister_id: String,
-        source: candid::types::principal::PrincipalError,
-    },
-
-    #[snafu(display("failed to parse receiver principal: {source}"))]
-    ParseReceiverPrincipal {
         source: candid::types::principal::PrincipalError,
     },
 
@@ -109,23 +106,18 @@ pub struct TransferInfo {
 /// A `TransferInfo` struct containing transfer details including block index
 pub async fn icrc1_transfer(
     agent: &Agent,
+    from_subaccount: Option<[u8; 32]>,
     ledger_canister_id: Principal,
     ledger_amount: Nat,
-    receiver: Principal,
+    receiver_account: Account,
     fee: Nat,
     decimals: u32,
     symbol: String,
 ) -> Result<TransferInfo, TokenTransferError> {
-    // Prepare transfer
-    let receiver_account = Account {
-        owner: receiver,
-        subaccount: None,
-    };
-
     let arg = TransferArg {
         amount: ledger_amount.clone(),
         to: receiver_account,
-        from_subaccount: None,
+        from_subaccount,
         fee: None,
         created_at_time: None,
         memo: None,
@@ -173,7 +165,7 @@ pub async fn icrc1_transfer(
             amount: BigDecimal::from_biguint(ledger_amount.0, decimals as i64),
             symbol,
         },
-        receiver_display: receiver.to_string(),
+        receiver_display: receiver_account.to_string(),
     })
 }
 
@@ -197,6 +189,7 @@ pub async fn icrc1_transfer(
 /// A `TransferInfo` struct containing transfer details including block index
 pub async fn icp_legacy_transfer(
     agent: &Agent,
+    from_subaccount: Option<[u8; 32]>,
     ledger_canister_id: Principal,
     ledger_amount: Nat,
     to: AccountIdentifier,
@@ -215,7 +208,7 @@ pub async fn icp_legacy_transfer(
         memo: Memo(0),
         amount: Tokens::from_e8s(amount_e8s),
         fee: Tokens::from_e8s(fee_e8s),
-        from_subaccount: None,
+        from_subaccount: from_subaccount.map(Subaccount),
         to,
         created_at_time: None,
     };
@@ -294,9 +287,10 @@ pub async fn icp_legacy_transfer(
 /// A `TransferInfo` struct containing transfer details including block index
 pub async fn transfer(
     agent: &Agent,
+    from_subaccount: Option<[u8; 32]>,
     token: &str,
     amount: &BigDecimal,
-    receiver: &str,
+    receiver: &FlexibleAccountId,
 ) -> Result<TransferInfo, TokenTransferError> {
     // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
@@ -371,35 +365,37 @@ pub async fn transfer(
 
     // Determine if receiver is an AccountIdentifier or Principal
     // Try parsing as AccountIdentifier first (64 hex chars)
-    if let Ok(account_id) = AccountIdentifier::from_hex(receiver) {
-        // AccountIdentifier is only supported for ICP ledger
-        if cid.to_text() == ICP_LEDGER_CID {
-            return icp_legacy_transfer(
+    match receiver {
+        FlexibleAccountId::IcpLedger(account_id) => {
+            // AccountIdentifier is only supported for ICP ledger
+            if cid.to_text() == ICP_LEDGER_CID {
+                icp_legacy_transfer(
+                    agent,
+                    from_subaccount,
+                    cid,
+                    ledger_amount,
+                    *account_id,
+                    fee,
+                    decimals,
+                    symbol,
+                )
+                .await
+            } else {
+                Err(TokenTransferError::AccountIdentifierNotSupported)
+            }
+        }
+        FlexibleAccountId::Icrc1(receiver_account) => {
+            icrc1_transfer(
                 agent,
+                from_subaccount,
                 cid,
                 ledger_amount,
-                account_id,
+                *receiver_account,
                 fee,
                 decimals,
                 symbol,
             )
-            .await;
-        } else {
-            return Err(TokenTransferError::AccountIdentifierNotSupported);
+            .await
         }
     }
-
-    // Try parsing as Principal for ICRC-1 transfer
-    let receiver_principal = Principal::from_text(receiver).context(ParseReceiverPrincipalSnafu)?;
-
-    icrc1_transfer(
-        agent,
-        cid,
-        ledger_amount,
-        receiver_principal,
-        fee,
-        decimals,
-        symbol,
-    )
-    .await
 }

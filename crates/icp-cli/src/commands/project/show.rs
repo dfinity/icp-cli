@@ -3,6 +3,16 @@ use clap::Args;
 
 use icp::context::Context;
 
+/// Outputs the project's effective yaml configuration.
+///
+/// The effective yaml configuration includes:
+///
+/// - implicit networks
+///
+/// - implicit environments
+///
+/// - processed recipes
+///
 #[derive(Args, Debug)]
 pub(crate) struct ShowArgs;
 
@@ -13,7 +23,7 @@ pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), anyhow::Erro
     let p = ctx.project.load().await.context("failed to load project")?;
 
     let yaml = serde_yaml::to_string(&p).expect("Serializing to yaml failed");
-    ctx.term.write_line(&yaml)?;
+    print!("{yaml}");
 
     Ok(())
 }

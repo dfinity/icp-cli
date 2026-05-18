@@ -1,6 +1,6 @@
 {
   "name": "@icp-sdk/icp-cli-darwin-arm64",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0",
   "description": "icp-cli binary for macOS ARM64 (Apple Silicon)",
   "repository": {
     "type": "git",

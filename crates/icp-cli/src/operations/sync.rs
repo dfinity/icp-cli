@@ -1,13 +1,16 @@
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, export::Principal};
+use ic_agent::Agent;
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
-    context::TermWriter,
+    package::PackageCache,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use tracing::error;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
@@ -29,11 +32,15 @@ struct SyncFailure {
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
-    _term: &TermWriter,
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
+    environment: &str,
+    network: &str,
+    canister_ids: &BTreeMap<String, Principal>,
+    proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
 
@@ -51,9 +58,14 @@ async fn sync_canister(
                 &Params {
                     path: canister_path.clone(),
                     cid: canister_id,
+                    environment: environment.to_owned(),
+                    network: network.to_owned(),
+                    canister_ids: canister_ids.clone(),
+                    proxy,
                 },
                 agent,
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
@@ -70,9 +82,13 @@ async fn sync_canister(
 pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
-    term: Arc<TermWriter>,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    environment: String,
+    network: String,
+    canister_ids: BTreeMap<String, Principal>,
+    proxy: Option<Principal>,
     debug: bool,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -83,18 +99,24 @@ pub(crate) async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
-            let term = term.clone();
+            let environment = environment.clone();
+            let network = network.clone();
+            let canister_ids = canister_ids.clone();
 
             async move {
                 // Define the sync logic
                 let sync_result = sync_canister(
                     &syncer,
                     &agent,
-                    &term,
                     canister_path,
                     cid,
                     &canister_info,
+                    &environment,
+                    &network,
+                    &canister_ids,
+                    proxy,
                     &mut pb,
+                    pkg_cache,
                 )
                 .await;
 
@@ -112,7 +134,7 @@ pub(crate) async fn sync_many(
                     canister_name: canister_info.name.clone(),
                     canister_id: cid,
                     error,
-                    progress_output: pb.dump_output(),
+                    progress_output: pb.dump_output(debug),
                 })
             }
         };
@@ -131,19 +153,22 @@ pub(crate) async fn sync_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            // Print progress output
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
-                " ----- Failed to sync canister '{}': {} -----",
+            error!(
+                "----- Failed to sync canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            for line in &failure.progress_output {
-                let _ = term.write_line(line);
+            );
+            error!("'{}'", failure.error);
+            {
+                use std::error::Error;
+                let mut cause = failure.error.source();
+                while let Some(err) = cause {
+                    error!("  caused by: {err}");
+                    cause = err.source();
+                }
             }
-
-            let _ = term.write_line("");
+            for line in &failure.progress_output {
+                error!("{line}");
+            }
         }
 
         return SyncOperationSnafu {

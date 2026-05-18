@@ -4,6 +4,7 @@ use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::BuildStep;
+use crate::package::PackageCache;
 use crate::prelude::*;
 
 mod prebuilt;
@@ -29,6 +30,7 @@ pub trait Build: Sync + Send {
         step: &BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), BuildError>;
 }
 
@@ -41,9 +43,12 @@ impl Build for Builder {
         step: &BuildStep,
         params: &Params,
         stdio: Option<Sender<String>>,
+        pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         match step {
-            BuildStep::Prebuilt(adapter) => Ok(prebuilt::build(adapter, params, stdio).await?),
+            BuildStep::Prebuilt(adapter) => {
+                Ok(prebuilt::build(adapter, params, stdio, pkg_cache).await?)
+            }
             BuildStep::Script(adapter) => Ok(script::build(adapter, params, stdio).await?),
         }
     }
@@ -62,6 +67,7 @@ impl Build for UnimplementedMockBuilder {
         _step: &BuildStep,
         _params: &Params,
         _stdio: Option<Sender<String>>,
+        _pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         unimplemented!("UnimplementedMockBuilder::build")
     }

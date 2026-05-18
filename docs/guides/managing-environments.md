@@ -1,4 +1,7 @@
-# Managing Environments
+---
+title: Managing Environments
+description: Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
+---
 
 Environments allow you to deploy multiple instances of a set of canisters to the same network, with each set having independent settings. This guide covers setting up development, staging, and production environments.
 
@@ -57,7 +60,7 @@ environments:
     settings:
       backend:
         compute_allocation: 20
-        freezing_threshold: 7776000  # 90 days
+        freezing_threshold: 90d
         environment_variables:
           LOG_LEVEL: "error"
 ```
@@ -163,10 +166,10 @@ environments:
     canisters: [frontend, backend]
     settings:
       frontend:
-        memory_allocation: 2147483648  # 2GB
+        memory_allocation: 2gib
       backend:
         compute_allocation: 5
-        reserved_cycles_limit: 5000000000000
+        reserved_cycles_limit: 5t
         environment_variables:
           API_ENV: "staging"
 
@@ -175,12 +178,12 @@ environments:
     canisters: [frontend, backend]
     settings:
       frontend:
-        memory_allocation: 4294967296  # 4GB
-        freezing_threshold: 7776000    # 90 days
+        memory_allocation: 4gib
+        freezing_threshold: 90d
       backend:
         compute_allocation: 20
-        reserved_cycles_limit: 50000000000000
-        freezing_threshold: 7776000
+        reserved_cycles_limit: 50t
+        freezing_threshold: 90d
         environment_variables:
           API_ENV: "production"
 ```

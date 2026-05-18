@@ -1,4 +1,7 @@
-# Deploying to IC Mainnet
+---
+title: Deploying to IC Mainnet
+description: Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
+---
 
 This guide walks through deploying your canisters to the Internet Computer mainnet.
 

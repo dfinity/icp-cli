@@ -4,54 +4,52 @@ This directory contains the Starlight-based documentation website for ICP CLI.
 
 ## Overview
 
-The documentation site is built with [Astro](https://astro.build/) and [Starlight](https://starlight.astro.build/), reading markdown files from the `../docs/` directory.
+The documentation site is built with [Astro](https://astro.build/) and [Starlight](https://starlight.astro.build/), reading markdown files directly from the `../docs/` directory.
 
 ## Architecture
 
 ```
 docs-site/
-├── astro.config.mjs     # Starlight configuration (sidebar, theme)
+├── astro.config.mjs       # Starlight configuration (sidebar, theme, SEO meta tags, JSON-LD)
+├── versions.json          # Version registry (controls root redirect and robots.txt)
+├── plugins/
+│   ├── rehype-rewrite-links.mjs  # Rewrites .md links for Starlight's clean URLs
+│   └── astro-agent-docs.mjs     # Generates llms.txt, feed.xml, og-image.png, sitemap lastmod
 ├── src/
 │   ├── content.config.ts  # Content loader configuration
+│   ├── components/        # Custom Starlight component overrides (Footer, Banner, SiteTitle)
 │   ├── assets/            # Logo and static assets
 │   └── styles/            # DFINITY theme CSS
-├── public/              # Static files (favicon, etc.)
-└── package.json         # Dependencies and scripts
+├── public/
+│   ├── og-image.svg       # Source SVG for the social sharing image (converted to PNG at build time)
+│   └── ...                # Other static files (favicon, well-known, etc.)
+└── package.json           # Dependencies and scripts
 ```
 
 ## Key Features
 
 ### Content Loading
-- Uses Astro's `glob` loader to read from `../docs/` via a temporary `.docs-temp/` directory
-- Source docs remain plain Markdown (GitHub-friendly)
-- Build process adds frontmatter and processes links automatically
+- Uses Astro's `glob` loader to read directly from `../docs/` (excluding `schemas/` and README files)
+- Source docs use minimal YAML frontmatter (`title` + `description`)
+- A rehype plugin rewrites `.md` links at build time for Starlight's clean URLs
 
 ### Build Pipeline
 
-The build pipeline ensures source documentation remains clean while producing a polished site:
+1. **Starlight** reads content directly from `../docs/` via the glob content loader
+2. **Rehype plugin** (`plugins/rehype-rewrite-links.mjs`) strips `.md` extensions from relative links and adjusts paths for Astro's directory-based output
+3. **DFINITY theme CSS** is applied for consistent branding
+4. **Static HTML** is produced in `dist/`
+5. **`astro-agent-docs` plugin** runs in the `astro:build:done` hook and generates additional files:
+   - `llms.txt` — LLM/agent-friendly page index (agentdocsspec.com)
+   - `llms-full.txt` — full content dump for RAG pipelines
+   - `feed.xml` — RSS 2.0 feed with git-accurate publish dates per page
+   - `og-image.png` — social sharing preview image, rendered from `public/og-image.svg` via `@resvg/resvg-js`
+   - Sitemap `<lastmod>` injection — adds git commit dates to the Starlight-generated sitemap
 
-**Step 1: Prepare Docs** (`../scripts/prepare-docs.sh`)
-- Copies `../docs/` to `.docs-temp/` (excluding `schemas/` directory and README files)
-- Adjusts relative paths and strips `.md` extensions for Starlight's clean URLs
-  - Source files use `.md` extensions (work on GitHub)
-  - Build transforms to clean URLs without `.md` (work on site)
-- Extracts page title from first H1 heading
-- Adds YAML frontmatter with the title
-- Removes the H1 heading from content (prevents duplicate titles)
-
-**Step 2: Starlight Build**
-- Reads content from `.docs-temp/` via glob loader
-- Applies DFINITY theme CSS
-- Generates navigation from manual sidebar configuration
-- Produces static HTML in `dist/`
-
-**Why this approach?**
-- Source docs stay plain Markdown (GitHub-friendly, no framework lock-in)
-- Build-time transformations keep things DRY (single source of truth)
-- Cross-platform compatibility (works on macOS and Linux)
+Source docs use `.md` extensions in links (GitHub-friendly), and the rehype plugin transforms them to clean URLs at build time.
 
 ### Styling
-- Custom CSS copied from `icp-js-sdk-docs` for DFINITY branding
+- Custom CSS for DFINITY branding
 - Files: `layers.css`, `theme.css`, `overrides.css`, `elements.css`
 - Maintains consistent look with other DFINITY documentation sites
 
@@ -59,6 +57,10 @@ The build pipeline ensures source documentation remains clean while producing a 
 - External links automatically open in new tabs with security attributes (`rel="noopener noreferrer"`)
 - Implemented via `rehype-external-links` plugin for content links
 - Custom script in `astro.config.mjs` handles social/header links
+
+### Global Banner
+- A feedback banner is shown on every page via a custom `Banner` component override (`src/components/Banner.astro`)
+- No per-page frontmatter needed — the component renders the same banner globally
 
 ### Navigation
 - Sidebar is **manually configured** in `astro.config.mjs`
@@ -93,40 +95,66 @@ npm run preview
 ```bash
 npm run clean
 ```
-Removes `.docs-temp/`, `dist/`, and `.astro/` directories
+Removes `dist/` and `.astro/` directories
 
 ## Scripts
 
-- `prepare-docs` - Runs `../scripts/prepare-docs.sh` to prepare documentation files
-- `dev` - Cleans artifacts, prepares docs, and starts development server
-- `build` - Prepares docs and builds for production
+- `dev` - Cleans artifacts and starts development server
+- `build` - Builds for production
 - `preview` - Previews production build locally
-- `clean` - Removes build artifacts (`.docs-temp/`, `dist/`, `.astro/`)
+- `clean` - Removes build artifacts (`dist/`, `.astro/`)
+- `test:versions` - Simulates the full multi-version production layout locally for testing the version switcher UI
 
 ## Deployment
 
-The site is automatically deployed to GitHub Pages:
-- **URL**: https://dfinity.github.io/icp-cli/
-- **Workflow**: `.github/workflows/docs.yml`
-- **Trigger**: Push to `main` branch (docs or docs-site changes)
+The site is hosted on an IC asset canister and served at `https://cli.internetcomputer.org`.
 
-The workflow:
-1. Installs dependencies
-2. Runs `npm run build` (which runs `prepare-docs.sh`)
-3. Uploads the `dist/` directory as a GitHub Pages artifact
-4. Deploys to GitHub Pages
+**Canister ID**: `ak73b-maaaa-aaaad-qlbgq-cai`
+
+### How it works
+
+1. **`.github/workflows/docs.yml`** builds documentation and pushes built files to the `docs-deployment` branch (one directory per version: `0.1/`, `0.2/`, `main/`, etc.)
+2. **`.github/workflows/docs-deploy.yml`** is called by `docs.yml` after publish jobs complete and deploys the entire `docs-deployment` branch to the IC asset canister
+
+### Triggers
+
+- **Push to `main`**: Rebuilds `/main/` docs and root files (`index.html`, `versions.json`, `robots.txt`, `sitemap.xml`, IC config). Also copies `og-image.png`, `llms.txt`, `llms-full.txt`, and `feed.xml` from the latest versioned deployment to the root.
+- **Release tags (`v*`)**: Builds and deploys versioned docs (e.g., `v0.2.0` → `/0.2/`). Also triggers `delete-docs-branch.yml` which automatically deletes the `docs/v0.2` branch if one exists — preventing stale branches from re-deploying outdated content on accidental pushes.
+- **Docs-override branches (`docs/v*`)**: Redeploys versioned docs for a specific minor version without cutting a new code release (e.g., `docs/v0.2` → `/0.2/`). These branches are short-lived by design — created only for an immediate docs fix, then deleted automatically on the next release.
+
+  To trigger a re-deploy, create a fresh branch from the latest release tag and push your fix:
+  ```bash
+  git fetch origin
+  git checkout -b docs/v0.2 v0.2.3   # start from the release tag, not stale state
+  git cherry-pick <commit-sha>        # commit must already be merged to main
+  git push origin docs/v0.2
+  ```
+
+### Root-level files
+
+Several files must live at the deployment root (not inside a versioned subfolder) to be discovered correctly:
+
+- **`robots.txt`** — generated dynamically by the CI `publish-root-files` job from `versions.json`; allows only the latest version's path, disallows old versions, and disallows `/main/` (except when no releases exist yet and `/main/` is the fallback). Never placed in versioned build output.
+- **`sitemap.xml`** — root sitemap index pointing directly to the latest version's `sitemap-0.xml` (spec-compliant: a sitemapindex must reference sitemaps, not other sitemapindex files); generated by `publish-root-files`.
+- **`og-image.png`** — the `og:image` meta tag always references `https://cli.internetcomputer.org/og-image.png`. The CI `publish-root-files` job copies it from the latest versioned build folder to root after each versioned deployment.
+- **`llms.txt` / `llms-full.txt`** — same pattern as `og-image.png`; `publish-root-files` prepends a version navigation header to the root `llms.txt`.
+- **`feed.xml`** — same pattern; copied from the latest versioned folder to root.
+
+### Legacy redirect
+
+The old GitHub Pages site at `https://dfinity.github.io/icp-cli/` redirects all paths to `https://cli.internetcomputer.org/`.
 
 ## Configuration
 
 ### Site Settings
 In `astro.config.mjs`:
-- `site`: Base URL for the site
-- `base`: Base path (currently `/` for root domain)
+- `site`: Base URL (`https://cli.internetcomputer.org` in production)
+- `base`: Version path (set via `PUBLIC_BASE_PATH`, e.g., `/0.2/`, `/main/`)
 - `title`, `description`: Site metadata
 - `logo`: ICP logo configuration
 - `favicon`: Site favicon
 - `customCss`: DFINITY theme files
-- `markdown.rehypePlugins`: External link handling with `rehype-external-links`
+- `markdown.rehypePlugins`: Link rewriting and external link handling
 
 ### Sidebar Configuration
 Manual sidebar definition in `astro.config.mjs`:
@@ -148,8 +176,8 @@ The `slug` should match the file path relative to `docs/` without the `.md` exte
 ## Adding New Pages
 
 1. Create a `.md` file in `../docs/` in the appropriate directory
-2. Start with a `# Heading` (used as page title)
-3. Write standard Markdown content
+2. Add YAML frontmatter with `title` and `description`
+3. Write standard Markdown content (no H1 heading — Starlight renders the title)
 4. Add the page to the sidebar in `astro.config.mjs`:
    ```js
    {
@@ -166,21 +194,20 @@ The `slug` should match the file path relative to `docs/` without the `.md` exte
 ### Sidebar shows no pages
 Check that:
 - The file exists in `../docs/` with correct path
+- The file has YAML frontmatter with at least a `title` field
 - The slug in `astro.config.mjs` matches the file path (without `.md`)
 - You ran `npm run dev` to trigger the build process
 
 ### Duplicate page titles
 Check that:
-- The source file in `../docs/` has only one H1 heading
-- The `prepare-docs.sh` script is running correctly
+- The source file in `../docs/` does not have an H1 heading (the `title` frontmatter is rendered as H1 by Starlight)
 
 ### Broken links
 - Use relative links with `.md` extension in source docs: `[text](./file.md)`
-- The build process (`prepare-docs.sh`) adjusts paths and strips `.md` extensions
+- The rehype plugin (`plugins/rehype-rewrite-links.mjs`) strips `.md` extensions and adjusts paths at build time
 - External links should use full URLs
 
 ## Notes
 
-- The `.docs-temp/` directory is generated at build time and should not be committed
-- Source documentation in `../docs/` should never have frontmatter
+- Source documentation in `../docs/` uses minimal YAML frontmatter (`title` + `description`)
 - The `schemas/` directory is excluded from the docs site (served via GitHub raw URLs)

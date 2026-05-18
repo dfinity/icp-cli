@@ -1,4 +1,7 @@
-# Creating Project Templates
+---
+title: Creating Project Templates
+description: Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
+---
 
 Project templates let users scaffold new ICP projects with `icp new`. This guide covers creating custom templates for your team or the community.
 
@@ -36,7 +39,7 @@ description = "A simple ICP project template"
 canisters:
   - name: {{project-name}}
     recipe:
-      type: "@dfinity/motoko"
+      type: "@dfinity/motoko@v4.0.0"
       configuration:
         main: src/main.mo
 ```
@@ -88,7 +91,7 @@ canisters:
   {% if include_frontend %}
   - name: {{project-name}}-frontend
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.1.0"
       configuration:
         dir: dist
   {% endif %}
@@ -154,12 +157,12 @@ canisters:
   - name: {{project-name}}
     {% if backend_language == "rust" %}
     recipe:
-      type: "@dfinity/rust"
+      type: "@dfinity/rust@v3.0.0"
       configuration:
         package: {{crate_name}}
     {% else %}
     recipe:
-      type: "@dfinity/motoko"
+      type: "@dfinity/motoko@v4.0.0"
       configuration:
         main: src/backend/main.mo
     {% endif %}

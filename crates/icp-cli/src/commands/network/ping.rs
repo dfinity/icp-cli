@@ -1,12 +1,12 @@
 use anyhow::bail;
 use clap::Args;
 use ic_agent::{Agent, agent::status::Status};
-use icp::identity::IdentitySelection;
+use icp::{context::Context, identity::IdentitySelection};
 use std::time::Duration;
 use tokio::time::sleep;
+use tracing::info;
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]
@@ -52,13 +52,13 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
     let access = ctx.network.access(&network).await?;
 
     // Agent
+    // TODO We might want to expose the ctx.create_agent function that takes a NetworkAccess
+    // instead of doing this
     let agent = ctx
-        .get_agent_for_url(&IdentitySelection::Anonymous, &access.url)
+        .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
         .await?;
 
-    if let Some(k) = access.root_key {
-        agent.set_root_key(k);
-    }
+    agent.set_root_key(access.root_key);
 
     // Query
     let status = match args.wait_healthy {
@@ -94,7 +94,7 @@ async fn ping_until_healthy(agent: &Agent) -> Result<Status, anyhow::Error> {
                 return Ok(status);
             }
 
-            eprintln!("{status}");
+            info!("{status}");
         }
 
         if retries >= 60 {

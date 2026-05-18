@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
+use url::Url;
 
 use crate::network::SubnetKind;
 
@@ -55,18 +56,27 @@ pub enum ManagedMode {
         status_dir: Option<String>,
         /// Bind mounts to add to the container in the format relative_host_path:container_path[:options]
         mounts: Option<Vec<String>>,
+        /// Extra hosts entries for Docker networking (e.g. "host.docker.internal:host-gateway")
+        extra_hosts: Option<Vec<String>>,
     },
     Launcher {
         /// HTTP gateway configuration
         gateway: Option<Gateway>,
         /// Artificial delay to add to every update call
         artificial_delay_ms: Option<u64>,
-        /// Set up the Internet Identity canister
+        /// Set up the Internet Identity canister. Makes internet identity available at
+        /// id.ai.localhost:<port>
         ii: Option<bool>,
         /// Set up the NNS
         nns: Option<bool>,
         /// Configure the list of subnets (one application subnet by default)
         subnets: Option<Vec<SubnetKind>>,
+        /// Bitcoin P2P node addresses to connect to (e.g. "127.0.0.1:18444")
+        bitcoind_addr: Option<Vec<String>>,
+        /// Dogecoin P2P node addresses to connect to
+        dogecoind_addr: Option<Vec<String>>,
+        /// The version of icp-cli-network-launcher to use. Defaults to the latest released version. Launcher versions correspond to published PocketIC or IC-OS releases.
+        version: Option<String>,
     },
 }
 
@@ -78,6 +88,9 @@ impl Default for ManagedMode {
             ii: None,
             nns: None,
             subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
         }
     }
 }
@@ -85,12 +98,32 @@ impl Default for ManagedMode {
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
-    /// The URL this network can be reached at.
-    pub url: String,
+    #[serde(flatten)]
+    pub endpoints: Endpoints,
 
     /// The root key of this network
     #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{266}$"))]
     pub root_key: Option<RootKey>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
+#[serde(untagged, rename_all_fields = "kebab-case")]
+pub enum Endpoints {
+    Explicit {
+        /// The URL of the HTTP gateway endpoint. Should support prefixing canister IDs as subdomains,
+        /// otherwise icp-cli will fall back to ?canisterId= query parameters which are frequently brittle in frontend code.
+        ///
+        /// If no HTTP gateway endpoint is provided, canister URLs will not be printed in deploy operations.
+        http_gateway_url: Option<Url>,
+        /// The URL of the API endpoint. Should support the standard API routes (e.g. /api/v3).
+        api_url: Url,
+    },
+    Implicit {
+        /// The URL this network can be reached at.
+        ///
+        /// Assumed to be the URL of both the HTTP gateway (canister-id.domain.com) and API (domain.com/api/v3).
+        url: Url,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -114,7 +147,11 @@ impl From<RootKey> for String {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema)]
 pub struct Gateway {
-    pub host: Option<String>,
+    /// Network interface for the gateway. Defaults to 127.0.0.1
+    pub bind: Option<String>,
+    /// Domains the gateway should respond to. Automatically includes localhost if applicable.
+    pub domains: Option<Vec<String>>,
+    /// Port for the gateway to listen on. Defaults to 8000
     pub port: Option<u16>,
 }
 
@@ -160,7 +197,9 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
+                    endpoints: Endpoints::Implicit {
+                        url: "https://ic0.app".parse().unwrap(),
+                    },
                     root_key: None
                 }),
             },
@@ -200,7 +239,9 @@ mod tests {
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Connected(Connected {
-                    url: "https://ic0.app".to_string(),
+                    endpoints: Endpoints::Implicit {
+                        url: "https://ic0.app".parse().unwrap(),
+                    },
                     root_key: Some(
                         RootKey::try_from(
                             "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010\
@@ -231,7 +272,10 @@ mod tests {
                         artificial_delay_ms: None,
                         ii: None,
                         nns: None,
-                        subnets: None
+                        subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },
@@ -239,26 +283,30 @@ mod tests {
     }
 
     #[test]
-    fn managed_network_with_host() {
+    fn managed_network_with_bind() {
         assert_eq!(
             validate_network_yaml(indoc! {r#"
                     name: my-network
                     mode: managed
                     gateway:
-                      host: localhost
+                      bind: 127.0.0.1
                 "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
                 configuration: Mode::Managed(Managed {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
-                            host: Some("localhost".to_string()),
+                            bind: Some("127.0.0.1".to_string()),
+                            domains: None,
                             port: None,
                         }),
                         artificial_delay_ms: None,
                         ii: None,
                         nns: None,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },
@@ -272,7 +320,7 @@ mod tests {
                     name: my-network
                     mode: managed
                     gateway:
-                      host: localhost
+                      bind: 127.0.0.1
                       port: 8000
                 "#}),
             NetworkManifest {
@@ -280,13 +328,106 @@ mod tests {
                 configuration: Mode::Managed(Managed {
                     mode: Box::new(ManagedMode::Launcher {
                         gateway: Some(Gateway {
-                            host: Some("localhost".to_string()),
+                            bind: Some("127.0.0.1".to_string()),
+                            domains: None,
                             port: Some(8000)
                         }),
                         artificial_delay_ms: None,
                         ii: None,
                         nns: None,
                         subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
+                        version: None,
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_network_with_dogecoind_addr() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    dogecoind-addr:
+                      - "127.0.0.1:22556"
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: Some(vec!["127.0.0.1:22556".to_string()]),
+                        version: None,
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_docker_network_with_extra_hosts() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    image: ghcr.io/dfinity/icp-cli-network-launcher
+                    port-mapping:
+                      - "8000:4943"
+                    extra-hosts:
+                      - "host.docker.internal:host-gateway"
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Image {
+                        image: "ghcr.io/dfinity/icp-cli-network-launcher".to_string(),
+                        port_mapping: vec!["8000:4943".to_string()],
+                        rm_on_exit: None,
+                        args: None,
+                        entrypoint: None,
+                        environment: None,
+                        volumes: None,
+                        platform: None,
+                        user: None,
+                        shm_size: None,
+                        status_dir: None,
+                        mounts: None,
+                        extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_network_with_bitcoind_addr() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    bitcoind-addr:
+                      - "127.0.0.1:18444"
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: None,
+                        nns: None,
+                        subnets: None,
+                        bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+                        dogecoind_addr: None,
+                        version: None,
                     })
                 })
             },

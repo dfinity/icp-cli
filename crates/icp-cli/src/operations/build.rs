@@ -5,10 +5,11 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use icp::{
     Canister,
     canister::build::{Build, BuildError, Params},
-    context::TermWriter,
+    package::PackageCache,
     prelude::*,
 };
 use snafu::{ResultExt, Snafu};
+use tracing::error;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
@@ -51,6 +52,7 @@ pub(crate) async fn build(
     pb: &mut MultiStepProgressBar,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
+    pkg_cache: &PackageCache,
 ) -> Result<(), BuildOperationError> {
     let build_dir = tempdir().context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
@@ -69,6 +71,7 @@ pub(crate) async fn build(
                     output: wasm_output_path.to_owned(),
                 },
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
@@ -95,7 +98,7 @@ pub(crate) async fn build_many_with_progress_bar(
     canisters: Vec<(PathBuf, Canister)>,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    term: Arc<TermWriter>,
+    pkg_cache: &PackageCache,
     debug: bool,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
@@ -106,7 +109,15 @@ pub(crate) async fn build_many_with_progress_bar(
         let builder = builder.clone();
         let artifacts = artifacts.clone();
         let fut = async move {
-            let build_result = build(&canister_path, &canister, &mut pb, builder, artifacts).await;
+            let build_result = build(
+                &canister_path,
+                &canister,
+                &mut pb,
+                builder,
+                artifacts,
+                pkg_cache,
+            )
+            .await;
 
             // Execute with progress tracking for final state
             let result = ProgressManager::execute_with_progress(
@@ -121,7 +132,7 @@ pub(crate) async fn build_many_with_progress_bar(
             result.map_err(|error| BuildFailure {
                 canister_name: canister.name.clone(),
                 error,
-                progress_output: pb.dump_output(),
+                progress_output: pb.dump_output(debug),
             })
         };
         futs.push_back(fut);
@@ -138,19 +149,14 @@ pub(crate) async fn build_many_with_progress_bar(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            // Print progress output
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
-                " ----- Failed to build canister '{}' -----",
+            error!(
+                "----- Failed to build canister '{}' -----",
                 failure.canister_name,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
+            );
+            error!("'{}'", failure.error);
             for line in &failure.progress_output {
-                let _ = term.write_line(line);
+                error!("{line}");
             }
-
-            let _ = term.write_line("");
         }
 
         return BuildManySnafu {

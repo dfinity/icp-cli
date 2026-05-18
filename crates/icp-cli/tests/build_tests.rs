@@ -119,31 +119,76 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
-        [my-canister] Build output:
-        [my-canister] Building: step 1 of 3 (script):
-        [my-canister] echo "success 1":
-        [my-canister] > success 1
-        [my-canister] Building: step 2 of 3 (script):
-        [my-canister] echo "success 2":
-        [my-canister] > success 2
-        [my-canister] Building: step 3 of 3 (script):
-        [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
-        [my-canister] > failing build step 1
-        [my-canister] > failing build step 2
-        [my-canister] > failing build step 3
-        [my-canister] > failing build step 4
-        [my-canister] > failing build step 5
+        ERR ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 3 of 3 (script):
+        ERR [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
+        ERR [my-canister] > failing build step 1
+        ERR [my-canister] > failing build step 2
+        ERR [my-canister] > failing build step 3
+        ERR [my-canister] > failing build step 4
+        ERR [my-canister] > failing build step 5
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output))
-        .stdout(contains("hide this").not());
+        .stderr(contains(expected_output))
+        .stderr(contains("hide this").not())
+        .stderr(contains("success 1").not())
+        .stderr(contains("success 2").not());
+}
+
+#[test]
+fn build_adapter_display_failing_middle_step_output() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest: step 2 of 3 fails
+    let pm = indoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo "step 1 ok"
+                - type: script
+                  command: echo "step 2 failing"; exit 1
+                - type: script
+                  command: echo "step 3 should not run"
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // Only step 2 output should be shown, not step 1 or step 3
+    let expected_output = indoc! {r#"
+        ERR ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 3 (script):
+        ERR [my-canister] echo "step 2 failing"; exit 1:
+        ERR [my-canister] > step 2 failing
+    "#};
+
+    ctx.icp()
+        .current_dir(project_dir)
+        .env("NO_COLOR", "1")
+        .args(["build", "my-canister"])
+        .assert()
+        .failure()
+        .stderr(contains(expected_output))
+        .stderr(contains("step 1 ok").not())
+        .stderr(contains("step 3 should not run").not());
 }
 
 #[test]
@@ -174,23 +219,21 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'failed to read prebuilt canister file'
-        [my-canister] Build output:
-        [my-canister] Building: step 1 of 2 (script):
-        [my-canister] echo "initial step succeeded":
-        [my-canister] > initial step succeeded
-        [my-canister] Building: step 2 of 2 (pre-built):
-        [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
-        [my-canister] > Reading local file: /nonexistent/path/to/wasm.wasm
+        ERR ----- Failed to build canister 'my-canister' -----
+        ERR 'failed to read wasm file at '/nonexistent/path/to/wasm.wasm''
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 2 (pre-built):
+        ERR [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
+        ERR [my-canister] > Reading wasm: /nonexistent/path/to/wasm.wasm
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]
@@ -220,23 +263,21 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'command 'exit 1' failed with status code 1'
-        [my-canister] Build output:
-        [my-canister] Building: step 1 of 2 (script):
-        [my-canister] echo "step 1 succeeded":
-        [my-canister] > step 1 succeeded
-        [my-canister] Building: step 2 of 2 (script):
-        [my-canister] exit 1:
-        [my-canister] <no output>
+        ERR ----- Failed to build canister 'my-canister' -----
+        ERR 'command 'exit 1' failed with status code 1'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 2 of 2 (script):
+        ERR [my-canister] exit 1:
+        ERR [my-canister] <no output>
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]
@@ -308,24 +349,25 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-         ----- Failed to build canister 'my-canister' -----
-        Error: 'build did not produce a wasm output file'
-        [my-canister] Build output:
-        [my-canister] Building: step 1 of 1 (script):
-        [my-canister] echo "command 1":
-        [my-canister] echo "command 2":
-        [my-canister] echo "command 3":
-        [my-canister] > command 1
-        [my-canister] > command 2
-        [my-canister] > command 3
+        ERR ----- Failed to build canister 'my-canister' -----
+        ERR 'build did not produce a wasm output file'
+        ERR [my-canister] Build output:
+        ERR [my-canister] Building: step 1 of 1 (script):
+        ERR [my-canister] echo "command 1":
+        ERR [my-canister] echo "command 2":
+        ERR [my-canister] echo "command 3":
+        ERR [my-canister] > command 1
+        ERR [my-canister] > command 2
+        ERR [my-canister] > command 3
     "#};
 
     ctx.icp()
         .current_dir(project_dir)
+        .env("NO_COLOR", "1")
         .args(["build", "my-canister"])
         .assert()
         .failure()
-        .stdout(contains(expected_output));
+        .stderr(contains(expected_output));
 }
 
 #[test]
@@ -403,10 +445,10 @@ fn build_multiple_canisters() {
         .args(["--debug", "build", "canister-a", "canister-b"])
         .assert()
         .success()
-        .stdout(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stdout(contains("DEBUG icp::progress: building canister-a"))
-        .stdout(contains("DEBUG icp::progress: building canister-b"))
-        .stdout(contains("DEBUG icp::progress: building canister-c").not());
+        .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
+        .stderr(contains("DEBUG icp::progress: building canister-a"))
+        .stderr(contains("DEBUG icp::progress: building canister-b"))
+        .stderr(contains("DEBUG icp::progress: building canister-c").not());
 }
 
 #[test]
@@ -459,9 +501,9 @@ fn build_all_canisters_in_environment() {
         .args(["--debug", "build", "--environment", "test-env"])
         .assert()
         .success()
-        .stdout(contains(r#"canisters: []"#))
-        .stdout(contains(r#"environment: Some("test-env")"#))
-        .stdout(contains("DEBUG icp::progress: building canister-a"))
-        .stdout(contains("DEBUG icp::progress: building canister-b"))
-        .stdout(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
+        .stderr(contains(r#"canisters: []"#))
+        .stderr(contains(r#"environment: Some("test-env")"#))
+        .stderr(contains("DEBUG icp::progress: building canister-a"))
+        .stderr(contains("DEBUG icp::progress: building canister-b"))
+        .stderr(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
 }

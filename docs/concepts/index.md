@@ -1,4 +1,7 @@
-# Concepts
+---
+title: Concepts
+description: Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+---
 
 Understanding how icp-cli organizes and manages your project.
 
@@ -8,6 +11,8 @@ Understanding how icp-cli organizes and manages your project.
 - [Build, Deploy, Sync](build-deploy-sync.md) — The three phases of the deployment lifecycle
 - [Environments and Networks](environments.md) — Deployment targets and how they relate
 - [Recipes](recipes.md) — Templated, reusable build configurations
+- [Canister Discovery](canister-discovery.md) — How canisters discover each other
+- [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
 ## Quick Reference
 

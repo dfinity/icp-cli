@@ -16,6 +16,10 @@ use crate::{
         canister::{BuildSteps, SyncSteps},
         recipe::{Recipe, RecipeType},
     },
+    package::{
+        PackageCache, cache_registry_recipe, cache_uri_recipe, read_cached_registry_recipe,
+        read_cached_uri_recipe,
+    },
     prelude::*,
 };
 
@@ -24,6 +28,8 @@ use super::{Resolve, ResolveError};
 pub struct Handlebars {
     /// Http client for fetching remote recipe templates
     pub http_client: reqwest::Client,
+    /// Package cache for caching downloaded recipe templates
+    pub pkg_cache: PackageCache,
 }
 
 pub enum TemplateSource {
@@ -62,6 +68,19 @@ pub enum HandlebarsError {
         "sha256 checksum mismatch for recipe template: expected {expected}, actual {actual}"
     ))]
     ChecksumMismatch { expected: String, actual: String },
+
+    #[snafu(display("failed to read cached recipe template"))]
+    ReadCache {
+        source: crate::package::RecipeCacheError,
+    },
+
+    #[snafu(display("failed to cache recipe template"))]
+    CacheRecipe {
+        source: crate::package::RecipeCacheError,
+    },
+
+    #[snafu(display("failed to acquire lock on package cache"))]
+    LockCache { source: crate::fs::lock::LockError },
 }
 
 impl Handlebars {
@@ -69,8 +88,8 @@ impl Handlebars {
         &self,
         recipe: &Recipe,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
-        // Find the template
-        let tmpl = match &recipe.recipe_type {
+        // Determine the template source
+        let tmpl_source = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
             RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
             RecipeType::Registry {
@@ -80,72 +99,76 @@ impl Handlebars {
             } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
         };
 
-        // TMP(or.ricon): Temporarily hardcode a dfinity registry
-        let tmpl = match tmpl {
-            TemplateSource::Registry(registry, recipe, version) => {
+        // Retrieve the template, using cache for remote/registry sources
+        let (tmpl, should_cache) = match &tmpl_source {
+            TemplateSource::LocalPath(path) => {
+                let bytes = read(path).context(ReadFileSnafu)?;
+                (parse_bytes_to_string(bytes)?, false)
+            }
+
+            TemplateSource::RemoteUrl(u) => {
+                // Check cache
+                let maybe_cached = self
+                    .pkg_cache
+                    .with_read(async |r| {
+                        read_cached_uri_recipe(r, u, recipe.sha256.as_deref())
+                            .context(ReadCacheSnafu)
+                    })
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(cached) = maybe_cached? {
+                    debug!("Using cached recipe template for {u}");
+                    (parse_bytes_to_string(cached)?, false)
+                } else {
+                    // Download the template
+                    let tmpl = self.fetch_remote_bytes(u).await?;
+                    (parse_bytes_to_string(tmpl)?, true)
+                }
+            }
+
+            // TMP(or.ricon): Temporarily hardcode a dfinity registry
+            TemplateSource::Registry(registry, recipe_name, version) => {
                 if registry != "dfinity" {
                     panic!("only the dfinity registry is currently supported");
                 }
 
-                TemplateSource::RemoteUrl(format!(
-                    "https://github.com/dfinity/icp-cli-recipes/releases/download/{recipe}-{version}/recipe.hbs"
-                ))
+                let package = format!("@{registry}/{recipe_name}");
+                let release_tag = format!("{recipe_name}-{version}");
+
+                // Check cache
+                let maybe_cached = self
+                    .pkg_cache
+                    .with_read(async |r| {
+                        read_cached_registry_recipe(r, &package, version).context(ReadCacheSnafu)
+                    })
+                    .await
+                    .context(LockCacheSnafu)?;
+                if let Some(cached) = maybe_cached? {
+                    debug!("Using cached recipe template for {package}@{version}");
+                    (parse_bytes_to_string(cached)?, false)
+                } else {
+                    // Download the template
+                    let url = format!(
+                        "https://github.com/dfinity/icp-cli-recipes/releases/download/{release_tag}/recipe.hbs"
+                    );
+                    let bytes = self.fetch_remote_bytes(&url).await?;
+
+                    (parse_bytes_to_string(bytes)?, true)
+                }
             }
-            _ => tmpl,
         };
 
-        // Retrieve the template for the recipe from its respective source
-        let tmpl = match tmpl {
-            // TMP(or.ricon): Support multiple registries
-            TemplateSource::Registry(_, _, _) => panic!(
-                "registry source should have been converted to a dfinity-specific remote url"
-            ),
-
-            // Attempt to load template from local file-system
-            TemplateSource::LocalPath(path) => {
-                let bytes = read(&path).context(ReadFileSnafu)?;
-
-                // Verify the checksum if it's provided
-                if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)?;
-                }
-
-                parse_bytes_to_string(bytes)?
-            }
-
-            // Attempt to fetch template from remote resource url
-            TemplateSource::RemoteUrl(u) => {
-                let u = Url::from_str(&u).context(UrlParseSnafu)?;
-
-                debug!("Requesting template from: {u}");
-
-                let resp = self
-                    .http_client
-                    .execute(Request::new(Method::GET, u.clone()))
-                    .await
-                    .context(HttpRequestSnafu)?;
-
-                if !resp.status().is_success() {
-                    return HttpStatusSnafu {
-                        url: u.to_string(),
-                        status: resp.status().as_u16(),
-                    }
-                    .fail();
-                }
-
-                let bytes = resp.bytes().await.context(HttpRequestSnafu)?;
-
-                // Verify the checksum if it's provided
-                if let Some(expected) = &recipe.sha256 {
-                    verify_checksum(&bytes, expected)?;
-                }
-
-                parse_bytes_to_string(bytes.into())?
-            }
+        let hash = if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?
+        } else {
+            Sha256::digest(tmpl.as_bytes()).into()
         };
 
         // Load the template via handlebars
         let mut reg = handlebars::Handlebars::new();
+
+        // Disable HTML escaping since the output is YAML, not HTML
+        reg.register_escape_fn(handlebars::no_escape);
 
         // Register helpers
         reg.register_helper("replace", Box::new(ReplaceHelper));
@@ -172,7 +195,7 @@ impl Handlebars {
             })?;
 
         // Read the rendered YAML canister manifest
-        // Recipes can only render buid/sync
+        // Recipes can only render build/sync
         #[derive(Deserialize)]
         struct BuildSyncHelper {
             build: BuildSteps,
@@ -181,8 +204,8 @@ impl Handlebars {
         }
 
         let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        match insts {
-            Ok(helper) => Ok((helper.build, helper.sync)),
+        let (build, sync) = match insts {
+            Ok(helper) => (helper.build, helper.sync),
             Err(e) => panic!(
                 "{}",
                 formatdoc! {r#"
@@ -194,7 +217,63 @@ impl Handlebars {
                 ------
             "#, recipe.recipe_type}
             ),
+        };
+
+        // The template is verified good - now cache it if it was remote
+        if should_cache {
+            match tmpl_source {
+                TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
+                TemplateSource::RemoteUrl(u) => {
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_uri_recipe(w, &u, &hex::encode(hash), tmpl.as_bytes())
+                                .context(CacheRecipeSnafu)?;
+                            Ok(())
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+                TemplateSource::Registry(registry, recipe_name, version) => {
+                    let package = format!("@{registry}/{recipe_name}");
+                    self.pkg_cache
+                        .with_write(async |w| {
+                            cache_registry_recipe(
+                                w,
+                                &package,
+                                &version,
+                                &hex::encode(hash),
+                                tmpl.as_bytes(),
+                            )
+                            .context(CacheRecipeSnafu)
+                        })
+                        .await
+                        .context(LockCacheSnafu)??;
+                }
+            }
         }
+        Ok((build, sync))
+    }
+
+    /// Fetch raw bytes from a remote URL.
+    async fn fetch_remote_bytes(&self, url: &str) -> Result<Vec<u8>, HandlebarsError> {
+        let u = Url::from_str(url).context(UrlParseSnafu)?;
+        debug!("Requesting template from: {u}");
+
+        let resp = self
+            .http_client
+            .execute(Request::new(Method::GET, u.clone()))
+            .await
+            .context(HttpRequestSnafu)?;
+
+        if !resp.status().is_success() {
+            return HttpStatusSnafu {
+                url: u.to_string(),
+                status: resp.status().as_u16(),
+            }
+            .fail();
+        }
+
+        Ok(resp.bytes().await.context(HttpRequestSnafu)?.to_vec())
     }
 }
 
@@ -234,13 +313,13 @@ impl HelperDef for ReplaceHelper {
 }
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> {
-    let actual = hex::encode({
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], HandlebarsError> {
+    let actual_hash = {
         let mut h = Sha256::new();
         h.update(bytes);
         h.finalize()
-    });
-
+    };
+    let actual = hex::encode(actual_hash);
     if actual != expected {
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
@@ -248,11 +327,69 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), HandlebarsError> 
         }
         .fail();
     }
-
-    Ok(())
+    Ok(actual_hash.into())
 }
 
 /// Helper function to parse bytes into a UTF-8 string
 fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
     String::from_utf8(bytes).context(DecodeUtf8Snafu)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::recipe::{Recipe, RecipeType};
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn template_values_are_not_html_escaped() {
+        // Create a recipe template that interpolates a value containing
+        // characters that Handlebars would normally HTML-escape (", =, &, <, >).
+        // Use double-stache {{ }} which is what real recipe templates use.
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "{{ command }}"
+            "#},
+        )
+        .unwrap();
+
+        let cache_dir = tmp.path().join("pkg");
+        let pkg_cache = PackageCache::new(cache_dir).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let mut configuration = HashMap::new();
+        configuration.insert(
+            "command".to_string(),
+            serde_yaml::Value::String("SITE=https://example.com&foo=bar npm run build".to_string()),
+        );
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration,
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs.resolve_impl(&recipe).await.unwrap();
+        let cmd = build.steps[0].clone();
+
+        match cmd {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                let commands = adapter.command.as_vec();
+                assert_eq!(
+                    commands[0], "SITE=https://example.com&foo=bar npm run build",
+                    "Template values must not be HTML-escaped (= and & must be preserved)"
+                );
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
 }

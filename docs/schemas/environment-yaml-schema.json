@@ -1,5 +1,51 @@
 {
   "$defs": {
+    "ArgsFormat": {
+      "description": "Format specifier for canister call/install args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
+    },
+    "CyclesAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
+    },
+    "DurationAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A duration in seconds.\n\nDeserializes from a number (seconds) or a string with duration suffix (s, m, h, d, w)\nand optional underscore separators.\n\nSuffixes (case-insensitive):\n- `s` — seconds\n- `m` — minutes (×60)\n- `h` — hours (×3600)\n- `d` — days (×86400)\n- `w` — weeks (×604800)\n\nA bare number without suffix is treated as seconds."
+    },
     "LogVisibility": {
       "description": "Controls who can read canister logs.",
       "oneOf": [
@@ -31,6 +77,60 @@
         }
       ]
     },
+    "ManifestInitArgs": {
+      "anyOf": [
+        {
+          "description": "Plain string shorthand — treated as Candid.",
+          "type": "string"
+        },
+        {
+          "description": "File reference with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/ArgsFormat",
+              "default": "candid"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Inline value with explicit format.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/ArgsFormat",
+              "default": "candid"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+    },
+    "MemoryAmount": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
+    },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",
       "properties": {
@@ -54,13 +154,26 @@
           ]
         },
         "freezing_threshold": {
-          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DurationAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.\nSupports duration suffixes in YAML: s, m, h, d, w (e.g. \"30d\" or \"4w\")."
+        },
+        "log_memory_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.\nSupports suffixes in YAML: kb, kib, mb, mib (e.g. \"2mib\" or \"256kib\"). Canister default is 4096 bytes."
         },
         "log_visibility": {
           "anyOf": [
@@ -74,40 +187,49 @@
           "description": "Controls who can read canister logs."
         },
         "memory_allocation": {
-          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory allocation in bytes. If unset, memory is allocated dynamically.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "reserved_cycles_limit": {
-          "description": "Reserved cycles limit. If set, the canister cannot consume more than this many cycles.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CyclesAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
-          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         },
         "wasm_memory_threshold": {
-          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wasm memory threshold in bytes. Triggers a callback when exceeded.\nSupports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. \"4gib\" or \"2.5kb\")."
         }
       },
       "type": "object"
@@ -129,7 +251,7 @@
     },
     "init_args": {
       "additionalProperties": {
-        "type": "string"
+        "$ref": "#/$defs/ManifestInitArgs"
       },
       "description": "Override init args for specific canisters in this environment",
       "type": [

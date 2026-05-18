@@ -1,84 +1,38 @@
 use std::collections::HashMap;
 
 use candid::{Nat, Principal};
-use icp_canister_interfaces::cycles_ledger::CanisterSettingsArg;
+use ic_management_canister_types::{CanisterSettings, LogVisibility};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 
 pub mod build;
 pub mod recipe;
 pub mod sync;
 
 mod script;
+mod wasm;
 
 /// Controls who can read canister logs.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum LogVisibility {
-    /// Only controllers can view logs.
-    #[default]
-    Controllers,
-    /// Anyone can view logs.
-    Public,
-    /// Specific principals can view logs.
-    AllowedViewers(Vec<Principal>),
-}
-
-/// Serialization/deserialization representation for LogVisibility.
 /// Supports both string format ("controllers", "public") and object format ({ allowed_viewers: [...] }).
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged, rename_all = "snake_case")]
-enum LogVisibilityDef {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum LogVisibilityDef {
     /// Simple string variants for controllers or public
     Simple(LogVisibilitySimple),
     /// Object format with allowed_viewers list
     AllowedViewers { allowed_viewers: Vec<Principal> },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum LogVisibilitySimple {
+pub enum LogVisibilitySimple {
     Controllers,
     Public,
 }
 
-impl From<LogVisibility> for LogVisibilityDef {
-    fn from(value: LogVisibility) -> Self {
-        match value {
-            LogVisibility::Controllers => {
-                LogVisibilityDef::Simple(LogVisibilitySimple::Controllers)
-            }
-            LogVisibility::Public => LogVisibilityDef::Simple(LogVisibilitySimple::Public),
-            LogVisibility::AllowedViewers(viewers) => LogVisibilityDef::AllowedViewers {
-                allowed_viewers: viewers,
-            },
-        }
-    }
-}
-
-impl From<LogVisibilityDef> for LogVisibility {
-    fn from(value: LogVisibilityDef) -> Self {
-        match value {
-            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers) => {
-                LogVisibility::Controllers
-            }
-            LogVisibilityDef::Simple(LogVisibilitySimple::Public) => LogVisibility::Public,
-            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
-                LogVisibility::AllowedViewers(allowed_viewers)
-            }
-        }
-    }
-}
-
-impl Serialize for LogVisibility {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        LogVisibilityDef::from(self.clone()).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LogVisibility {
+impl<'de> Deserialize<'de> for LogVisibilityDef {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -89,17 +43,17 @@ impl<'de> Deserialize<'de> for LogVisibility {
         struct LogVisibilityVisitor;
 
         impl<'de> Visitor<'de> for LogVisibilityVisitor {
-            type Value = LogVisibility;
+            type Value = LogVisibilityDef;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("'controllers', 'public', or object with 'allowed_viewers'")
             }
 
             fn visit_str<E: Error>(self, value: &str) -> Result<Self::Value, E> {
-                LogVisibilityDef::deserialize(
+                LogVisibilitySimple::deserialize(
                     serde::de::value::StrDeserializer::<E>::new(value),
                 )
-                .map(Into::into)
+                .map(LogVisibilityDef::Simple)
                 .map_err(|_| {
                     E::custom(format!(
                         "unknown log_visibility value: '{}', expected 'controllers' or 'public'",
@@ -129,7 +83,7 @@ impl<'de> Deserialize<'de> for LogVisibility {
                 }
 
                 allowed_viewers
-                    .map(LogVisibility::AllowedViewers)
+                    .map(|v| LogVisibilityDef::AllowedViewers { allowed_viewers: v })
                     .ok_or_else(|| Error::missing_field("allowed_viewers"))
             }
         }
@@ -138,7 +92,7 @@ impl<'de> Deserialize<'de> for LogVisibility {
     }
 }
 
-impl JsonSchema for LogVisibility {
+impl JsonSchema for LogVisibilityDef {
     fn schema_name() -> std::borrow::Cow<'static, str> {
         std::borrow::Cow::Borrowed("LogVisibility")
     }
@@ -173,26 +127,15 @@ impl JsonSchema for LogVisibility {
     }
 }
 
-impl From<LogVisibility> for ic_management_canister_types::LogVisibility {
-    fn from(value: LogVisibility) -> Self {
+impl From<LogVisibilityDef> for LogVisibility {
+    fn from(value: LogVisibilityDef) -> Self {
         match value {
-            LogVisibility::Controllers => ic_management_canister_types::LogVisibility::Controllers,
-            LogVisibility::Public => ic_management_canister_types::LogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                ic_management_canister_types::LogVisibility::AllowedViewers(viewers)
+            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers) => {
+                LogVisibility::Controllers
             }
-        }
-    }
-}
-
-impl From<LogVisibility> for icp_canister_interfaces::cycles_ledger::LogVisibility {
-    fn from(value: LogVisibility) -> Self {
-        use icp_canister_interfaces::cycles_ledger::LogVisibility as CyclesLedgerLogVisibility;
-        match value {
-            LogVisibility::Controllers => CyclesLedgerLogVisibility::Controllers,
-            LogVisibility::Public => CyclesLedgerLogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                CyclesLedgerLogVisibility::AllowedViewers(viewers)
+            LogVisibilityDef::Simple(LogVisibilitySimple::Public) => LogVisibility::Public,
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                LogVisibility::AllowedViewers(allowed_viewers)
             }
         }
     }
@@ -202,25 +145,36 @@ impl From<LogVisibility> for icp_canister_interfaces::cycles_ledger::LogVisibili
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
     /// Controls who can read canister logs.
-    pub log_visibility: Option<LogVisibility>,
+    pub log_visibility: Option<LogVisibilityDef>,
 
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
     pub compute_allocation: Option<u64>,
 
     /// Memory allocation in bytes. If unset, memory is allocated dynamically.
-    pub memory_allocation: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
-    pub freezing_threshold: Option<u64>,
+    /// Supports duration suffixes in YAML: s, m, h, d, w (e.g. "30d" or "4w").
+    pub freezing_threshold: Option<DurationAmount>,
 
-    /// Reserved cycles limit. If set, the canister cannot consume more than this many cycles.
-    pub reserved_cycles_limit: Option<u64>,
+    /// Upper limit on cycles reserved for future resource payments.
+    /// Memory allocations that would push the reserved balance above this limit will fail.
+    /// Supports suffixes in YAML: k, m, b, t (e.g. "4t" or "4.3t").
+    #[serde(default)]
+    pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
-    pub wasm_memory_limit: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
-    pub wasm_memory_threshold: Option<u64>,
+    /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    pub wasm_memory_threshold: Option<MemoryAmount>,
+
+    /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
+    /// Supports suffixes in YAML: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    pub log_memory_limit: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
@@ -228,15 +182,16 @@ pub struct Settings {
     pub environment_variables: Option<HashMap<String, String>>,
 }
 
-impl From<Settings> for CanisterSettingsArg {
+impl From<Settings> for CanisterSettings {
     fn from(settings: Settings) -> Self {
-        CanisterSettingsArg {
-            freezing_threshold: settings.freezing_threshold.map(Nat::from),
+        CanisterSettings {
+            freezing_threshold: settings.freezing_threshold.map(|d| Nat::from(d.get())),
             controllers: None,
-            reserved_cycles_limit: settings.reserved_cycles_limit.map(Nat::from),
+            reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(Into::into),
-            memory_allocation: settings.memory_allocation.map(Nat::from),
+            memory_allocation: settings.memory_allocation.map(|m| Nat::from(m.get())),
             compute_allocation: settings.compute_allocation.map(Nat::from),
+            ..Default::default()
         }
     }
 }
@@ -248,15 +203,21 @@ mod tests {
     #[test]
     fn log_visibility_deserialize_controllers() {
         let yaml = "controllers";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(result, LogVisibility::Controllers);
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            LogVisibilityDef::Simple(LogVisibilitySimple::Controllers)
+        );
     }
 
     #[test]
     fn log_visibility_deserialize_public() {
         let yaml = "public";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(result, LogVisibility::Public);
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            LogVisibilityDef::Simple(LogVisibilitySimple::Public)
+        );
     }
 
     #[test]
@@ -266,12 +227,18 @@ allowed_viewers:
   - "aaaaa-aa"
   - "2vxsx-fae"
 "#;
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
         match result {
-            LogVisibility::AllowedViewers(viewers) => {
-                assert_eq!(viewers.len(), 2);
-                assert_eq!(viewers[0], Principal::from_text("aaaaa-aa").unwrap());
-                assert_eq!(viewers[1], Principal::from_text("2vxsx-fae").unwrap());
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                assert_eq!(allowed_viewers.len(), 2);
+                assert_eq!(
+                    allowed_viewers[0],
+                    Principal::from_text("aaaaa-aa").unwrap()
+                );
+                assert_eq!(
+                    allowed_viewers[1],
+                    Principal::from_text("2vxsx-fae").unwrap()
+                );
             }
             _ => panic!("Expected AllowedViewers variant"),
         }
@@ -280,10 +247,10 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_allowed_viewers_empty() {
         let yaml = "allowed_viewers: []";
-        let result: LogVisibility = serde_yaml::from_str(yaml).unwrap();
+        let result: LogVisibilityDef = serde_yaml::from_str(yaml).unwrap();
         match result {
-            LogVisibility::AllowedViewers(viewers) => {
-                assert!(viewers.is_empty());
+            LogVisibilityDef::AllowedViewers { allowed_viewers } => {
+                assert!(allowed_viewers.is_empty());
             }
             _ => panic!("Expected AllowedViewers variant"),
         }
@@ -292,7 +259,7 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_invalid_string() {
         let yaml = "invalid";
-        let result: Result<LogVisibility, _> = serde_yaml::from_str(yaml);
+        let result: Result<LogVisibilityDef, _> = serde_yaml::from_str(yaml);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown log_visibility value"));
@@ -301,7 +268,7 @@ allowed_viewers:
     #[test]
     fn log_visibility_deserialize_invalid_field() {
         let yaml = "unknown_field: []";
-        let result: Result<LogVisibility, _> = serde_yaml::from_str(yaml);
+        let result: Result<LogVisibilityDef, _> = serde_yaml::from_str(yaml);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown field"));
@@ -309,24 +276,26 @@ allowed_viewers:
 
     #[test]
     fn log_visibility_serialize_controllers() {
-        let log_vis = LogVisibility::Controllers;
+        let log_vis = LogVisibilityDef::Simple(LogVisibilitySimple::Controllers);
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert_eq!(yaml.trim(), "controllers");
     }
 
     #[test]
     fn log_visibility_serialize_public() {
-        let log_vis = LogVisibility::Public;
+        let log_vis = LogVisibilityDef::Simple(LogVisibilitySimple::Public);
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert_eq!(yaml.trim(), "public");
     }
 
     #[test]
     fn log_visibility_serialize_allowed_viewers() {
-        let log_vis = LogVisibility::AllowedViewers(vec![
-            Principal::from_text("aaaaa-aa").unwrap(),
-            Principal::from_text("2vxsx-fae").unwrap(),
-        ]);
+        let log_vis = LogVisibilityDef::AllowedViewers {
+            allowed_viewers: vec![
+                Principal::from_text("aaaaa-aa").unwrap(),
+                Principal::from_text("2vxsx-fae").unwrap(),
+            ],
+        };
         let yaml = serde_yaml::to_string(&log_vis).unwrap();
         assert!(yaml.contains("allowed_viewers"));
         assert!(yaml.contains("aaaaa-aa"));
@@ -334,26 +303,91 @@ allowed_viewers:
     }
 
     #[test]
+    fn settings_reserved_cycles_limit_parses_suffix() {
+        let yaml = "reserved_cycles_limit: 4.3t";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(4_300_000_000_000)
+        );
+    }
+
+    #[test]
+    fn settings_reserved_cycles_limit_parses_number() {
+        let yaml = "reserved_cycles_limit: 5000000000000";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.reserved_cycles_limit.as_ref().map(|c| c.get()),
+            Some(5_000_000_000_000)
+        );
+    }
+
+    #[test]
+    fn settings_memory_allocation_parses_suffix() {
+        let yaml = "memory_allocation: 4gib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.memory_allocation.as_ref().map(|m| m.get()),
+            Some(4 * 1024 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_memory_allocation_parses_number() {
+        let yaml = "memory_allocation: 4294967296";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.memory_allocation.as_ref().map(|m| m.get()),
+            Some(4294967296)
+        );
+    }
+
+    #[test]
+    fn settings_wasm_memory_limit_parses_suffix() {
+        let yaml = "wasm_memory_limit: 1.5gib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.wasm_memory_limit.as_ref().map(|m| m.get()),
+            Some(1610612736)
+        );
+    }
+
+    #[test]
+    fn settings_log_memory_limit_parses_suffix() {
+        let yaml = "log_memory_limit: 256kib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(256 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_log_memory_limit_parses_mib() {
+        let yaml = "log_memory_limit: 2mib";
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.log_memory_limit.as_ref().map(|m| m.get()),
+            Some(2 * 1024 * 1024)
+        );
+    }
+
+    #[test]
     fn log_visibility_conversion_to_ic_type() {
-        let controllers = LogVisibility::Controllers;
-        let ic_controllers: ic_management_canister_types::LogVisibility = controllers.into();
-        assert!(matches!(
-            ic_controllers,
-            ic_management_canister_types::LogVisibility::Controllers
-        ));
+        let controllers = LogVisibilityDef::Simple(LogVisibilitySimple::Controllers);
+        let ic_controllers: LogVisibility = controllers.into();
+        assert!(matches!(ic_controllers, LogVisibility::Controllers));
 
-        let public = LogVisibility::Public;
-        let ic_public: ic_management_canister_types::LogVisibility = public.into();
-        assert!(matches!(
-            ic_public,
-            ic_management_canister_types::LogVisibility::Public
-        ));
+        let public = LogVisibilityDef::Simple(LogVisibilitySimple::Public);
+        let ic_public: LogVisibility = public.into();
+        assert!(matches!(ic_public, LogVisibility::Public));
 
-        let viewers =
-            LogVisibility::AllowedViewers(vec![Principal::from_text("aaaaa-aa").unwrap()]);
-        let ic_viewers: ic_management_canister_types::LogVisibility = viewers.into();
+        let viewers = LogVisibilityDef::AllowedViewers {
+            allowed_viewers: vec![Principal::from_text("aaaaa-aa").unwrap()],
+        };
+        let ic_viewers: LogVisibility = viewers.into();
         match ic_viewers {
-            ic_management_canister_types::LogVisibility::AllowedViewers(v) => {
+            LogVisibility::AllowedViewers(v) => {
                 assert_eq!(v.len(), 1);
             }
             _ => panic!("Expected AllowedViewers"),

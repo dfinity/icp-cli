@@ -1,3 +1,3 @@
 #!/bin/bash
 set -euo pipefail
-brew install softhsm
+brew install softhsm mitmproxy

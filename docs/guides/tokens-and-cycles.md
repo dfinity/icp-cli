@@ -1,4 +1,7 @@
-# Tokens and Cycles
+---
+title: Tokens and Cycles
+description: Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
+---
 
 This is a command reference for managing ICP tokens and cycles. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
@@ -245,6 +248,75 @@ icp token transfer 1 <RECEIVER> --identity my-wallet -n ic
 ```
 
 See [Managing Identities](managing-identities.md) for more details.
+
+## Subaccounts
+
+A subaccount is a 32-byte namespace under a principal. Subaccounts let a single principal manage multiple independent balances — useful for separating funds by purpose, managing deposits from multiple users, or interacting with exchanges.
+
+Subaccounts are specified as hex strings (up to 64 characters). Shorter values are left-padded with zeros. For example, `1` becomes a 32-byte value with `01` in the last byte.
+
+### Checking a Subaccount Balance
+
+```bash
+# ICP token balance for a subaccount
+icp token balance --subaccount 1 -n ic
+
+# Cycles balance for a subaccount
+icp cycles balance --subaccount 1 -n ic
+```
+
+### Transferring with Subaccounts
+
+Send from a subaccount using `--from-subaccount`:
+
+```bash
+# Transfer ICP from a subaccount
+icp token transfer 1 <RECEIVER> --from-subaccount 1 -n ic
+
+# Transfer cycles from a subaccount
+icp cycles transfer 1T <RECEIVER> --from-subaccount 1 -n ic
+
+# Mint cycles from a specific ICP subaccount
+icp cycles mint --icp 5 --from-subaccount 1 -n ic
+```
+
+Send to a receiver's subaccount using `--to-subaccount`:
+
+```bash
+# Send ICP to subaccount 1 of the receiver
+icp token transfer 1 rrkah-fqaaa-aaaaa-aaaaq-cai --to-subaccount 1 -n ic
+
+# Send cycles to subaccount 1 of the receiver
+icp cycles transfer 1T rrkah-fqaaa-aaaaa-aaaaq-cai --to-subaccount 1 -n ic
+```
+
+Alternatively, you can use the ICRC-1 account format, which embeds the subaccount directly in the address. This format appends a CRC32 checksum to the principal, followed by the subaccount hex after a `.` separator. For example, `2vxsx-fae-22yutvy.1` is the anonymous principal (`2vxsx-fae`) with checksum `22yutvy` and subaccount `1`.
+
+Use `icp identity account-id --of-subaccount <hex>` to get both the ICP ledger account ID and the ICRC-1 account format for a subaccount, rather than constructing them manually.
+
+### Receiver Address Formats
+
+Transfer commands accept multiple receiver formats:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| Principal | `rrkah-fqaaa-aaaaa-aaaaq-cai` | Sends to the principal's default subaccount |
+| ICRC-1 account | `2vxsx-fae-22yutvy.1` | Principal + CRC32 checksum + subaccount hex |
+| ICP ledger account ID | `64-character hex string` | 32-byte account identifier (used by exchanges and the NNS) |
+
+The ICRC-1 account format works for both `icp token transfer` and `icp cycles transfer`. Use `icp identity account-id` to obtain correctly formatted addresses. ICP ledger account IDs are only accepted by `icp token transfer`.
+
+### Getting Account Identifiers for Subaccounts
+
+```bash
+# Show account identifiers for a subaccount
+icp identity account-id --of-subaccount 1
+
+# Show the icrc1 format
+icp identity account-id --of-subaccount 1 --format icrc1
+```
+
+You can choose to the output format as either `ledger` (the default) or `icrc1`.
 
 ## Fees and Safety
 

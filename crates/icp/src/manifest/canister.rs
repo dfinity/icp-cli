@@ -7,6 +7,57 @@ use crate::canister::Settings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
+/// Format specifier for canister call/install args content.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "lowercase")]
+pub enum ArgsFormat {
+    /// Hex-encoded bytes
+    Hex,
+    /// Candid text format
+    #[default]
+    Candid,
+    /// Raw binary (only valid for file references)
+    Bin,
+}
+
+/// Init args as specified in a manifest file (canister.yaml or icp.yaml).
+///
+/// A plain string is shorthand for inline Candid:
+/// ```yaml
+/// init_args: "(42)"
+/// ```
+///
+/// Object forms with explicit source and format:
+/// ```yaml
+/// init_args:
+///   path: ./args.bin
+///   format: bin
+/// ```
+/// ```yaml
+/// init_args:
+///   value: "(42)"
+///   format: candid
+/// ```
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ManifestInitArgs {
+    /// Plain string shorthand — treated as Candid.
+    String(String),
+    /// File reference with explicit format.
+    Path {
+        path: String,
+        #[serde(default)]
+        format: ArgsFormat,
+    },
+    /// Inline value with explicit format.
+    Value {
+        value: String,
+        #[serde(default)]
+        format: ArgsFormat,
+    },
+}
+
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
@@ -21,8 +72,7 @@ pub struct CanisterManifest {
     pub settings: Settings,
 
     /// Initialization arguments passed to the canister during installation.
-    /// Can be hex-encoded bytes or Candid text format.
-    pub init_args: Option<String>,
+    pub init_args: Option<ManifestInitArgs>,
 
     #[serde(flatten)]
     pub instructions: Instructions,
@@ -85,14 +135,13 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     };
 
                 // Extract init_args (optional)
-                let init_args: Option<String> =
+                let init_args: Option<ManifestInitArgs> =
                     if let Some(init_args_value) = temp_map.remove(&init_args_key) {
-                        Some(
-                            init_args_value
-                                .as_str()
-                                .ok_or_else(|| Error::custom("'init_args' must be a string"))?
-                                .to_string(),
-                        )
+                        Some(serde_yaml::from_value(init_args_value).map_err(|e| {
+                            Error::custom(format!(
+                                "Failed to parse init_args for canister `{name}`: {e}"
+                            ))
+                        })?)
                     } else {
                         None
                     };
@@ -267,6 +316,11 @@ pub enum SyncStep {
 
     /// Represents syncing of an assets canister
     Assets(adapter::assets::Adapter),
+
+    /// Represents a sync step executed by a WebAssembly plugin running inside
+    /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
+    /// the canister being synced and read files from the declared `dirs`.
+    Plugin(adapter::plugin::Adapter),
 }
 
 impl fmt::Display for SyncStep {
@@ -277,6 +331,13 @@ impl fmt::Display for SyncStep {
             match self {
                 SyncStep::Script(v) => format!("script {v}"),
                 SyncStep::Assets(v) => format!("assets {v}"),
+                SyncStep::Plugin(v) => {
+                    let src = match &v.source {
+                        adapter::prebuilt::SourceField::Local(l) => format!("path: {}", l.path),
+                        adapter::prebuilt::SourceField::Remote(r) => format!("url: {}", r.url),
+                    };
+                    format!("plugin {src}")
+                }
             }
         )
     }
@@ -294,13 +355,16 @@ mod tests {
     use indoc::indoc;
     use std::collections::HashMap;
 
-    use crate::manifest::{
-        adapter::{
-            assets,
-            prebuilt::{self, RemoteSource, SourceField},
-            script,
+    use crate::{
+        manifest::{
+            adapter::{
+                assets,
+                prebuilt::{self, RemoteSource, SourceField},
+                script,
+            },
+            recipe::RecipeType,
         },
-        recipe::RecipeType,
+        parsers::MemoryAmount,
     };
 
     use super::*;
@@ -558,7 +622,7 @@ mod tests {
             validate_canister_yaml(indoc! {r#"
                     name: my-canister
                     recipe:
-                      type: "@dfinity/dummy"
+                      type: "@dfinity/dummy@v1.0.0"
                       sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
                 "#}),
             CanisterManifest {
@@ -570,7 +634,7 @@ mod tests {
                         recipe_type: RecipeType::Registry {
                             name: "dfinity".to_string(),
                             recipe: "dummy".to_string(),
-                            version: "latest".to_string(),
+                            version: "v1.0.0".to_string(),
                         },
                         configuration: HashMap::new(),
                         sha256: Some(
@@ -598,7 +662,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: Settings {
                     compute_allocation: Some(3),
-                    memory_allocation: Some(4294967296),
+                    memory_allocation: Some(MemoryAmount::from(4294967296)),
                     ..Default::default()
                 },
                 init_args: None,
@@ -671,6 +735,108 @@ mod tests {
     }
 
     #[test]
+    fn sync_steps_plugin_local() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: plugin
+                      path: ./plugins/my-sync.wasm
+                      dirs:
+                        - assets/seed-data/
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Plugin(
+                            crate::manifest::adapter::plugin::Adapter {
+                                source: prebuilt::SourceField::Local(prebuilt::LocalSource {
+                                    path: "./plugins/my-sync.wasm".into(),
+                                }),
+                                sha256: None,
+                                dirs: Some(vec!["assets/seed-data/".to_string()]),
+                                files: None,
+                            }
+                        )]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn sync_steps_plugin_remote() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: plugin
+                      url: https://example.com/plugins/migrate-v2.wasm
+                      sha256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Plugin(crate::manifest::adapter::plugin::Adapter {
+                            source: prebuilt::SourceField::Remote(prebuilt::RemoteSource {
+                                url: "https://example.com/plugins/migrate-v2.wasm".to_string(),
+                            }),
+                            sha256: Some(
+                                "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+                                    .to_string()
+                            ),
+                            dirs: None,
+                            files: None,
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "plugin with `url` requires `sha256`")]
+    fn sync_steps_plugin_remote_without_sha256_is_rejected() {
+        validate_canister_yaml(indoc! {r#"
+            name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: dosomething.sh
+            sync:
+              steps:
+                - type: plugin
+                  url: https://example.com/plugins/migrate-v2.wasm
+        "#});
+    }
+
+    #[test]
     fn sync_steps() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
@@ -702,5 +868,58 @@ mod tests {
                 },
             },
         );
+    }
+
+    #[test]
+    fn manifest_init_args_path() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            path: ./args.bin
+            format: bin
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Path {
+                path: "./args.bin".to_string(),
+                format: ArgsFormat::Bin,
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_value() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            value: "(42)"
+            format: candid
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Value {
+                value: "(42)".to_string(),
+                format: ArgsFormat::Candid,
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_value_default_format() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+            value: "(42)"
+        "#})
+        .unwrap();
+        assert_eq!(
+            ia,
+            ManifestInitArgs::Value {
+                value: "(42)".to_string(),
+                format: ArgsFormat::Candid,
+            }
+        );
+    }
+
+    #[test]
+    fn manifest_init_args_inline_string() {
+        let ia: ManifestInitArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
+        assert_eq!(ia, ManifestInitArgs::String("(42)".to_string()));
     }
 }

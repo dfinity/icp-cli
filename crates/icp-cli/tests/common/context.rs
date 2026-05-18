@@ -1,9 +1,18 @@
-use std::{cell::OnceCell, env, ffi::OsString, fs};
+use std::{
+    cell::{Cell, OnceCell},
+    env,
+    ffi::OsString,
+    fs,
+    time::Duration,
+};
 
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use ic_agent::Agent;
 use icp::prelude::*;
+use reqwest::Client;
+use serde_json::json;
+use time::UtcDateTime;
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, softhsm::SoftHsmContext};
@@ -14,7 +23,9 @@ pub(crate) struct TestContext {
     asset_dir: PathBuf,
     mock_cred_dir: PathBuf,
     os_path: OsString,
-    gateway_url: OnceCell<Url>,
+    http_gateway_url: OnceCell<Url>,
+    config_url: OnceCell<Option<Url>>,
+    time_offset: Cell<Option<Duration>>,
     root_key: OnceCell<Vec<u8>>,
     softhsm: OnceCell<SoftHsmContext>,
 }
@@ -51,9 +62,11 @@ impl TestContext {
             asset_dir,
             mock_cred_dir,
             os_path,
-            gateway_url: OnceCell::new(),
+            http_gateway_url: OnceCell::new(),
+            config_url: OnceCell::new(),
             root_key: OnceCell::new(),
             softhsm: OnceCell::new(),
+            time_offset: Cell::new(None),
         }
     }
 
@@ -80,64 +93,34 @@ impl TestContext {
         cmd.current_dir(self.home_path());
         // Isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        cmd.env("HOME", self.home_path())
+            .env_remove("ICP_HOME")
+            .env_remove("PWD") // don't inherit from the tester's shell
+            // Also set XDG directories to ensure isolation on Linux
+            .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+            .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+            .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
         // Run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.env("PATH", self.os_path.clone());
         cmd.env("ICP_CLI_KEYRING_MOCK_DIR", self.mock_cred_dir.clone());
+        cmd.env("ICP_TELEMETRY_DISABLED", "1");
+        cmd.env("ICP_CLI_TEST_NO_TELEMETRY_UPLOAD", "1");
 
         // If SoftHSM has been initialized, include its config
         if let Some(hsm) = self.softhsm.get() {
             cmd.env("SOFTHSM2_CONF", &hsm.config_path);
         }
 
+        if let Some(offset) = self.time_offset.get() {
+            cmd.env(
+                "ICP_CLI_TEST_ADVANCE_TIME_MS",
+                offset.as_millis().to_string(),
+            );
+        }
+
         cmd
-    }
-
-    #[cfg(unix)]
-    pub(crate) async fn launcher_path(&self) -> PathBuf {
-        use icp::directories::{Access, Directories};
-        if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
-            PathBuf::from(var)
-        } else {
-            // replicate the command's logic to only perform it if needed, and perform it in the user home instead of the test home
-            let cache = Directories::new()
-                .unwrap()
-                .package_cache()
-                .unwrap()
-                .into_write()
-                .await
-                .unwrap();
-            if let Some(path) = icp::network::managed::cache::get_cached_launcher_version(
-                cache.as_ref().read(),
-                "latest",
-            )
-            .unwrap()
-            {
-                path
-            } else {
-                let (_ver, path) = icp::network::managed::cache::download_launcher_version(
-                    cache.as_ref(),
-                    "latest",
-                    &reqwest::Client::new(),
-                )
-                .await
-                .unwrap();
-                path
-            }
-        }
-    }
-
-    pub(crate) async fn launcher_path_or_nothing(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
-            self.launcher_path().await
-        }
-        #[cfg(windows)]
-        {
-            PathBuf::new()
-        }
     }
 
     fn build_os_path(bin_dir: &Path) -> OsString {
@@ -205,16 +188,24 @@ impl TestContext {
         cmd.current_dir(project_dir);
         // isolate the whole user directory in Unix, test in normal mode
         #[cfg(unix)]
-        cmd.env("HOME", self.home_path()).env_remove("ICP_HOME");
+        {
+            cmd.env("HOME", self.home_path())
+                .env_remove("ICP_HOME")
+                // Also set XDG directories to ensure isolation on Linux
+                .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
+                .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
+                .env("XDG_CACHE_HOME", self.home_path().join(".cache"))
+                .env("PWD", project_dir);
+        }
         // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.arg("network").arg("start").arg(name);
         #[cfg(unix)]
-        {
-            let launcher_path = self.launcher_path().await;
-            cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
-        }
+        cmd.env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            test_network_launcher_path(),
+        );
 
         eprintln!("Running network in {project_dir}");
 
@@ -226,13 +217,22 @@ impl TestContext {
         self.root_key
             .set(network_descriptor.root_key.clone())
             .expect("Root key should not be already initialized");
-        self.gateway_url
+        self.http_gateway_url
             .set(
                 format!("http://localhost:{}", network_descriptor.gateway_port)
                     .parse()
                     .unwrap(),
             )
             .expect("Gateway URL should not be already initialized");
+        self.config_url
+            .set(network_descriptor.pocketic_config_port.and_then(|port| {
+                network_descriptor.pocketic_instance_id.map(|instance| {
+                    format!("http://localhost:{port}/instances/{instance}/")
+                        .parse()
+                        .expect("Failed to parse PocketIC config URL")
+                })
+            }))
+            .expect("Config URL should not be already initialized");
         child_guard
     }
 
@@ -302,6 +302,14 @@ impl TestContext {
             .and_then(|p| p.as_u64())
             .expect("network descriptor does not contain gateway port")
             as u16;
+        let pocketic_config_port: Option<u16> = network_descriptor
+            .get("pocketic-config-port")
+            .and_then(|p| p.as_u64())
+            .map(|p| p as u16);
+        let pocketic_instance_id: Option<usize> = network_descriptor
+            .get("pocketic-instance-id")
+            .and_then(|p| p.as_u64())
+            .map(|p| p as usize);
 
         let root_key = network_descriptor
             .get("root-key")
@@ -313,6 +321,8 @@ impl TestContext {
         TestNetwork {
             gateway_port,
             root_key,
+            pocketic_config_port,
+            pocketic_instance_id,
         }
     }
 
@@ -341,29 +351,116 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
+    pub(crate) fn gateway_url(&self) -> &Url {
+        self.http_gateway_url.get().unwrap()
+    }
+
     pub(crate) fn agent(&self) -> Agent {
         let agent = Agent::builder()
-            .with_url(self.gateway_url.get().unwrap().as_str())
+            .with_url(self.http_gateway_url.get().unwrap().as_str())
             .build()
             .unwrap();
         agent.set_root_key(self.root_key.get().unwrap().clone());
         agent
     }
 
+    pub(crate) async fn pocketic_time_fastforward(&self, duration: Duration) {
+        let now = UtcDateTime::now();
+        let url = self
+            .config_url
+            .get()
+            .expect("network must have been initialized")
+            .as_ref()
+            .expect("network must use pocket-ic")
+            .join("update/set_time")
+            .unwrap();
+        let body = json!({ "nanos_since_epoch": (now + duration).unix_timestamp_nanos() });
+        for attempt in 0..5 {
+            let response = Client::new()
+                .post(url.clone())
+                .json(&body)
+                .send()
+                .await
+                .expect("failed to update time");
+            if response.status() == reqwest::StatusCode::CONFLICT {
+                tokio::time::sleep(Duration::from_millis(100 * (attempt + 1))).await;
+                continue;
+            }
+            response.error_for_status().expect("failed to update time");
+            self.time_offset.set(Some(duration));
+            return;
+        }
+        panic!("failed to update time: still receiving 409 Conflict after 5 attempts");
+    }
+
+    pub(crate) fn pocketic_config_url(&self) -> Option<&Url> {
+        self.config_url
+            .get()
+            .expect("network must have been initialized")
+            .as_ref()
+    }
+
+    /// Get the proxy canister principal from network status JSON output.
+    pub(crate) fn get_proxy_cid(&self, project_dir: &Path, network: &str) -> String {
+        let output = self
+            .icp()
+            .current_dir(project_dir)
+            .args(["network", "status", network, "--json"])
+            .output()
+            .expect("failed to get network status");
+        let status_json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
+        status_json
+            .get("proxy_canister_principal")
+            .and_then(|v| v.as_str())
+            .expect("proxy canister principal not found in network status")
+            .to_string()
+    }
+
     pub(crate) fn docker_pull_network(&self) {
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION")
+        ));
+    }
+
+    pub(crate) fn docker_pull_engine_network(&self) {
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION"),
+            "-engine"
+        ));
+    }
+
+    fn docker_pull_image(&self, image: &str) {
         let platform = if cfg!(target_arch = "aarch64") {
             "linux/arm64"
         } else {
             "linux/amd64"
         };
         Command::new("docker")
-            .args([
-                "pull",
-                "--platform",
-                platform,
-                "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
-            ])
+            .args(["pull", "--platform", platform, image])
             .assert()
             .success();
     }
+}
+
+/// Returns the path to the pre-downloaded test network launcher binary.
+///
+/// Panics with a clear message if the launcher has not been downloaded yet.
+/// Run `scripts/download_test_network_launcher.sh` from the repository root first.
+fn test_network_launcher_path() -> PathBuf {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("CARGO_MANIFEST_DIR has unexpected structure");
+    let path = workspace_root.join("target/test-fixture/icp-cli-network-launcher");
+    #[cfg(unix)]
+    assert!(
+        path.exists(),
+        "Test network launcher not found at `{}`.\n\
+         Run `scripts/download_test_network_launcher.sh` from the repository root before running integration tests.",
+        path
+    );
+    path
 }

@@ -1,4 +1,7 @@
-# Guides
+---
+title: Guides
+description: Step-by-step guides covering installation, local development, deployment, identity management, and more.
+---
 
 Step-by-step instructions for common tasks. Each guide assumes you've completed the [Tutorial](../tutorial.md).
 
@@ -11,6 +14,8 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 - [Deploying to Mainnet](deploying-to-mainnet.md) — Go live on the Internet Computer
 - [Deploying to Specific Subnets](deploying-to-specific-subnets.md) — Target specific subnets for geographic or capability requirements
+- [Canister Snapshots](canister-snapshots.md) — Back up, transfer, and restore canister state
+- [Canister Migration](canister-migration.md) — Move canisters between subnets while preserving the canister ID
 - [Managing Environments](managing-environments.md) — Configure dev, staging, and production
 
 ## Reference

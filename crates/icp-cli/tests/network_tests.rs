@@ -1,13 +1,17 @@
+use std::net::SocketAddr;
+
 use candid::Principal;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
+    internet_identity::INTERNET_IDENTITY_FRONTEND_PRINCIPAL,
     internet_identity::INTERNET_IDENTITY_PRINCIPAL, registry::REGISTRY_PRINCIPAL,
 };
 use indoc::{formatdoc, indoc};
 use predicates::{
     ord::eq,
-    str::{PredicateStrExt, contains, is_match},
+    prelude::*,
+    str::{contains, is_match},
 };
 use serde_json::Value;
 use serial_test::file_serial;
@@ -64,6 +68,7 @@ async fn network_same_port() {
     ctx.ping_until_healthy(&project_dir_a, "sameport-network");
 
     eprintln!("second network start attempt in another project");
+
     ctx.icp()
         .current_dir(&project_dir_b)
         .args(["network", "start", "sameport-network"])
@@ -71,7 +76,7 @@ async fn network_same_port() {
         .failure()
         .stderr(contains(format!(
             "Error: port 8080 is in use by the sameport-network network of the project at '{}'",
-            dunce::canonicalize(&project_dir_a).unwrap().display()
+            project_dir_a
         )));
 }
 
@@ -329,7 +334,8 @@ async fn network_run_and_stop_background() {
         .assert()
         .success()
         .stderr(contains("Seeding ICP and cycles"))
-        .stdout(contains("Installed Candid UI canister with ID"));
+        .stderr(contains("Installed Candid UI canister with ID"))
+        .stderr(contains("Installed proxy canister with ID"));
 
     let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
 
@@ -392,19 +398,19 @@ async fn network_run_and_stop_background() {
         .success();
     #[cfg(unix)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (PID: {})",
             background_launcher_pid
         )));
     }
     #[cfg(windows)]
     {
-        stop = stop.stdout(contains(format!(
+        stop = stop.stderr(contains(format!(
             "Stopping background network (container ID: {})",
             &background_container_id[..12]
         )));
     }
-    stop.stdout(contains("Network stopped successfully"));
+    stop.stderr(contains("Network stopped successfully"));
 
     // Verify descriptor file is removed
     assert!(
@@ -492,6 +498,10 @@ async fn network_starts_with_canisters_preset() {
     // Internet identity
     agent
         .read_state_canister_module_hash(INTERNET_IDENTITY_PRINCIPAL)
+        .await
+        .unwrap();
+    agent
+        .read_state_canister_module_hash(INTERNET_IDENTITY_FRONTEND_PRINCIPAL)
         .await
         .unwrap();
 }
@@ -617,4 +627,327 @@ async fn override_local_network_as_connected() {
         .args(["network", "ping", "local"])
         .assert()
         .success();
+}
+
+/// Test that specifying a launcher version in the manifest causes the network to use that
+/// specific version. Verifies the running launcher binary lives in the v12.0.0 cache directory.
+#[cfg(unix)]
+#[tokio::test]
+async fn network_launcher_uses_configured_version() {
+    use sysinfo::{ProcessesToUpdate, System};
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("versioned-launcher");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: versioned-network
+                mode: managed
+                gateway:
+                  port: 0
+                version: "v12.0.0"
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Start in background mode. ctx.icp() does NOT set ICP_CLI_NETWORK_LAUNCHER_PATH,
+    // so start.rs will resolve the launcher from the version-based cache.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "versioned-network", "--background"])
+        .assert()
+        .success();
+
+    let _network = ctx.wait_for_network_descriptor(&project_dir, "versioned-network");
+
+    let descriptor_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("networks")
+        .join("versioned-network")
+        .join("descriptor.json");
+    let descriptor_contents =
+        read_to_string(&descriptor_path).expect("Failed to read network descriptor");
+    let descriptor: Value = descriptor_contents
+        .trim()
+        .parse()
+        .expect("Descriptor should contain valid JSON");
+
+    let launcher_pid = descriptor
+        .get("child-locator")
+        .and_then(|cl| cl.get("pid"))
+        .and_then(|pid| pid.as_u64())
+        .expect("Descriptor should contain launcher PID");
+    let sysinfo_pid = sysinfo::Pid::from(launcher_pid as usize);
+
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[sysinfo_pid]), true);
+    let process = system
+        .process(sysinfo_pid)
+        .expect("Launcher process should be running");
+    let exe_path = process
+        .exe()
+        .expect("Should be able to read launcher exe path");
+    let version_dir_name = exe_path
+        .parent()
+        .expect("Exe should have a parent directory")
+        .file_name()
+        .expect("Parent should have a directory name");
+    assert_eq!(
+        version_dir_name,
+        "v12.0.0",
+        "Launcher should run from the v12.0.0 version directory, but exe was at: {}",
+        exe_path.display()
+    );
+
+    // Clean up the background network
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "stop", "versioned-network"])
+        .assert()
+        .success();
+}
+
+/// Test that setting autocontainerize=true causes the network launcher to run in Docker
+/// even when a native launcher configuration is used.
+///
+/// This test is skipped on Windows because autocontainerize has no effect there
+/// (Docker is always used on Windows).
+#[cfg(not(windows))]
+#[tag(docker)]
+#[tokio::test]
+async fn network_autocontainerize_uses_docker() {
+    let ctx = TestContext::new();
+
+    // Set autocontainerize to true
+    ctx.icp()
+        .args(["settings", "autocontainerize", "true"])
+        .assert()
+        .success();
+
+    let project_dir = ctx.create_project_dir("autocontainerize-test");
+
+    // Use a native launcher configuration (not an explicit docker image)
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Pull the docker image first
+    ctx.docker_pull_network();
+
+    // Start the network
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
+
+    // Verify the descriptor contains a container ID (not a PID)
+    let descriptor_file_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("networks")
+        .join("random-network")
+        .join("descriptor.json");
+
+    let descriptor_contents =
+        read_to_string(&descriptor_file_path).expect("Failed to read network descriptor file");
+    let descriptor: Value = descriptor_contents
+        .trim()
+        .parse()
+        .expect("Descriptor file should contain valid JSON");
+
+    // When running in Docker, the child-locator should have an "id" field (container ID)
+    // rather than a "pid" field
+    let child_locator = descriptor
+        .get("child-locator")
+        .expect("Descriptor should have child-locator");
+
+    assert!(
+        child_locator.get("id").is_some(),
+        "With autocontainerize=true, child-locator should have container 'id', not 'pid'. Got: {child_locator}"
+    );
+    assert!(
+        child_locator.get("pid").is_none(),
+        "With autocontainerize=true, child-locator should not have 'pid'. Got: {child_locator}"
+    );
+
+    let container_id = child_locator
+        .get("id")
+        .and_then(|id| id.as_str())
+        .expect("Container ID should be a string");
+
+    // Verify the container is running
+    let output = std::process::Command::new("docker")
+        .args(["inspect", container_id])
+        .output()
+        .expect("Failed to run docker inspect");
+    assert!(
+        output.status.success(),
+        "Container should be running while network is active"
+    );
+}
+
+/// Test that a managed network configured with a custom domain accepts requests
+/// addressed to that domain. Uses reqwest's `resolve()` to map the domain to
+/// 127.0.0.1 without requiring any system DNS configuration.
+#[tokio::test]
+async fn network_gateway_responds_to_custom_domain() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-domain");
+
+    let domain = "my-app.localhost";
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: domain-network
+                mode: managed
+                gateway:
+                  port: 0
+                  domains:
+                    - {domain}
+            environments:
+              - name: domain-env
+                network: domain-network
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _guard = ctx.start_network_in(&project_dir, "domain-network").await;
+    ctx.ping_until_healthy(&project_dir, "domain-network");
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "domain-network");
+    let port = network.gateway_port;
+
+    let client = reqwest::Client::builder()
+        .resolve(domain, SocketAddr::from(([127, 0, 0, 1], port)))
+        .build()
+        .expect("failed to build reqwest client");
+
+    let resp = client
+        .get(format!("http://{domain}:{port}/api/v2/status"))
+        .send()
+        .await
+        .expect("request to custom domain failed");
+
+    assert!(
+        resp.status().is_success(),
+        "gateway should respond successfully on custom domain, got {}",
+        resp.status()
+    );
+}
+
+#[cfg(target_os = "linux")] // alternate loopback
+#[tokio::test]
+async fn network_gateway_binds_to_configured_interface() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("custom-bind");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            networks:
+              - name: bind-network
+                mode: managed
+                gateway:
+                  port: 0
+                  bind: 127.0.0.2
+            environments:
+              - name: bind-env
+                network: bind-network
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _guard = ctx.start_network_in(&project_dir, "bind-network").await;
+    ctx.ping_until_healthy(&project_dir, "bind-network");
+
+    let network = ctx.wait_for_network_descriptor(&project_dir, "bind-network");
+    let port = network.gateway_port;
+
+    let client = reqwest::Client::builder()
+        .build()
+        .expect("failed to build reqwest client");
+
+    let resp = client
+        .get(format!("http://127.0.0.2:{port}/api/v2/status"))
+        .send()
+        .await
+        .expect("request to custom interface failed");
+
+    assert!(
+        resp.status().is_success(),
+        "gateway should respond successfully on custom interface, got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn network_recovers_from_stale_descriptor() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("stale-descriptor");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    // Ensure the network descriptor directory exists
+    let network_dir = project_dir.join(".icp/cache/networks/random-network");
+    std::fs::create_dir_all(&network_dir).expect("failed to create network directory");
+
+    // Create a stale descriptor with a PID that cannot exist
+    let stale_descriptor = serde_json::json!({
+        "v": "1",
+        "id": "11111111-1111-1111-1111-111111111111",
+        "project-dir": project_dir.to_string(),
+        "network": "random-network",
+        "network-dir": network_dir.to_string(),
+        "gateway": {
+            "fixed": false,
+            "port": 9999,
+            "host": "localhost",
+            "ip": "127.0.0.1"
+        },
+        "child-locator": {
+            "type": "pid",
+            "pid": u32::MAX,  // Non-existent PID
+            "start-time": 0
+        },
+        "root-key": "308182301c300d06092a864886f70d0101010500030b008081007f",
+        "pocketic-config-port": null,
+        "pocketic-instance-id": null,
+        "candid-ui-canister-id": null,
+        "proxy-canister-id": null,
+        "status-dir": null,
+        "use-friendly-domains": false
+    });
+
+    // Write the stale descriptor
+    let descriptor_bytes =
+        serde_json::to_vec(&stale_descriptor).expect("failed to serialize descriptor");
+    ctx.write_network_descriptor(&project_dir, "random-network", &descriptor_bytes);
+
+    // Start network - should succeed and clean up the stale descriptor
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "random-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("Found stale network descriptor"));
+
+    // Verify the network actually started (descriptor should be updated with real process)
+    let network = ctx.wait_for_network_descriptor(&project_dir, "random-network");
+
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Verify we can query the network
+    let agent = ic_agent::Agent::builder()
+        .with_url(format!("http://127.0.0.1:{}", network.gateway_port))
+        .build()
+        .expect("Failed to build agent");
+
+    let status = agent.status().await.expect("Failed to get network status");
+    assert!(
+        matches!(&status.replica_health_status, Some(health) if health == "healthy"),
+        "Network should be healthy"
+    );
 }

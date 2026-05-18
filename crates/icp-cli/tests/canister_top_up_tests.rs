@@ -1,9 +1,6 @@
 use ic_utils::interfaces::ManagementCanister;
 use indoc::formatdoc;
-use predicates::{
-    ord::eq,
-    str::{PredicateStrExt, contains},
-};
+use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp::{fs::write_string, prelude::*};
@@ -100,7 +97,9 @@ async fn canister_top_up() {
             &format!("{}", 10 * TRILLION),
         ])
         .assert()
-        .stdout(eq("Topped up canister my-canister with 10_000_000_000_000 cycles").trim())
+        .stderr(contains(
+            "Topped up canister my-canister with 10_000_000_000_000 cycles",
+        ))
         .success();
 
     let new_canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;

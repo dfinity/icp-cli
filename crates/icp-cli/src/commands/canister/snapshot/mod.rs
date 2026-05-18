@@ -4,19 +4,20 @@ use clap::Subcommand;
 
 pub(crate) mod create;
 pub(crate) mod delete;
+pub(crate) mod download;
 pub(crate) mod list;
 pub(crate) mod restore;
+pub(crate) mod upload;
 
+/// Commands to manage canister snapshots
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
-    /// Create a snapshot of a canister's state
     Create(create::CreateArgs),
-    /// Delete a canister snapshot
     Delete(delete::DeleteArgs),
-    /// List all snapshots for a canister
+    Download(download::DownloadArgs),
     List(list::ListArgs),
-    /// Restore a canister from a snapshot
     Restore(restore::RestoreArgs),
+    Upload(upload::UploadArgs),
 }
 
 /// A hex-encoded snapshot ID.

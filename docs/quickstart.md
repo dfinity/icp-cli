@@ -1,12 +1,25 @@
-# Quickstart
+---
+title: Quickstart
+description: Install icp-cli and deploy a full-stack Internet Computer app to a local network in under 5 minutes.
+---
 
 Deploy a full-stack app to a local network in under 5 minutes.
 
-## Prerequisites
+**Prerequisites:** [Node.js](https://nodejs.org/) (LTS) is required for the installation commands below.
 
-Complete the [Installation Guide](guides/installation.md) first.
+> **Windows users:** This quickstart requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (for Motoko) and [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (for local networks). Install both first, then run all commands inside WSL.
 
-> **Tip:** An npm package for even simpler installation is coming soon.
+## Install
+
+```bash
+# icp-cli and ic-wasm (required)
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+
+# Motoko toolchain (for Motoko projects)
+npm install -g ic-mops
+```
+
+> **Alternative methods:** See the [Installation Guide](guides/installation.md) for Homebrew, shell script, or other options.
 
 ## Steps
 

@@ -1,6 +1,4 @@
-use console::Term;
-use std::{io::Write, sync::Arc};
-use tracing::info;
+use std::sync::Arc;
 use url::Url;
 
 use crate::{
@@ -12,6 +10,7 @@ use crate::{
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
     store_id::{IdMapping, LookupIdError},
+    telemetry_data::NetworkType,
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
@@ -21,6 +20,8 @@ mod init;
 
 pub use init::initialize;
 
+pub const IC_ROOT_KEY: &[u8; 133] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00\x81\x4c\x0e\x6e\xc7\x1f\xab\x58\x3b\x08\xbd\x81\x37\x3c\x25\x5c\x3c\x37\x1b\x2e\x84\x86\x3c\x98\xa4\xf1\xe0\x8b\x74\x23\x5d\x14\xfb\x5d\x9c\x0c\xd5\x46\xd9\x68\x5f\x91\x3a\x0c\x0b\x2c\xc5\x34\x15\x83\xbf\x4b\x43\x92\xe4\x67\xdb\x96\xd6\x5b\x9b\xb4\xcb\x71\x71\x12\xf8\x47\x2e\x0d\x5a\x4d\x14\x50\x5f\xfd\x74\x84\xb0\x12\x91\x09\x1c\x5f\x87\xb9\x88\x83\x46\x3f\x98\x09\x1a\x0b\xaa\xae";
+
 /// Selection type for networks - similar to IdentitySelection
 #[derive(Clone, Debug, PartialEq)]
 pub enum NetworkSelection {
@@ -29,7 +30,7 @@ pub enum NetworkSelection {
     /// Use a named network
     Named(String),
     /// Use a network by URL
-    Url(Url),
+    Url(Url, Vec<u8>),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -68,10 +69,8 @@ pub enum CanisterSelection {
     Principal(Principal),
 }
 
+#[derive(Clone)]
 pub struct Context {
-    /// Terminal for printing messages for the user to see
-    pub term: TermWriter,
-
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Arc<dyn directories::Access>,
 
@@ -101,6 +100,9 @@ pub struct Context {
 
     /// Whether debug is enabled
     pub debug: bool,
+
+    /// Telemetry data collected during command execution
+    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
 }
 
 impl Context {
@@ -138,6 +140,13 @@ impl Context {
                 name: environment.name().to_owned(),
             })?;
 
+        let network_type = match &env.network.configuration {
+            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
+            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
+        };
+        self.telemetry_data.set_network_type(network_type);
+        self.telemetry_data.set_project(&p);
+
         Ok(env.clone())
     }
 
@@ -150,41 +159,53 @@ impl Context {
         &self,
         network_selection: &NetworkSelection,
     ) -> Result<crate::Network, GetNetworkError> {
-        match network_selection {
+        let network = match network_selection {
             NetworkSelection::Named(network_name) => {
                 if self.project.exists().await? {
                     let p = self.project.load().await?;
                     let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
                         name: network_name.to_owned(),
                     })?;
-                    Ok(net.clone())
+                    net.clone()
                 } else if network_name == IC {
-                    Ok(crate::Network {
+                    crate::Network {
                         name: IC.to_string(),
                         configuration: crate::network::Configuration::Connected {
                             connected: crate::network::Connected {
-                                url: IC_MAINNET_NETWORK_URL.to_string(),
-                                root_key: None,
+                                api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
+                                http_gateway_url: Some(
+                                    IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
+                                ),
+                                root_key: IC_ROOT_KEY.to_vec(),
                             },
                         },
-                    })
+                    }
                 } else {
-                    Err(GetNetworkError::NetworkNotFound {
+                    return Err(GetNetworkError::NetworkNotFound {
                         name: network_name.to_owned(),
-                    })
+                    });
                 }
             }
-            NetworkSelection::Default => Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(url) => Ok(crate::Network {
+            NetworkSelection::Default => return Err(GetNetworkError::DefaultNetwork),
+            NetworkSelection::Url(url, root_key) => crate::Network {
                 name: url.to_string(),
                 configuration: crate::network::Configuration::Connected {
                     connected: crate::network::Connected {
-                        url: url.to_string(),
-                        root_key: None,
+                        api_url: url.clone(),
+                        http_gateway_url: Some(url.clone()),
+                        root_key: root_key.to_vec(),
                     },
                 },
-            }),
-        }
+            },
+        };
+
+        let network_type = match &network.configuration {
+            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
+            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
+        };
+        self.telemetry_data.set_network_type(network_type);
+
+        Ok(network)
     }
 
     /// Gets a network from either a network name or environment name.
@@ -368,10 +389,11 @@ impl Context {
         id: Arc<dyn Identity>,
         network_access: NetworkAccess,
     ) -> Result<Agent, CreateAgentError> {
-        let agent = self.agent.create(id, network_access.url.as_str()).await?;
-        if let Some(k) = network_access.root_key {
-            agent.set_root_key(k);
-        }
+        let agent = self
+            .agent
+            .create(id, network_access.api_url.as_str())
+            .await?;
+        agent.set_root_key(network_access.root_key);
         Ok(agent)
     }
 
@@ -395,7 +417,7 @@ impl Context {
         match (environment, network) {
             // Error: Both environment and network specified
             (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                 Err(GetAgentError::EnvironmentAndNetworkSpecified)
             }
 
@@ -421,7 +443,7 @@ impl Context {
 
             // Network specified
             (EnvironmentSelection::Default, NetworkSelection::Named(_))
-            | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+            | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                 Ok(self.get_agent_for_network(identity, network).await?)
             }
         }
@@ -439,13 +461,13 @@ impl Context {
                 match (environment, network) {
                     // Error: Both environment and network specified
                     (EnvironmentSelection::Named(_), NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::CanisterEnvironmentAndNetworkSpecified)
                     }
 
                     // Error: Canister by name with explicit network but no environment
                     (EnvironmentSelection::Default, NetworkSelection::Named(_))
-                    | (EnvironmentSelection::Default, NetworkSelection::Url(_)) => {
+                    | (EnvironmentSelection::Default, NetworkSelection::Url(_, _)) => {
                         Err(GetCanisterIdError::AmbiguousCanisterName)
                     }
 
@@ -474,14 +496,75 @@ impl Context {
             })
     }
 
+    /// Updates the `custom-domains.txt` file for the managed network used by the
+    /// given environment. Collects ID mappings from all environments that share
+    /// the same managed network, then writes the file to the network's status
+    /// directory.
+    ///
+    /// This is a best-effort operation: errors are logged but not propagated,
+    /// because a failure to update friendly domains should not block canister
+    /// creation or deletion.
+    pub async fn update_custom_domains(&self, environment: &EnvironmentSelection) {
+        let Ok(env) = self.get_environment(environment).await else {
+            return;
+        };
+        let NetworkConfiguration::Managed { .. } = &env.network.configuration else {
+            return;
+        };
+        let Ok(nd) = self.network.get_network_directory(&env.network) else {
+            return;
+        };
+        let Ok(Some(desc)) = nd.load_network_descriptor().await else {
+            return;
+        };
+        let Some(status_dir) = &desc.status_dir else {
+            return;
+        };
+        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
+        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
+            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
+            return;
+        };
+        let domain = crate::network::custom_domains::gateway_domain(&gateway_url);
+        let Some(domain) = domain else {
+            return;
+        };
+        // Collect mappings from all environments that use this network
+        let Ok(project) = self.project.load().await else {
+            return;
+        };
+        let mut env_mappings = std::collections::BTreeMap::new();
+        for (env_name, env) in &project.environments {
+            if env.network.name != desc.network {
+                continue;
+            }
+            let is_cache = matches!(
+                env.network.configuration,
+                NetworkConfiguration::Managed { .. }
+            );
+            if let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name)
+                && !mapping.is_empty()
+            {
+                env_mappings.insert(env_name.clone(), mapping);
+            }
+        }
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(desc.ii, domain)
+            .into_iter()
+            .collect();
+        if let Err(e) = crate::network::custom_domains::write_custom_domains(
+            status_dir,
+            domain,
+            &env_mappings,
+            &extra,
+        ) {
+            tracing::warn!("Failed to update custom domains: {e}");
+        }
+    }
+
     #[cfg(test)]
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
         Context {
-            term: TermWriter {
-                debug: false,
-                raw_term: Term::stderr(),
-            },
             dirs: Arc::new(crate::directories::UnimplementedMockDirs),
             ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
@@ -492,52 +575,8 @@ impl Context {
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
+            telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TermWriter {
-    pub debug: bool,
-    pub raw_term: Term,
-}
-
-impl TermWriter {
-    pub fn write_line(&self, line: &str) -> std::io::Result<()> {
-        if self.debug {
-            info!("{line}");
-        } else {
-            writeln!(&self.raw_term, "{line}")?;
-        }
-        Ok(())
-    }
-}
-
-impl Write for TermWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        (&*self).write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        (&*self).flush()
-    }
-}
-
-impl Write for &TermWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if self.debug {
-            info!("{}", String::from_utf8_lossy(buf).trim());
-            Ok(buf.len())
-        } else {
-            (&self.raw_term).write(buf)
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        if !self.debug {
-            self.raw_term.flush()?;
-        }
-        Ok(())
     }
 }
 

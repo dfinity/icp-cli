@@ -1,4 +1,7 @@
-# Tutorial
+---
+title: Tutorial
+description: Step-by-step walkthrough of deploying a full-stack Motoko and React app on the Internet Computer.
+---
 
 This tutorial walks through deploying a full-stack app on the Internet Computer, explaining each step along the way.
 
@@ -14,12 +17,33 @@ In this tutorial, you'll deploy two canisters:
 
 ## Prerequisites
 
-Complete the **[Installation Guide](guides/installation.md)** first.
+**Required:** [Node.js](https://nodejs.org/) (LTS) for the installation commands below.
 
-Verify icp-cli is installed:
+> **Windows users:** This tutorial requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (for Motoko) and [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (for local networks). Install both first, then run all commands inside WSL.
+
+Install the required tools:
+
+```bash
+# icp-cli and ic-wasm (required)
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm
+
+# Motoko toolchain (for Motoko projects)
+npm install -g ic-mops
+```
+
+This installs:
+- **icp-cli** — the core CLI for building and deploying canisters
+- **ic-wasm** — optimizes WebAssembly for the Internet Computer
+- **mops** — Motoko package manager, which also installs the Motoko compiler
+
+> **Alternative methods:** See the [Installation Guide](guides/installation.md) for Homebrew, shell script, Rust setup, or other options.
+
+Verify the tools are installed:
 
 ```bash
 icp --version
+ic-wasm --version
+mops --version
 ```
 
 ## Create a Project
@@ -100,6 +124,8 @@ Deployed canisters:
 
 Open the **frontend URL** in your browser. You'll see a React app that calls your backend canister.
 
+**How does the frontend know the backend's canister ID?** The asset canister (which serves your frontend) provides canister IDs via a cookie. The template's frontend code reads this cookie to discover the backend. This works the same way locally and on mainnet — see [Canister Discovery](concepts/canister-discovery.md) for details.
+
 ### Candid UI
 
 Open the **Candid UI URL** (shown next to "backend"). Candid UI is a web interface that lets you interact with any canister that has a known [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) interface — no frontend code required.
@@ -127,7 +153,7 @@ You should see: `("Hello, World!")`
 
 The argument format `'("World")'` is [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) — the interface description language for the Internet Computer.
 
-### Interactive Arguments
+### Interactive Mode
 
 Don't want to type Candid manually? Omit the argument and icp-cli will prompt you interactively:
 
@@ -136,6 +162,14 @@ icp canister call backend greet
 ```
 
 You'll see a prompt asking for the `name` parameter — just type `World` and press Enter. This works for any method with any argument types, making it easy to explore canister APIs without memorizing Candid syntax.
+
+You can also omit the method name to get an interactive method picker:
+
+```bash
+icp canister call backend
+```
+
+This lists all available methods on the canister and lets you select one, which is handy when you're exploring an unfamiliar canister.
 
 ## Stop the Network
 

@@ -4,6 +4,7 @@ use ic_agent::export::Principal;
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 use strum::{Display, EnumString};
+use url::Url;
 
 use crate::{
     fs::{
@@ -128,15 +129,45 @@ pub enum IdentitySpec {
         slot: usize,
         key_id: String,
     },
+    InternetIdentity {
+        algorithm: IdentityKeyAlgorithm,
+        /// The principal at the root of the delegation chain
+        /// (`Principal::self_authenticating(from_key)`), not the session key.
+        principal: Principal,
+        storage: DelegationKeyStorage,
+        /// The host used for II login, stored so `icp identity login` can
+        /// re-authenticate without requiring `--host` again.
+        host: Url,
+    },
+    /// Session key created via `icp identity delegation request`; no delegation
+    /// chain yet. Cannot be used as an identity until `icp identity delegation use`
+    /// completes it.
+    PendingDelegation {
+        algorithm: IdentityKeyAlgorithm,
+        storage: DelegationKeyStorage,
+    },
+    /// Fully delegated identity created via `icp identity delegation use`.
+    /// Behaves identically to `InternetIdentity` when loaded.
+    Delegation {
+        algorithm: IdentityKeyAlgorithm,
+        /// `Principal::self_authenticating(chain.public_key)` — root key principal.
+        principal: Principal,
+        storage: DelegationKeyStorage,
+    },
 }
 
 impl IdentitySpec {
-    pub fn principal(&self) -> Principal {
+    /// Returns the principal associated with this identity, or `None` if the
+    /// identity has no delegation yet (`PendingDelegation`).
+    pub fn principal(&self) -> Option<Principal> {
         match self {
-            IdentitySpec::Pem { principal, .. } => *principal,
-            IdentitySpec::Anonymous => Principal::anonymous(),
-            IdentitySpec::Keyring { principal, .. } => *principal,
-            IdentitySpec::Hsm { principal, .. } => *principal,
+            IdentitySpec::Pem { principal, .. } => Some(*principal),
+            IdentitySpec::Anonymous => Some(Principal::anonymous()),
+            IdentitySpec::Keyring { principal, .. } => Some(*principal),
+            IdentitySpec::Hsm { principal, .. } => Some(*principal),
+            IdentitySpec::InternetIdentity { principal, .. } => Some(*principal),
+            IdentitySpec::PendingDelegation { .. } => None,
+            IdentitySpec::Delegation { principal, .. } => Some(*principal),
         }
     }
 }
@@ -146,6 +177,13 @@ impl IdentitySpec {
 pub enum PemFormat {
     Plaintext,
     Pbes2,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum DelegationKeyStorage {
+    Keyring,
+    Pem { format: PemFormat },
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display)]

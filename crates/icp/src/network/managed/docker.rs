@@ -5,22 +5,24 @@ use async_trait::async_trait;
 use bollard::{
     Docker,
     errors::Error as BollardError,
+    models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
         RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
-    secret::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
 };
-use camino_tempfile::Utf8TempDir;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
 use tokio::select;
+use tracing::info;
 use wslpath2::Conversion;
 
 use crate::network::{
-    ManagedImageConfig, config::ChildLocator, managed::launcher::NetworkInstance,
+    ManagedImageConfig,
+    config::ChildLocator,
+    managed::launcher::{CUSTOM_DOMAINS_FEATURE, NetworkInstance},
 };
 use crate::prelude::*;
 
@@ -52,6 +54,8 @@ pub struct ManagedImageOptions {
     pub status_dir: String,
     /// Parsed mounts (excluding the status directory mount, which is added at runtime).
     pub mounts: Vec<Mount>,
+    /// Extra hosts entries for Docker networking (e.g. "host.docker.internal:host-gateway").
+    pub extra_hosts: Vec<String>,
 }
 
 impl ManagedImageOptions {
@@ -160,6 +164,7 @@ impl TryFrom<&ManagedImageConfig> for ManagedImageOptions {
             shm_size: config.shm_size,
             status_dir: config.status_dir.clone(),
             mounts,
+            extra_hosts: config.extra_hosts.clone(),
         })
     }
 }
@@ -187,8 +192,55 @@ pub enum ManagedImageConversionError {
     WslPathConvert { source: WslPathConversionError },
 }
 
+/// Translates a host:port address for use inside a Docker container.
+/// Replaces `127.0.0.1`, `0.0.0.0`, `localhost`, and `::1` with `host.docker.internal`
+/// so the container can reach services running on the host machine.
+pub(super) fn translate_addr_for_docker(addr: &str) -> String {
+    if let Some((host, port)) = addr.rsplit_once(':') {
+        let translated = match host {
+            "127.0.0.1" | "0.0.0.0" | "localhost" | "::1" => "host.docker.internal",
+            _ => host,
+        };
+        format!("{translated}:{port}")
+    } else {
+        addr.to_string()
+    }
+}
+
+/// Returns extra_hosts entries needed for Docker to resolve `host.docker.internal`.
+/// On Linux, Docker Engine does not provide `host.docker.internal` by default,
+/// so we add `host.docker.internal:host-gateway` when any addresses reference localhost.
+pub(super) fn docker_extra_hosts_for_addrs(addrs: &[String]) -> Vec<String> {
+    let needs_host_gateway = addrs.iter().any(|addr| {
+        addr.rsplit_once(':')
+            .map(|(host, _)| matches!(host, "127.0.0.1" | "0.0.0.0" | "localhost" | "::1"))
+            .unwrap_or(false)
+    });
+    if needs_host_gateway {
+        vec!["host.docker.internal:host-gateway".to_string()]
+    } else {
+        vec![]
+    }
+}
+
+/// Translates localhost addresses in `--bitcoind-addr=` and `--dogecoind-addr=` flags
+/// for use inside a Docker container.
+pub(super) fn translate_launcher_args_for_docker(args: Vec<String>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| {
+            for prefix in ["--bitcoind-addr=", "--dogecoind-addr="] {
+                if let Some(addr) = arg.strip_prefix(prefix) {
+                    return format!("{prefix}{}", translate_addr_for_docker(addr));
+                }
+            }
+            arg
+        })
+        .collect()
+}
+
 pub async fn spawn_docker_launcher(
     options: &ManagedImageOptions,
+    host_status_dir: &Path,
 ) -> Result<
     (
         AsyncDropper<DockerDropGuard>,
@@ -211,15 +263,14 @@ pub async fn spawn_docker_launcher(
         shm_size,
         status_dir,
         mounts,
+        extra_hosts,
     } = options;
 
-    // Create status tmpdir and convert path for WSL2 if needed
+    // Convert path for WSL2 if needed
     let wsl2_distro = std::env::var("ICP_CLI_DOCKER_WSL2_DISTRO").ok();
     let wsl2_distro = wsl2_distro.as_deref();
     let wsl2_convert = cfg!(windows) && wsl2_distro.is_some();
-    let host_status_tmpdir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
-    let host_status_dir = host_status_tmpdir.path();
-    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_tmpdir.path())?;
+    let host_status_dir_param = convert_path(wsl2_convert, wsl2_distro, host_status_dir)?;
 
     let socket = match std::env::var("DOCKER_HOST").ok() {
         Some(sock) => sock,
@@ -276,7 +327,7 @@ pub async fn spawn_docker_launcher(
         Err(BollardError::DockerResponseServerError {
             status_code: 404, ..
         }) => {
-            eprintln!("Pulling image {image}");
+            info!("Pulling image {image}");
             docker
                 .create_image(
                     Some(CreateImageOptions {
@@ -320,6 +371,11 @@ pub async fn spawn_docker_launcher(
                     mounts: Some(all_mounts),
                     binds: Some(volumes.clone()),
                     shm_size: *shm_size,
+                    extra_hosts: if extra_hosts.is_empty() {
+                        None
+                    } else {
+                        Some(extra_hosts.clone())
+                    },
                     ..<_>::default()
                 }),
                 ..<_>::default()
@@ -328,7 +384,7 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
-    eprintln!("Created container {}", &container_id[..12]);
+    info!("Created container {}", &container_id[..12]);
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -446,6 +502,10 @@ pub async fn spawn_docker_launcher(
             root_key: hex::decode(&launcher_status.root_key).context(ParseRootKeySnafu {
                 key: &launcher_status.root_key,
             })?,
+            use_friendly_domains: launcher_status
+                .supported_features
+                .iter()
+                .any(|f| f == CUSTOM_DOMAINS_FEATURE),
         },
         locator,
         gateway_port_was_fixed,
@@ -645,8 +705,6 @@ pub enum DockerLauncherError {
         container_id: String,
         exit_status: i64,
     },
-    #[snafu(display("failed to create status directory"))]
-    CreateStatusDir { source: std::io::Error },
     #[snafu(display("failed to query docker image {image}"))]
     QueryImage {
         source: bollard::errors::Error,

@@ -1,5 +1,6 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
 use bigdecimal::BigDecimal;
+use camino_tempfile::Utf8TempDir;
 use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
 use ic_agent::{
@@ -7,11 +8,12 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
+use ic_management_canister_types::CanisterSettings;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
-        CreateCanisterResponse,
+        CreateCanisterResponse, CreationArgs,
     },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
@@ -24,11 +26,11 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 use k256::SecretKey;
-use rand::{RngCore, rng};
+use rand::{Rng, rng};
 use snafu::prelude::*;
-use std::{io::Write, process::ExitStatus, time::Duration};
-use tokio::{process::Child, select, signal::ctrl_c, time::sleep};
-use tracing::debug;
+use std::{process::ExitStatus, time::Duration};
+use tokio::{process::Child, select, time::sleep};
+use tracing::{debug, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -47,17 +49,21 @@ use crate::{
         },
     },
     prelude::*,
+    signal::stop_signal,
 };
 
 pub async fn run_network(
     config: &Managed,
     nd: NetworkDirectory,
     project_root: &Path,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
+    all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
+    proxy_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
     network_launcher_path: Option<&Path>,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkError> {
     nd.ensure_exists()?;
 
@@ -66,10 +72,13 @@ pub async fn run_network(
         config,
         &nd,
         project_root,
-        seed_accounts,
+        all_identities,
+        default_identity,
         candid_ui_wasm,
+        proxy_wasm,
         background,
         verbose,
+        autocontainerize,
     )
     .await?;
     Ok(())
@@ -117,10 +126,13 @@ async fn run_network_launcher(
     config: &Managed,
     nd: &NetworkDirectory,
     project_root: &Path,
-    seed_accounts: impl Iterator<Item = Principal> + Clone,
+    all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
+    proxy_wasm: Option<&[u8]>,
     background: bool,
     verbose: bool,
+    autocontainerize: bool,
 ) -> Result<(), RunNetworkLauncherError> {
     let network_root = nd.root()?;
 
@@ -136,7 +148,7 @@ async fn run_network_launcher(
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
-        ManagedMode::Launcher(launcher_config) if cfg!(windows) => {
+        ManagedMode::Launcher(launcher_config) if autocontainerize => {
             let options = transform_native_launcher_to_container(launcher_config);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
@@ -150,6 +162,7 @@ async fn run_network_launcher(
         }
     };
 
+    let status_dir = Utf8TempDir::new().context(CreateStatusDirSnafu)?;
     let (mut guard, instance, gateway, locator) = network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
             // Acquire locks for all fixed ports and check they're not in use
@@ -177,10 +190,13 @@ async fn run_network_launcher(
 
             match launch_mode {
                 LaunchMode::Image(options) => {
-                    let (guard, instance, locator, fixed) = spawn_docker_launcher(&options).await?;
+                    let (guard, instance, locator, fixed) =
+                        spawn_docker_launcher(&options, status_dir.path()).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
+                        host: "localhost".to_string(),
+                        ip: "127.0.0.1".to_string(),
                     };
                     Ok((ShutdownGuard::Container(guard), instance, gateway, locator))
                 }
@@ -200,31 +216,46 @@ async fn run_network_launcher(
                         verbose,
                         launcher_config,
                         &root.state_dir(),
+                        status_dir.path(),
                     )
                     .await?;
+                    let host = match launcher_config.gateway.domains.first() {
+                        Some(domain) => domain.clone(),
+                        None => launcher_config.gateway.bind.to_string(),
+                    };
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed: matches!(launcher_config.gateway.port, Port::Fixed(_)),
+                        ip: launcher_config.gateway.bind.clone(),
+                        host,
                     };
                     Ok((ShutdownGuard::Process(child), instance, gateway, locator))
                 }
             }
         })
         .await??;
-
+    // The launcher owns cleanup, so we call keep() to prevent the Utf8TempDir from deleting it on drop.
+    let status_dir_path = status_dir.keep();
     if background {
         // background means we're using stdio files - otherwise the launcher already prints this
-        eprintln!("Network started on port {}", instance.gateway_port);
+        info!("Network started on port {}", instance.gateway_port);
     }
-    let candid_ui_canister_id = initialize_network(
-        &format!("http://localhost:{}", instance.gateway_port)
-            .parse()
-            .unwrap(),
+
+    let gateway_url: Url = format!("http://{}:{}", gateway.host, gateway.port)
+        .parse()
+        .unwrap();
+
+    let (candid_ui_canister_id, proxy_canister_id) = initialize_network(
+        &gateway_url,
         &instance.root_key,
-        seed_accounts,
+        all_identities,
+        default_identity,
         candid_ui_wasm,
+        proxy_wasm,
     )
     .await?;
+
+    let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.ii);
 
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {
@@ -246,6 +277,10 @@ async fn run_network_launcher(
                 pocketic_config_port: instance.pocketic_config_port,
                 pocketic_instance_id: instance.pocketic_instance_id,
                 candid_ui_canister_id,
+                proxy_canister_id,
+                ii,
+                status_dir: Some(status_dir_path.clone()),
+                use_friendly_domains: instance.use_friendly_domains,
             };
 
             // Save descriptor to project root and all fixed port directories
@@ -254,11 +289,28 @@ async fn run_network_launcher(
             Ok(())
         })
         .await??;
+
+    // Write initial custom-domains.txt with system canister entries (e.g. II)
+    if instance.use_friendly_domains
+        && let Some(domain) = crate::network::custom_domains::gateway_domain(&gateway_url)
+    {
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(ii, domain)
+            .into_iter()
+            .collect();
+        if !extra.is_empty() {
+            let _ = crate::network::custom_domains::write_custom_domains(
+                &status_dir_path,
+                domain,
+                &std::collections::BTreeMap::new(),
+                &extra,
+            );
+        }
+    }
     if background {
-        eprintln!("To stop the network, run `icp network stop`");
+        info!("To stop the network, run `icp network stop`");
         guard.defuse();
     } else {
-        eprintln!("Network ready. Press Ctrl-C to exit.");
+        info!("Network ready. Press Ctrl-C to exit.");
 
         let _ = wait_for_shutdown(&mut guard).await;
         guard.async_drop().await;
@@ -272,14 +324,26 @@ async fn run_network_launcher(
 }
 
 fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
-    use bollard::secret::PortBinding;
+    use bollard::models::PortBinding;
     use std::collections::HashMap;
+
+    use super::docker::{docker_extra_hosts_for_addrs, translate_launcher_args_for_docker};
 
     let port = match config.gateway.port {
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
     let args = launcher_settings_flags(config);
+    let args = translate_launcher_args_for_docker(args);
+
+    let all_addrs: Vec<String> = config
+        .bitcoind_addr
+        .iter()
+        .chain(config.dogecoind_addr.iter())
+        .flatten()
+        .cloned()
+        .collect();
+    let extra_hosts = docker_extra_hosts_for_addrs(&all_addrs);
 
     let platform = if cfg!(target_arch = "aarch64") {
         "linux/arm64".to_string()
@@ -290,14 +354,19 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
     let port_bindings: HashMap<String, Option<Vec<PortBinding>>> = [(
         "4943/tcp".to_string(),
         Some(vec![PortBinding {
-            host_ip: Some("127.0.0.1".to_string()),
+            host_ip: Some(config.gateway.bind.to_string()),
             host_port: Some(port.to_string()),
         }]),
     )]
     .into();
+    let version = config
+        .version
+        .as_deref()
+        .unwrap_or("latest")
+        .trim_start_matches('v');
 
     ManagedImageOptions {
-        image: "ghcr.io/dfinity/icp-cli-network-launcher:latest".to_string(),
+        image: format!("ghcr.io/dfinity/icp-cli-network-launcher:{version}"),
         port_bindings,
         rm_on_exit: true,
         args,
@@ -309,6 +378,7 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         shm_size: None,
         status_dir: "/app/status".to_string(),
         mounts: vec![],
+        extra_hosts,
     }
 }
 
@@ -336,6 +406,9 @@ impl ShutdownGuard {
 pub enum RunNetworkLauncherError {
     #[snafu(display("ICP_CLI_NETWORK_LAUNCHER_PATH environment variable is not set"))]
     NoNetworkLauncherPath,
+
+    #[snafu(display("failed to create status directory"))]
+    CreateStatusDir { source: std::io::Error },
 
     #[snafu(display("failed to create dir"))]
     CreateDirAll { source: crate::fs::IoError },
@@ -391,54 +464,25 @@ pub enum ShutdownReason {
     ChildExited,
 }
 
-/// Write to stderr, ignoring any errors. This is safe to use even when stderr is closed
-/// (e.g., in a background process after the parent exits), unlike eprintln! which panics.
-fn safe_eprintln(msg: &str) {
-    let _ = std::io::stderr().write_all(msg.as_bytes());
-    let _ = std::io::stderr().write_all(b"\n");
-}
-
 async fn wait_for_shutdown(guard: &mut ShutdownGuard) -> ShutdownReason {
     match guard {
         ShutdownGuard::Container(_) => {
             stop_signal().await;
-            safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+            info!("Received Ctrl-C, shutting down PocketIC...");
             ShutdownReason::CtrlC
         }
         ShutdownGuard::Process(child) => {
             select!(
                 _ = stop_signal() => {
-                    safe_eprintln("Received Ctrl-C, shutting down PocketIC...");
+                    info!("Received Ctrl-C, shutting down PocketIC...");
                     ShutdownReason::CtrlC
                 }
                 res = notice_child_exit(child.child.as_mut().unwrap()) => {
-                    safe_eprintln(&format!("PocketIC exited with status: {:?}", res.status));
+                    info!("PocketIC exited with status: {:?}", res.status);
                     ShutdownReason::ChildExited
                 }
             )
         }
-    }
-}
-
-#[cfg(unix)]
-async fn stop_signal() {
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-    select! {
-        _ = ctrl_c() => {},
-        _ = sigterm.recv() => {},
-    }
-}
-
-#[cfg(windows)]
-async fn stop_signal() {
-    use tokio::signal::windows::{ctrl_break, ctrl_close};
-    let mut ctrl_break = ctrl_break().unwrap();
-    let mut ctrl_close = ctrl_close().unwrap();
-    select! {
-        _ = ctrl_c() => {},
-        _ = ctrl_break.recv() => {},
-        _ = ctrl_close.recv() => {},
     }
 }
 
@@ -469,45 +513,51 @@ pub enum WaitForPortError {
 /// Initialize the network:
 /// - Seed ICP and cycles to the given accounts
 /// - Install the candid UI canister
+/// - Install the proxy canister
 ///
-/// Returns the canister id of the candid ui canister
+/// Returns a tuple of (candid_ui_canister_id, proxy_canister_id)
 pub async fn initialize_network(
-    gateway_url: &Url,
+    api_url: &Url,
     root_key: &[u8],
-    seed_accounts: impl IntoIterator<Item = Principal> + Clone,
+    mut all_identities: Vec<Principal>,
+    default_identity: Option<Principal>,
     candid_ui_wasm: Option<&[u8]>,
-) -> Result<Option<Principal>, InitializeNetworkError> {
-    eprintln!("Seeding ICP and cycles account balances");
+    proxy_wasm: Option<&[u8]>,
+) -> Result<(Option<Principal>, Option<Principal>), InitializeNetworkError> {
+    all_identities.sort_unstable();
+    all_identities.dedup();
+
+    info!("Seeding ICP and cycles account balances");
     let agent = Agent::builder()
-        .with_url(gateway_url.as_str())
+        .with_url(api_url.as_str())
         .with_identity(AnonymousIdentity)
         .build()
         .context(BuildAgentSnafu {
-            url: gateway_url.as_str(),
+            url: api_url.as_str(),
         })?;
     agent.set_root_key(root_key.to_vec());
+
     let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&agent).await?;
     let icp_amount = 100_000_000_000_000u64;
     let display_icp_amount = BigDecimal::new(icp_amount.into(), 8).normalized();
     let seed_icp = join_all(
-        seed_accounts
-            .clone()
-            .into_iter()
-            .filter(|account| *account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
+        all_identities
+            .iter()
+            .filter(|account| **account != Principal::anonymous()) // Anon gets seeded by pocket-ic (or whatever the launcher is doing)
             .map(|account| {
                 debug!("Seeding {} ICP to account {}", display_icp_amount, account);
-                acquire_icp_to_account(&agent, account, icp_amount)
+                acquire_icp_to_account(&agent, *account, icp_amount)
             }),
     );
     let cycles_amount = 1_000_000_000_000_000u128; // 1_000T cycles
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
-    let seed_cycles = join_all(seed_accounts.into_iter().map(|account| {
+    let seed_cycles = join_all(all_identities.iter().map(|account| {
         debug!(
             "Seeding {}T cycles to account {}",
             display_cycles_amount, account
         );
-        mint_cycles_to_account(&agent, account, cycles_amount, icp_xdr_conversion_rate)
+        mint_cycles_to_account(&agent, *account, cycles_amount, icp_xdr_conversion_rate)
     }));
     let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
     seed_icp_results
@@ -517,11 +567,44 @@ pub async fn initialize_network(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    if let Some(candid_ui_wasm) = candid_ui_wasm {
-        Ok(Some(install_candid_ui(&agent, candid_ui_wasm).await?))
+    // Install Candid UI if provided
+    let candid_ui_id = if let Some(candid_ui_wasm) = candid_ui_wasm {
+        Some(install_candid_ui(&agent, candid_ui_wasm).await?)
     } else {
-        Ok(None)
-    }
+        None
+    };
+
+    // Install proxy canister if provided
+    let proxy_id = if let Some(proxy_wasm) = proxy_wasm {
+        // Determine controllers based on the number of identities
+        // IC protocol limits: max 10 controllers per canister
+        let controllers = if all_identities.len() <= 10 {
+            // Use all identities as controllers
+            all_identities
+        } else {
+            // Use only anonymous and default identity
+            debug!(
+                "More than 10 identities detected ({} total). IC protocol limits canisters to 10 controllers. \
+                 Proxy canister will be created with only anonymous and default identity as controllers.",
+                all_identities.len()
+            );
+            let mut limited_controllers = vec![Principal::anonymous()];
+            if let Some(default) = default_identity {
+                // Only add default if it's different from anonymous
+                if default != Principal::anonymous() {
+                    limited_controllers.push(default);
+                }
+            }
+
+            limited_controllers
+        };
+
+        Some(install_proxy(&agent, proxy_wasm, controllers).await?)
+    } else {
+        None
+    };
+
+    Ok((candid_ui_id, proxy_id))
 }
 
 #[derive(Debug, Snafu)]
@@ -534,6 +617,9 @@ pub enum InitializeNetworkError {
 
     #[snafu(display("Failed to install Candid UI canister: {error}"))]
     CandidUI { error: String },
+
+    #[snafu(display("Failed to install proxy canister: {error}"))]
+    Proxy { error: String },
 }
 
 async fn mint_cycles_to_account(
@@ -746,4 +832,253 @@ async fn install_candid_ui(
     debug!("Installed Candid UI canister with ID {}", canister_id);
 
     Ok(canister_id)
+}
+
+async fn install_proxy(
+    agent: &Agent,
+    proxy_wasm: &[u8],
+    controllers: Vec<Principal>,
+) -> Result<Principal, InitializeNetworkError> {
+    debug!("Creating canister for proxy");
+    let amount = 10 * TRILLION;
+
+    // Prepare controller settings
+    let creation_args = if !controllers.is_empty() {
+        Some(CreationArgs {
+            subnet_selection: None,
+            settings: Some(CanisterSettings {
+                controllers: Some(controllers.clone()),
+                ..Default::default()
+            }),
+        })
+    } else {
+        None
+    };
+
+    let response = agent
+        .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
+        .with_arg(
+            Encode!(&CreateCanisterArgs {
+                from_subaccount: None,
+                created_at_time: None,
+                amount: Nat::from(amount),
+                creation_args,
+            })
+            .unwrap(),
+        )
+        .await
+        .map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to create canister for proxy: {e}"),
+        })?;
+    let response =
+        Decode!(&response, CreateCanisterResponse).map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to decode create canister response for proxy: {e}"),
+        })?;
+    let canister_id = match response {
+        CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+        CreateCanisterResponse::Err(err) => {
+            return Err(InitializeNetworkError::Proxy {
+                error: format!(
+                    "Failed to create canister for proxy: {}",
+                    err.format_error(amount)
+                ),
+            });
+        }
+    };
+    debug!("Installing proxy wasm into canister {}", canister_id);
+
+    let mgmt = ic_utils::interfaces::ManagementCanister::create(agent);
+    mgmt.install_code(&canister_id, proxy_wasm)
+        .with_mode(CanisterInstallMode::Install)
+        .await
+        .map_err(|e| InitializeNetworkError::Proxy {
+            error: format!("Failed to install proxy canister: {e}"),
+        })?;
+    debug!(
+        "Installed proxy canister with ID {} and controllers: {:?}",
+        canister_id, controllers
+    );
+
+    Ok(canister_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::{Gateway, ManagedLauncherConfig, Port};
+
+    #[test]
+    fn transform_native_launcher_default_config() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                bind: "127.0.0.1".to_string(),
+                port: Port::Fixed(8000),
+                domains: vec!["localhost".to_string()],
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert_eq!(
+            opts.image,
+            "ghcr.io/dfinity/icp-cli-network-launcher:latest"
+        );
+        assert!(opts.args.iter().eq(["--domain=localhost"]));
+        assert!(opts.extra_hosts.is_empty());
+        assert!(opts.rm_on_exit);
+        assert_eq!(opts.status_dir, "/app/status");
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
+    }
+
+    #[test]
+    fn transform_native_launcher_strips_v_prefix_from_image_tag() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                bind: "127.0.0.1".to_string(),
+                port: Port::Fixed(8000),
+                domains: vec![],
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: Some("v12.0.0-2026-04-16-04-20".to_string()),
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert_eq!(
+            opts.image,
+            "ghcr.io/dfinity/icp-cli-network-launcher:12.0.0-2026-04-16-04-20"
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_random_port() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                bind: "127.0.0.1".to_string(),
+                port: Port::Random,
+                domains: vec![],
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        let binding = opts
+            .port_bindings
+            .get("4943/tcp")
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(binding[0].host_port.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn transform_native_launcher_with_bitcoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: true,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(opts.args.contains(&"--ii".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_with_dogecoind_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: Some(50),
+            ii: false,
+            nns: true,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(opts.args.contains(&"--nns".to_string()));
+        assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
+        assert!(
+            opts.args
+                .contains(&"--dogecoind-addr=host.docker.internal:22556".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
+
+    #[test]
+    fn transform_native_launcher_external_addr_no_extra_hosts() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
+        );
+        assert!(opts.extra_hosts.is_empty());
+    }
+
+    #[test]
+    fn transform_native_launcher_with_all_zeros_addr() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway::default(),
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: Some(vec!["0.0.0.0:18444".to_string()]),
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert!(
+            opts.args
+                .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())
+        );
+        assert_eq!(
+            opts.extra_hosts,
+            vec!["host.docker.internal:host-gateway".to_string()]
+        );
+    }
 }

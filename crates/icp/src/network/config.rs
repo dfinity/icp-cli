@@ -16,6 +16,14 @@ use uuid::Uuid;
 
 use crate::prelude::*;
 
+fn default_gateway_host() -> String {
+    "localhost".to_string()
+}
+
+fn default_gateway_ip() -> String {
+    "127.0.0.1".to_string()
+}
+
 /// Gateway port configuration within a network descriptor.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -25,6 +33,12 @@ pub struct NetworkDescriptorGatewayPort {
     pub fixed: bool,
     /// The TCP port the gateway is listening on.
     pub port: u16,
+    /// The host to use when constructing URLs to reach the gateway.
+    #[serde(default = "default_gateway_host")]
+    pub host: String,
+    /// The IP address to use when constructing URLs to reach the API.
+    #[serde(default = "default_gateway_ip")]
+    pub ip: String,
 }
 
 /// Runtime state of a running managed network, persisted as `descriptor.json`.
@@ -59,6 +73,18 @@ pub struct NetworkDescriptorModel {
     pub pocketic_instance_id: Option<usize>,
     /// Canister ID of the deployed Candid UI, if any.
     pub candid_ui_canister_id: Option<Principal>,
+    /// Canister ID of the deployed proxy canister, if any.
+    pub proxy_canister_id: Option<Principal>,
+    /// Whether Internet Identity is deployed on this network.
+    #[serde(default)]
+    pub ii: bool,
+    /// Path to the status directory shared with the network launcher.
+    /// Used to write `custom-domains.txt` for friendly domain routing.
+    #[serde(default)]
+    pub status_dir: Option<PathBuf>,
+    /// Whether the network supports friendly domain routing (e.g., `foo.local.localhost`).
+    #[serde(default)]
+    pub use_friendly_domains: bool,
 }
 
 /// Identifies the process or container running a managed network.

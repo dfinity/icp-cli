@@ -1,32 +1,33 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
-use candid::Principal;
+use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::{EnvironmentVariable, LogVisibility as IcLogVisibility};
-use ic_utils::interfaces::ManagementCanister;
-use icp::{Canister, canister::Settings, context::TermWriter};
+use ic_agent::Agent;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
+};
+use icp::{Canister, canister::Settings};
 use itertools::Itertools;
+use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
+use tracing::error;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
+
+use super::proxy::UpdateOrProxyError;
+use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {
-        source: AgentError,
+        source: UpdateOrProxyError,
         canister: Principal,
     },
-    #[snafu(display("invalid canister settings in manifest for canister {name}"))]
-    ValidateSettings { source: AgentError, name: String },
     #[snafu(display("failed to update canister settings for canister {canister}"))]
     UpdateSettings {
-        source: AgentError,
+        source: UpdateOrProxyError,
         canister: Principal,
     },
 }
@@ -46,11 +47,11 @@ struct SettingsFailure {
 
 /// Compare two LogVisibility values in an order-insensitive manner.
 /// For AllowedViewers, the principal lists are compared as sets.
-fn log_visibility_eq(a: &IcLogVisibility, b: &IcLogVisibility) -> bool {
+fn log_visibility_eq(a: &LogVisibility, b: &LogVisibility) -> bool {
     match (a, b) {
-        (IcLogVisibility::Controllers, IcLogVisibility::Controllers) => true,
-        (IcLogVisibility::Public, IcLogVisibility::Public) => true,
-        (IcLogVisibility::AllowedViewers(va), IcLogVisibility::AllowedViewers(vb)) => {
+        (LogVisibility::Controllers, LogVisibility::Controllers) => true,
+        (LogVisibility::Public, LogVisibility::Public) => true,
+        (LogVisibility::AllowedViewers(va), LogVisibility::AllowedViewers(vb)) => {
             let set_a: HashSet<_> = va.iter().collect();
             let set_b: HashSet<_> = vb.iter().collect();
             set_a == set_b
@@ -68,29 +69,31 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
 }
 
 pub(crate) async fn sync_settings(
-    mgmt: &ManagementCanister<'_>,
+    agent: &Agent,
+    proxy: Option<Principal>,
     cid: &Principal,
     canister: &Canister,
 ) -> Result<(), SyncSettingsOperationError> {
-    let (status,) = mgmt
-        .canister_status(cid)
-        .await
-        .context(FetchCurrentSettingsSnafu { canister: *cid })?;
+    let status =
+        proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id: *cid })
+            .await
+            .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
         compute_allocation,
-        memory_allocation,
-        freezing_threshold,
-        reserved_cycles_limit,
-        wasm_memory_limit,
-        wasm_memory_threshold,
+        ref memory_allocation,
+        ref freezing_threshold,
+        ref reserved_cycles_limit,
+        ref wasm_memory_limit,
+        ref wasm_memory_threshold,
+        ref log_memory_limit,
         ref environment_variables,
     } = &canister.settings;
     let current_settings = status.settings;
 
     // Convert our log_visibility to IC type for comparison and update
-    let log_visibility_setting: Option<IcLogVisibility> =
-        log_visibility.clone().map(IcLogVisibility::from);
+    let log_visibility_setting: Option<LogVisibility> =
+        log_visibility.clone().map(LogVisibility::from);
 
     let environment_variable_setting =
         if let Some(configured_environment_variables) = &environment_variables {
@@ -114,11 +117,29 @@ pub(crate) async fn sync_settings(
         .as_ref()
         .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
         && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
-        && memory_allocation.is_none_or(|s| s == current_settings.memory_allocation)
-        && freezing_threshold.is_none_or(|s| s == current_settings.freezing_threshold)
-        && reserved_cycles_limit.is_none_or(|s| s == current_settings.reserved_cycles_limit)
-        && wasm_memory_limit.is_none_or(|s| s == current_settings.wasm_memory_limit)
-        && wasm_memory_threshold.is_none_or(|s| s == current_settings.wasm_memory_threshold)
+        && memory_allocation
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.memory_allocation.0.to_u64() == Some(s))
+        && freezing_threshold
+            .as_ref()
+            .map(|d| d.get())
+            .is_none_or(|s| s == current_settings.freezing_threshold)
+        && reserved_cycles_limit
+            .as_ref()
+            .is_none_or(|s| s.get() == current_settings.reserved_cycles_limit)
+        && wasm_memory_limit
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.wasm_memory_limit.0.to_u64() == Some(s))
+        && wasm_memory_threshold
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.wasm_memory_threshold.0.to_u64() == Some(s))
+        && log_memory_limit
+            .as_ref()
+            .map(|m| m.get())
+            .is_none_or(|s| current_settings.log_memory_limit.0.to_u64() == Some(s))
         && environment_variable_setting
             .as_ref()
             .is_none_or(|s| environment_variables_eq(s, &current_settings.environment_variables))
@@ -126,33 +147,41 @@ pub(crate) async fn sync_settings(
         // No changes needed
         return Ok(());
     }
-    mgmt.update_settings(cid)
-        .with_optional_log_visibility(log_visibility_setting)
-        .with_optional_compute_allocation(compute_allocation)
-        .with_optional_memory_allocation(memory_allocation)
-        .with_optional_freezing_threshold(freezing_threshold)
-        .with_optional_reserved_cycles_limit(reserved_cycles_limit)
-        .with_optional_wasm_memory_limit(wasm_memory_limit)
-        .with_optional_wasm_memory_threshold(wasm_memory_threshold)
-        .with_optional_environment_variables(environment_variable_setting)
-        .build()
-        .context(ValidateSettingsSnafu {
-            name: &canister.name,
-        })?
-        .await
-        .context(UpdateSettingsSnafu { canister: *cid })?;
+
+    let settings = CanisterSettings {
+        log_visibility: log_visibility_setting,
+        compute_allocation: compute_allocation.map(Nat::from),
+        memory_allocation: memory_allocation.as_ref().map(|m| Nat::from(m.get())),
+        freezing_threshold: freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
+        reserved_cycles_limit: reserved_cycles_limit.as_ref().map(|r| Nat::from(r.get())),
+        wasm_memory_limit: wasm_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        wasm_memory_threshold: wasm_memory_threshold.as_ref().map(|m| Nat::from(m.get())),
+        log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
+        environment_variables: environment_variable_setting,
+        ..Default::default()
+    };
+
+    proxy_management::update_settings(
+        agent,
+        proxy,
+        UpdateSettingsArgs {
+            canister_id: *cid,
+            settings,
+            sender_canister_version: None,
+        },
+    )
+    .await
+    .context(UpdateSettingsSnafu { canister: *cid })?;
 
     Ok(())
 }
 
 pub(crate) async fn sync_settings_many(
     agent: Agent,
+    proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
-    term: Arc<TermWriter>,
     debug: bool,
 ) -> Result<(), SyncSettingsManyError> {
-    let mgmt = ManagementCanister::create(&agent);
-
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -161,12 +190,12 @@ pub(crate) async fn sync_settings_many(
         let canister_name = info.name.clone();
 
         let settings_fn = {
-            let mgmt = mgmt.clone();
+            let agent = agent.clone();
             let pb = pb.clone();
 
             async move {
                 pb.set_message("Updating canister settings...");
-                sync_settings(&mgmt, &cid, &info).await
+                sync_settings(&agent, proxy, &cid, &info).await
             }
         };
 
@@ -199,14 +228,11 @@ pub(crate) async fn sync_settings_many(
     if !errors.is_empty() {
         // Print all errors in batch
         for failure in &errors {
-            let _ = term.write_line("");
-            let _ = term.write_line("");
-            let _ = term.write_line(&format!(
-                " ----- Failed to update settings for canister '{}': {} -----",
+            error!(
+                "----- Failed to update settings for canister '{}': {} -----",
                 failure.canister_name, failure.canister_id,
-            ));
-            let _ = term.write_line(&format!("Error: '{}'", failure.error));
-            let _ = term.write_line("");
+            );
+            error!("'{}'", failure.error);
         }
 
         return SyncSettingsManySnafu {
@@ -228,28 +254,28 @@ mod tests {
     #[test]
     fn log_visibility_eq_controllers() {
         assert!(log_visibility_eq(
-            &IcLogVisibility::Controllers,
-            &IcLogVisibility::Controllers
+            &LogVisibility::Controllers,
+            &LogVisibility::Controllers
         ));
     }
 
     #[test]
     fn log_visibility_eq_public() {
         assert!(log_visibility_eq(
-            &IcLogVisibility::Public,
-            &IcLogVisibility::Public
+            &LogVisibility::Public,
+            &LogVisibility::Public
         ));
     }
 
     #[test]
     fn log_visibility_eq_different_variants() {
         assert!(!log_visibility_eq(
-            &IcLogVisibility::Controllers,
-            &IcLogVisibility::Public
+            &LogVisibility::Controllers,
+            &LogVisibility::Public
         ));
         assert!(!log_visibility_eq(
-            &IcLogVisibility::Public,
-            &IcLogVisibility::Controllers
+            &LogVisibility::Public,
+            &LogVisibility::Controllers
         ));
     }
 
@@ -259,8 +285,8 @@ mod tests {
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         assert!(log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
@@ -271,8 +297,8 @@ mod tests {
 
         // Order should not matter
         assert!(log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p2, p1])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p2, p1])
         ));
     }
 
@@ -283,8 +309,8 @@ mod tests {
         let p3 = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1, p2]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p3])
+            &LogVisibility::AllowedViewers(vec![p1, p2]),
+            &LogVisibility::AllowedViewers(vec![p1, p3])
         ));
     }
 
@@ -294,8 +320,8 @@ mod tests {
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::AllowedViewers(vec![p1, p2])
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
@@ -304,12 +330,12 @@ mod tests {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
 
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::Controllers
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::Controllers
         ));
         assert!(!log_visibility_eq(
-            &IcLogVisibility::AllowedViewers(vec![p1]),
-            &IcLogVisibility::Public
+            &LogVisibility::AllowedViewers(vec![p1]),
+            &LogVisibility::Public
         ));
     }
 

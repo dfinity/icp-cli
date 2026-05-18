@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
 use crate::fs;
@@ -16,7 +16,12 @@ pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {
-    canister::{ArgsFormat, CanisterManifest, ManifestInitArgs},
+    adapter::assets,
+    adapter::prebuilt,
+    canister::{
+        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestInitArgs,
+        SyncStep, SyncSteps,
+    },
     environment::EnvironmentManifest,
     network::NetworkManifest,
     project::ProjectManifest,
@@ -39,6 +44,15 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
+}
+
+impl<T: Serialize> Serialize for Item<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Item::Path(p) => p.serialize(serializer),
+            Item::Manifest(m) => m.serialize(serializer),
+        }
+    }
 }
 
 impl<'de, T> Deserialize<'de> for Item<T>

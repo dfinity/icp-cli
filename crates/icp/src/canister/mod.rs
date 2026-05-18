@@ -145,40 +145,48 @@ impl From<LogVisibilityDef> for LogVisibility {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
     /// Controls who can read canister logs.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_visibility: Option<LogVisibilityDef>,
 
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_allocation: Option<u64>,
 
     /// Memory allocation in bytes. If unset, memory is allocated dynamically.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     /// Supports duration suffixes in YAML: s, m, h, d, w (e.g. "30d" or "4w").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub freezing_threshold: Option<DurationAmount>,
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes in YAML: k, m, b, t (e.g. "4t" or "4.3t").
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
     /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
     /// Supports suffixes in YAML: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_memory_limit: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment_variables: Option<HashMap<String, String>>,
 }
 

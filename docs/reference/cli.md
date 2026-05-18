@@ -66,6 +66,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp new`↴](#icp-new)
 * [`icp project`↴](#icp-project)
 * [`icp project show`↴](#icp-project-show)
+* [`icp project bundle`↴](#icp-project-bundle)
 * [`icp settings`↴](#icp-settings)
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
@@ -89,7 +90,7 @@ This document contains the help content for the `icp` command-line program.
 * `identity` — Manage your identities
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
-* `project` — Display information about the current project
+* `project` — Manage the current project
 * `settings` — Configure user settings
 * `sync` — Synchronize canisters
 * `token` — Perform token transactions
@@ -1449,13 +1450,14 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 
 ## `icp project`
 
-Display information about the current project
+Manage the current project
 
 **Usage:** `icp project <COMMAND>`
 
 ###### **Subcommands:**
 
 * `show` — Outputs the project's effective yaml configuration
+* `bundle` — Bundle a project into a self-contained deployable archive
 
 
 
@@ -1472,6 +1474,22 @@ The effective yaml configuration includes:
 - processed recipes
 
 **Usage:** `icp project show`
+
+
+
+## `icp project bundle`
+
+Bundle a project into a self-contained deployable archive.
+
+Builds all project canisters and packages them with a rewritten manifest into a `.tar.gz` file. The rewritten manifest replaces all build steps with pre-built steps referencing the bundled WASM files. Asset sync directories are included in the archive.
+
+Projects with script sync steps cannot be bundled.
+
+**Usage:** `icp project bundle --output <OUTPUT>`
+
+###### **Options:**
+
+* `-o`, `--output <OUTPUT>` — Output path for the bundle archive (e.g. bundle.tar.gz)
 
 
 

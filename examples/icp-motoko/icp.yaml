@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0-beta.2/docs/schemas/icp-yaml-schema.json
 
 canisters:
-  - name: my-canister
+  - name: alice
     build:
       steps:
         - type: script
@@ -9,3 +9,18 @@ canisters:
             - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
             - moc src/main.mo
             - mv main.wasm "$ICP_WASM_OUTPUT_PATH"
+    settings:
+      environment_variables:
+        test: "alice"
+
+  - name: bob
+    build:
+      steps:
+        - type: script
+          commands:
+            - command -v moc >/dev/null 2>&1 || { echo >&2 "moc not found. To install moc, see https://internetcomputer.org/docs/building-apps/getting-started/install \n"; exit 1; }
+            - moc src/bob.mo
+            - mv bob.wasm "$ICP_WASM_OUTPUT_PATH"
+    settings:
+      environment_variables:
+        test: "bob"

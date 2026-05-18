@@ -121,6 +121,29 @@ sync:
       dir: dist
 ```
 
+### Script Sync Steps
+
+You can also run arbitrary shell commands in sync steps:
+
+```yaml
+sync:
+  steps:
+    - type: script
+      commands:
+        - my-tool upload --canister "$ICP_CLI_CID" --env "$ICP_CLI_ENVIRONMENT"
+```
+
+### Environment Variables
+
+Script sync steps have access to:
+
+- `ICP_CLI_ENVIRONMENT` — The current environment name (e.g. `local`, `staging`)
+- `ICP_CLI_NETWORK` — The current network name (e.g. `local`, `ic`)
+- `ICP_CLI_CID` — The canister ID of the canister being synced
+- `ICP_CLI_CID_<NAME>` — The canister ID of every canister with a registered ID in the current environment (name uppercased, non-alphanumeric characters replaced with `_`)
+
+See [Environment Variables Reference](../reference/environment-variables.md#sync-script-variables) for full details.
+
 ### When Sync Runs
 
 - Automatically after `icp deploy`

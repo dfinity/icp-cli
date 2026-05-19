@@ -22,18 +22,19 @@ jobs:
           fi
           echo "tag=v${VERSION#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
-        id: app-token
-        with:
-          client-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_CLIENT_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
-          owner: dfinity
-          repositories: icp-cli-network-launcher
-
       - name: Dispatch promote-release workflow
+        # Rotating NETWORK_LAUNCHER_DISPATCH_PAT (fine-grained PAT, max 1y expiry).
+        # This PAT only dispatches INTO dfinity/icp-cli-network-launcher; the
+        # reverse direction uses a separate PAT stored in that repo.
+        #   1. github.com -> Settings -> Developer settings -> Personal access tokens
+        #      -> Fine-grained tokens -> Generate new token.
+        #   2. Resource owner: dfinity. Repository access: only
+        #      dfinity/icp-cli-network-launcher.
+        #   3. Repository permissions: Actions = Read and write
+        #      (Metadata: Read is auto-added).
+        #   4. Update the NETWORK_LAUNCHER_DISPATCH_PAT secret in dfinity/icp-cli.
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.NETWORK_LAUNCHER_DISPATCH_PAT }}
         run: |
           gh workflow run promote-release.yml \
             --repo dfinity/icp-cli-network-launcher \

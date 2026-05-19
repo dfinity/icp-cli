@@ -336,7 +336,7 @@ Some dfx features work differently or aren't directly available:
 | Canister dependencies | Use bindings compatible with Canister Environment Variables |
 | `dfx generate` | Use language-specific tooling |
 | `dfx ledger` | `icp token` and `icp cycles` commands |
-| `dfx wallet` | Use the [proxy canister pattern](../guides/proxy-canister.md) for forwarding calls with cycles; use `icp cycles balance` and `icp cycles transfer` for cycle management |
+| `dfx wallet` | Use the [proxy canister pattern](../guides/proxy-canister.md) for forwarding calls with cycles; use `icp canister top-up` to fund a canister and `icp canister status` to check its balance |
 | `dfx upgrade` | Reinstall icp-cli |
 
 ## Replacing the dfx Wallet Canister

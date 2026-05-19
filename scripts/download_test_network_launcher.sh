@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VERSION_FILE="$WORKSPACE_ROOT/crates/icp-cli/test-network-launcher-version"
+VERSION_FILE="$WORKSPACE_ROOT/network-launcher-version"
 TARGET_DIR="$WORKSPACE_ROOT/target/test-fixture"
 VERSION_CACHE="$TARGET_DIR/network-launcher-version"
 

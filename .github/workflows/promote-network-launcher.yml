@@ -1,0 +1,40 @@
+name: Promote network-launcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - network-launcher-version
+
+jobs:
+  promote-network-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read version
+        id: ver
+        run: |
+          VERSION=$(tr -d '[:space:]' < network-launcher-version)
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::network-launcher-version is empty"
+            exit 1
+          fi
+          echo "tag=v${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_CLIENT_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          owner: dfinity
+          repositories: icp-cli-network-launcher
+
+      - name: Dispatch promote-release workflow
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run promote-release.yml \
+            --repo dfinity/icp-cli-network-launcher \
+            -f tag="${{ steps.ver.outputs.tag }}"

@@ -379,19 +379,11 @@ The recommended approach is to **reinstall the existing wallet canister with the
 
 ```bash
 # Note the wallet canister ID
-WALLET_ID=$(dfx identity get-wallet)
+WALLET_ID=$(dfx identity get-wallet --network ic)
 echo "Wallet ID: $WALLET_ID"
 
 # Note the cycle balance
-dfx wallet balance
-
-# List managed canisters (for your records)
-dfx wallet managed-canisters 2>/dev/null || dfx canister list
-
-# Note which canisters have the wallet as controller
-for canister_id in $(dfx canister list --json | jq -r '.[].canister_id'); do
-  echo "$canister_id controllers: $(dfx canister info $canister_id | grep Controllers:)"
-done
+dfx wallet balance --network ic
 ```
 
 **Step 1 — Download the proxy WASM.**
@@ -411,7 +403,8 @@ Verify the SHA-256 matches the published checksum before proceeding.
 dfx canister install $WALLET_ID \
   --mode reinstall \
   --wasm proxy.wasm \
-  --yes
+  --yes \
+  --network ic
 ```
 
 **Step 3 — Verify the migration.**
@@ -420,10 +413,10 @@ Check that cycles are intact and the proxy is running:
 
 ```bash
 # Cycle balance should be nearly unchanged (only reinstall cost deducted, ~3B cycles)
-dfx canister status $WALLET_ID
+dfx canister status $WALLET_ID --network ic
 
 # Verify a managed canister still lists the (now-proxy) canister as controller
-dfx canister info <your-managed-canister-id>
+dfx canister info <your-managed-canister-id> --network ic
 ```
 
 **Step 4 — Add your icp-cli identity as a controller** (if not already one).
@@ -434,7 +427,7 @@ The proxy only accepts calls from its controllers. Import your dfx identity into
 ICP_PRINCIPAL=$(icp identity principal)
 
 # Use dfx (while it still controls the proxy) to add the icp-cli identity
-dfx canister update-settings $WALLET_ID --add-controller $ICP_PRINCIPAL
+dfx canister update-settings $WALLET_ID --add-controller $ICP_PRINCIPAL --network ic
 ```
 
 **Step 5 — Use the proxy with icp-cli.**
@@ -460,16 +453,16 @@ If you prefer to keep the wallet canister running (for example, to preserve the 
 
 ```bash
 # 1. Create a new project from the proxy template
-icp new my-proxy --template proxy
+icp new my-proxy --subfolder proxy
 cd my-proxy
 icp deploy -e ic
 
 # 2. Fund the proxy with cycles from the wallet
 PROXY_ID=$(icp canister status -e ic --id-only proxy)
-dfx wallet send $PROXY_ID 10000000000000  # 10T cycles
+dfx wallet send $PROXY_ID 10000000000000 --network ic  # 10T cycles
 
 # 3. For each managed canister, add the proxy as a controller
-dfx canister update-settings <canister-id> --add-controller $PROXY_ID
+dfx canister update-settings <canister-id> --add-controller $PROXY_ID --network ic
 
 # 4. Switch to icp-cli using the new proxy
 icp deploy -e ic --proxy $PROXY_ID
@@ -484,7 +477,7 @@ The proxy enforces controller-based access: only principals listed as controller
 Both dfx and icp-cli support importing identities from PEM files. After import, **verify that the principal matches**:
 
 ```bash
-dfx identity get-principal --identity my-identity
+dfx --identity my-identity identity get-principal
 icp identity principal --identity my-identity
 # Both should print the same value
 ```
@@ -493,7 +486,8 @@ If the principals don't match (which can happen with secp256k1 keys from older d
 
 ```bash
 dfx canister update-settings $WALLET_ID \
-  --add-controller $(icp identity principal)
+  --add-controller $(icp identity principal) \
+  --network ic
 ```
 
 ## Migrating Identities
@@ -555,7 +549,7 @@ icp identity import my-identity --from-pem /tmp/my-identity.pem
 rm /tmp/my-identity.pem
 
 # Verify the principal matches
-dfx identity get-principal --identity my-identity
+dfx --identity my-identity identity get-principal
 icp identity principal --identity my-identity
 ```
 
@@ -613,7 +607,7 @@ for id in $(dfx identity list | grep -v "^anonymous"); do
   rm "/tmp/${id}.pem"
 
   # Verify principals match
-  echo "  dfx principal:     $(dfx identity get-principal --identity "$id")"
+  echo "  dfx principal:     $(dfx --identity "$id" identity get-principal)"
   echo "  icp-cli principal: $(icp identity principal --identity "$id")"
   echo ""
 done

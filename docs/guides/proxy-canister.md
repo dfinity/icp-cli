@@ -55,7 +55,7 @@ The fastest path is the `proxy` template:
 
 ```bash
 # Create a new project from the proxy template
-icp new my-proxy --template proxy
+icp new my-proxy --subfolder proxy
 cd my-proxy
 
 # Deploy to IC mainnet

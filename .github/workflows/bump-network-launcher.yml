@@ -26,13 +26,13 @@ jobs:
             exit 1
           fi
 
-      - name: Update test-network-launcher-version
+      - name: Update network-launcher-version
         id: update
         run: |
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          printf '%s' "$VERSION" > crates/icp-cli/test-network-launcher-version
+          printf '%s' "$VERSION" > network-launcher-version
 
           if git diff --quiet; then
             echo "needs_update=false" >> "$GITHUB_OUTPUT"
@@ -56,12 +56,12 @@ jobs:
           VERSION="${{ steps.update.outputs.version }}"
           BRANCH="chore/bump-network-launcher-${VERSION}"
           TITLE="chore(deps): bump network-launcher to ${VERSION}"
-          BODY="Updates \`crates/icp-cli/test-network-launcher-version\` to \`${VERSION}\`."
+          BODY="Updates \`network-launcher-version\` to \`${VERSION}\`."
 
           git config user.name "pr-automation-bot-public[bot]"
           git config user.email "pr-automation-bot-public[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add crates/icp-cli/test-network-launcher-version
+          git add network-launcher-version
           git commit -m "$TITLE"
           git push origin "$BRANCH" --force
 

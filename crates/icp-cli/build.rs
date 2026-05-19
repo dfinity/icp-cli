@@ -16,11 +16,14 @@ fn define_git_sha() {
 }
 
 fn define_test_network_launcher_version() {
-    let raw = std::fs::read_to_string("test-network-launcher-version")
-        .expect("missing test-network-launcher-version file");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../network-launcher-version"
+    );
+    let raw = std::fs::read_to_string(path).expect("missing network-launcher-version file");
     let version = raw.trim().trim_start_matches('v');
     println!("cargo:rustc-env=TEST_NETWORK_LAUNCHER_VERSION={version}");
-    println!("cargo:rerun-if-changed=test-network-launcher-version");
+    println!("cargo:rerun-if-changed=../../network-launcher-version");
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
 

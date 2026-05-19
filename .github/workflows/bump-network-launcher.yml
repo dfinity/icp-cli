@@ -52,6 +52,7 @@ jobs:
         if: steps.update.outputs.needs_update == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           VERSION="${{ steps.update.outputs.version }}"
           BRANCH="chore/bump-network-launcher-${VERSION}"
@@ -60,10 +61,15 @@ jobs:
 
           git config user.name "pr-automation-bot-public[bot]"
           git config user.email "pr-automation-bot-public[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git"
           git checkout -b "$BRANCH"
           git add network-launcher-version
           git commit -m "$TITLE"
           git push origin "$BRANCH" --force
 
-          gh pr create --title "$TITLE" --body "$BODY" --base main --head "$BRANCH" \
-            || echo "PR already open on $BRANCH, branch updated."
+          existing=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq 'length')
+          if [[ "$existing" == "0" ]]; then
+            gh pr create --title "$TITLE" --body "$BODY" --base main --head "$BRANCH"
+          else
+            echo "PR already open on $BRANCH, branch updated."
+          fi

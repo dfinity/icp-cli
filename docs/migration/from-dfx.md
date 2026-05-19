@@ -477,7 +477,7 @@ The proxy enforces controller-based access: only principals listed as controller
 Both dfx and icp-cli support importing identities from PEM files. After import, **verify that the principal matches**:
 
 ```bash
-dfx --identity my-identity identity get-principal
+dfx identity get-principal --identity my-identity
 icp identity principal --identity my-identity
 # Both should print the same value
 ```
@@ -549,7 +549,7 @@ icp identity import my-identity --from-pem /tmp/my-identity.pem
 rm /tmp/my-identity.pem
 
 # Verify the principal matches
-dfx --identity my-identity identity get-principal
+dfx identity get-principal --identity my-identity
 icp identity principal --identity my-identity
 ```
 
@@ -607,7 +607,7 @@ for id in $(dfx identity list | grep -v "^anonymous"); do
   rm "/tmp/${id}.pem"
 
   # Verify principals match
-  echo "  dfx principal:     $(dfx --identity "$id" identity get-principal)"
+  echo "  dfx principal:     $(dfx identity get-principal --identity "$id")"
   echo "  icp-cli principal: $(icp identity principal --identity "$id")"
   echo ""
 done

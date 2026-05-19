@@ -23,6 +23,7 @@ Step-by-step instructions for common tasks:
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication reference
 - [Tokens and Cycles](guides/tokens-and-cycles.md) — ICP tokens and cycles command reference
+- [Proxy Canister](guides/proxy-canister.md) — Forward calls with cycles or call canister-only methods
 - [Containerized Networks](guides/containerized-networks.md) — Docker-based local networks
 - [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Creating Recipes](guides/creating-recipes.md) — Build custom recipes

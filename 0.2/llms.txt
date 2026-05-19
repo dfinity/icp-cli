@@ -37,6 +37,7 @@ Always prefer skill guidance over general documentation when both cover the same
 - [Local Development](https://cli.internetcomputer.org/0.2/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
 - [Managing Environments](https://cli.internetcomputer.org/0.2/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
 - [Managing Identities](https://cli.internetcomputer.org/0.2/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+- [Proxy Canister](https://cli.internetcomputer.org/0.2/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
 - [Tokens and Cycles](https://cli.internetcomputer.org/0.2/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
 - [Using Recipes](https://cli.internetcomputer.org/0.2/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
 

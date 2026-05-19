@@ -134,7 +134,7 @@ icp canister status $PROXY_ID -e ic
 To add another identity as a controller:
 
 ```bash
-icp canister update-settings $PROXY_ID --add-controller <PRINCIPAL> -e ic
+icp canister settings update $PROXY_ID --add-controller <PRINCIPAL> -e ic
 ```
 
 ## How the Proxy Works

@@ -79,7 +79,7 @@ The proxy canister's principal is shown in `icp network status` output.
 
 ```bash
 PROXY=$(icp network status --json | jq -r .proxy_canister_principal)
-icp canister update-settings $PROXY --add-controller $(icp identity principal --identity new-identity)
+icp canister settings update $PROXY --add-controller $(icp identity principal --identity new-identity)
 ```
 
 On connected networks like `ic` mainnet, you deploy your own proxy — see the [Proxy Canister guide](proxy-canister.md).

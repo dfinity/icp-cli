@@ -457,18 +457,19 @@ icp new my-proxy --subfolder proxy
 cd my-proxy
 icp deploy -e ic
 
-# 2. Fund the proxy with cycles from the wallet
+# 2. For each managed canister, add the new proxy as a controller
 PROXY_ID=$(icp canister status -e ic --id-only proxy)
-dfx wallet send $PROXY_ID 10000000000000 --network ic  # 10T cycles
-
-# 3. For each managed canister, add the proxy as a controller
 dfx canister update-settings <canister-id> --add-controller $PROXY_ID --network ic
 
-# 4. Switch to icp-cli using the new proxy
+# 3. Switch to icp-cli using the new proxy
 icp deploy -e ic --proxy $PROXY_ID
+
+# 4. Transfer remaining wallet cycles to the proxy
+dfx wallet balance --network ic  # check remaining balance
+dfx wallet send $PROXY_ID <amount> --network ic
 ```
 
-Once you've verified everything works through the new proxy, you can optionally remove the old wallet as a controller from your managed canisters.
+The proxy starts with the cycles used for its initial deployment. Once you've verified everything works through the new proxy, transfer the remaining wallet balance into it to fully retire the old wallet. You can then optionally remove the wallet as a controller from your managed canisters.
 
 ### Identity Considerations
 

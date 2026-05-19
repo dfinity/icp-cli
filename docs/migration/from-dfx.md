@@ -474,20 +474,12 @@ Once you've verified everything works through the new proxy, you can optionally 
 
 The proxy enforces controller-based access: only principals listed as controllers of the proxy can call its `proxy` method.
 
-Both dfx and icp-cli support importing identities from PEM files. After import, **verify that the principal matches**:
+Both dfx and icp-cli support importing identities from PEM files. After import, verify that the principal matches:
 
 ```bash
 dfx identity get-principal --identity my-identity
 icp identity principal --identity my-identity
 # Both should print the same value
-```
-
-If the principals don't match (which can happen with secp256k1 keys from older dfx versions), use dfx to add your icp-cli principal as a controller **before** switching to icp-cli:
-
-```bash
-dfx canister update-settings $WALLET_ID \
-  --add-controller $(icp identity principal) \
-  --network ic
 ```
 
 ## Migrating Identities

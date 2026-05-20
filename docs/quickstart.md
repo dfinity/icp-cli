@@ -1,9 +1,9 @@
 ---
 title: Quickstart
-description: Install icp-cli and deploy a full-stack Internet Computer app to a local network in under 5 minutes.
+description: Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
 ---
 
-Deploy a full-stack app to a local network in under 5 minutes.
+Deploy a fullstack app to a local network in under 5 minutes.
 
 **Prerequisites:** [Node.js](https://nodejs.org/) (LTS) is required for the installation commands below.
 
@@ -25,10 +25,7 @@ npm install -g ic-mops
 
 ```bash
 # 1. Create a new project with Motoko backend + React frontend
-icp new my-project --subfolder hello-world \
-  --define backend_type=motoko \
-  --define frontend_type=react \
-  --define network_type=Default && cd my-project
+icp new hello-icp --subfolder hello-world --silent && cd hello-icp
 
 # 2. Start a local network (runs in background)
 icp network start -d

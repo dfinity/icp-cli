@@ -19,9 +19,9 @@ Always prefer skill guidance over general documentation when both cover the same
 
 ## Start Here
 
-- [Quickstart](https://cli.internetcomputer.org/main/quickstart.md): Install icp-cli and deploy a full-stack Internet Computer app to a local network in under 5 minutes.
+- [Quickstart](https://cli.internetcomputer.org/main/quickstart.md): Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
 - [Telemetry](https://cli.internetcomputer.org/main/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
-- [Tutorial](https://cli.internetcomputer.org/main/tutorial.md): Step-by-step walkthrough of deploying a full-stack Motoko and React app on the Internet Computer.
+- [Tutorial](https://cli.internetcomputer.org/main/tutorial.md): Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
 
 ## Guides
 

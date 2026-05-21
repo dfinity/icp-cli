@@ -292,6 +292,20 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
+* `--wasm-memory-persistence <WASM_MEMORY_PERSISTENCE>` — For Motoko canisters with enhanced orthogonal persistence (EOP), controls whether the canister's main (Wasm) memory is preserved across an upgrade.
+
+   Only valid with `--mode upgrade` on an EOP canister.
+
+   - `keep`: preserve main memory — the normal EOP upgrade (the default if this flag is omitted).
+
+   - `replace`: discard main memory. DANGEROUS: any state not held in `stable` variables is lost. Requires interactive confirmation.
+
+  Possible values:
+  - `keep`:
+    Preserve canister main memory across upgrade (normal EOP upgrade)
+  - `replace`:
+    Discard canister main memory; only `stable` variables survive. Dangerous — heap state is lost
+
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
 * `--args-file <ARGS_FILE>` — Path to a file containing arguments

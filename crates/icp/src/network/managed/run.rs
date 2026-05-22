@@ -359,7 +359,11 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         }]),
     )]
     .into();
-    let version = config.version.as_deref().unwrap_or("latest");
+    let version = config
+        .version
+        .as_deref()
+        .unwrap_or("latest")
+        .trim_start_matches('v');
 
     ManagedImageOptions {
         image: format!("ghcr.io/dfinity/icp-cli-network-launcher:{version}"),
@@ -935,6 +939,29 @@ mod tests {
             .as_ref()
             .unwrap();
         assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
+    }
+
+    #[test]
+    fn transform_native_launcher_strips_v_prefix_from_image_tag() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                bind: "127.0.0.1".to_string(),
+                port: Port::Fixed(8000),
+                domains: vec![],
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: Some("v12.0.0-2026-04-16-04-20".to_string()),
+        };
+        let opts = transform_native_launcher_to_container(&config);
+        assert_eq!(
+            opts.image,
+            "ghcr.io/dfinity/icp-cli-network-launcher:12.0.0-2026-04-16-04-20"
+        );
     }
 
     #[test]

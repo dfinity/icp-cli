@@ -1,0 +1,41 @@
+name: Promote network-launcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - network-launcher-version
+
+jobs:
+  promote-network-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read version
+        id: ver
+        run: |
+          VERSION=$(tr -d '[:space:]' < network-launcher-version)
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::network-launcher-version is empty"
+            exit 1
+          fi
+          echo "tag=v${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch promote-release workflow
+        # Rotating NETWORK_LAUNCHER_DISPATCH_PAT (fine-grained PAT, max 1y expiry).
+        # This PAT only dispatches INTO dfinity/icp-cli-network-launcher; the
+        # reverse direction uses a separate PAT stored in that repo.
+        #   1. github.com -> Settings -> Developer settings -> Personal access tokens
+        #      -> Fine-grained tokens -> Generate new token.
+        #   2. Resource owner: dfinity. Repository access: only
+        #      dfinity/icp-cli-network-launcher.
+        #   3. Repository permissions: Actions = Read and write
+        #      (Metadata: Read is auto-added).
+        #   4. Update the NETWORK_LAUNCHER_DISPATCH_PAT secret in dfinity/icp-cli.
+        env:
+          GH_TOKEN: ${{ secrets.NETWORK_LAUNCHER_DISPATCH_PAT }}
+        run: |
+          gh workflow run promote-release.yml \
+            --repo dfinity/icp-cli-network-launcher \
+            -f tag="${{ steps.ver.outputs.tag }}"

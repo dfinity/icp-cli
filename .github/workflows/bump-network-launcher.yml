@@ -1,0 +1,75 @@
+name: Bump network-launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'icp-cli-network-launcher release version (e.g. v12.0.0-2026-04-16-04-20 or 12.0.0-2026-04-16-04-20)'
+        required: true
+
+jobs:
+  bump-network-launcher:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify release tag exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="v${VERSION#v}"
+          if ! gh release view "$TAG" --repo dfinity/icp-cli-network-launcher >/dev/null 2>&1; then
+            echo "::error::Release tag '$TAG' not found in dfinity/icp-cli-network-launcher"
+            exit 1
+          fi
+
+      - name: Update network-launcher-version
+        id: update
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          printf '%s' "$VERSION" > network-launcher-version
+
+          if git diff --quiet; then
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub App Token
+        if: steps.update.outputs.needs_update == 'true'
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_CLIENT_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+      - name: Open pull request
+        if: steps.update.outputs.needs_update == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          VERSION="${{ steps.update.outputs.version }}"
+          BRANCH="chore/bump-network-launcher-${VERSION}"
+          TITLE="chore(deps): bump network-launcher to ${VERSION}"
+          BODY="Updates \`network-launcher-version\` to \`${VERSION}\`."
+
+          git config user.name "pr-automation-bot-public[bot]"
+          git config user.email "pr-automation-bot-public[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git"
+          git checkout -b "$BRANCH"
+          git add network-launcher-version
+          git commit -m "$TITLE"
+          git push origin "$BRANCH" --force
+
+          existing=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq 'length')
+          if [[ "$existing" == "0" ]]; then
+            gh pr create --title "$TITLE" --body "$BODY" --base main --head "$BRANCH"
+          else
+            echo "PR already open on $BRANCH, branch updated."
+          fi

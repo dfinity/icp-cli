@@ -1,15 +1,34 @@
+<!--
+Convention: changes to experimental features live in a dedicated
+`## Experimental` subsection under each version. Experimental features
+may receive breaking changes between releases without a major version
+bump. Currently experimental: sync plugins.
+-->
+
 # Unreleased
 
 * feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity login <NAME> [--duration <DURATION>]`.
+
+# v0.2.7
+
+* feat: `script` sync steps now receive `ICP_CLI_ENVIRONMENT`, `ICP_CLI_NETWORK`, `ICP_CLI_CID` (the current canister's principal), and `ICP_CLI_CID_<NAME>` (every canister's principal) as environment variables.
+* fix: `icp canister call` with both `--json` and `-o hex` no longer prints both kinds of output at once.
 * fix: `icp` no longer picks up a stale inherited `$PWD` when launched as a subprocess via `chdir(2)` + `execve` (e.g. from a test harness). The logical `$PWD` path is now validated against `getcwd()` by inode before use, preserving symlink-aware project root discovery while ignoring stale values.
+
+## Experimental
+
+* feat(sync-plugin): Plugins can now surface messages that persist after the step completes. Anything the plugin writes to stderr (e.g. `eprintln!` in Rust) is streamed live in the rolling step view AND printed under the canister name once the step ends; stdout remains transient. The `exec()` return signature has changed from `result<option<string>, string>` to `result<_, string>` — plugins that returned a summary string should `eprintln!` it instead.
 
 # v0.2.6
 
 * feat: `icp token/cycles balance` now accept `--of-principal`
 * fix: The local wasm cache has moved from `.icp/cache/canisters/` to `.icp/cache/wasms/`. Existing cached files will be re-downloaded automatically on the next run.
-* feat: Canister manifests now support a `plugin` sync step type. Plugins are WebAssembly components that run in a sandboxed environment and can drive arbitrary post-deployment logic against the canister being synced. See `crates/icp-sync-plugin/DESIGN.md` for details.
-* feat: `icp sync` now accepts `--proxy` to route sync plugin calls to the target canister through a proxy canister.
 * fix: `icp canister call` now serializes arguments built via the interactive Candid assist prompt against the method's declared signature, matching the behavior of arguments passed on the command line. Previously, narrower values (e.g. a variant case from a multi-case variant) were encoded with a type table inferred only from the value, which the target canister rejected with errors like "Variant index N larger than length 1".
+
+## Experimental
+
+* feat(sync-plugin): Canister manifests now support a `plugin` sync step type. Plugins are WebAssembly components that run in a sandboxed environment and can drive arbitrary post-deployment logic against the canister being synced. See `crates/icp-sync-plugin/DESIGN.md` for details.
+* feat(sync-plugin): `icp sync` now accepts `--proxy` to route sync plugin calls to the target canister through a proxy canister.
 
 # v0.2.5
 

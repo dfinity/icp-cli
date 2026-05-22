@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
 import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 import agentDocs from './plugins/astro-agent-docs.mjs';
+import mermaid from 'astro-mermaid';
 
 const SITE = (process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org').replace(/\/$/, '');
 
@@ -21,6 +22,7 @@ export default defineConfig({
     ],
   },
   integrations: [
+    mermaid({ autoTheme: true }),
     starlight({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
@@ -148,6 +150,7 @@ export default defineConfig({
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
+            { label: 'Proxy Canister', slug: 'guides/proxy-canister' },
             { label: 'Containerized Networks', slug: 'guides/containerized-networks' },
             { label: 'Using Recipes', slug: 'guides/using-recipes' },
             { label: 'Creating Recipes', slug: 'guides/creating-recipes' },

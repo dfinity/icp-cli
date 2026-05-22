@@ -7,6 +7,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+bytes.workspace = true
 camino.workspace = true
 candid.workspace = true
 console.workspace = true

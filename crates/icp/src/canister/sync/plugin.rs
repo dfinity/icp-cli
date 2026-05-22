@@ -42,7 +42,7 @@ pub(super) async fn sync(
     proxy: Option<Principal>,
     stdio: Option<Sender<String>>,
     pkg_cache: &PackageCache,
-) -> Result<(), PluginError> {
+) -> Result<Vec<String>, PluginError> {
     // 1. Determine the on-disk path for the wasm. run_plugin needs a path, not raw bytes.
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the

@@ -7,7 +7,7 @@ Build and deploy applications on the [Internet Computer](https://internetcompute
 
 ## Start Here
 
-- **[Quickstart](quickstart.md)** — Deploy a full-stack app in under 5 minutes
+- **[Quickstart](quickstart.md)** — Deploy a fullstack app in under 5 minutes
 - **[Tutorial](tutorial.md)** — Deploy your first app step by step
 
 ## Guides
@@ -23,6 +23,7 @@ Step-by-step instructions for common tasks:
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication reference
 - [Tokens and Cycles](guides/tokens-and-cycles.md) — ICP tokens and cycles command reference
+- [Proxy Canister](guides/proxy-canister.md) — Forward calls with cycles or call canister-only methods
 - [Containerized Networks](guides/containerized-networks.md) — Docker-based local networks
 - [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Creating Recipes](guides/creating-recipes.md) — Build custom recipes

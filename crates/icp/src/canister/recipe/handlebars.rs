@@ -83,6 +83,12 @@ pub enum HandlebarsError {
     LockCache { source: crate::fs::lock::LockError },
 }
 
+/// CLI-injected variables available in every recipe template under the `icp` namespace.
+#[derive(serde::Serialize)]
+struct IcpContext<'a> {
+    canister_name: &'a str,
+}
+
 impl Handlebars {
     async fn resolve_impl(
         &self,
@@ -192,14 +198,8 @@ impl Handlebars {
         let mut context = recipe.configuration.clone();
         context.insert(
             "icp".to_string(),
-            serde_yaml::Value::Mapping({
-                let mut m = serde_yaml::Mapping::new();
-                m.insert(
-                    serde_yaml::Value::String("canister_name".to_string()),
-                    serde_yaml::Value::String(canister_name.to_string()),
-                );
-                m
-            }),
+            serde_yaml::to_value(IcpContext { canister_name })
+                .expect("IcpContext serialization is infallible"),
         );
 
         // Render the template to YAML

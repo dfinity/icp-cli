@@ -7,7 +7,7 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
-* feat: Recipe templates can now use `{{icp.canister_name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `icp` namespace is reserved and cannot be overridden by user-provided configuration.
+* feat: Recipe templates can now use `{{_.canister.name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `_` namespace is reserved and cannot be overridden by user-provided configuration.
 
 # v0.2.7
 

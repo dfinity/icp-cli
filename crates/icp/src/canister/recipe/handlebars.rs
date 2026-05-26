@@ -83,10 +83,15 @@ pub enum HandlebarsError {
     LockCache { source: crate::fs::lock::LockError },
 }
 
-/// CLI-injected variables available in every recipe template under the `icp` namespace.
+/// CLI-injected variables available in every recipe template under the `_` namespace.
 #[derive(serde::Serialize)]
-struct IcpContext<'a> {
-    canister_name: &'a str,
+struct InjectedContext<'a> {
+    canister: CanisterContext<'a>,
+}
+
+#[derive(serde::Serialize)]
+struct CanisterContext<'a> {
+    name: &'a str,
 }
 
 impl Handlebars {
@@ -197,9 +202,13 @@ impl Handlebars {
         // The icp key is reserved and always overrides any user-supplied value.
         let mut context = recipe.configuration.clone();
         context.insert(
-            "icp".to_string(),
-            serde_yaml::to_value(IcpContext { canister_name })
-                .expect("IcpContext serialization is infallible"),
+            "_".to_string(),
+            serde_yaml::to_value(InjectedContext {
+                canister: CanisterContext {
+                    name: canister_name,
+                },
+            })
+            .expect("InjectedContext serialization is infallible"),
         );
 
         // Render the template to YAML
@@ -421,7 +430,7 @@ mod tests {
                 build:
                   steps:
                     - type: script
-                      command: "build {{icp.canister_name}}"
+                      command: "build {{_.canister.name}}"
             "#},
         )
         .unwrap();
@@ -458,7 +467,7 @@ mod tests {
                 build:
                   steps:
                     - type: script
-                      command: "cp {{ replace "-" "_" icp.canister_name }}.wasm out.wasm"
+                      command: "cp {{ replace "-" "_" _.canister.name }}.wasm out.wasm"
             "#},
         )
         .unwrap();
@@ -495,7 +504,7 @@ mod tests {
                 build:
                   steps:
                     - type: script
-                      command: "build {{icp.canister_name}}"
+                      command: "build {{_.canister.name}}"
             "#},
         )
         .unwrap();
@@ -508,12 +517,19 @@ mod tests {
 
         let mut configuration = HashMap::new();
         configuration.insert(
-            "icp".to_string(),
+            "_".to_string(),
             serde_yaml::Value::Mapping({
                 let mut m = serde_yaml::Mapping::new();
                 m.insert(
-                    serde_yaml::Value::String("canister_name".to_string()),
-                    serde_yaml::Value::String("user-override".to_string()),
+                    serde_yaml::Value::String("canister".to_string()),
+                    serde_yaml::Value::Mapping({
+                        let mut inner = serde_yaml::Mapping::new();
+                        inner.insert(
+                            serde_yaml::Value::String("name".to_string()),
+                            serde_yaml::Value::String("user-override".to_string()),
+                        );
+                        inner
+                    }),
                 );
                 m
             }),
@@ -532,7 +548,7 @@ mod tests {
                 assert_eq!(
                     adapter.command.as_vec()[0],
                     "build real-name",
-                    "icp namespace must not be overridable by user configuration"
+                    "_ namespace must not be overridable by user configuration"
                 );
             }
             other => panic!("Expected Script build step, got: {other:?}"),

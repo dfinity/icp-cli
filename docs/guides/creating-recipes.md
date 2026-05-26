@@ -148,7 +148,7 @@ Use `{{#if}}` with `{{else}}` for defaults, refer to the examples above.
 
 ## Built-in Recipe Variables
 
-icp-cli automatically injects variables into every recipe template under the reserved `icp` namespace. These are available alongside any user-provided `configuration:` values and cannot be overridden by them.
+icp-cli automatically injects variables into every recipe template under the reserved `_` namespace. These are available alongside any user-provided `configuration:` values and cannot be overridden by them.
 
 | Variable | Value |
 |---|---|

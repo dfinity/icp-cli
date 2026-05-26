@@ -13,7 +13,11 @@ pub mod handlebars;
 #[async_trait]
 pub trait Resolve: Sync + Send {
     #[allow(clippy::result_large_err)]
-    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError>;
+    async fn resolve(
+        &self,
+        recipe: &Recipe,
+        canister_name: &str,
+    ) -> Result<(BuildSteps, SyncSteps), ResolveError>;
 }
 
 #[derive(Debug, Snafu)]

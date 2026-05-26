@@ -254,11 +254,12 @@ pub async fn consolidate_manifest(
                 ),
 
                 // Recipe
-                Instructions::Recipe { recipe } => {
-                    recipe_resolver.resolve(recipe).await.context(RecipeSnafu {
-                        recipe_type: recipe.recipe_type.clone(),
-                    })?
-                }
+                Instructions::Recipe { recipe } => recipe_resolver
+                    .resolve(recipe, &m.name)
+                    .await
+                    .context(RecipeSnafu {
+                    recipe_type: recipe.recipe_type.clone(),
+                })?,
             };
 
             // Check for duplicates

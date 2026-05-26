@@ -622,7 +622,11 @@ mod tests {
 
     #[async_trait]
     impl Resolve for MockRecipeResolver {
-        async fn resolve(&self, _recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        async fn resolve(
+            &self,
+            _recipe: &Recipe,
+            _canister_name: &str,
+        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             use crate::manifest::adapter::prebuilt::{
                 Adapter as PrebuiltAdapter, LocalSource, SourceField,
             };

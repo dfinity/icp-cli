@@ -198,8 +198,8 @@ impl Handlebars {
         "#}
         );
 
-        // Build render context: user-provided configuration plus injected icp.* variables.
-        // The icp key is reserved and always overrides any user-supplied value.
+        // Build render context: user-provided configuration plus injected _.* variables.
+        // The _ key is reserved and always overrides any user-supplied value.
         let mut context = recipe.configuration.clone();
         context.insert(
             "_".to_string(),
@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn icp_canister_name_is_injected() {
+    async fn canister_name_is_injected() {
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let tmpl_path = tmp.path().join("recipe.hbs");
         std::fs::write(
@@ -458,7 +458,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn icp_canister_name_works_with_replace_helper() {
+    async fn canister_name_works_with_replace_helper() {
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let tmpl_path = tmp.path().join("recipe.hbs");
         std::fs::write(
@@ -495,7 +495,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn icp_namespace_cannot_be_overridden_by_user_config() {
+    async fn reserved_namespace_cannot_be_overridden_by_user_config() {
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let tmpl_path = tmp.path().join("recipe.hbs");
         std::fs::write(

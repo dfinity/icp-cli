@@ -79,7 +79,7 @@ build:
       commands:
         - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
         - cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
-        {{#if optimize}}
+        {{#if shrink}}
         - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{/if}}
 ```

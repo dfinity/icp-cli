@@ -3760,6 +3760,7 @@ dependencies = [
  "icp-canister-interfaces",
  "icp-sync-plugin",
  "icrc-ledger-types",
+ "indexmap",
  "indoc",
  "itertools 0.14.0",
  "jsonschema",

@@ -64,6 +64,7 @@ icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }
 ic-identity-hsm = "0.47.0"
 icrc-ledger-types = "0.1.10"
+indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"

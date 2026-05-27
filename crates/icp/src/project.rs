@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
+use indexmap::{IndexMap, map::Entry as IndexEntry};
+
 use snafu::prelude::*;
 
 use crate::{
@@ -154,8 +156,9 @@ pub async fn consolidate_manifest(
     recipe_resolver: &dyn recipe::Resolve,
     m: &ProjectManifest,
 ) -> Result<Project, ConsolidateManifestError> {
-    // Canisters
-    let mut canisters: HashMap<String, (PathBuf, Canister)> = HashMap::new();
+    // Canisters. IndexMap (not HashMap) so the order from the project manifest is preserved
+    // through to consumers like `icp project bundle`, which needs reproducible output.
+    let mut canisters: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
 
     for i in &m.canisters {
         let ms = match i {
@@ -264,7 +267,7 @@ pub async fn consolidate_manifest(
             // Check for duplicates
             match canisters.entry(m.name.to_owned()) {
                 // Duplicate
-                Entry::Occupied(e) => {
+                IndexEntry::Occupied(e) => {
                     return DuplicateSnafu {
                         kind: "canister".to_string(),
                         name: e.key().to_owned(),
@@ -273,7 +276,7 @@ pub async fn consolidate_manifest(
                 }
 
                 // Ok
-                Entry::Vacant(e) => {
+                IndexEntry::Vacant(e) => {
                     let init_args = m
                         .init_args
                         .as_ref()
@@ -452,14 +455,14 @@ pub async fn consolidate_manifest(
                     canisters: {
                         let mut cs = match &m.canisters {
                             // None
-                            CanisterSelection::None => HashMap::new(),
+                            CanisterSelection::None => IndexMap::new(),
 
                             // Everything
                             CanisterSelection::Everything => canisters.clone(),
 
                             // Named
                             CanisterSelection::Named(names) => {
-                                let mut cs: HashMap<String, (PathBuf, Canister)> = HashMap::new();
+                                let mut cs: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
 
                                 for name in names {
                                     let v = canisters.get(name).ok_or(

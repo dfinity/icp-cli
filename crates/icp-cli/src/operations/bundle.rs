@@ -207,8 +207,13 @@ pub(crate) async fn create_bundle(
     let (canister_items, bundle_artifacts) =
         prepare_canisters(&canisters, &*artifacts, pkg_cache).await?;
     let networks = inline_networks(raw_manifest.networks, project_dir).await?;
-    let (environments, init_args_files) =
-        inline_environments(raw_manifest.environments, project_dir, &canisters).await?;
+    let (environments, init_args_files) = inline_environments(
+        raw_manifest.environments,
+        project_dir,
+        &canonical_project_dir,
+        &canisters,
+    )
+    .await?;
 
     let bundle_manifest = ProjectManifest {
         canisters: canister_items,
@@ -445,6 +450,7 @@ async fn inline_networks(
 async fn inline_environments(
     items: Vec<Item<EnvironmentManifest>>,
     project_dir: &Path,
+    canonical_project_dir: &Path,
     canisters: &[(PathBuf, Canister)],
 ) -> Result<(Vec<Item<EnvironmentManifest>>, Vec<InitArgsFile>), BundleError> {
     // Inline canisters resolve init_args paths relative to the project dir (matches the
@@ -482,13 +488,19 @@ async fn inline_environments(
                         .get(canister_name.as_str())
                         .copied()
                         .unwrap_or(project_dir);
+                    let src = base.join(orig_path);
+                    // Same containment rule as asset/plugin sources — a malicious manifest
+                    // could otherwise point init_args at host files outside the project, and
+                    // normalize_archive_dir would silently strip any leading `..` from the
+                    // rewritten archive path so the escape wouldn't be visible there.
+                    canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
                     let archive_path = format!(
                         "init-args/{}/{}",
                         path_segment(canister_name),
                         normalize_archive_dir(orig_path)
                     );
                     init_args_files.push(InitArgsFile {
-                        src_path: base.join(orig_path),
+                        src_path: src,
                         archive_path: archive_path.clone(),
                     });
                     *mia = ManifestInitArgs::Path {
@@ -709,10 +721,7 @@ fn validate_network_for_bundle(net: &NetworkManifest) -> Result<(), BundleError>
         return Ok(());
     };
     for mount in mounts {
-        // Format documented in the manifest: relative_host_path:container_path[:options].
-        // Split once on ':' and check the host-path side.
-        let host = mount.split(':').next().unwrap_or("");
-        if Path::new(host).is_absolute() {
+        if is_absolute_bind_mount_host(mount) {
             return AbsoluteBindMountSnafu {
                 network: net.name.clone(),
                 mount: mount.clone(),
@@ -721,6 +730,24 @@ fn validate_network_for_bundle(net: &NetworkManifest) -> Result<(), BundleError>
         }
     }
     Ok(())
+}
+
+/// Detects whether the host-path side of a bind mount (`host:container[:options]`) is absolute.
+fn is_absolute_bind_mount_host(mount: &str) -> bool {
+    let bytes = mount.as_bytes();
+    // Drive-absolute Windows path (`C:\foo` / `C:/foo`). Detected before splitting so the
+    // drive-letter colon isn't mistaken for the host/container separator. `C:foo` is
+    // drive-*relative* and is left to the normal split below.
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'/' || bytes[2] == b'\\')
+    {
+        return true;
+    }
+    let host = mount.split(':').next().unwrap_or("");
+    let h = host.as_bytes();
+    !h.is_empty() && (h[0] == b'/' || h[0] == b'\\')
 }
 
 fn canonicalize(path: &Path) -> Result<PathBuf, BundleError> {
@@ -769,6 +796,9 @@ fn canonicalize_output(output: &Path) -> Result<PathBuf, BundleError> {
 /// Resolves `.` and `..` lexically, strips leading `..` that would escape the
 /// canister root, and discards any absolute prefix. The result is a clean
 /// forward-slash-separated relative path safe to embed in a tar entry name.
+/// Inputs that lexically resolve to the canister root (e.g. `.`, `tmp/..`)
+/// return `.` so callers that build `format!("{prefix}/{normalized}")` produce
+/// a well-formed path instead of a dangling trailing slash.
 fn normalize_archive_dir(dir: &str) -> String {
     // Treat `\` as a path separator regardless of host OS so cross-platform bundles don't
     // produce archive entry names that decode as nested paths on Windows extraction.
@@ -784,6 +814,9 @@ fn normalize_archive_dir(dir: &str) -> String {
             Utf8Component::RootDir | Utf8Component::Prefix(_) => parts.clear(),
         }
     }
+    if parts.is_empty() {
+        return ".".to_string();
+    }
     parts.join("/")
 }
 
@@ -791,14 +824,39 @@ fn normalize_archive_dir(dir: &str) -> String {
 ///
 /// Replaces any character that is not alphanumeric, `-`, `_`, or `.` with `_`.
 /// This covers all characters prohibited on Windows (`< > : " / \ | ? *`),
-/// path separators on Unix, and control characters.
+/// path separators on Unix, and control characters. Additionally rewrites
+/// Windows reserved device names (CON, PRN, AUX, NUL, COM0–COM9, LPT0–LPT9)
+/// and trailing dots, which Windows strips and would otherwise produce
+/// collisions or invalid filenames on extraction.
 fn path_segment(name: &str) -> String {
-    name.chars()
+    const RESERVED_WINDOWS_NAMES: &[&str] = &[
+        "CON", "PRN", "AUX", "NUL", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+        "COM8", "COM9", "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+        "LPT9",
+    ];
+
+    let mut s: String = name
+        .chars()
         .map(|c| match c {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => c,
             _ => '_',
         })
-        .collect()
+        .collect();
+
+    // Reserved device names apply to the stem (the part before the first `.`), regardless
+    // of extension, and are matched case-insensitively.
+    let stem = s.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if RESERVED_WINDOWS_NAMES.contains(&stem.as_str()) {
+        s.insert(0, '_');
+    }
+
+    // Windows silently strips trailing dots from filenames, which would collide with a
+    // sibling that has the dot stripped. Trailing spaces are already mapped to `_` above.
+    if s.ends_with('.') {
+        s.push('_');
+    }
+
+    s
 }
 
 fn convert_init_args(args: &InitArgs) -> ManifestInitArgs {

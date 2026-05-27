@@ -653,6 +653,63 @@ fn bundle_packages_plugin_sync_steps() {
     );
 }
 
+/// `icp_customize.yaml` next to the project manifest must be packaged at the archive root
+/// verbatim, so the bundled project can be deployed with its customize prompts intact.
+#[test]
+fn bundle_includes_customize_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let customize_yaml = indoc::indoc! {r#"
+        options:
+          - canister: my-canister
+            field_path: ".name"
+            candid_type: "text"
+            description: "Greeting target"
+    "#};
+    write_string(&project_dir.join("icp_customize.yaml"), customize_yaml)
+        .expect("failed to write customize manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut found: Option<String> = None;
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp_customize.yaml" {
+            let mut s = String::new();
+            entry.read_to_string(&mut s).expect("read customize entry");
+            found = Some(s);
+        }
+    }
+    let bundled = found.expect("icp_customize.yaml not found in bundle");
+    assert_eq!(bundled, customize_yaml);
+}
+
 /// Projects with script sync steps must be rejected with a clear error.
 #[test]
 fn bundle_rejects_script_sync_step() {

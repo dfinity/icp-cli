@@ -311,7 +311,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         args.canister_settings_with_default(&canister_info, &ids, caller);
     for name in &unresolved {
         warn!(
-            "Controller canister '{name}' for '{canister}' does not exist yet; \
+            "Controller canister '{name}' for '{canister}' has not been created yet; \
              it will be set as a controller once created."
         );
     }

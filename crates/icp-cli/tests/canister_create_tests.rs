@@ -393,6 +393,38 @@ fn canister_create_nonexistent_canister() {
 }
 
 #[test]
+fn canister_create_unknown_controller_name() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" references "typo" as a controller, but no canister with that name is
+    // declared. consolidate_manifest must reject the manifest at load time rather than
+    // letting it through as a perpetual warning.
+    let pm = indoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - typo
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "create", "a"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "canister 'a' lists controller 'typo', but no canister with that name is declared in the project",
+        ));
+}
+
+#[test]
 fn canister_create_canister_not_in_environment() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
@@ -731,7 +763,7 @@ async fn canister_create_with_resolved_canister_controller() {
         ])
         .assert()
         .success()
-        .stderr(contains("does not exist yet").not());
+        .stderr(contains("has not been created yet").not());
 
     // "a"'s controllers must include "b"'s principal and the active identity (2vxsx-fae).
     ctx.icp()
@@ -800,7 +832,7 @@ async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
         .assert()
         .success()
         .stderr(contains(
-            "Controller canister 'b' for 'a' does not exist yet",
+            "Controller canister 'b' for 'a' has not been created yet",
         ));
 
     // At this point "a" is only controlled by the active identity; "b" is not yet a controller.

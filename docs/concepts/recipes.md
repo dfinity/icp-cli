@@ -105,7 +105,7 @@ build:
         {{else}}
         - cargo build
         {{/if}}
-        - cp target/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cp target/{{package}}.wasm "$ICP_WASM_OUTPUT_PATH"
 
 ```
 

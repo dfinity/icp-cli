@@ -593,7 +593,7 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{Resolve, ResolveError};
+    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
     use crate::manifest::{
         ProjectRootLocate, ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
@@ -625,7 +625,7 @@ mod tests {
         async fn resolve(
             &self,
             _recipe: &Recipe,
-            _canister_name: &str,
+            _context: &RecipeContext<'_>,
         ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             use crate::manifest::adapter::prebuilt::{
                 Adapter as PrebuiltAdapter, LocalSource, SourceField,

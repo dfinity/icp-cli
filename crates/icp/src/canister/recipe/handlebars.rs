@@ -305,9 +305,9 @@ impl Resolve for Handlebars {
     async fn resolve(
         &self,
         recipe: &Recipe,
-        canister_name: &str,
+        context: &super::RecipeContext<'_>,
     ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-        self.resolve_impl(recipe, canister_name)
+        self.resolve_impl(recipe, context.canister_name)
             .await
             .context(super::HandlebarsSnafu)
     }

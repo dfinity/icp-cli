@@ -8,6 +8,11 @@ use crate::manifest::{
 
 pub mod handlebars;
 
+/// Context passed to a recipe resolver, describing the canister being built.
+pub struct RecipeContext<'a> {
+    pub canister_name: &'a str,
+}
+
 /// A recipe resolver takes a recipe that is specified in a canister manifest
 /// and resolves it into a set of build/sync steps
 #[async_trait]
@@ -16,7 +21,7 @@ pub trait Resolve: Sync + Send {
     async fn resolve(
         &self,
         recipe: &Recipe,
-        canister_name: &str,
+        context: &RecipeContext<'_>,
     ) -> Result<(BuildSteps, SyncSteps), ResolveError>;
 }
 

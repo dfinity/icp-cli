@@ -181,7 +181,7 @@ pub(crate) enum IiError {
     BadPassword {},
 }
 
-pub(crate) const DEFAULT_HOST: &str = "https://cli.id.ai";
+pub(crate) const DEFAULT_HOST: &str = "https://id.ai";
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiRecvError {

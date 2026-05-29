@@ -79,7 +79,7 @@ build:
   steps:
     - type: script
       commands:
-        - cargo build --package {{configuration.package}}
+        - cargo build --package {{ package }}
 ```
 
 ### Conditionals
@@ -93,10 +93,10 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - ic-wasm target/wasm32-unknown-unknown/release/{{ package }}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - cp target/wasm32-unknown-unknown/debug/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cp target/wasm32-unknown-unknown/debug/{{ package }}.wasm "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 

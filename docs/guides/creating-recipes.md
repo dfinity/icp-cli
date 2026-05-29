@@ -16,31 +16,32 @@ build:
   steps:
     - type: script
       commands:
-        - echo "Building {{_.canister.name}}..."
+        - echo "Building {{ name }}..."
 
 {{! # optional sync step }}
 sync:
   steps:
     - type: script
       commands:
-        - echo "Syncing {{_.canister.name}}..."
+        - echo "Syncing {{ name }}..."
 ```
 
 ## Basic Recipe Example
 
-A simple recipe for Rust builds using `{{_.canister.name}}`:
+A simple recipe for Rust builds:
 
 ```
 {{! file: ./recipes/rust-example.hbs }}
 {{! A recipe for building a rust canister }}
+{{! `package: string` The package to build }}
 {{! `shrink: boolean` Optimizes the wasm with ic-wasm }}
 
 build:
   steps:
     - type: script
       commands:
-        - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
+        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -52,7 +53,7 @@ build:
         {{/if}}
 ```
 
-Usage — no `package` field needed since `{{_.canister.name}}` is injected automatically:
+Usage:
 
 ```yaml
 # file: icp.yaml
@@ -61,6 +62,7 @@ canisters:
     recipe:
       type: ./recipes/rust-example.hbs
       configuration:
+        package: my-backend-crate
         shrink: true
 ```
 
@@ -70,18 +72,14 @@ Recipes use [Handlebars](https://handlebarsjs.com/) templating:
 
 ### Variables
 
-Access configuration parameters passed in the `configuration` section of the recipe, and built-in `_.*` variables provided automatically by icp-cli:
+Access configuration parameters passed in the `configuration` section of the recipe.
 
 ```
 build:
   steps:
     - type: script
       commands:
-        - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-        - cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
-        {{#if shrink}}
-        - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "$ICP_WASM_OUTPUT_PATH" shrink
-        {{/if}}
+        - cargo build --package {{configuration.package}}
 ```
 
 ### Conditionals
@@ -95,10 +93,10 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - ic-wasm target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - cp target/wasm32-unknown-unknown/debug/{{ replace "-" "_" _.canister.name }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cp target/wasm32-unknown-unknown/debug/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 
@@ -109,14 +107,15 @@ Use `{{#each}}` for dynamic lists:
 ```
 {{! file: ./recipes/rust-example-metadata.hbs }}
 {{! A recipe for building a rust canister }}
+{{! `package: string` The package to build }}
 {{! `metadata: [name: string, value: string]`: An array of name/value pairs that get injected into the wasm metadata section }}
 
 build:
   steps:
     - type: script
       commands:
-        - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
+        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -135,6 +134,7 @@ canisters:
     recipe:
       type: ./recipes/rust-example-metadata.hbs
       configuration:
+        package: my-backend-crate
         metadata:
           - name: "crate:version"
             value: "1.0.0"
@@ -145,38 +145,6 @@ canisters:
 ### Default Values
 
 Use `{{#if}}` with `{{else}}` for defaults, refer to the examples above.
-
-## Built-in Recipe Variables
-
-icp-cli automatically injects variables into every recipe template under the reserved `_` namespace. These are available alongside any user-provided `configuration:` values and cannot be overridden by them.
-
-| Variable | Value |
-|---|---|
-| `{{_.canister.name}}` | The canister name as defined in `icp.yaml` |
-
-Use `{{_.canister.name}}` whenever a recipe needs to refer to the canister being built — this avoids requiring users to repeat the name in the `configuration:` block.
-
-Built-in recipe variables work with all Handlebars helpers. For example, the `replace` helper can produce the underscore form of a name required by Rust WASM artifact filenames:
-
-```
-- cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-- cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
-```
-
-User-provided overrides can still be supported with an `{{#if}}` fallback for cases where the user needs to supply a different name (e.g. when the Cargo package name differs from the canister name):
-
-```
-{{#if package}}{{package}}{{else}}{{_.canister.name}}{{/if}}
-```
-
-### Built-in recipe variables vs. environment variables
-
-icp-cli provides two distinct kinds of variables to recipes:
-
-- **`{{_.*}}` built-in recipe variables** — injected at _render time_, when the recipe template is expanded into build/sync steps. Use these in Handlebars expressions.
-- **`$ICP_*` environment variables** — set at _execution time_, when the rendered build commands actually run. Use these inside shell commands.
-
-`{{_.canister.name}}` is available at render time because it is read from `icp.yaml` before any build command is run. `$ICP_WASM_OUTPUT_PATH` must be an environment variable because it is a temporary path computed dynamically at execution time.
 
 ## Environment Variables
 
@@ -224,9 +192,13 @@ canisters:
   - name: canister1
     recipe:
       type: ./recipes/my-recipe.hbs
+      configuration:
+        package: my-crate1
   - name: canister2
     recipe:
       type: ./recipes/my-recipe.hbs
+      configuration:
+        package: my-other-crate
 ```
 
 ### Across Projects

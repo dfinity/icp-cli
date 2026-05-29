@@ -1176,6 +1176,7 @@ pub fn link_ii_identity(
     principal: ic_agent::export::Principal,
     create_format: CreateFormat,
     host: Url,
+    domain: Option<String>,
 ) -> Result<(), CreatePendingDelegationError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
@@ -1251,6 +1252,7 @@ pub fn link_ii_identity(
         principal,
         storage: ii_storage,
         host,
+        domain,
     };
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;

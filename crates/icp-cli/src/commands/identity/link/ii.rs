@@ -1,5 +1,6 @@
-use std::net::SocketAddr;
+use std::{io::IsTerminal, net::SocketAddr, time::Duration};
 
+use anstyle::{AnsiColor, Reset, Style};
 use axum::{
     Form, Router,
     extract::State,
@@ -38,9 +39,15 @@ pub(crate) struct IiArgs {
     /// Name for the linked identity
     name: String,
 
-    /// Host of the II login frontend (e.g. example.icp0.io or https://example.icp0.io)
-    #[arg(long, default_value = DEFAULT_HOST, value_parser = parse_host)]
-    host: Url,
+    /// Auth domain to sign in at (e.g. id.ai or identity.ce1.com). Its
+    /// `/.well-known/cli-auth-config` decides the login path.
+    #[arg(long, default_value = DEFAULT_AUTH, value_parser = parse_auth)]
+    auth: Url,
+
+    /// Delegation domain to get an identity for (e.g. oisy.com). When omitted,
+    /// the auth domain picks its default (id.ai uses cli.id.ai).
+    #[arg(long)]
+    app: Option<String>,
 
     /// Where to store the session private key
     #[arg(long, value_enum, default_value_t)]
@@ -51,7 +58,7 @@ pub(crate) struct IiArgs {
     storage_password_file: Option<PathBuf>,
 }
 
-fn parse_host(s: &str) -> Result<Url, String> {
+fn parse_auth(s: &str) -> Result<Url, String> {
     let with_scheme = if s.contains("://") {
         s.to_owned()
     } else {
@@ -102,14 +109,15 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
     let der_public_key = basic.public_key().expect("ed25519 always has a public key");
 
     // Linking creates a brand-new identity, so there is no principal to match against.
-    let chain = recv_delegation(&args.host, &der_public_key, None)
+    let chain = recv_delegation(&args.auth, args.app.as_deref(), &der_public_key, None)
         .await
         .context(PollSnafu)?;
 
     let from_key = hex::decode(&chain.public_key).context(DecodeFromKeySnafu)?;
     let ii_principal = Principal::self_authenticating(&from_key);
 
-    let host = args.host.clone();
+    let auth = args.auth.clone();
+    let app = args.app.clone();
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
@@ -120,7 +128,8 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
                 &chain,
                 ii_principal,
                 create_format,
-                host,
+                auth,
+                app,
             )
         })
         .await?
@@ -182,7 +191,7 @@ pub(crate) enum IiError {
     BadPassword {},
 }
 
-pub(crate) const DEFAULT_HOST: &str = "https://id.ai";
+pub(crate) const DEFAULT_AUTH: &str = "https://id.ai";
 
 #[derive(Debug, Snafu)]
 pub(crate) enum IiRecvError {
@@ -215,14 +224,18 @@ pub(crate) enum IiRecvError {
 }
 
 /// Discovers the login path from the `{ "path": "…" }` JSON served at
-/// `{host}/.well-known/cli-auth-config`, then opens a local HTTP server, builds
+/// `{auth}/.well-known/cli-auth-config`, then opens a local HTTP server, builds
 /// the login URL, and returns the delegation chain once the frontend submits it.
+///
+/// `delegation_domain` is the domain to get a delegation for; when `None`, the
+/// auth page picks its own default (id.ai uses cli.id.ai).
 ///
 /// When `expected_principal` is set (the `login` re-auth path), a delegation
 /// whose self-authenticating principal does not match is rejected without
 /// stopping the server, so the frontend can show a mismatch message and retry.
 pub(crate) async fn recv_delegation(
-    host: &Url,
+    auth: &Url,
+    delegation_domain: Option<&str>,
     der_public_key: &[u8],
     expected_principal: Option<Principal>,
 ) -> Result<DelegationChain, IiRecvError> {
@@ -236,7 +249,7 @@ pub(crate) async fn recv_delegation(
     let nonce = URL_SAFE_NO_PAD.encode(nonce_bytes);
 
     // Discover the login path.
-    let discovery_url = host
+    let discovery_url = auth
         .join("/.well-known/cli-auth-config")
         .expect("joining an absolute path is infallible");
     let discovery_url_str = discovery_url.to_string();
@@ -269,29 +282,37 @@ pub(crate) async fn recv_delegation(
     // can parse it with `new URLSearchParams(location.hash.slice(1))`.
     let fragment = {
         let mut scratch = Url::parse("x:?").expect("infallible");
-        scratch
-            .query_pairs_mut()
-            .append_pair("public_key", &key_b64)
-            .append_pair("callback", &callback_url)
-            .append_pair("nonce", &nonce);
+        {
+            let mut pairs = scratch.query_pairs_mut();
+            pairs
+                .append_pair("public_key", &key_b64)
+                .append_pair("callback", &callback_url)
+                .append_pair("nonce", &nonce);
+            // Omitted when the caller passes no `--app`, so the auth page picks
+            // its own default delegation domain.
+            if let Some(domain) = delegation_domain {
+                pairs.append_pair("domain", domain);
+            }
+        }
         scratch.query().expect("just set").to_owned()
     };
-    let mut login_url = host.join(login_path).expect("login_path is a valid path");
+    let mut login_url = auth.join(login_path).expect("login_path is a valid path");
     login_url.set_fragment(Some(&fragment));
 
     // Where the loopback server sends the browser back to once it has the
     // delegation, so the frontend keeps ownership of the success/error UI. The
-    // mismatch URL re-supplies `public_key`/`callback`/`nonce` so the user can
-    // pick another identity and submit again to the same loopback server.
+    // mismatch URL re-supplies the request params (`public_key`/`callback`/
+    // `nonce`/`domain`) so the user can pick another identity and submit again
+    // to the same loopback server.
     let status_url = |status: &str| {
-        let mut url = host.join(login_path).expect("login_path is a valid path");
+        let mut url = auth.join(login_path).expect("login_path is a valid path");
         url.set_fragment(Some(&format!("status={status}")));
         url.to_string()
     };
     let success_url = status_url("success");
     let error_url = status_url("error");
     let mismatch_url = {
-        let mut url = host.join(login_path).expect("login_path is a valid path");
+        let mut url = auth.join(login_path).expect("login_path is a valid path");
         url.set_fragment(Some(&format!("{fragment}&status=identity-mismatch")));
         url.to_string()
     };
@@ -318,11 +339,13 @@ pub(crate) async fn recv_delegation(
         .route("/", post(handle_callback))
         .with_state(std::sync::Arc::new(state));
 
+    // Animated braille frames while waiting, with a green `✓` as the final
+    // tick so a finished step matches the checkmark on the id.ai/cli screen.
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .expect("valid template"),
+        ProgressStyle::with_template("{spinner:.green} {msg}")
+            .expect("valid template")
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "✓"]),
     );
 
     eprintln!();
@@ -344,6 +367,11 @@ pub(crate) async fn recv_delegation(
         let _ = shutdown_rx.await;
     });
     open::that(login_url.as_str()).context(OpenBrowserSnafu)?;
+    // Mirror the id.ai/cli terminal block: a checked "Browser opened" line, then
+    // an animated "Linking Internet Identity" step until the delegation lands.
+    spinner.println(format!("{} Browser opened", green_check()));
+    spinner.set_message("Linking Internet Identity");
+    spinner.enable_steady_tick(Duration::from_millis(80));
     let mut serve_fut = std::pin::pin!(serve.into_future());
     let result = loop {
         tokio::select! {
@@ -361,10 +389,28 @@ pub(crate) async fn recv_delegation(
         }
     };
 
-    spinner.finish_and_clear();
     match result.expect("sender only dropped after sending") {
-        Ok(chain) => Ok(chain),
-        Err(()) => InvalidDelegationSnafu.fail(),
+        Ok(chain) => {
+            // Leaves a checked "✓ Linking Internet Identity" line (the final
+            // tick of the spinner style).
+            spinner.finish_with_message("Linking Internet Identity");
+            Ok(chain)
+        }
+        Err(()) => {
+            spinner.finish_and_clear();
+            InvalidDelegationSnafu.fail()
+        }
+    }
+}
+
+/// A green `✓`, or a plain one when color is disabled or stderr isn't a TTY —
+/// matching how the rest of the CLI gates ANSI styling.
+fn green_check() -> String {
+    const GREEN: Style = AnsiColor::Green.on_default();
+    if std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal() {
+        format!("{GREEN}✓{Reset}")
+    } else {
+        "✓".to_string()
     }
 }
 
@@ -375,7 +421,7 @@ enum CallbackEvent {
     Mismatch,
 }
 
-/// Response body of `{host}/.well-known/cli-auth-config`.
+/// Response body of `{auth}/.well-known/cli-auth-config`.
 #[derive(Debug, Deserialize)]
 struct CliAuthConfig {
     path: String,

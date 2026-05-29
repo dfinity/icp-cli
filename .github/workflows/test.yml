@@ -76,6 +76,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
           cache-shared-key: ${{ runner.os }}-test
+          cache-bin: false
 
       - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -101,6 +102,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
           cache-shared-key: ${{ runner.os }}-test
+          cache-bin: false
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -154,6 +156,10 @@ jobs:
         run: |
           which wasm-tools
           wasm-tools --version
+
+      - name: Download test network launcher
+        if: ${{ !contains(matrix.os, 'windows') }}
+        run: ./scripts/download_test_network_launcher.sh
 
       - name: Run ${{ matrix.test }}
         # the macos runners do not support Docker

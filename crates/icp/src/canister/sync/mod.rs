@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
@@ -18,6 +20,10 @@ pub struct Params {
     /// Name of the environment being synced (e.g. "local", "production").
     /// Passed to sync plugin steps via `SyncExecInput`.
     pub environment: String,
+    /// Name of the network (e.g. "local", "ic").
+    pub network: String,
+    /// IDs of all named canisters in the project for this environment.
+    pub canister_ids: BTreeMap<String, Principal>,
     /// Proxy canister to route calls through, if `--proxy` was passed.
     pub proxy: Option<Principal>,
 }
@@ -43,7 +49,7 @@ pub trait Synchronize: Sync + Send {
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError>;
+    ) -> Result<Vec<String>, SynchronizeError>;
 }
 
 pub struct Syncer;
@@ -57,7 +63,7 @@ impl Synchronize for Syncer {
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<Vec<String>, SynchronizeError> {
         match step {
             SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
@@ -90,7 +96,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _agent: &Agent,
         _stdio: Option<Sender<String>>,
         _pkg_cache: &PackageCache,
-    ) -> Result<(), SynchronizeError> {
+    ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
     }
 }

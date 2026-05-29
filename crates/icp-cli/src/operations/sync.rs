@@ -8,6 +8,7 @@ use icp::{
     prelude::PathBuf,
 };
 use snafu::prelude::*;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tracing::error;
 
@@ -35,11 +36,14 @@ async fn sync_canister(
     canister_id: Principal,
     canister_info: &Canister,
     environment: &str,
+    network: &str,
+    canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
     pkg_cache: &PackageCache,
-) -> Result<(), SynchronizeError> {
+) -> Result<Vec<String>, SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
+    let mut stderr_lines = Vec::new();
 
     for (i, step) in canister_info.sync.steps.iter().enumerate() {
         // Indicate to user the current step being executed
@@ -56,6 +60,8 @@ async fn sync_canister(
                     path: canister_path.clone(),
                     cid: canister_id,
                     environment: environment.to_owned(),
+                    network: network.to_owned(),
+                    canister_ids: canister_ids.clone(),
                     proxy,
                 },
                 agent,
@@ -67,10 +73,10 @@ async fn sync_canister(
         // Ensure background receiver drains all messages
         pb.end_step().await;
 
-        sync_result?;
+        stderr_lines.extend(sync_result?);
     }
 
-    Ok(())
+    Ok(stderr_lines)
 }
 
 /// Orchestrates syncing multiple canisters with progress tracking
@@ -79,6 +85,8 @@ pub(crate) async fn sync_many(
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     environment: String,
+    network: String,
+    canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     debug: bool,
     pkg_cache: &PackageCache,
@@ -93,6 +101,8 @@ pub(crate) async fn sync_many(
             let agent = agent.clone();
             let syncer = syncer.clone();
             let environment = environment.clone();
+            let network = network.clone();
+            let canister_ids = canister_ids.clone();
 
             async move {
                 // Define the sync logic
@@ -103,6 +113,8 @@ pub(crate) async fn sync_many(
                     cid,
                     &canister_info,
                     &environment,
+                    &network,
+                    &canister_ids,
                     proxy,
                     &mut pb,
                     pkg_cache,
@@ -117,6 +129,15 @@ pub(crate) async fn sync_many(
                     |err| format!("Failed to sync canister: {err}"),
                 )
                 .await;
+
+                // Print stderr lines the plugin emitted; the rolling buffer
+                // discards them on success, but they belong on the persistent
+                // output channel.
+                if let Ok(lines) = &result {
+                    for line in lines {
+                        eprintln!("[{}] {line}", canister_info.name);
+                    }
+                }
 
                 // Map error to include canister context for deferred printing
                 result.map_err(|error| SyncFailure {

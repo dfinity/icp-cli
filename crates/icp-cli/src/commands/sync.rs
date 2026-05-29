@@ -3,6 +3,7 @@ use clap::Args;
 use futures::future::try_join_all;
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
+use std::collections::BTreeMap;
 use tracing::info;
 
 use crate::{
@@ -82,12 +83,20 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
 
     info!("Syncing canisters:");
 
+    let canister_ids: BTreeMap<String, Principal> = ctx
+        .ids_by_environment(&environment_selection)
+        .await?
+        .into_iter()
+        .collect();
+
     let pkg_cache = ctx.dirs.package_cache()?;
     sync_many(
         ctx.syncer.clone(),
         agent,
         sync_canisters,
         environment_selection.name().to_owned(),
+        env.network.name.clone(),
+        canister_ids,
         args.proxy,
         ctx.debug,
         &pkg_cache,

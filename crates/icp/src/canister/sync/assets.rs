@@ -25,7 +25,7 @@ pub(super) async fn sync(
     adapter: &Adapter,
     params: &Params,
     agent: &Agent,
-) -> Result<(), AssetsError> {
+) -> Result<Vec<String>, AssetsError> {
     // Prepare canister client
     let canister = ic_utils::Canister::builder()
         .with_canister_id(params.cid)
@@ -74,5 +74,7 @@ pub(super) async fn sync(
     .await
     .context(SyncSnafu)?;
 
-    Ok(())
+    // Persistent stderr is a sync-plugin feature only; assets steps don't
+    // currently retain any output past the rolling step view.
+    Ok(vec![])
 }

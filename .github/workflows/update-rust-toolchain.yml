@@ -1,0 +1,67 @@
+name: Update Rust Toolchain
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  update-toolchain:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check latest stable Rust version
+        id: check
+        run: |
+          MANIFEST=$(curl -sf https://static.rust-lang.org/dist/channel-rust-stable.toml)
+
+          RELEASE_DATE=$(echo "$MANIFEST" | grep '^date = ' | sed 's/date = "\(.*\)"/\1/')
+          LATEST=$(echo "$MANIFEST" | sed -n '/^\[pkg\.rust\]/,/^\[/{ s/^version = "\([0-9.]*\) .*/\1/p }')
+          CURRENT=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+
+          DAYS=$(( ( $(date +%s) - $(date -d "$RELEASE_DATE" +%s) ) / 86400 ))
+
+          echo "latest=$LATEST" | tee -a "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" | tee -a "$GITHUB_OUTPUT"
+
+          echo "Latest stable: $LATEST (released $DAYS days ago), current: $CURRENT"
+
+          if [ "$DAYS" -ge 14 ] && [ "$LATEST" != "$CURRENT" ]; then
+            echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update rust-toolchain.toml
+        if: steps.check.outputs.needs_update == 'true'
+        run: sed -i 's/^channel = ".*"/channel = "${{ steps.check.outputs.latest }}"/' rust-toolchain.toml
+
+      - name: Create GitHub App Token
+        if: steps.check.outputs.needs_update == 'true'
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_CLIENT_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+      - name: Open pull request
+        if: steps.check.outputs.needs_update == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BRANCH="chore/update-rust-toolchain"
+          TITLE="chore(toolchain): update Rust to ${{ steps.check.outputs.latest }}"
+          BODY="Updates pinned Rust toolchain from \`${{ steps.check.outputs.current }}\` to \`${{ steps.check.outputs.latest }}\`."
+
+          git config user.name "pr-automation-bot-public[bot]"
+          git config user.email "pr-automation-bot-public[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add rust-toolchain.toml
+          git commit -m "$TITLE"
+          git push origin "$BRANCH" --force
+
+          gh pr create --title "$TITLE" --body "$BODY" --base main --head "$BRANCH" \
+            || echo "PR already open on $BRANCH, branch updated."

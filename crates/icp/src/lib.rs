@@ -625,7 +625,7 @@ mod tests {
         async fn resolve(
             &self,
             _recipe: &Recipe,
-            _context: &RecipeContext<'_>,
+            _context: &RecipeContext,
         ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             use crate::manifest::adapter::prebuilt::{
                 Adapter as PrebuiltAdapter, LocalSource, SourceField,

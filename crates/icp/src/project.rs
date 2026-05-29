@@ -256,7 +256,7 @@ pub async fn consolidate_manifest(
                 // Recipe
                 Instructions::Recipe { recipe } => {
                     let ctx = recipe::RecipeContext {
-                        canister_name: &m.name,
+                        canister_name: m.name.clone(),
                     };
                     recipe_resolver
                         .resolve(recipe, &ctx)

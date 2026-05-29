@@ -83,22 +83,11 @@ pub enum HandlebarsError {
     LockCache { source: crate::fs::lock::LockError },
 }
 
-/// CLI-injected variables available in every recipe template under the `_` namespace.
-#[derive(serde::Serialize)]
-struct InjectedContext<'a> {
-    canister: CanisterContext<'a>,
-}
-
-#[derive(serde::Serialize)]
-struct CanisterContext<'a> {
-    name: &'a str,
-}
-
 impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
-        canister_name: &str,
+        context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
         let tmpl_source = match &recipe.recipe_type {
@@ -200,22 +189,16 @@ impl Handlebars {
 
         // Build render context: user-provided configuration plus injected _.* variables.
         // The _ key is reserved and always overrides any user-supplied value.
-        let mut context = recipe.configuration.clone();
-        context.insert(
-            "_".to_string(),
-            serde_yaml::to_value(InjectedContext {
-                canister: CanisterContext {
-                    name: canister_name,
-                },
-            })
-            .expect("InjectedContext serialization is infallible"),
-        );
+        let mut render_context = recipe.configuration.clone();
+        render_context.insert("_".to_string(), context.to_yaml());
 
         // Render the template to YAML
-        let out = reg.render_template(&tmpl, &context).context(RenderSnafu {
-            recipe: recipe.recipe_type.clone(),
-            template: tmpl.to_owned(),
-        })?;
+        let out = reg
+            .render_template(&tmpl, &render_context)
+            .context(RenderSnafu {
+                recipe: recipe.recipe_type.clone(),
+                template: tmpl.to_owned(),
+            })?;
 
         // Read the rendered YAML canister manifest
         // Recipes can only render build/sync
@@ -305,9 +288,9 @@ impl Resolve for Handlebars {
     async fn resolve(
         &self,
         recipe: &Recipe,
-        context: &super::RecipeContext<'_>,
+        context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-        self.resolve_impl(recipe, context.canister_name)
+        self.resolve_impl(recipe, context)
             .await
             .context(super::HandlebarsSnafu)
     }
@@ -365,8 +348,15 @@ fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canister::recipe::RecipeContext;
     use crate::manifest::recipe::{Recipe, RecipeType};
     use std::collections::HashMap;
+
+    fn recipe_context(canister_name: &str) -> RecipeContext {
+        RecipeContext {
+            canister_name: canister_name.to_string(),
+        }
+    }
 
     #[tokio::test]
     async fn template_values_are_not_html_escaped() {
@@ -405,7 +395,10 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs.resolve_impl(&recipe, "my-canister").await.unwrap();
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
         let cmd = build.steps[0].clone();
 
         match cmd {
@@ -447,7 +440,10 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs.resolve_impl(&recipe, "my-canister").await.unwrap();
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
 
         match build.steps[0].clone() {
             crate::manifest::canister::BuildStep::Script(adapter) => {
@@ -484,7 +480,10 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs.resolve_impl(&recipe, "my-canister").await.unwrap();
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
 
         match build.steps[0].clone() {
             crate::manifest::canister::BuildStep::Script(adapter) => {
@@ -541,7 +540,10 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs.resolve_impl(&recipe, "real-name").await.unwrap();
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("real-name"))
+            .await
+            .unwrap();
 
         match build.steps[0].clone() {
             crate::manifest::canister::BuildStep::Script(adapter) => {

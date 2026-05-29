@@ -87,7 +87,7 @@ impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
-        context: &super::RecipeContext,
+        recipe_context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
         let tmpl_source = match &recipe.recipe_type {
@@ -190,7 +190,7 @@ impl Handlebars {
         // Build render context: user-provided configuration plus injected _.* variables.
         // The _ key is reserved and always overrides any user-supplied value.
         let mut render_context = recipe.configuration.clone();
-        render_context.insert("_".to_string(), context.to_yaml());
+        render_context.insert("_".to_string(), recipe_context.to_yaml());
 
         // Render the template to YAML
         let out = reg
@@ -288,9 +288,9 @@ impl Resolve for Handlebars {
     async fn resolve(
         &self,
         recipe: &Recipe,
-        context: &super::RecipeContext,
+        recipe_context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-        self.resolve_impl(recipe, context)
+        self.resolve_impl(recipe, recipe_context)
             .await
             .context(super::HandlebarsSnafu)
     }

@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use axum::{
     Form, Router,
     extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Redirect},
     routing::post,
 };
@@ -23,6 +23,7 @@ use icp::{
     prelude::*,
 };
 use indicatif::{ProgressBar, ProgressStyle};
+use rand::RngExt as _;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tokio::{net::TcpListener, sync::oneshot};
@@ -227,6 +228,13 @@ pub(crate) async fn recv_delegation(
 ) -> Result<DelegationChain, IiRecvError> {
     let key_b64 = URL_SAFE_NO_PAD.encode(der_public_key);
 
+    // Single-use secret shared with the frontend via the URL fragment, which is
+    // never sent over the network and is unreadable cross-origin. The frontend
+    // echoes it back in its POST, proving the request came from the page the
+    // user logged in through rather than a stray or forged local request.
+    let nonce_bytes: [u8; 32] = rand::rng().random();
+    let nonce = URL_SAFE_NO_PAD.encode(nonce_bytes);
+
     // Discover the login path.
     let discovery_url = host
         .join("/.well-known/cli-auth-config")
@@ -264,7 +272,8 @@ pub(crate) async fn recv_delegation(
         scratch
             .query_pairs_mut()
             .append_pair("public_key", &key_b64)
-            .append_pair("callback", &callback_url);
+            .append_pair("callback", &callback_url)
+            .append_pair("nonce", &nonce);
         scratch.query().expect("just set").to_owned()
     };
     let mut login_url = host.join(login_path).expect("login_path is a valid path");
@@ -272,8 +281,8 @@ pub(crate) async fn recv_delegation(
 
     // Where the loopback server sends the browser back to once it has the
     // delegation, so the frontend keeps ownership of the success/error UI. The
-    // mismatch URL re-supplies `public_key`/`callback` so the user can pick
-    // another identity and submit again to the same loopback server.
+    // mismatch URL re-supplies `public_key`/`callback`/`nonce` so the user can
+    // pick another identity and submit again to the same loopback server.
     let status_url = |status: &str| {
         let mut url = host.join(login_path).expect("login_path is a valid path");
         url.set_fragment(Some(&format!("status={status}")));
@@ -293,15 +302,12 @@ pub(crate) async fn recv_delegation(
     // mismatch that the user can retry), so the CLI isn't silent during retries.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<CallbackEvent>();
 
-    let allowed_origin =
-        HeaderValue::from_str(&host.origin().ascii_serialization()).expect("URL origin is valid");
-
     // chain_tx is wrapped in an Option so the handler can take ownership.
     let state = CallbackState {
         chain_tx: std::sync::Mutex::new(Some(chain_tx)),
         shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
         event_tx,
-        allowed_origin,
+        expected_nonce: nonce,
         expected_principal,
         success_url,
         error_url,
@@ -380,6 +386,8 @@ struct CliAuthConfig {
 struct CallbackForm {
     /// The delegation chain as JSON (`DelegationChain.toJSON()`).
     delegation: String,
+    /// The single-use nonce echoed back from the login URL fragment.
+    nonce: String,
 }
 
 #[derive(Debug)]
@@ -387,7 +395,8 @@ struct CallbackState {
     chain_tx: std::sync::Mutex<Option<oneshot::Sender<Result<DelegationChain, ()>>>>,
     shutdown_tx: std::sync::Mutex<Option<oneshot::Sender<()>>>,
     event_tx: tokio::sync::mpsc::UnboundedSender<CallbackEvent>,
-    allowed_origin: HeaderValue,
+    /// The nonce the frontend must echo back, proving it read the login URL fragment.
+    expected_nonce: String,
     /// When set, a delegation must resolve to this principal or it is rejected.
     expected_principal: Option<Principal>,
     success_url: String,
@@ -413,17 +422,13 @@ fn principal_of_chain(chain: &DelegationChain) -> Option<Principal> {
 
 async fn handle_callback(
     State(state): State<std::sync::Arc<CallbackState>>,
-    headers: HeaderMap,
     Form(form): Form<CallbackForm>,
 ) -> axum::response::Response {
-    // A top-level form-POST navigation from the II origin carries `Origin`.
-    // Reject anything else without ending the flow, so stray or forged local
-    // requests can't abort an in-progress login.
-    let origin_ok = headers
-        .get(header::ORIGIN)
-        .map(|v| *v == state.allowed_origin)
-        .unwrap_or(false);
-    if !origin_ok {
+    // Only the frontend the user logged in through saw the nonce in the login
+    // URL fragment. Reject anything else without ending the flow, so stray or
+    // forged local requests can't abort an in-progress login.
+    if form.nonce != state.expected_nonce {
+        warn!("rejecting callback POST: nonce missing or mismatched");
         return StatusCode::FORBIDDEN.into_response();
     }
 

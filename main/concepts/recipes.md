@@ -102,14 +102,32 @@ build:
         {{else}}
         - cargo build
         {{/if}}
-        - cp target/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cp target/{{package}}.wasm "$ICP_WASM_OUTPUT_PATH"
 
 ```
 
 ### Template Variables
 
-icp-cli will essentially render the handlebar template with all the parameters passed
-in the configuration section of the recipe.
+Recipe templates have access to two kinds of variables:
+
+**User-provided configuration** — values passed in the `configuration:` block of `icp.yaml`:
+
+```yaml
+recipe:
+  type: "@dfinity/rust@v3.0.0"
+  configuration:
+    shrink: true   # available as {{ shrink }} in the template
+```
+
+**Built-in recipe variables** — automatically provided by icp-cli for every recipe, regardless of what the user puts in `configuration:`:
+
+| Variable | Value |
+|---|---|
+| `{{_.canister.name}}` | The canister name as defined in `icp.yaml` |
+
+The `_` namespace is reserved and cannot be overridden by user-provided configuration.
+
+These injected variables are available to the Handlebars `replace` helper and all other template features, for example `{{ replace "-" "_" _.canister.name }}` produces the underscore form of the canister name needed for Rust WASM artifact filenames.
 
 ## Viewing Expanded Configuration
 

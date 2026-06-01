@@ -6,9 +6,25 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 29 May 2026 16:42:59 GMT</lastBuildDate>
-    <pubDate>Wed, 20 May 2026 13:43:10 GMT</pubDate>
+    <lastBuildDate>Mon, 01 Jun 2026 14:55:09 GMT</lastBuildDate>
+    <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Creating Recipes</title>
+      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
+      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
+      <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Recipes</title>
+      <link>https://cli.internetcomputer.org/main/concepts/recipes/</link>
+      <description>How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.</description>
+      <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>icp-cli Documentation</title>
       <link>https://cli.internetcomputer.org/main/</link>
@@ -71,14 +87,6 @@
       <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
       <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Creating Recipes</title>
-      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
-      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
-      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -255,14 +263,6 @@
       <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Recipes</title>
-      <link>https://cli.internetcomputer.org/main/concepts/recipes/</link>
-      <description>How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
   </channel>

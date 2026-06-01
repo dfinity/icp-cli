@@ -87,6 +87,7 @@ impl Handlebars {
     async fn resolve_impl(
         &self,
         recipe: &Recipe,
+        recipe_context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
         // Determine the template source
         let tmpl_source = match &recipe.recipe_type {
@@ -186,9 +187,14 @@ impl Handlebars {
         "#}
         );
 
+        // Build render context: user-provided configuration plus injected _.* variables.
+        // The _ key is reserved and always overrides any user-supplied value.
+        let mut render_context = recipe.configuration.clone();
+        render_context.insert("_".to_string(), recipe_context.to_yaml());
+
         // Render the template to YAML
         let out = reg
-            .render_template(&tmpl, &recipe.configuration)
+            .render_template(&tmpl, &render_context)
             .context(RenderSnafu {
                 recipe: recipe.recipe_type.clone(),
                 template: tmpl.to_owned(),
@@ -279,8 +285,12 @@ impl Handlebars {
 
 #[async_trait]
 impl Resolve for Handlebars {
-    async fn resolve(&self, recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-        self.resolve_impl(recipe)
+    async fn resolve(
+        &self,
+        recipe: &Recipe,
+        recipe_context: &super::RecipeContext,
+    ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        self.resolve_impl(recipe, recipe_context)
             .await
             .context(super::HandlebarsSnafu)
     }
@@ -338,8 +348,15 @@ fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, HandlebarsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canister::recipe::RecipeContext;
     use crate::manifest::recipe::{Recipe, RecipeType};
     use std::collections::HashMap;
+
+    fn recipe_context(canister_name: &str) -> RecipeContext {
+        RecipeContext {
+            canister_name: canister_name.to_string(),
+        }
+    }
 
     #[tokio::test]
     async fn template_values_are_not_html_escaped() {
@@ -378,7 +395,10 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs.resolve_impl(&recipe).await.unwrap();
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
         let cmd = build.steps[0].clone();
 
         match cmd {
@@ -387,6 +407,150 @@ mod tests {
                 assert_eq!(
                     commands[0], "SITE=https://example.com&foo=bar npm run build",
                     "Template values must not be HTML-escaped (= and & must be preserved)"
+                );
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn canister_name_is_injected() {
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "build {{_.canister.name}}"
+            "#},
+        )
+        .unwrap();
+
+        let pkg_cache = PackageCache::new(tmp.path().join("pkg")).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration: HashMap::new(),
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
+
+        match build.steps[0].clone() {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                assert_eq!(adapter.command.as_vec()[0], "build my-canister");
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn canister_name_works_with_replace_helper() {
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "cp {{ replace "-" "_" _.canister.name }}.wasm out.wasm"
+            "#},
+        )
+        .unwrap();
+
+        let pkg_cache = PackageCache::new(tmp.path().join("pkg")).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration: HashMap::new(),
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
+
+        match build.steps[0].clone() {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                assert_eq!(adapter.command.as_vec()[0], "cp my_canister.wasm out.wasm");
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn reserved_namespace_cannot_be_overridden_by_user_config() {
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "build {{_.canister.name}}"
+            "#},
+        )
+        .unwrap();
+
+        let pkg_cache = PackageCache::new(tmp.path().join("pkg")).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let mut configuration = HashMap::new();
+        configuration.insert(
+            "_".to_string(),
+            serde_yaml::Value::Mapping({
+                let mut m = serde_yaml::Mapping::new();
+                m.insert(
+                    serde_yaml::Value::String("canister".to_string()),
+                    serde_yaml::Value::Mapping({
+                        let mut inner = serde_yaml::Mapping::new();
+                        inner.insert(
+                            serde_yaml::Value::String("name".to_string()),
+                            serde_yaml::Value::String("user-override".to_string()),
+                        );
+                        inner
+                    }),
+                );
+                m
+            }),
+        );
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration,
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("real-name"))
+            .await
+            .unwrap();
+
+        match build.steps[0].clone() {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                assert_eq!(
+                    adapter.command.as_vec()[0],
+                    "build real-name",
+                    "_ namespace must not be overridable by user configuration"
                 );
             }
             other => panic!("Expected Script build step, got: {other:?}"),

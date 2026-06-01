@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* feat: Recipe templates can now use `{{_.canister.name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `_` namespace is reserved and cannot be overridden by user-provided configuration.
+
 # v0.2.7
 
 * feat: `script` sync steps now receive `ICP_CLI_ENVIRONMENT`, `ICP_CLI_NETWORK`, `ICP_CLI_CID` (the current canister's principal), and `ICP_CLI_CID_<NAME>` (every canister's principal) as environment variables.

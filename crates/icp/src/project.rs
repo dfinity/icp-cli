@@ -264,9 +264,15 @@ pub async fn consolidate_manifest(
 
                 // Recipe
                 Instructions::Recipe { recipe } => {
-                    recipe_resolver.resolve(recipe).await.context(RecipeSnafu {
-                        recipe_type: recipe.recipe_type.clone(),
-                    })?
+                    let ctx = recipe::RecipeContext {
+                        canister_name: m.name.clone(),
+                    };
+                    recipe_resolver
+                        .resolve(recipe, &ctx)
+                        .await
+                        .context(RecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        })?
                 }
             };
 

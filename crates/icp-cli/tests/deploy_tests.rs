@@ -40,7 +40,7 @@ fn deploy_empty() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--subnet", common::SUBNET_ID])
+        .args(["deploy"])
         .assert()
         .success();
 }
@@ -67,7 +67,7 @@ fn deploy_canister_not_found() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "my-canister", "--subnet", common::SUBNET_ID])
+        .args(["deploy", "my-canister"])
         .assert()
         .failure()
         .stderr(contains("Error: project does not contain a canister named 'my-canister'").trim());
@@ -112,13 +112,7 @@ async fn deploy() {
     // Deploy project
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -178,26 +172,14 @@ async fn deploy_twice_should_succeed() {
     // Deploy project (first time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -216,6 +198,69 @@ async fn deploy_twice_should_succeed() {
         .assert()
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+/// Verifies that `deploy --subnet <id>` routes the canister to the requested subnet.
+///
+/// The network is configured with multiple application subnets so the placement is an actual
+/// choice: if `--subnet` were ignored (and a subnet picked by default instead), the canister
+/// could land on a different one and the assertion would fail.
+#[tokio::test]
+async fn deploy_routes_canister_to_requested_subnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+            subnets: [application, application]
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let subnet_id = ctx.application_subnet_id().await;
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--subnet",
+            &subnet_id,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister must end up on exactly the subnet we requested.
+    let actual_subnet = clients::registry(&ctx)
+        .get_subnet_for_canister(icp_client.get_canister_id("my-canister"))
+        .await;
+    assert_eq!(
+        actual_subnet.to_string(),
+        subnet_id,
+        "canister should be deployed on the requested subnet"
+    );
 }
 
 #[tokio::test]
@@ -397,13 +442,7 @@ async fn deploy_prints_canister_urls() {
     // The example_icp_mo.wasm doesn't have http_request, so it should show Candid UI
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stdout(contains("Deployed canisters:"))
@@ -454,13 +493,7 @@ async fn deploy_prints_friendly_url_for_asset_canister() {
     // Deploy and check that the friendly URL is printed (not the Candid UI form)
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stdout(contains("Deployed canisters:"))
@@ -637,23 +670,7 @@ async fn deploy_cloud_engine() {
 
     // Find the CloudEngine subnet by querying the topology endpoint
     // TODO replace with a subnet selection parameter once we have one
-    let topology_url = ctx.gateway_url().join("/_/topology").unwrap();
-    let topology: serde_json::Value = reqwest::get(topology_url)
-        .await
-        .expect("failed to fetch topology")
-        .json()
-        .await
-        .expect("failed to parse topology");
-
-    let subnet_configs = topology["subnet_configs"]
-        .as_object()
-        .expect("subnet_configs should be an object");
-    let cloud_engine_subnet_id = subnet_configs
-        .iter()
-        .find_map(|(id, config)| {
-            (config["subnet_kind"].as_str()? == "CloudEngine").then_some(id.clone())
-        })
-        .expect("no CloudEngine subnet found in topology");
+    let cloud_engine_subnet_id = ctx.cloud_engine_subnet_id().await;
 
     // Deploy to the CloudEngine subnet
     // Only the admin can do this. In local envs, the admin is the anonymous principal
@@ -949,15 +966,7 @@ fn deploy_with_args_multiple_canisters_fails() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "canister-a",
-            "canister-b",
-            "--subnet",
-            common::SUBNET_ID,
-            "--args",
-            "()",
-        ])
+        .args(["deploy", "canister-a", "canister-b", "--args", "()"])
         .assert()
         .failure()
         .stderr(contains(
@@ -1073,13 +1082,7 @@ async fn deploy_with_fixed_controller_principals() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1143,13 +1146,7 @@ async fn deploy_with_canister_controller() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1218,14 +1215,7 @@ async fn deploy_sync_script_icp_env_vars() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "--debug",
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["--debug", "deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stderr(contains("ENV=random-environment"))

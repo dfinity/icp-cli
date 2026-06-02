@@ -58,14 +58,7 @@ async fn sync_adapter_script_single() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "--debug",
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["--debug", "deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stderr(contains("syncing").trim());
@@ -132,14 +125,7 @@ async fn sync_adapter_script_multiple() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "--debug",
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["--debug", "deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stderr(contains("first").and(contains("second")));
@@ -215,13 +201,7 @@ async fn sync_adapter_static_assets() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -380,13 +360,7 @@ async fn sync_multiple_canisters() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -508,13 +482,7 @@ async fn sync_plugin_registers_seed_data() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -582,13 +550,7 @@ async fn sync_script_icp_env_vars() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -767,13 +729,7 @@ async fn sync_all_canisters_in_environment() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "test-env",
-        ])
+        .args(["deploy", "--environment", "test-env"])
         .assert()
         .success();
 

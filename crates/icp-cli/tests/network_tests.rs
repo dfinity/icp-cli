@@ -193,26 +193,14 @@ async fn deploy_to_other_projects_network() {
 
     ctx.icp()
         .current_dir(&projb)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "environment-1",
-        ])
+        .args(["deploy", "--environment", "environment-1"])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&projb)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "environment-1",
-        ])
+        .args(["deploy", "--environment", "environment-1"])
         .assert()
         .success();
 

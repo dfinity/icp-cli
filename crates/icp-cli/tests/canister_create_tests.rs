@@ -73,6 +73,68 @@ async fn canister_create() {
     );
 }
 
+/// Verifies that `canister create --subnet <id>` creates the canister on the requested subnet.
+///
+/// The network is configured with multiple application subnets so the placement is an actual
+/// choice: if `--subnet` were ignored (and a subnet picked by default instead), the canister
+/// could land on a different one and the assertion would fail.
+#[tokio::test]
+async fn canister_create_on_requested_subnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+            subnets: [application, application]
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let subnet_id = ctx.application_subnet_id().await;
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--subnet",
+            &subnet_id,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister must be created on exactly the subnet we requested.
+    let actual_subnet = clients::registry(&ctx)
+        .get_subnet_for_canister(icp_client.get_canister_id("my-canister"))
+        .await;
+    assert_eq!(
+        actual_subnet.to_string(),
+        subnet_id,
+        "canister should be created on the requested subnet"
+    );
+}
+
 #[tokio::test]
 async fn canister_create_with_settings() {
     let ctx = TestContext::new();
@@ -979,23 +1041,7 @@ async fn canister_create_cloud_engine() {
 
     // Find the CloudEngine subnet by querying the topology endpoint
     // TODO replace with a subnet selection parameter once we have one
-    let topology_url = ctx.gateway_url().join("/_/topology").unwrap();
-    let topology: serde_json::Value = reqwest::get(topology_url)
-        .await
-        .expect("failed to fetch topology")
-        .json()
-        .await
-        .expect("failed to parse topology");
-
-    let subnet_configs = topology["subnet_configs"]
-        .as_object()
-        .expect("subnet_configs should be an object");
-    let cloud_engine_subnet_id = subnet_configs
-        .iter()
-        .find_map(|(id, config)| {
-            (config["subnet_kind"].as_str()? == "CloudEngine").then_some(id.clone())
-        })
-        .expect("no CloudEngine subnet found in topology");
+    let cloud_engine_subnet_id = ctx.cloud_engine_subnet_id().await;
 
     // Create the canister on the CloudEngine subnet
     // Only the admin can do this. In local envs, the admin is the anonymous principal

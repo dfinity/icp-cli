@@ -135,9 +135,13 @@ pub enum IdentitySpec {
         /// (`Principal::self_authenticating(from_key)`), not the session key.
         principal: Principal,
         storage: DelegationKeyStorage,
-        /// The host used for II login, stored so `icp identity login` can
-        /// re-authenticate without requiring `--host` again.
+        /// The auth domain used for II login, stored so `icp identity login`
+        /// can re-authenticate without requiring `--auth` again.
         host: Url,
+        /// The delegation domain (`--app`) used at link time, stored so re-auth
+        /// resolves the same principal. `None` means the auth page's default.
+        #[serde(default)]
+        domain: Option<String>,
     },
     /// Session key created via `icp identity delegation request`; no delegation
     /// chain yet. Cannot be used as an identity until `icp identity delegation use`

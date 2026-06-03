@@ -176,7 +176,13 @@ async fn sync_step_assets_is_rejected() {
         .args(["project", "show"])
         .assert()
         .failure()
-        .stderr(contains("no longer supports").and(contains("assets")));
+        .stderr(
+            contains("no longer supports")
+                .and(contains("assets"))
+                // The message stays recipe-agnostic; it must not leak a specific
+                // recipe identifier.
+                .and(contains("@dfinity/asset-canister").not()),
+        );
 }
 
 #[tokio::test]

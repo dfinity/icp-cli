@@ -153,8 +153,19 @@ icp-cli automatically injects variables into every recipe template under the res
 | Variable | Value |
 |---|---|
 | `{{_.canister.name}}` | The canister name as defined in `icp.yaml` |
+| `{{_.cli.version}}` | The icp-cli version string, e.g. `0.3.0` |
+
+The `_` namespace is reserved. If a user sets `_` in the `configuration:` block, icp-cli will error immediately.
 
 Use `{{_.canister.name}}` whenever a recipe needs to refer to the canister being built — this avoids requiring users to repeat the name in the `configuration:` block.
+
+Use `{{_.cli.version}}` when a recipe needs to adapt behaviour based on which version of icp-cli the developer is running:
+
+```
+{{#if (eq _.cli.version "0.3.0")}}
+  - echo "running on icp-cli 0.3.0"
+{{/if}}
+```
 
 Built-in recipe variables work with all Handlebars helpers. For example, the `replace` helper can produce the underscore form of a name required by Rust WASM artifact filenames:
 

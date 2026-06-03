@@ -266,6 +266,7 @@ pub async fn consolidate_manifest(
                 Instructions::Recipe { recipe } => {
                     let ctx = recipe::RecipeContext {
                         canister_name: m.name.clone(),
+                        cli_version: env!("CARGO_PKG_VERSION").to_string(),
                     };
                     recipe_resolver
                         .resolve(recipe, &ctx)

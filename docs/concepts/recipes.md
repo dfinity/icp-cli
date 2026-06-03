@@ -127,8 +127,9 @@ recipe:
 | Variable | Value |
 |---|---|
 | `{{_.canister.name}}` | The canister name as defined in `icp.yaml` |
+| `{{_.cli.version}}` | The icp-cli version string, e.g. `0.3.0` |
 
-The `_` namespace is reserved and cannot be overridden by user-provided configuration.
+The `_` namespace is reserved and cannot be set in `configuration:`. Attempting to do so is an error.
 
 These injected variables are available to the Handlebars `replace` helper and all other template features, for example `{{ replace "-" "_" _.canister.name }}` produces the underscore form of the canister name needed for Rust WASM artifact filenames.
 

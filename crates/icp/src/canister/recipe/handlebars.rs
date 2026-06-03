@@ -81,6 +81,20 @@ pub enum HandlebarsError {
 
     #[snafu(display("failed to acquire lock on package cache"))]
     LockCache { source: crate::fs::lock::LockError },
+
+    #[snafu(display(
+        "_ is a reserved namespace in recipe configuration and cannot be set by the user"
+    ))]
+    ReservedNamespace,
+
+    #[snafu(display(
+        "recipe template for '{recipe}' rendered to invalid YAML\n\nRendered content:\n------\n{template}\n------"
+    ))]
+    ParseRenderedYaml {
+        source: serde_yaml::Error,
+        recipe: String,
+        template: String,
+    },
 }
 
 impl Handlebars {
@@ -89,6 +103,11 @@ impl Handlebars {
         recipe: &Recipe,
         recipe_context: &super::RecipeContext,
     ) -> Result<(BuildSteps, SyncSteps), HandlebarsError> {
+        ensure!(
+            !recipe.configuration.contains_key("_"),
+            ReservedNamespaceSnafu
+        );
+
         // Determine the template source
         let tmpl_source = match &recipe.recipe_type {
             RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
@@ -188,7 +207,6 @@ impl Handlebars {
         );
 
         // Build render context: user-provided configuration plus injected _.* variables.
-        // The _ key is reserved and always overrides any user-supplied value.
         let mut render_context = recipe.configuration.clone();
         render_context.insert("_".to_string(), recipe_context.to_yaml());
 
@@ -209,21 +227,11 @@ impl Handlebars {
             sync: SyncSteps,
         }
 
-        let insts = serde_yaml::from_str::<BuildSyncHelper>(&out);
-        let (build, sync) = match insts {
-            Ok(helper) => (helper.build, helper.sync),
-            Err(e) => panic!(
-                "{}",
-                formatdoc! {r#"
-                Unable to render recipe {} template into valid yaml: {e}
-
-                Rendered content:
-                ------
-                {out}
-                ------
-            "#, recipe.recipe_type}
-            ),
-        };
+        let BuildSyncHelper { build, sync } = serde_yaml::from_str::<BuildSyncHelper>(&out)
+            .with_context(|_| ParseRenderedYamlSnafu {
+                recipe: recipe.recipe_type.to_string(),
+                template: out,
+            })?;
 
         // The template is verified good - now cache it if it was remote
         if should_cache {
@@ -355,6 +363,7 @@ mod tests {
     fn recipe_context(canister_name: &str) -> RecipeContext {
         RecipeContext {
             canister_name: canister_name.to_string(),
+            cli_version: "1.2.3".to_string(),
         }
     }
 
@@ -454,6 +463,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cli_version_is_injected() {
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let tmpl_path = tmp.path().join("recipe.hbs");
+        std::fs::write(
+            &tmpl_path,
+            indoc::indoc! {r#"
+                build:
+                  steps:
+                    - type: script
+                      command: "requires icp {{_.cli.version}}"
+            "#},
+        )
+        .unwrap();
+
+        let pkg_cache = PackageCache::new(tmp.path().join("pkg")).unwrap();
+        let hbs = Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache,
+        };
+
+        let recipe = Recipe {
+            recipe_type: RecipeType::File(tmpl_path.to_string()),
+            configuration: HashMap::new(),
+            sha256: None,
+        };
+
+        let (build, _sync) = hbs
+            .resolve_impl(&recipe, &recipe_context("my-canister"))
+            .await
+            .unwrap();
+
+        match build.steps[0].clone() {
+            crate::manifest::canister::BuildStep::Script(adapter) => {
+                assert_eq!(adapter.command.as_vec()[0], "requires icp 1.2.3");
+            }
+            other => panic!("Expected Script build step, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn canister_name_works_with_replace_helper() {
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let tmpl_path = tmp.path().join("recipe.hbs");
@@ -494,7 +543,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reserved_namespace_cannot_be_overridden_by_user_config() {
+    async fn reserved_namespace_in_user_config_is_an_error() {
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let tmpl_path = tmp.path().join("recipe.hbs");
         std::fs::write(
@@ -515,24 +564,7 @@ mod tests {
         };
 
         let mut configuration = HashMap::new();
-        configuration.insert(
-            "_".to_string(),
-            serde_yaml::Value::Mapping({
-                let mut m = serde_yaml::Mapping::new();
-                m.insert(
-                    serde_yaml::Value::String("canister".to_string()),
-                    serde_yaml::Value::Mapping({
-                        let mut inner = serde_yaml::Mapping::new();
-                        inner.insert(
-                            serde_yaml::Value::String("name".to_string()),
-                            serde_yaml::Value::String("user-override".to_string()),
-                        );
-                        inner
-                    }),
-                );
-                m
-            }),
-        );
+        configuration.insert("_".to_string(), serde_yaml::Value::Null);
 
         let recipe = Recipe {
             recipe_type: RecipeType::File(tmpl_path.to_string()),
@@ -540,20 +572,14 @@ mod tests {
             sha256: None,
         };
 
-        let (build, _sync) = hbs
+        let err = hbs
             .resolve_impl(&recipe, &recipe_context("real-name"))
             .await
-            .unwrap();
+            .unwrap_err();
 
-        match build.steps[0].clone() {
-            crate::manifest::canister::BuildStep::Script(adapter) => {
-                assert_eq!(
-                    adapter.command.as_vec()[0],
-                    "build real-name",
-                    "_ namespace must not be overridable by user configuration"
-                );
-            }
-            other => panic!("Expected Script build step, got: {other:?}"),
-        }
+        assert!(
+            matches!(err, HandlebarsError::ReservedNamespace),
+            "expected ReservedNamespace error, got: {err:?}"
+        );
     }
 }

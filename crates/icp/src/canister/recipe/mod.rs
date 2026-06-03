@@ -15,9 +15,13 @@ pub mod handlebars;
 /// ```yaml
 /// canister:
 ///   name: <canister_name>
+/// cli:
+///   version: <cli_version>
 /// ```
 pub struct RecipeContext {
     pub canister_name: String,
+    /// The icp-cli version string, e.g. `"0.3.0"`.
+    pub cli_version: String,
 }
 
 impl RecipeContext {
@@ -29,8 +33,12 @@ impl RecipeContext {
         let mut canister = Mapping::new();
         canister.insert("name".into(), Value::String(self.canister_name.clone()));
 
+        let mut cli = Mapping::new();
+        cli.insert("version".into(), Value::String(self.cli_version.clone()));
+
         let mut root = Mapping::new();
         root.insert("canister".into(), Value::Mapping(canister));
+        root.insert("cli".into(), Value::Mapping(cli));
 
         Value::Mapping(root)
     }

@@ -8,6 +8,8 @@ bump. Currently experimental: sync plugins.
 # Unreleased
 
 * feat: Recipe templates can now use `{{_.canister.name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `_` namespace is reserved and cannot be overridden by user-provided configuration.
+* feat: Recipe templates can now use `{{_.cli.version}}` to read the running icp-cli version string (e.g. `0.3.0`), allowing recipes to adapt behaviour across CLI versions.
+* fix: Setting `_` in a recipe's `configuration:` block is now an explicit error instead of being silently ignored.
 
 # v0.2.7
 

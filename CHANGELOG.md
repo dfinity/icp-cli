@@ -7,6 +7,7 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* BREAKING: removed the `assets` sync step type (`type: assets`). Asset uploading is no longer built into icp-cli — use a `script` or `plugin` sync step instead (for example, a recipe that provides a sync plugin). A manifest that still uses `type: assets` now fails to load with a message explaining the change.
 * feat: Recipe templates can now use `{{_.canister.name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `_` namespace is reserved and cannot be overridden by user-provided configuration.
 
 # v0.2.7

@@ -35,8 +35,8 @@ canisters:
             - echo "Building..."
     sync:
       steps:
-        - type: assets
-          dir: www
+        - type: script
+          command: ./scripts/configure-canister.sh
     settings:
       compute_allocation: 5
     init_args: "()"
@@ -112,31 +112,9 @@ build:
 
 Sync steps run after canister deployment to configure the running canister.
 
-### Assets Sync
-
-Upload files to asset canister:
-
-```yaml
-# Single directory
-sync:
-  steps:
-    - type: assets
-      dir: dist
-
-# Multiple directories
-sync:
-  steps:
-    - type: assets
-      dirs:
-        - dist
-        - static
-        - public/images
-```
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `dir` | string | One of `dir` or `dirs` | Single directory to upload |
-| `dirs` | array | One of `dir` or `dirs` | Multiple directories to upload |
+> Uploading static files to an asset canister is no longer a built-in sync step.
+> Use a `plugin` sync step (a WebAssembly sync plugin) — for example, one provided
+> by a recipe.
 
 ### Script Sync
 

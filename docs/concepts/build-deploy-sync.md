@@ -113,16 +113,11 @@ The sync phase handles post-deployment operations that depend on the canister be
 
 - **Asset canisters** — Upload static files after the canister is running
 
-### Asset Sync
+### Asset Uploads
 
-For frontend canisters, sync uploads your built assets:
-
-```yaml
-sync:
-  steps:
-    - type: assets
-      dir: dist
-```
+For frontend canisters, you typically upload your built assets after deployment.
+This is done with a `plugin` sync step (a WebAssembly sync plugin) — for example,
+one provided by a recipe — rather than a built-in step.
 
 ### Script Sync Steps
 

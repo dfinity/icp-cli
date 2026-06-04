@@ -7,6 +7,7 @@ Link an external key to a new identity
 ###### **Subcommands:**
 
 * [`hsm`](identity-link-hsm.md) — Link an HSM key to a new identity
+* [`web`](identity-link-web.md) — Link a web-based identity (such as Internet Identity) to a new icp-cli identity
 
 
 

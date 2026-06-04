@@ -16,6 +16,7 @@ Manage your identities
 * [`list`](identity-list.md) — List the identities
 * [`new`](identity-new.md) — Create a new identity
 * [`principal`](identity-principal.md) — Display the principal for the current identity
+* [`reauth`](identity-reauth.md) — Re-authenticate a delegation-based identity
 * [`rename`](identity-rename.md) — Rename an identity
 
 

@@ -6,15 +6,23 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 04 Jun 2026 18:34:14 GMT</lastBuildDate>
-    <pubDate>Thu, 04 Jun 2026 18:32:48 GMT</pubDate>
+    <lastBuildDate>Thu, 04 Jun 2026 20:48:42 GMT</lastBuildDate>
+    <pubDate>Thu, 04 Jun 2026 20:47:28 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Thu, 04 Jun 2026 18:32:48 GMT</pubDate>
+      <pubDate>Thu, 04 Jun 2026 20:47:28 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Managing Identities</title>
+      <link>https://cli.internetcomputer.org/main/guides/managing-identities/</link>
+      <description>Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.</description>
+      <pubDate>Thu, 04 Jun 2026 20:47:28 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-identities/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -255,14 +263,6 @@
       <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Managing Identities</title>
-      <link>https://cli.internetcomputer.org/main/guides/managing-identities/</link>
-      <description>Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-identities/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

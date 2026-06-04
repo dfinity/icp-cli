@@ -57,39 +57,6 @@
       "type": "object"
     },
     "Adapter3": {
-      "description": "Configuration for a custom canister build adapter.",
-      "oneOf": [
-        {
-          "description": "Directory used to synchronize an assets canister",
-          "properties": {
-            "dir": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "dir"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Set of directories used to synchronize an assets canister",
-          "properties": {
-            "dirs": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "dirs"
-          ],
-          "type": "object"
-        }
-      ],
-      "type": "object"
-    },
-    "Adapter4": {
       "anyOf": [
         {
           "$ref": "#/$defs/LocalSource",
@@ -996,20 +963,6 @@
         },
         {
           "$ref": "#/$defs/Adapter3",
-          "description": "Represents syncing of an assets canister",
-          "properties": {
-            "type": {
-              "const": "assets",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        },
-        {
-          "$ref": "#/$defs/Adapter4",
           "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
           "properties": {
             "type": {

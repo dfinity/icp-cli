@@ -91,7 +91,7 @@ canisters:
   {% if include_frontend %}
   - name: {{project-name}}-frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
   {% endif %}

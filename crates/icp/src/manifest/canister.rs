@@ -307,20 +307,45 @@ pub struct BuildSteps {
 /// type: script
 /// command: echo "synchronizing canister"
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
     /// This variant allows for flexible sync processes defined by the user.
     Script(adapter::script::Adapter),
 
-    /// Represents syncing of an assets canister
-    Assets(adapter::assets::Adapter),
-
     /// Represents a sync step executed by a WebAssembly plugin running inside
     /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
     /// the canister being synced and read files from the declared `dirs`.
     Plugin(adapter::plugin::Adapter),
+}
+
+impl<'de> Deserialize<'de> for SyncStep {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        // Mirrors `SyncStep` but with an `Assets` catch arm. The retired
+        // `type: assets` step is still recognized here at the parsing surface so
+        // we can emit a helpful, targeted error instead of serde's generic
+        // "unknown variant" message. `IgnoredAny` swallows any `dir`/`dirs`
+        // fields so the error fires regardless of the step's contents.
+        #[derive(Deserialize)]
+        #[serde(tag = "type", rename_all = "lowercase")]
+        enum Helper {
+            Script(adapter::script::Adapter),
+            Plugin(adapter::plugin::Adapter),
+            Assets(serde::de::IgnoredAny),
+        }
+
+        match Helper::deserialize(d)? {
+            Helper::Script(a) => Ok(SyncStep::Script(a)),
+            Helper::Plugin(a) => Ok(SyncStep::Plugin(a)),
+            Helper::Assets(_) => Err(serde::de::Error::custom(
+                "icp-cli no longer supports the `assets` sync step type. \
+                 Switch to a `script` or `plugin` sync step. If this step comes from a \
+                 recipe, check whether a newer version of the recipe uses a plugin-based \
+                 solution.",
+            )),
+        }
+    }
 }
 
 impl fmt::Display for SyncStep {
@@ -330,7 +355,6 @@ impl fmt::Display for SyncStep {
             "{}",
             match self {
                 SyncStep::Script(v) => format!("script {v}"),
-                SyncStep::Assets(v) => format!("assets {v}"),
                 SyncStep::Plugin(v) => {
                     let src = match &v.source {
                         adapter::prebuilt::SourceField::Local(l) => format!("path: {}", l.path),
@@ -358,7 +382,6 @@ mod tests {
     use crate::{
         manifest::{
             adapter::{
-                assets,
                 prebuilt::{self, RemoteSource, SourceField},
                 script,
             },
@@ -718,8 +741,8 @@ mod tests {
                       steps: []
                     sync:
                       steps:
-                        - type: assets
-                          dir: dist
+                        - type: script
+                          command: echo hi
             "#})
         {
             Ok(_) => {
@@ -836,10 +859,13 @@ mod tests {
         "#});
     }
 
+    /// The retired `type: assets` sync step is still recognized at the parsing
+    /// surface, but deserialization fails with a helpful, targeted message.
     #[test]
-    fn sync_steps() {
-        assert_eq!(
-            validate_canister_yaml(indoc! {r#"
+    fn sync_step_assets_is_rejected() {
+        for fixture in [
+            // single dir
+            indoc! {r#"
                 name: my-canister
                 build:
                   steps:
@@ -849,25 +875,43 @@ mod tests {
                   steps:
                     - type: assets
                       dir: dist
-            "#}),
-            CanisterManifest {
-                name: "my-canister".to_string(),
-                settings: Settings::default(),
-                init_args: None,
-                instructions: Instructions::BuildSync {
-                    build: BuildSteps {
-                        steps: vec![BuildStep::Script(script::Adapter {
-                            command: script::CommandField::Command("dosomething.sh".to_string()),
-                        })]
-                    },
-                    sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Assets(assets::Adapter {
-                            dir: assets::DirField::Dir("dist".to_string()),
-                        })]
-                    }),
-                },
-            },
-        );
+            "#},
+            // multiple dirs
+            indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: assets
+                      dirs:
+                        - dist
+            "#},
+            // no dir field at all
+            indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: assets
+            "#},
+        ] {
+            match serde_yaml::from_str::<CanisterManifest>(fixture) {
+                Ok(_) => panic!("`type: assets` should no longer deserialize"),
+                Err(err) => {
+                    let msg = format!("{err}");
+                    assert!(
+                        msg.contains("no longer supports") && msg.contains("assets"),
+                        "expected a helpful `assets` removal error but got: {err}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

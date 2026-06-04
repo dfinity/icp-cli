@@ -183,6 +183,7 @@ export default defineConfig({
           label: 'Other',
           items: [
             { label: 'Migrating from dfx', slug: 'migration/from-dfx' },
+            { label: 'Upgrading from icp-cli 0.2', slug: 'migration/upgrading-from-v0.2' },
             { label: 'Telemetry', slug: 'telemetry' },
           ],
         },

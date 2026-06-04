@@ -3,7 +3,7 @@
 canisters:
   - name: docs
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         version: asset-canister-404-support
         dir: .

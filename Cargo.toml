@@ -54,7 +54,6 @@ hmac = { version = "0.13", features = ["zeroize"] }
 hybrid-array = { version = "0.4.10", features = ["zeroize"] }
 httptest = "0.16.3"
 ic-agent = { version = "0.47.0" }
-ic-asset = "0.29.0"
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.7.1" }
@@ -64,6 +63,7 @@ icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }
 ic-identity-hsm = "0.47.0"
 icrc-ledger-types = "0.1.10"
+indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"
@@ -98,7 +98,6 @@ serde_json = "1.0"
 serde_yaml = "0.9.34"
 sha2 = { version = "0.11.0", features = ["zeroize"] }
 shellwords = "1.1.0"
-slog = "2.7.0"
 snafu = "0.9.0"
 strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = "0.38.4"

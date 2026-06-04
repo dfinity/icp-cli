@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
 use crate::fs;
@@ -16,9 +16,14 @@ pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {
-    canister::{ArgsFormat, CanisterManifest, ManifestInitArgs},
+    adapter::plugin,
+    adapter::prebuilt,
+    canister::{
+        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestInitArgs,
+        SyncStep, SyncSteps,
+    },
     environment::EnvironmentManifest,
-    network::NetworkManifest,
+    network::{ManagedMode, Mode, NetworkManifest},
     project::ProjectManifest,
 };
 
@@ -39,6 +44,19 @@ pub enum Item<T> {
 
     /// The manifest
     Manifest(T),
+}
+
+/// Items in path form serialize back to a bare path string, *not* to the contents of the
+/// referenced file. Callers that need a self-contained YAML output (e.g. `icp project bundle`)
+/// must convert any `Item::Path` to `Item::Manifest` themselves by loading the referenced
+/// manifest first.
+impl<T: Serialize> Serialize for Item<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Item::Path(p) => p.serialize(serializer),
+            Item::Manifest(m) => m.serialize(serializer),
+        }
+    }
 }
 
 impl<'de, T> Deserialize<'de> for Item<T>

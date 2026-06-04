@@ -9,7 +9,9 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, build_sync_plugin_example, clients,
+};
 
 mod common;
 
@@ -145,21 +147,14 @@ async fn sync_adapter_script_multiple() {
         .stderr(contains("first").and(contains("second")));
 }
 
+/// The `assets` sync step type was removed. A manifest that still uses it must
+/// fail to load with a helpful, targeted message (and must not name a specific
+/// recipe).
 #[tokio::test]
-async fn sync_adapter_static_assets() {
+async fn sync_step_assets_is_rejected() {
     let ctx = TestContext::new();
-
-    // Setup project
     let project_dir = ctx.create_project_dir("icp");
-    let assets_dir = project_dir.join("www");
 
-    // Create assets directory
-    create_dir_all(&assets_dir).expect("failed to create assets directory");
-
-    // Create simple index page
-    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
-
-    // Project manifest
     let pm = formatdoc! {r#"
         canisters:
           - name: my-canister
@@ -173,89 +168,23 @@ async fn sync_adapter_static_assets() {
               steps:
                 - type: assets
                   dirs:
-                    - {assets_dir}
-
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+                    - www
     "#};
 
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        &pm,                           // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network").await;
-
-    // Wait for network
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    let network_port = ctx
-        .wait_for_network_descriptor(&project_dir, "random-network")
-        .gateway_port;
-
-    // Deploy project
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
-        .mint_cycles(10 * TRILLION);
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["deploy", "--environment", "random-environment"])
+        .args(["project", "show"])
         .assert()
-        .success();
-
-    let id_mapping_path = project_dir
-        .join(".icp")
-        .join("cache")
-        .join("mappings")
-        .join("random-environment.ids.json");
-
-    let id_mapping_content: IdMapping =
-        icp::fs::json::load(&id_mapping_path).expect("failed to read ID mapping file");
-
-    let cid = id_mapping_content
-        .get("my-canister")
-        .expect("canister ID not found");
-
-    // Invoke sync
-    ctx.icp()
-        .current_dir(project_dir)
-        .args(["sync", "my-canister", "--environment", "random-environment"])
-        .assert()
-        .success();
-
-    // Verify that assets canister was synced via canisterId query param
-    let resp = reqwest::get(format!("http://localhost:{network_port}/?canisterId={cid}"))
-        .await
-        .expect("request failed");
-
-    let out = resp
-        .text()
-        .await
-        .expect("failed to read canister response body");
-
-    assert_eq!(out, "hello");
-
-    // Verify that the friendly domain also works
-    let friendly_domain = "my-canister.random-environment.localhost";
-    let client = reqwest::Client::builder()
-        .resolve(
-            friendly_domain,
-            std::net::SocketAddr::from(([127, 0, 0, 1], network_port)),
-        )
-        .build()
-        .expect("failed to build reqwest client");
-    let resp = client
-        .get(format!("http://{friendly_domain}:{network_port}/"))
-        .send()
-        .await
-        .expect("friendly domain request failed");
-    let out = resp
-        .text()
-        .await
-        .expect("failed to read friendly domain response body");
-    assert_eq!(out, "hello");
+        .failure()
+        .stderr(
+            contains("no longer supports")
+                .and(contains("assets"))
+                // The message stays recipe-agnostic; it must not leak a specific
+                // recipe identifier.
+                .and(contains("@dfinity/asset-canister").not()),
+        );
 }
 
 #[tokio::test]
@@ -383,56 +312,6 @@ async fn sync_multiple_canisters() {
         .stderr(contains("DEBUG icp::progress: syncing canister-a"))
         .stderr(contains("DEBUG icp::progress: syncing canister-b"))
         .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
-}
-
-/// Compiles the canister and plugin from `examples/icp-sync-plugin/` and returns
-/// (canister_wasm_path, plugin_wasm_path). Cargo caches the build so subsequent
-/// test runs are fast when sources haven't changed.
-fn build_sync_plugin_example() -> (PathBuf, PathBuf) {
-    let example_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/icp-sync-plugin");
-    // Use CARGO env var when available (set by cargo test), fall back to PATH lookup.
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-
-    let status = std::process::Command::new(&cargo)
-        .args([
-            "build",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--release",
-            "-p",
-            "canister",
-        ])
-        .current_dir(&example_dir)
-        .status()
-        .expect("failed to spawn cargo build for canister");
-    assert!(
-        status.success(),
-        "cargo build --target wasm32-unknown-unknown failed"
-    );
-
-    let status = std::process::Command::new(&cargo)
-        .args([
-            "build",
-            "--target",
-            "wasm32-wasip2",
-            "--release",
-            "-p",
-            "plugin",
-        ])
-        .current_dir(&example_dir)
-        .status()
-        .expect("failed to spawn cargo build for plugin");
-
-    assert!(
-        status.success(),
-        "cargo build --target wasm32-wasip2 failed"
-    );
-
-    (
-        example_dir.join("target/wasm32-unknown-unknown/release/canister.wasm"),
-        example_dir.join("target/wasm32-wasip2/release/plugin.wasm"),
-    )
 }
 
 #[tokio::test]

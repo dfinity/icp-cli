@@ -10,11 +10,7 @@ use crate::common::{
     ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
     TestContext, clients,
 };
-use icp::{
-    fs::{create_dir_all, write_string},
-    prelude::*,
-    store_id::IdMapping,
-};
+use icp::{fs::write_string, prelude::*, store_id::IdMapping};
 
 mod common;
 
@@ -457,9 +453,6 @@ async fn deploy_prints_friendly_url_for_asset_canister() {
 
     // Setup project
     let project_dir = ctx.create_project_dir("icp");
-    let assets_dir = project_dir.join("www");
-    create_dir_all(&assets_dir).expect("failed to create assets directory");
-    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
 
     // Project manifest with a pre-built asset canister
     let pm = formatdoc! {r#"
@@ -470,12 +463,6 @@ async fn deploy_prints_friendly_url_for_asset_canister() {
                 - type: pre-built
                   url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
                   sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
-
-            sync:
-              steps:
-                - type: assets
-                  dirs:
-                    - {assets_dir}
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

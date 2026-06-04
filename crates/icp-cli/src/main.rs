@@ -406,6 +406,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
             commands::project::Command::Show(args) => {
                 commands::project::show::exec(ctx, &args).await?
             }
+            commands::project::Command::Bundle(args) => {
+                commands::project::bundle::exec(ctx, &args).await?
+            }
         },
 
         // Settings

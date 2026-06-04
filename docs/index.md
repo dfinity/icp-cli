@@ -54,6 +54,6 @@ Complete technical specifications:
 ## Additional Resources
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
-- [Upgrading from icp-cli 0.2](migration/upgrading-from-v0.2.md) — Switch off the removed `type: assets` sync step
+- [Upgrading from icp-cli 0.2](migration/upgrading-from-v0-2.md) — Switch off the removed `type: assets` sync step
 - [Telemetry](telemetry.md) — What data is collected and how to opt out
 - [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases

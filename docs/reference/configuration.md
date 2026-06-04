@@ -117,7 +117,7 @@ Sync steps run after canister deployment to configure the running canister.
 > by a recipe. The `@dfinity/asset-canister` recipe emits a `plugin` sync step
 > starting with `v2.2.0`; earlier versions emit the retired `assets` step and will
 > no longer load. Upgrading an existing project? See
-> [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0.2.md).
+> [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0-2.md).
 
 ### Script Sync
 

@@ -129,13 +129,14 @@ pub enum IdentitySpec {
         slot: usize,
         key_id: String,
     },
-    InternetIdentity {
+    #[serde(alias = "internet-identity")]
+    WebAuth {
         algorithm: IdentityKeyAlgorithm,
         /// The principal at the root of the delegation chain
         /// (`Principal::self_authenticating(from_key)`), not the session key.
         principal: Principal,
         storage: DelegationKeyStorage,
-        /// The auth domain used for II login, stored so `icp identity login`
+        /// The auth domain used for web login, stored so `icp identity reauth`
         /// can re-authenticate without requiring `--auth` again.
         host: Url,
         /// The delegation domain (`--app`) used at link time, stored so re-auth
@@ -169,7 +170,7 @@ impl IdentitySpec {
             IdentitySpec::Anonymous => Some(Principal::anonymous()),
             IdentitySpec::Keyring { principal, .. } => Some(*principal),
             IdentitySpec::Hsm { principal, .. } => Some(*principal),
-            IdentitySpec::InternetIdentity { principal, .. } => Some(*principal),
+            IdentitySpec::WebAuth { principal, .. } => Some(*principal),
             IdentitySpec::PendingDelegation { .. } => None,
             IdentitySpec::Delegation { principal, .. } => Some(*principal),
         }

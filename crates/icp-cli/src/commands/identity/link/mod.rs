@@ -1,12 +1,11 @@
 use clap::Subcommand;
 
 pub(crate) mod hsm;
-pub(crate) mod ii;
+pub(crate) mod web;
 
 /// Link an external key to a new identity
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Hsm(hsm::HsmArgs),
-    #[command(hide = true)] // todo remove when II login is out of beta
-    Ii(ii::IiArgs),
+    Web(web::WebArgs),
 }

@@ -123,7 +123,7 @@ pub enum LoadIdentityError {
 
     #[snafu(display(
         "delegation for identity `{name}` has expired or will expire within 5 minutes; \
-         run `icp identity login {name}` to re-authenticate"
+         run `icp identity reauth {name}` to re-authenticate"
     ))]
     DelegationExpired { name: String },
 
@@ -160,13 +160,13 @@ pub fn load_identity(
             ..
         } => load_hsm_identity(module, *slot, key_id, password_func),
         IdentitySpec::Anonymous => Ok(Arc::new(AnonymousIdentity)),
-        IdentitySpec::InternetIdentity {
+        IdentitySpec::WebAuth {
             algorithm, storage, ..
-        } => load_ii_identity(dirs, name, algorithm, storage, password_func),
+        } => load_webauth_identity(dirs, name, algorithm, storage, password_func),
         IdentitySpec::PendingDelegation { .. } => DelegationNotYetProvidedSnafu { name }.fail(),
         IdentitySpec::Delegation {
             algorithm, storage, ..
-        } => load_ii_identity(dirs, name, algorithm, storage, password_func),
+        } => load_webauth_identity(dirs, name, algorithm, storage, password_func),
     }
 }
 
@@ -335,14 +335,14 @@ fn load_hsm_identity(
 
 const FIVE_MINUTES_NANOS: u64 = 5 * 60 * 1_000_000_000;
 
-fn load_ii_identity(
+fn load_webauth_identity(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
     storage: &DelegationKeyStorage,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
-    let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
+    let (doc, origin) = load_webauth_session_pem(dirs, name, storage)?;
 
     // Load the delegation chain
     let chain_path = dirs.delegation_chain_path(name);
@@ -376,35 +376,35 @@ fn load_ii_identity(
     Ok(Arc::new(delegated))
 }
 
-/// Returns the DER-encoded public key for a stored II session key.
+/// Returns the DER-encoded public key for a stored web-auth session key.
 ///
 /// Used during re-authentication to obtain the session public key without
 /// re-loading the full delegated identity.
-pub fn load_ii_session_public_key(
+pub fn load_webauth_session_public_key(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
     storage: &DelegationKeyStorage,
     password_func: impl FnOnce() -> Result<String, String>,
 ) -> Result<Vec<u8>, LoadIdentityError> {
-    let (doc, origin) = load_ii_session_pem(dirs, name, storage)?;
+    let (doc, origin) = load_webauth_session_pem(dirs, name, storage)?;
 
     match storage {
         DelegationKeyStorage::Keyring
         | DelegationKeyStorage::Pem {
             format: PemFormat::Plaintext,
-        } => load_ii_public_key_plaintext(&doc, algorithm, &origin),
+        } => load_webauth_public_key_plaintext(&doc, algorithm, &origin),
         DelegationKeyStorage::Pem {
             format: PemFormat::Pbes2,
         } => {
             let pw = password_func()
                 .map_err(|message| LoadIdentityError::GetPasswordError { message })?;
-            load_ii_public_key_pbes2(&doc, algorithm, &origin, &pw)
+            load_webauth_public_key_pbes2(&doc, algorithm, &origin, &pw)
         }
     }
 }
 
-fn load_ii_session_pem(
+fn load_webauth_session_pem(
     dirs: LRead<&IdentityPaths>,
     name: &str,
     storage: &DelegationKeyStorage,
@@ -436,7 +436,7 @@ fn load_ii_session_pem(
     }
 }
 
-fn load_ii_public_key_plaintext(
+fn load_webauth_public_key_plaintext(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     origin: &PemOrigin,
@@ -466,7 +466,7 @@ fn load_ii_public_key_plaintext(
     }
 }
 
-fn load_ii_public_key_pbes2(
+fn load_webauth_public_key_pbes2(
     doc: &Pem,
     algorithm: &IdentityKeyAlgorithm,
     origin: &PemOrigin,
@@ -769,8 +769,8 @@ pub fn rename_identity(
         Keyring(Entry),
         DelegationKeyring(Entry),
         DelegationPem(PathBuf),
-        IiKeyringAndDelegation(Entry, PathBuf),
-        IiPemAndDelegation(PathBuf, PathBuf),
+        WebAuthKeyringAndDelegation(Entry, PathBuf),
+        WebAuthPemAndDelegation(PathBuf, PathBuf),
         None,
     }
 
@@ -799,7 +799,7 @@ pub fn rename_identity(
 
             OldKeyMaterial::Keyring(old_entry)
         }
-        IdentitySpec::InternetIdentity { storage, .. } => {
+        IdentitySpec::WebAuth { storage, .. } => {
             let old_delegation = dirs.delegation_chain_path(old_name);
             let new_delegation = dirs
                 .ensure_delegation_chain_path(new_name)
@@ -819,14 +819,14 @@ pub fn rename_identity(
                     new_entry
                         .set_password(&password)
                         .context(SetKeyringEntryPasswordSnafu { new_name })?;
-                    OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
+                    OldKeyMaterial::WebAuthKeyringAndDelegation(old_entry, old_delegation)
                 }
                 DelegationKeyStorage::Pem { .. } => {
                     let old_pem = dirs.key_pem_path(old_name);
                     let new_pem = dirs.key_pem_path(new_name);
                     let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
                     fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
-                    OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation)
+                    OldKeyMaterial::WebAuthPemAndDelegation(old_pem, old_delegation)
                 }
             }
         }
@@ -879,14 +879,14 @@ pub fn rename_identity(
                     new_entry
                         .set_password(&password)
                         .context(SetKeyringEntryPasswordSnafu { new_name })?;
-                    OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation)
+                    OldKeyMaterial::WebAuthKeyringAndDelegation(old_entry, old_delegation)
                 }
                 DelegationKeyStorage::Pem { .. } => {
                     let old_pem = dirs.key_pem_path(old_name);
                     let new_pem = dirs.key_pem_path(new_name);
                     let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
                     fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
-                    OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation)
+                    OldKeyMaterial::WebAuthPemAndDelegation(old_pem, old_delegation)
                 }
             }
         }
@@ -921,13 +921,13 @@ pub fn rename_identity(
         OldKeyMaterial::DelegationPem(old_pem) => {
             fs::remove_file(&old_pem).context(DeleteOldKeyFileSnafu)?;
         }
-        OldKeyMaterial::IiKeyringAndDelegation(old_entry, old_delegation) => {
+        OldKeyMaterial::WebAuthKeyringAndDelegation(old_entry, old_delegation) => {
             old_entry
                 .delete_credential()
                 .context(DeleteKeyringEntrySnafu { old_name })?;
             fs::remove_file(&old_delegation).context(DeleteOldKeyFileSnafu)?;
         }
-        OldKeyMaterial::IiPemAndDelegation(old_pem, old_delegation) => {
+        OldKeyMaterial::WebAuthPemAndDelegation(old_pem, old_delegation) => {
             fs::remove_file(&old_pem).context(DeleteOldKeyFileSnafu)?;
             fs::remove_file(&old_delegation).context(DeleteOldKeyFileSnafu)?;
         }
@@ -1015,7 +1015,7 @@ pub fn delete_identity(
                 .delete_credential()
                 .context(DeleteKeyringEntryForDeleteSnafu { name })?;
         }
-        IdentitySpec::InternetIdentity { storage, .. } => {
+        IdentitySpec::WebAuth { storage, .. } => {
             match storage {
                 DelegationKeyStorage::Keyring => {
                     let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
@@ -1164,11 +1164,11 @@ pub enum CreatePendingDelegationError {
     },
 }
 
-/// Links an Internet Identity delegation to a new named identity.
+/// Links a web-auth identity to a new named identity.
 ///
 /// Stores the session keypair according to `storage` and the delegation chain
 /// as a separate JSON file.
-pub fn link_ii_identity(
+pub fn link_webauth_identity(
     dirs: LWrite<&IdentityPaths>,
     name: &str,
     key: IdentityKey,
@@ -1199,7 +1199,7 @@ pub fn link_ii_identity(
             .expect("infallible PKI encoding"),
     };
 
-    let ii_storage = match &create_format {
+    let webauth_storage = match &create_format {
         CreateFormat::Keyring => {
             let pem = doc
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
@@ -1247,10 +1247,10 @@ pub fn link_ii_identity(
         path: &delegation_path,
     })?;
 
-    let spec = IdentitySpec::InternetIdentity {
+    let spec = IdentitySpec::WebAuth {
         algorithm,
         principal,
-        storage: ii_storage,
+        storage: webauth_storage,
         host,
         domain,
     };
@@ -1261,47 +1261,47 @@ pub fn link_ii_identity(
 }
 
 #[derive(Debug, Snafu)]
-pub enum UpdateIiDelegationError {
+pub enum UpdateWebAuthDelegationError {
     #[snafu(transparent)]
     LoadIdentityManifest { source: LoadIdentityManifestError },
 
     #[snafu(display("no identity found with name `{name}`"))]
-    IiIdentityNotFound { name: String },
+    WebAuthIdentityNotFound { name: String },
 
-    #[snafu(display("identity `{name}` is not an Internet Identity"))]
-    NotInternetIdentity { name: String },
+    #[snafu(display("identity `{name}` is not web-based"))]
+    NotWebBased { name: String },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
-    UpdateIiDelegationSave {
+    UpdateWebAuthDelegationSave {
         path: PathBuf,
         source: delegation::SaveError,
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    UpdateIiCreateDir { source: crate::fs::IoError },
+    UpdateWebAuthCreateDir { source: crate::fs::IoError },
 }
 
-/// Updates the delegation chain for an existing Internet Identity.
-pub fn update_ii_delegation(
+/// Updates the delegation chain for an existing web-based identity.
+pub fn update_webauth_delegation(
     dirs: LWrite<&IdentityPaths>,
     name: &str,
     chain: &delegation::DelegationChain,
-) -> Result<(), UpdateIiDelegationError> {
+) -> Result<(), UpdateWebAuthDelegationError> {
     let identity_list = IdentityList::load_from(dirs.read())?;
     let spec = identity_list
         .identities
         .get(name)
-        .context(IiIdentityNotFoundSnafu { name })?;
+        .context(WebAuthIdentityNotFoundSnafu { name })?;
 
     ensure!(
-        matches!(spec, IdentitySpec::InternetIdentity { .. }),
-        NotInternetIdentitySnafu { name }
+        matches!(spec, IdentitySpec::WebAuth { .. }),
+        NotWebBasedSnafu { name }
     );
 
     let delegation_path = dirs
         .ensure_delegation_chain_path(name)
-        .context(UpdateIiCreateDirSnafu)?;
-    delegation::save(&delegation_path, chain).context(UpdateIiDelegationSaveSnafu {
+        .context(UpdateWebAuthCreateDirSnafu)?;
+    delegation::save(&delegation_path, chain).context(UpdateWebAuthDelegationSaveSnafu {
         path: &delegation_path,
     })?;
 
@@ -1497,8 +1497,8 @@ pub enum ExportIdentityError {
     #[snafu(display("cannot export an HSM-backed identity"))]
     CannotExportHsm,
 
-    #[snafu(display("cannot export an Internet Identity-backed identity"))]
-    CannotExportInternetIdentity,
+    #[snafu(display("cannot export a delegation-based identity"))]
+    CannotExportDelegationBased,
 
     #[snafu(display("cannot export a delegation identity"))]
     CannotExportDelegation,
@@ -1607,7 +1607,7 @@ pub fn export_identity(
         }
         IdentitySpec::Anonymous => return CannotExportAnonymousSnafu.fail(),
         IdentitySpec::Hsm { .. } => return CannotExportHsmSnafu.fail(),
-        IdentitySpec::InternetIdentity { .. } => return CannotExportInternetIdentitySnafu.fail(),
+        IdentitySpec::WebAuth { .. } => return CannotExportDelegationBasedSnafu.fail(),
         IdentitySpec::PendingDelegation { .. } | IdentitySpec::Delegation { .. } => {
             return CannotExportDelegationSnafu.fail();
         }

@@ -33,9 +33,9 @@ use url::Url;
 
 use crate::commands::identity::StorageMode;
 
-/// Link an Internet Identity to a new identity
+/// Link a web-based identity (such as Internet Identity) to a new icp-cli identity
 #[derive(Debug, Args)]
-pub(crate) struct IiArgs {
+pub(crate) struct WebArgs {
     /// Name for the linked identity
     name: String,
 
@@ -67,10 +67,10 @@ fn parse_auth(s: &str) -> Result<Url, String> {
     Url::parse(&with_scheme).map_err(|e| e.to_string())
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
+pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthError> {
     ctx.dirs
         .identity()?
-        .with_read(async |dirs| -> Result<(), IiError> {
+        .with_read(async |dirs| -> Result<(), WebAuthError> {
             let list = IdentityList::load_from(dirs).context(LoadIdentityListSnafu)?;
             ensure!(
                 !list.identities.contains_key(&args.name),
@@ -114,19 +114,27 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .context(PollSnafu)?;
 
     let from_key = hex::decode(&chain.public_key).context(DecodeFromKeySnafu)?;
-    let ii_principal = Principal::self_authenticating(&from_key);
+    let remote_principal = Principal::self_authenticating(&from_key);
 
     let auth = args.auth.clone();
-    let app = args.app.clone();
+    let app = args.app.clone().map(|app| {
+        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is.
+        // Temporary hack: NNS is the most common app that would break. Special-case it
+        if app == "nns.internetcomputer.org" {
+            "nns.ic0.app".to_string()
+        } else {
+            app
+        }
+    });
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
-            key::link_ii_identity(
+            key::link_webauth_identity(
                 dirs,
                 &args.name,
                 identity_key,
                 &chain,
-                ii_principal,
+                remote_principal,
                 create_format,
                 auth,
                 app,
@@ -135,7 +143,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
         .await?
         .context(LinkSnafu)?;
 
-    info!("Identity `{}` linked to Internet Identity", args.name);
+    info!("Identity `{}` linked from web identity", args.name);
 
     if matches!(args.storage, StorageMode::Plaintext) {
         warn!(
@@ -147,7 +155,7 @@ pub(crate) async fn exec(ctx: &Context, args: &IiArgs) -> Result<(), IiError> {
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum IiError {
+pub(crate) enum WebAuthError {
     #[snafu(display("identity `{name}` already exists"))]
     NameTaken {
         name: String,
@@ -168,9 +176,9 @@ pub(crate) enum IiError {
         source: dialoguer::Error,
     },
 
-    #[snafu(display("failed during II authentication"))]
+    #[snafu(display("failed during web authentication"))]
     Poll {
-        source: IiRecvError,
+        source: WebAuthRecvError,
     },
 
     #[snafu(display("invalid public key in delegation chain"))]
@@ -183,7 +191,7 @@ pub(crate) enum IiError {
         source: icp::fs::lock::LockError,
     },
 
-    #[snafu(display("failed to link II identity"))]
+    #[snafu(display("failed to link web-auth identity"))]
     Link {
         source: key::CreatePendingDelegationError,
     },
@@ -194,7 +202,7 @@ pub(crate) enum IiError {
 pub(crate) const DEFAULT_AUTH: &str = "https://id.ai";
 
 #[derive(Debug, Snafu)]
-pub(crate) enum IiRecvError {
+pub(crate) enum WebAuthRecvError {
     #[snafu(display("failed to bind local callback server"))]
     BindServer { source: std::io::Error },
 
@@ -213,7 +221,7 @@ pub(crate) enum IiRecvError {
     #[snafu(display("interrupted"))]
     Interrupted,
 
-    #[snafu(display("failed to open browser for II login"))]
+    #[snafu(display("failed to open browser for login"))]
     OpenBrowser { source: std::io::Error },
 
     #[snafu(display("failed to read confirmation from terminal"))]
@@ -238,7 +246,7 @@ pub(crate) async fn recv_delegation(
     delegation_domain: Option<&str>,
     der_public_key: &[u8],
     expected_principal: Option<Principal>,
-) -> Result<DelegationChain, IiRecvError> {
+) -> Result<DelegationChain, WebAuthRecvError> {
     let key_b64 = URL_SAFE_NO_PAD.encode(der_public_key);
 
     // Single-use secret shared with the frontend via the URL fragment, which is
@@ -368,9 +376,9 @@ pub(crate) async fn recv_delegation(
     });
     open::that(login_url.as_str()).context(OpenBrowserSnafu)?;
     // Mirror the id.ai/cli terminal block: a checked "Browser opened" line, then
-    // an animated "Linking Internet Identity" step until the delegation lands.
+    // an animated "Linking web-based identity" step until the delegation lands.
     spinner.println(format!("{} Browser opened", green_check()));
-    spinner.set_message("Linking Internet Identity");
+    spinner.set_message("Linking web-based identity");
     spinner.enable_steady_tick(Duration::from_millis(80));
     let mut serve_fut = std::pin::pin!(serve.into_future());
     let result = loop {
@@ -391,9 +399,9 @@ pub(crate) async fn recv_delegation(
 
     match result.expect("sender only dropped after sending") {
         Ok(chain) => {
-            // Leaves a checked "✓ Linking Internet Identity" line (the final
+            // Leaves a checked "✓ Linking web-based identity" line (the final
             // tick of the spinner style).
-            spinner.finish_with_message("Linking Internet Identity");
+            spinner.finish_with_message("Linking web-based identity");
             Ok(chain)
         }
         Err(()) => {

@@ -92,7 +92,7 @@ impl From<&IdentitySpec> for IdentityStorageType {
             IdentitySpec::Keyring { .. } => Self::Keyring,
             IdentitySpec::Hsm { .. } => Self::Hsm,
             IdentitySpec::Anonymous => Self::Anonymous,
-            IdentitySpec::InternetIdentity { .. } => Self::InternetIdentity,
+            IdentitySpec::WebAuth { .. } => Self::InternetIdentity,
             IdentitySpec::PendingDelegation { .. } => Self::PendingDelegation,
             IdentitySpec::Delegation { .. } => Self::Delegation,
         }

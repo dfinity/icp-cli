@@ -16,9 +16,8 @@ use icp::{
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, EnvironmentManifest, Instructions,
         Item, LoadManifestFromPathError, ManagedMode, ManifestInitArgs, Mode, NetworkManifest,
-        PROJECT_MANIFEST, ProjectManifest, SyncStep, SyncSteps,
-        assets::DirField,
-        load_manifest_from_path, plugin, prebuilt,
+        PROJECT_MANIFEST, ProjectManifest, SyncStep, SyncSteps, load_manifest_from_path, plugin,
+        prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
@@ -223,7 +222,6 @@ const APP_MANIFEST: &str = "icp_manifest.yaml";
 #[derive(Default)]
 struct BundleArtifacts {
     wasms: Vec<NamedBytes>,
-    asset_dirs: Vec<DirEntry>,
     plugin_wasms: Vec<NamedBytes>,
     plugin_dirs: Vec<DirEntry>,
     plugin_files: Vec<PluginFile>,
@@ -331,9 +329,6 @@ async fn prepare_canister(
                 }
                 .fail();
             }
-            SyncStep::Assets(adapter) => {
-                bundle_sync_steps.push(prepare_asset_step(adapter, canister_path, &path_name, out));
-            }
             SyncStep::Plugin(adapter) => {
                 let idx = plugin_idx;
                 plugin_idx += 1;
@@ -378,32 +373,6 @@ async fn prepare_canister(
             sync,
         },
     }))
-}
-
-fn prepare_asset_step(
-    adapter: &icp::manifest::assets::Adapter,
-    canister_path: &Path,
-    path_name: &str,
-    out: &mut BundleArtifacts,
-) -> SyncStep {
-    let dirs = adapter.dir.as_vec();
-    let mut prefixed: Vec<String> = Vec::with_capacity(dirs.len());
-    for d in &dirs {
-        let archive_prefix = format!("canisters/{path_name}/{}", normalize_archive_dir(d));
-        out.asset_dirs.push(DirEntry {
-            src_path: canister_path.join(d),
-            archive_prefix: archive_prefix.clone(),
-        });
-        prefixed.push(archive_prefix);
-    }
-
-    let new_dir = if prefixed.len() == 1 {
-        DirField::Dir(prefixed.into_iter().next().unwrap())
-    } else {
-        DirField::Dirs(prefixed)
-    };
-
-    SyncStep::Assets(icp::manifest::assets::Adapter { dir: new_dir })
 }
 
 async fn prepare_plugin_step(
@@ -713,10 +682,6 @@ fn write_archive(
         append_bytes(&mut archive, &entry.archive_path, &data)?;
     }
 
-    for d in &artifacts.asset_dirs {
-        append_dir(&mut archive, &d.src_path, &d.archive_prefix)?;
-    }
-
     for nb in &artifacts.plugin_wasms {
         append_bytes(&mut archive, &nb.archive_path, &nb.bytes)?;
     }
@@ -816,17 +781,6 @@ fn validate_source_paths(
         for step in &canister.sync.steps {
             match step {
                 SyncStep::Script(_) => {}
-                SyncStep::Assets(adapter) => {
-                    for d in adapter.dir.as_vec() {
-                        let src = canister_path.join(&d);
-                        let canon = canonicalize_within_project(
-                            &src,
-                            canonical_project_dir,
-                            &canister.name,
-                        )?;
-                        canonical_sync_dirs.push(canon);
-                    }
-                }
                 SyncStep::Plugin(adapter) => {
                     if let Some(dirs) = &adapter.dirs {
                         for d in dirs {

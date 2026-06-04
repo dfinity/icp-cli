@@ -9,7 +9,9 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, build_sync_plugin_example, clients,
+};
 
 mod common;
 
@@ -310,56 +312,6 @@ async fn sync_multiple_canisters() {
         .stderr(contains("DEBUG icp::progress: syncing canister-a"))
         .stderr(contains("DEBUG icp::progress: syncing canister-b"))
         .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
-}
-
-/// Compiles the canister and plugin from `examples/icp-sync-plugin/` and returns
-/// (canister_wasm_path, plugin_wasm_path). Cargo caches the build so subsequent
-/// test runs are fast when sources haven't changed.
-fn build_sync_plugin_example() -> (PathBuf, PathBuf) {
-    let example_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/icp-sync-plugin");
-    // Use CARGO env var when available (set by cargo test), fall back to PATH lookup.
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-
-    let status = std::process::Command::new(&cargo)
-        .args([
-            "build",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--release",
-            "-p",
-            "canister",
-        ])
-        .current_dir(&example_dir)
-        .status()
-        .expect("failed to spawn cargo build for canister");
-    assert!(
-        status.success(),
-        "cargo build --target wasm32-unknown-unknown failed"
-    );
-
-    let status = std::process::Command::new(&cargo)
-        .args([
-            "build",
-            "--target",
-            "wasm32-wasip2",
-            "--release",
-            "-p",
-            "plugin",
-        ])
-        .current_dir(&example_dir)
-        .status()
-        .expect("failed to spawn cargo build for plugin");
-
-    assert!(
-        status.success(),
-        "cargo build --target wasm32-wasip2 failed"
-    );
-
-    (
-        example_dir.join("target/wasm32-unknown-unknown/release/canister.wasm"),
-        example_dir.join("target/wasm32-wasip2/release/plugin.wasm"),
-    )
 }
 
 #[tokio::test]

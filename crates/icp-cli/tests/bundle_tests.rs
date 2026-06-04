@@ -6,9 +6,8 @@ use std::{
 use camino::Utf8Component;
 use flate2::bufread::GzDecoder;
 use icp::{
-    fs::{create_dir_all, json, write, write_string},
+    fs::{create_dir_all, write, write_string},
     prelude::*,
-    store_id::IdMapping,
 };
 use indoc::formatdoc;
 use predicates::{
@@ -19,13 +18,15 @@ use predicates::{
 use sha2::{Digest, Sha256};
 use tar::Archive;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, build_sync_plugin_example, clients,
+};
 
 mod common;
 
-/// Bundle a standard frontend-backend project: a script-built backend canister and an
-/// asset-canister-recipe frontend canister with an assets sync step.
-/// Verify archive structure, manifest content, and that the bundle deploys successfully.
+/// Bundle a standard multi-canister project: a script-built backend canister and a
+/// canister with a plugin sync step that seeds data on deploy. Verify archive structure,
+/// manifest content, and that the extracted bundle deploys and runs the bundled plugin.
 #[tokio::test]
 async fn bundle_and_deploy() {
     let ctx = TestContext::new();
@@ -33,12 +34,17 @@ async fn bundle_and_deploy() {
     let project_dir = ctx.create_project_dir("icp");
 
     // A small WASM to serve as the pre-built artifact for the backend.
-    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+    let backend_wasm = ctx.make_asset("example_icp_mo.wasm");
 
-    // Create asset directory for the frontend canister.
-    let asset_dir = project_dir.join("www");
-    create_dir_all(&asset_dir).expect("failed to create asset dir");
-    write_string(&asset_dir.join("index.html"), "hello").expect("failed to write asset file");
+    // The registry canister and its sync plugin come from the example project: on deploy the
+    // plugin reads the preopened `seed-data` dir and registers each file with the canister.
+    let (registry_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&seed_data.join("fruit-02.txt"), "banana").expect("failed to write fruit-02.txt");
+    write_string(&seed_data.join("fruit-03.txt"), "cherry").expect("failed to write fruit-03.txt");
 
     let pm = formatdoc! {r#"
         canisters:
@@ -46,13 +52,19 @@ async fn bundle_and_deploy() {
             build:
               steps:
                 - type: script
-                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+                  command: cp '{backend_wasm}' "$ICP_WASM_OUTPUT_PATH"
 
-          - name: frontend
-            recipe:
-              type: "@dfinity/asset-canister@v2.1.0"
-              configuration:
-                dir: www
+          - name: registry
+            build:
+              steps:
+                - type: script
+                  command: cp '{registry_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -77,8 +89,9 @@ async fn bundle_and_deploy() {
 
     let mut found_manifest = false;
     let mut found_backend_wasm = false;
-    let mut found_frontend_wasm = false;
-    let mut found_asset = false;
+    let mut found_registry_wasm = false;
+    let mut found_plugin_wasm = false;
+    let mut found_seed_data = false;
     let mut manifest_yaml = String::new();
 
     for entry in archive.entries().expect("failed to read archive entries") {
@@ -99,11 +112,14 @@ async fn bundle_and_deploy() {
             "canisters/backend.wasm" => {
                 found_backend_wasm = true;
             }
-            "canisters/frontend.wasm" => {
-                found_frontend_wasm = true;
+            "canisters/registry.wasm" => {
+                found_registry_wasm = true;
             }
-            p if p.starts_with("canisters/frontend/www/") => {
-                found_asset = true;
+            "plugins/registry/0.wasm" => {
+                found_plugin_wasm = true;
+            }
+            p if p.starts_with("plugins/registry/0/dirs/seed-data/") => {
+                found_seed_data = true;
             }
             _ => {}
         }
@@ -115,15 +131,19 @@ async fn bundle_and_deploy() {
         "canisters/backend.wasm not found in bundle"
     );
     assert!(
-        found_frontend_wasm,
-        "canisters/frontend.wasm not found in bundle"
+        found_registry_wasm,
+        "canisters/registry.wasm not found in bundle"
     );
     assert!(
-        found_asset,
-        "asset file not found under canisters/frontend/www/ in bundle"
+        found_plugin_wasm,
+        "plugins/registry/0.wasm not found in bundle"
+    );
+    assert!(
+        found_seed_data,
+        "seed-data files not found under plugins/registry/0/dirs/seed-data/ in bundle"
     );
 
-    // Manifest must contain pre-built steps and no script or recipe steps.
+    // Manifest must convert build steps to pre-built and must not contain script or recipe steps.
     assert!(
         manifest_yaml.contains("pre-built"),
         "bundle manifest should have pre-built build steps"
@@ -154,13 +174,10 @@ async fn bundle_and_deploy() {
     let _g = ctx.start_network_in(&bundle_dir, "random-network").await;
     ctx.ping_until_healthy(&bundle_dir, "random-network");
 
-    let network_port = ctx
-        .wait_for_network_descriptor(&bundle_dir, "random-network")
-        .gateway_port;
-
     clients::icp(&ctx, &bundle_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
+    // deploy also runs the bundled plugin sync step, which seeds the registry canister.
     ctx.icp()
         .current_dir(&bundle_dir)
         .args(["deploy", "--environment", "random-environment"])
@@ -183,30 +200,26 @@ async fn bundle_and_deploy() {
         .success()
         .stdout(eq("(\"Hello, world!\")").trim());
 
-    // Verify the frontend canister serves the bundled asset.
-    let id_mapping: IdMapping = json::load(
-        &bundle_dir
-            .join(".icp")
-            .join("cache")
-            .join("mappings")
-            .join("random-environment.ids.json"),
-    )
-    .expect("failed to read ID mapping");
-
-    let frontend_cid = id_mapping
-        .get("frontend")
-        .expect("frontend canister ID not found");
-
-    let resp = reqwest::get(format!(
-        "http://localhost:{network_port}/?canisterId={frontend_cid}"
-    ))
-    .await
-    .expect("request to frontend canister failed");
-
-    assert_eq!(
-        resp.text().await.expect("failed to read response body"),
-        "hello"
-    );
+    // Verify the bundled plugin ran during deploy and registered all three seed files.
+    ctx.icp()
+        .current_dir(&bundle_dir)
+        .args([
+            "canister",
+            "call",
+            "registry",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("apple")
+                .and(contains("banana"))
+                .and(contains("cherry")),
+        );
 }
 
 /// Bundle a canister whose environment override uses an external init_args file.
@@ -363,16 +376,20 @@ fn bundle_sanitizes_canister_name_for_paths() {
     );
 }
 
-/// An asset sync `dir` that contains `..` components but still resolves inside the project
-/// must be accepted, and the `..` components must be lexically resolved before the path is
-/// written into the archive or the rewritten manifest.
+/// A plugin sync `dirs` entry that contains `..` components but still resolves inside the
+/// project must be accepted, and the `..` components must be lexically resolved before the path
+/// is written into the archive or the rewritten manifest.
 #[test]
 fn bundle_normalizes_dotdot_within_project() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
 
-    // Assets live inside the project at ./shared-assets. The canister references them via
+    // Bundling only reads and repackages the plugin wasm bytes, so any non-empty content works.
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    // Preopened dir lives inside the project at ./shared-assets. The canister references it via
     // a path that goes `tmp/..` and resolves to the same location — proof that `..` is
     // handled lexically and doesn't have to point outside.
     let assets_dir = project_dir.join("shared-assets");
@@ -389,8 +406,10 @@ fn bundle_normalizes_dotdot_within_project() {
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
-                - type: assets
-                  dir: tmp/../shared-assets
+                - type: plugin
+                  path: plugin.wasm
+                  dirs:
+                    - tmp/../shared-assets
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -406,7 +425,7 @@ fn bundle_normalizes_dotdot_within_project() {
     let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
     let mut archive = Archive::new(gz);
 
-    let mut found_asset = false;
+    let mut found_dir = false;
     let mut manifest_yaml = String::new();
 
     for entry in archive.entries().expect("failed to read archive entries") {
@@ -432,26 +451,26 @@ fn bundle_normalizes_dotdot_within_project() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            p if p.starts_with("canisters/my-canister/shared-assets/") => {
-                found_asset = true;
+            p if p.starts_with("plugins/my-canister/0/dirs/shared-assets/") => {
+                found_dir = true;
             }
             _ => {}
         }
     }
 
     assert!(
-        found_asset,
-        "asset not found under canisters/my-canister/shared-assets/ in bundle"
+        found_dir,
+        "preopened dir not found under plugins/my-canister/0/dirs/shared-assets/ in bundle"
     );
 
     // Parse the rewritten manifest and inspect the actual sync dir field rather than
     // substring-matching the whole YAML.
     let parsed: serde_yaml::Value =
         serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
-    let dir = parsed["canisters"][0]["sync"]["steps"][0]["dir"]
+    let dir = parsed["canisters"][0]["sync"]["steps"][0]["dirs"][0]
         .as_str()
-        .expect("expected sync step 0 to have a string `dir` field");
-    assert_eq!(dir, "canisters/my-canister/shared-assets");
+        .expect("expected sync step 0 to have a string `dirs[0]` field");
+    assert_eq!(dir, "plugins/my-canister/0/dirs/shared-assets");
     assert!(
         !Path::new(dir)
             .components()
@@ -460,15 +479,18 @@ fn bundle_normalizes_dotdot_within_project() {
     );
 }
 
-/// An asset sync step whose `dir` resolves *outside* the project directory must be rejected.
-/// Bundles can only reference files inside the project so the produced archive is portable.
+/// A plugin sync step whose `dirs` entry resolves *outside* the project directory must be
+/// rejected. Bundles can only reference files inside the project so the produced archive is portable.
 #[test]
 fn bundle_rejects_source_outside_project() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
 
-    // Assets live one directory above the project — outside its tree.
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    // Preopened dir lives one directory above the project — outside its tree.
     let assets_dir = project_dir
         .parent()
         .expect("project dir has no parent")
@@ -485,8 +507,10 @@ fn bundle_rejects_source_outside_project() {
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
-                - type: assets
-                  dir: ../shared-assets
+                - type: plugin
+                  path: plugin.wasm
+                  dirs:
+                    - ../shared-assets
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -727,6 +751,9 @@ fn bundle_rejects_output_inside_synced_dir() {
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
 
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
     let asset_dir = project_dir.join("www");
     create_dir_all(&asset_dir).expect("failed to create asset dir");
     write_string(&asset_dir.join("index.html"), "hello").expect("failed to write asset file");
@@ -740,8 +767,10 @@ fn bundle_rejects_output_inside_synced_dir() {
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
             sync:
               steps:
-                - type: assets
-                  dir: www
+                - type: plugin
+                  path: plugin.wasm
+                  dirs:
+                    - www
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");

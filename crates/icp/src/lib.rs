@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use serde::Serialize;
 use snafu::prelude::*;
 use tokio::sync::Mutex;
@@ -116,7 +117,7 @@ pub struct Network {
 pub struct Environment {
     pub name: String,
     pub network: Network,
-    pub canisters: HashMap<String, (PathBuf, Canister)>,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
 }
 
 impl Environment {
@@ -145,7 +146,7 @@ impl Environment {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,
-    pub canisters: HashMap<String, (PathBuf, Canister)>,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
 }
@@ -300,7 +301,7 @@ impl MockProjectLoader {
             },
         };
 
-        let mut canisters = HashMap::new();
+        let mut canisters = IndexMap::new();
         canisters.insert(
             "backend".to_string(),
             ("/project".into(), backend_canister.clone()),
@@ -309,7 +310,7 @@ impl MockProjectLoader {
         let mut networks = HashMap::new();
         networks.insert("local".to_string(), local_network.clone());
 
-        let mut env_canisters = HashMap::new();
+        let mut env_canisters = IndexMap::new();
         env_canisters.insert("backend".to_string(), ("/project".into(), backend_canister));
 
         let default_env = Environment {
@@ -465,7 +466,7 @@ impl MockProjectLoader {
         };
 
         // Setup canisters map
-        let mut canisters = HashMap::new();
+        let mut canisters = IndexMap::new();
         canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -486,7 +487,7 @@ impl MockProjectLoader {
         networks.insert("ic".to_string(), ic_network.clone());
 
         // Create dev environment (all canisters on local)
-        let mut dev_canisters = HashMap::new();
+        let mut dev_canisters = IndexMap::new();
         dev_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -507,7 +508,7 @@ impl MockProjectLoader {
         };
 
         // Create test environment (backend and frontend on staging)
-        let mut test_canisters = HashMap::new();
+        let mut test_canisters = IndexMap::new();
         test_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -524,7 +525,7 @@ impl MockProjectLoader {
         };
 
         // Create prod environment (backend and frontend on ic)
-        let mut prod_canisters = HashMap::new();
+        let mut prod_canisters = IndexMap::new();
         prod_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister),

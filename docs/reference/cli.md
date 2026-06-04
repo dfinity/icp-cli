@@ -89,7 +89,7 @@ This document contains the help content for the `icp` command-line program.
 * `identity` — Manage your identities
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
-* `project` — Display information about the current project
+* `project` — Manage the current project
 * `settings` — Configure user settings
 * `sync` — Synchronize canisters
 * `token` — Perform token transactions
@@ -1449,7 +1449,7 @@ Under the hood templates are generated with `cargo-generate`. See the cargo-gene
 
 ## `icp project`
 
-Display information about the current project
+Manage the current project
 
 **Usage:** `icp project <COMMAND>`
 

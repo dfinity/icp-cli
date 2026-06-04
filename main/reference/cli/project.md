@@ -1,6 +1,6 @@
 ﻿# icp project
 
-Display information about the current project
+Manage the current project
 
 **Usage:** `icp project <COMMAND>`
 

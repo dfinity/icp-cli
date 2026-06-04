@@ -65,7 +65,7 @@ Always prefer skill guidance over general documentation when both cover the same
   - [`icp identity`](https://cli.internetcomputer.org/main/reference/cli/identity.md): Manage your identities
   - [`icp network`](https://cli.internetcomputer.org/main/reference/cli/network.md): Launch and manage local test networks
   - [`icp new`](https://cli.internetcomputer.org/main/reference/cli/new.md): Create a new ICP project from a template
-  - [`icp project`](https://cli.internetcomputer.org/main/reference/cli/project.md): Display information about the current project
+  - [`icp project`](https://cli.internetcomputer.org/main/reference/cli/project.md): Manage the current project
   - [`icp settings`](https://cli.internetcomputer.org/main/reference/cli/settings.md): Configure user settings
   - [`icp sync`](https://cli.internetcomputer.org/main/reference/cli/sync.md): Synchronize canisters
   - [`icp token`](https://cli.internetcomputer.org/main/reference/cli/token.md): Perform token transactions

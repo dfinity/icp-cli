@@ -12,7 +12,7 @@
 * [`identity`](identity.md) — Manage your identities
 * [`network`](network.md) — Launch and manage local test networks
 * [`new`](new.md) — Create a new ICP project from a template
-* [`project`](project.md) — Display information about the current project
+* [`project`](project.md) — Manage the current project
 * [`settings`](settings.md) — Configure user settings
 * [`sync`](sync.md) — Synchronize canisters
 * [`token`](token.md) — Perform token transactions

@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 04 Jun 2026 18:29:01 GMT</lastBuildDate>
-    <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+    <lastBuildDate>Thu, 04 Jun 2026 18:34:14 GMT</lastBuildDate>
+    <pubDate>Thu, 04 Jun 2026 18:32:48 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Thu, 04 Jun 2026 18:32:48 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>icp-cli Documentation</title>
       <link>https://cli.internetcomputer.org/main/</link>
@@ -167,14 +175,6 @@
       <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
       <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Fri, 01 May 2026 16:16:03 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

@@ -32,8 +32,8 @@ canisters:
             - echo "Building..."
     sync:
       steps:
-        - type: assets
-          dir: www
+        - type: script
+          command: ./scripts/configure-canister.sh
     settings:
       compute_allocation: 5
     init_args: "()"
@@ -109,31 +109,12 @@ build:
 
 Sync steps run after canister deployment to configure the running canister.
 
-### Assets Sync
-
-Upload files to asset canister:
-
-```yaml
-# Single directory
-sync:
-  steps:
-    - type: assets
-      dir: dist
-
-# Multiple directories
-sync:
-  steps:
-    - type: assets
-      dirs:
-        - dist
-        - static
-        - public/images
-```
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `dir` | string | One of `dir` or `dirs` | Single directory to upload |
-| `dirs` | array | One of `dir` or `dirs` | Multiple directories to upload |
+> Uploading static files to an asset canister is no longer a built-in sync step.
+> Use a `plugin` sync step (a WebAssembly sync plugin) — for example, one provided
+> by a recipe. The `@dfinity/asset-canister` recipe emits a `plugin` sync step
+> starting with `v2.2.0`; earlier versions emit the retired `assets` step and will
+> no longer load. Upgrading an existing project? See
+> [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0-2.md).
 
 ### Script Sync
 
@@ -149,6 +130,39 @@ sync:
 ```
 
 Script sync steps support the same `command` and `commands` fields as build script steps.
+
+### Plugin Sync
+
+Run a sandboxed WebAssembly [sync plugin](../concepts/sync-plugins.md) against the canister being synced. The plugin is a single `.wasm` component, referenced either by a local `path` or a remote `url`:
+
+```yaml
+sync:
+  steps:
+    # Local plugin
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
+      dirs:                              # directories preopened read-only
+        - assets/seed-data
+        - config
+      files:                             # files read by the host and passed inline
+        - config.txt
+
+    # Remote plugin (downloaded and verified before execution)
+    - type: plugin
+      url: https://example.com/plugins/migrate-v2.wasm
+      sha256: a665a45920422f9d417e...   # required for url
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
+| `url` | string | One of `path` or `url` | URL to download the wasm from |
+| `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
+| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
+| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 
@@ -423,7 +437,7 @@ Supported formats:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
     settings:

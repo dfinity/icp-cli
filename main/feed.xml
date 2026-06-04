@@ -6,9 +6,113 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Mon, 01 Jun 2026 14:55:09 GMT</lastBuildDate>
-    <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
+    <lastBuildDate>Thu, 04 Jun 2026 18:29:01 GMT</lastBuildDate>
+    <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>icp-cli Documentation</title>
+      <link>https://cli.internetcomputer.org/main/</link>
+      <description>Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Configuration Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
+      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Migrating from dfx</title>
+      <link>https://cli.internetcomputer.org/main/migration/from-dfx/</link>
+      <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Upgrading from icp-cli 0.2</title>
+      <link>https://cli.internetcomputer.org/main/migration/upgrading-from-v0-2/</link>
+      <description>Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/upgrading-from-v0-2/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Creating Project Templates</title>
+      <link>https://cli.internetcomputer.org/main/guides/creating-templates/</link>
+      <description>Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-templates/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Guides</title>
+      <link>https://cli.internetcomputer.org/main/guides/</link>
+      <description>Step-by-step guides covering installation, local development, deployment, identity management, and more.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Local Development</title>
+      <link>https://cli.internetcomputer.org/main/guides/local-development/</link>
+      <description>Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/local-development/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Managing Environments</title>
+      <link>https://cli.internetcomputer.org/main/guides/managing-environments/</link>
+      <description>Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-environments/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Using Recipes</title>
+      <link>https://cli.internetcomputer.org/main/guides/using-recipes/</link>
+      <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/using-recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Writing a Sync Plugin</title>
+      <link>https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</link>
+      <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Build, Deploy, Sync</title>
+      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
+      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Concepts</title>
+      <link>https://cli.internetcomputer.org/main/concepts/</link>
+      <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Sync Plugins</title>
+      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
+      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
+      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Creating Recipes</title>
       <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
@@ -23,14 +127,6 @@
       <description>How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.</description>
       <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/recipes/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>icp-cli Documentation</title>
-      <link>https://cli.internetcomputer.org/main/</link>
-      <description>Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.</description>
-      <pubDate>Wed, 20 May 2026 13:43:10 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -58,22 +154,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Migrating from dfx</title>
-      <link>https://cli.internetcomputer.org/main/migration/from-dfx/</link>
-      <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
-      <pubDate>Tue, 19 May 2026 18:44:03 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Local Development</title>
-      <link>https://cli.internetcomputer.org/main/guides/local-development/</link>
-      <description>Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.</description>
-      <pubDate>Tue, 19 May 2026 18:44:03 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/local-development/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>Proxy Canister</title>
       <link>https://cli.internetcomputer.org/main/guides/proxy-canister/</link>
       <description>Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.</description>
@@ -90,27 +170,11 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Build, Deploy, Sync</title>
-      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
-      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
-      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
       <pubDate>Fri, 01 May 2026 16:16:03 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Configuration Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
-      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Fri, 27 Mar 2026 21:01:53 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -178,14 +242,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Creating Project Templates</title>
-      <link>https://cli.internetcomputer.org/main/guides/creating-templates/</link>
-      <description>Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-templates/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>Deploying to IC Mainnet</title>
       <link>https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</link>
       <description>Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.</description>
@@ -199,22 +255,6 @@
       <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Guides</title>
-      <link>https://cli.internetcomputer.org/main/guides/</link>
-      <description>Step-by-step guides covering installation, local development, deployment, identity management, and more.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Managing Environments</title>
-      <link>https://cli.internetcomputer.org/main/guides/managing-environments/</link>
-      <description>Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-environments/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -234,14 +274,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Using Recipes</title>
-      <link>https://cli.internetcomputer.org/main/guides/using-recipes/</link>
-      <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/using-recipes/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>Binding Generation</title>
       <link>https://cli.internetcomputer.org/main/concepts/binding-generation/</link>
       <description>Generate type-safe client code from Candid interface files to call canister methods with full type checking.</description>
@@ -255,14 +287,6 @@
       <description>How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/canister-discovery/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Concepts</title>
-      <link>https://cli.internetcomputer.org/main/concepts/</link>
-      <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
   </channel>

@@ -40,6 +40,7 @@ Always prefer skill guidance over general documentation when both cover the same
 - [Proxy Canister](https://cli.internetcomputer.org/main/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
 - [Tokens and Cycles](https://cli.internetcomputer.org/main/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
 - [Using Recipes](https://cli.internetcomputer.org/main/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
+- [Writing a Sync Plugin](https://cli.internetcomputer.org/main/guides/writing-sync-plugins.md): Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.
 
 ## Concepts
 
@@ -50,6 +51,7 @@ Always prefer skill guidance over general documentation when both cover the same
 - [Concepts](https://cli.internetcomputer.org/main/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
 - [Project Model](https://cli.internetcomputer.org/main/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
 - [Recipes](https://cli.internetcomputer.org/main/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
+- [Sync Plugins](https://cli.internetcomputer.org/main/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
 
 ## Reference
 
@@ -74,6 +76,7 @@ Always prefer skill guidance over general documentation when both cover the same
 ## Other
 
 - [Migrating from dfx](https://cli.internetcomputer.org/main/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
+- [Upgrading from icp-cli 0.2](https://cli.internetcomputer.org/main/migration/upgrading-from-v0-2.md): Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.
 
 
 ---
@@ -241,17 +244,20 @@ The sync phase handles post-deployment operations that depend on the canister be
 ### Common Use Cases
 
 - **Asset canisters** — Upload static files after the canister is running
+- **Seeding or configuring state** — Make post-deployment canister calls
 
-### Asset Sync
+### Plugin Sync Steps
 
-For frontend canisters, sync uploads your built assets:
+A `plugin` sync step runs a sandboxed WebAssembly [sync plugin](sync-plugins.md)
+against the canister being synced. This is how post-deployment operations like
+asset uploads work — for frontend canisters you typically upload your built
+assets with a plugin provided by a recipe (such as `@dfinity/asset-canister`)
+rather than a built-in step.
 
-```yaml
-sync:
-  steps:
-    - type: assets
-      dir: dist
-```
+A plugin can call update and query methods on the canister and read directories
+and files you declare, all inside a WASI sandbox with no network or write access.
+See [Sync Plugins](sync-plugins.md) for the full mechanism and [Writing a Sync
+Plugin](../guides/writing-sync-plugins.md) to author your own.
 
 ### Script Sync Steps
 
@@ -781,6 +787,7 @@ Understanding how icp-cli organizes and manages your project.
 - [Build, Deploy, Sync](build-deploy-sync.md) — The three phases of the deployment lifecycle
 - [Environments and Networks](environments.md) — Deployment targets and how they relate
 - [Recipes](recipes.md) — Templated, reusable build configurations
+- [Sync Plugins](sync-plugins.md) — Sandboxed WebAssembly components that run during the sync phase
 - [Canister Discovery](canister-discovery.md) — How canisters discover each other
 - [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
@@ -793,6 +800,7 @@ Understanding how icp-cli organizes and manages your project.
 | **Network** | An ICP network endpoint — local (managed by icp-cli) or remote (mainnet, testnet) |
 | **Environment** | A named deployment target combining a network with canister settings |
 | **Recipe** | A Handlebars template that generates build and sync configuration |
+| **Sync plugin** | A sandboxed WebAssembly component that runs post-deployment logic during `icp sync` |
 | **Principal** | A public identifier for an identity or canister on the Internet Computer |
 
 
@@ -1217,6 +1225,141 @@ This displays the effective configuration after all recipes are rendered.
 
 - [Using Recipes](../guides/using-recipes.md) — Apply recipes in your projects
 - [Creating Recipes](../guides/creating-recipes.md) — Build custom recipes
+
+[Browse all documentation →](../index.md)
+
+
+---
+
+# Sync Plugins
+
+A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work against a single canister. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced, and lets it make canister calls and read declared files — nothing more.
+
+You declare a sync plugin in your manifest with a `plugin` sync step. For the exact manifest fields, see [Plugin Sync in the Configuration Reference](../reference/configuration.md#plugin-sync). To author your own plugin, see [Writing a Sync Plugin](../guides/writing-sync-plugins.md).
+
+## Why Sync Plugins
+
+The built-in [`script` sync step](build-deploy-sync.md#script-sync-steps) covers simple post-deployment commands, but shelling out has drawbacks: scripts are unstructured, run with your full user privileges, and can't be distributed as a single verifiable artifact.
+
+Sync plugins fill that gap. A plugin is:
+
+- **Portable** — written in any language that compiles to `wasm32-wasip2`, distributed as one `.wasm` file (local path or remote URL + `sha256`).
+- **Sandboxed** — it cannot open network sockets, spawn subprocesses, or touch the filesystem outside the directories you explicitly grant it.
+- **Scoped to one canister** — it can call update and query methods, but only on the canister being synced. The target is fixed by the host; the plugin cannot choose a different one.
+
+The most common way to get a sync plugin is through a [recipe](recipes.md). For example, the `@dfinity/asset-canister` recipe emits a `plugin` sync step (starting with `v2.2.0`) that uploads your built static files to the asset canister — so for everyday frontend deployment you never write a plugin yourself.
+
+## How a Plugin Runs
+
+When a `plugin` sync step executes for a canister, icp-cli:
+
+1. Resolves the wasm — reads the local `path`, or downloads the `url` to the package cache.
+2. Verifies the `sha256` checksum if one is given (required for `url`).
+3. Reads any files listed in `files:` and preopens any directories listed in `dirs:` read-only.
+4. Instantiates the component in a WASI sandbox and calls its `exec()` export.
+5. Forwards the plugin's output to the CLI and reports success or the returned error.
+
+```
+icp sync
+  └─ host loads plugin.wasm into the WASI sandbox
+       ├─ exec(sync-exec-input) called
+       │    canister-id        = <canister being synced>
+       │    identity-principal = <your signing identity>
+       │    dirs / files       = what you declared in the manifest
+       │
+       └─ plugin makes canister-call(...) to the target canister (× N)
+```
+
+## The Plugin Interface
+
+The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides one import (`canister-call`); the plugin provides one export (`exec`):
+
+```wit
+world sync-plugin {
+    // Host import: call the canister being synced.
+    import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    // Plugin export: run the sync step.
+    export exec: func(input: sync-exec-input) -> result<_, string>;
+}
+```
+
+The authoritative interface, including all record fields, lives in [`sync-plugin.wit`](https://github.com/dfinity/icp-cli/blob/main/crates/icp-sync-plugin/sync-plugin.wit) in the icp-cli repository.
+
+### What the plugin receives — `sync-exec-input`
+
+| Field | Description |
+|-------|-------------|
+| `canister-id` | Textual principal of the canister being synced |
+| `environment` | Name of the environment being synced (e.g. `local`, `production`) |
+| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
+| `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `identity-principal` | Textual principal of the signing identity used for canister calls |
+| `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
+
+### Calling the canister — `canister-call`
+
+The plugin calls methods on the target canister through the `canister-call` import. It supplies the method name, **Candid-encoded argument bytes** (the host forwards them unchanged), and a few routing options:
+
+| Request field | Meaning |
+|---------------|---------|
+| `method` | The canister method to call |
+| `arg` | Candid-encoded argument bytes (the plugin encodes; the host forwards as-is) |
+| `call-type` | `update` or `query` |
+| `direct` | When `false` (default), update calls are routed through the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, the call always goes directly to the target. Query calls always go directly regardless. |
+| `cycles` | Cycles to attach to a proxied update call; only meaningful when `direct` is `false`, a proxy is configured, and `call-type` is `update` |
+
+The host always calls the canister named in `sync-exec-input.canister-id`. There is no field for a different canister ID — the single-canister restriction is structural, not a policy the plugin can opt out of.
+
+### Logging — stdout and stderr
+
+The plugin's stdout and stderr are captured by the host (no logging import is needed — use ordinary `println!` / `eprintln!`):
+
+- **stdout** is shown as transient progress in the rolling step view and discarded when the step ends. Use it for in-flight chatter.
+- **stderr** is shown in the rolling view **and** printed persistently after the step completes successfully. Use it for messages the user must still see afterward — warnings, summaries, deprecation notices.
+
+Each stream is capped at 1 MiB; output beyond that is truncated with a note.
+
+## The Sandbox
+
+The plugin runs with a deliberately narrow capability surface.
+
+### Filesystem
+
+- Each directory in `dirs:` is preopened **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `dirs: ["assets"]` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
+- Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
+- Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected. Paths in `dirs:`/`files:` must be relative and may not contain `..`.
+
+### Capabilities
+
+| Capability | Available? | Notes |
+|------------|------------|-------|
+| Read declared `dirs:` | yes | read-only preopens |
+| Clocks, RNG, `wasi:io` | yes | Rust's `HashMap`, `chrono`, etc. work normally |
+| `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
+| Canister calls | yes | only to the canister being synced |
+| Environment variables / args | no | the WASI environment is empty; use `sync-exec-input.environment` |
+| Network sockets / DNS | blocked | treat the network as unavailable |
+| Filesystem writes | blocked | no writable preopens |
+| Spawning subprocesses | blocked | no process interface is linked |
+
+### Resource limits
+
+| Resource | Limit |
+|----------|-------|
+| Wasm call-stack depth | 512 KiB |
+| Pure compute time | 60 seconds |
+| Linear memory | wasm32 address space (≤ 4 GiB) |
+| stdout / stderr per stream | 1 MiB |
+
+The 60-second budget counts only wasm instruction execution. Time spent waiting for a `canister-call` to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+
+## Next Steps
+
+- [Writing a Sync Plugin](../guides/writing-sync-plugins.md) — Author your own plugin in Rust
+- [Plugin Sync (Configuration Reference)](../reference/configuration.md#plugin-sync) — The manifest fields
+- [Build, Deploy, Sync](build-deploy-sync.md) — Where the sync phase fits in the lifecycle
+- [Recipes](recipes.md) — How recipes can emit a `plugin` sync step for you
 
 [Browse all documentation →](../index.md)
 
@@ -2619,7 +2762,7 @@ canisters:
   {% if include_frontend %}
   - name: {{project-name}}-frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
   {% endif %}
@@ -3244,6 +3387,7 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 - [Creating Recipes](creating-recipes.md) — Build custom recipe templates
 - [Creating Templates](creating-templates.md) — Author project templates for `icp new`
+- [Writing a Sync Plugin](writing-sync-plugins.md) — Author a sandboxed WebAssembly sync plugin
 
 
 ---
@@ -3550,7 +3694,7 @@ The `@dfinity/asset-canister` recipe deploys this pre-built canister and syncs y
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist  # Your built frontend files
 ```
@@ -3902,8 +4046,10 @@ canisters:
             - npm run build
     sync:
       steps:
-        - type: assets
-          dir: dist
+        - type: plugin
+          path: ./plugins/upload-assets.wasm
+          dirs:
+            - dist
 
   - name: backend
     build:
@@ -4902,7 +5048,7 @@ For deploying an asset canister with frontend assets:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
 ```
@@ -5021,6 +5167,159 @@ canisters:
 
 ---
 
+# Writing a Sync Plugin
+
+This guide walks through writing a [sync plugin](../concepts/sync-plugins.md) in Rust — a WebAssembly component that icp-cli runs during `icp sync` to perform post-deployment work against a canister. If you only want to *use* an existing plugin (for example, one emitted by a recipe), you don't need this guide; see [Plugin Sync in the Configuration Reference](../reference/configuration.md#plugin-sync) instead.
+
+For a complete, runnable project, see the [`icp-sync-plugin` example](https://github.com/dfinity/icp-cli/tree/main/examples/icp-sync-plugin).
+
+## Prerequisites
+
+A plugin compiles to the `wasm32-wasip2` target. Add it once:
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+You also need the plugin interface definition, [`sync-plugin.wit`](https://github.com/dfinity/icp-cli/blob/main/crates/icp-sync-plugin/sync-plugin.wit). Copy it into your plugin crate (e.g. as `sync-plugin.wit`) so the build can generate bindings from it. The `.wit` file is the source of truth for the interface.
+
+## Set Up the Crate
+
+A plugin is a `cdylib` crate. Its `Cargo.toml` needs `candid` (to encode call arguments) and `wit-bindgen` (to generate the interface bindings):
+
+```toml
+[package]
+name = "my-plugin"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = "0.10"
+wit-bindgen = { version = "0.56", features = ["realloc"] }
+```
+
+## Generate Bindings and Implement `exec`
+
+`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the `canister_call` host function. The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
+
+```rust
+// src/lib.rs
+wit_bindgen::generate!({
+    world: "sync-plugin",
+    path: "sync-plugin.wit",
+});
+
+use candid::{Encode, Principal};
+
+struct Plugin;
+
+impl Guest for Plugin {
+    fn exec(input: SyncExecInput) -> Result<(), String> {
+        // stdout: transient progress, discarded when the step ends.
+        println!(
+            "syncing canister {} (environment: {})",
+            input.canister_id, input.environment
+        );
+
+        // Encode the Candid argument yourself; the host forwards the bytes unchanged.
+        let uploader = Principal::from_text(&input.identity_principal)
+            .map_err(|e| format!("invalid identity principal: {e}"))?;
+        let arg = Encode!(&uploader).map_err(|e| format!("encode arg: {e}"))?;
+
+        // Call a method on the canister being synced.
+        canister_call(&CanisterCallRequest {
+            method: "set_uploader".to_string(),
+            arg,
+            call_type: icp::sync_plugin::types::CallType::Update,
+            direct: false, // route update calls through the proxy if one is configured
+            cycles: 0,
+        })?;
+
+        // stderr: printed persistently after the step completes — use for summaries.
+        eprintln!("set_uploader: ok");
+        Ok(())
+    }
+}
+
+export!(Plugin);
+```
+
+A few things to note:
+
+- **You encode the arguments.** `arg` is raw Candid bytes. Encode with `candid::Encode!`; decode any response (`Vec<u8>`) with `candid::Decode!`.
+- **The target is fixed.** `canister_call` always reaches the canister in `input.canister_id` — there is no field to target another canister.
+- **`direct` and `cycles` control proxy routing.** With `direct: false`, update calls go through the [proxy canister](proxy-canister.md) when one is configured, and `cycles` can fund the forwarded call. With `direct: true`, the call always goes straight to the target. See [The Plugin Interface](../concepts/sync-plugins.md#the-plugin-interface) for the full semantics.
+
+## Read Declared Files and Directories
+
+A plugin can't see the filesystem freely — only what you grant it in the manifest's `dirs:` and `files:`.
+
+Directories in `dirs:` are preopened read-only at the same relative path. Traverse them with standard `std::fs`:
+
+```rust
+for dir in &input.dirs {
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        // ... encode and send to the canister ...
+    }
+}
+```
+
+Files in `files:` are read by the host up front and passed inline — read them from the input struct, not from disk:
+
+```rust
+for file in &input.files {
+    println!("{} = {}", file.name, file.content.trim());
+}
+```
+
+Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
+
+## Build
+
+```bash
+cargo build --target wasm32-wasip2 --release
+```
+
+The output `.wasm` (under `target/wasm32-wasip2/release/`) is loaded directly by icp-cli — no extra component-packaging step is required.
+
+## Wire It Into the Manifest
+
+Reference the built wasm from a `plugin` sync step and declare the files and directories the plugin needs:
+
+```yaml
+sync:
+  steps:
+    - type: plugin
+      path: target/wasm32-wasip2/release/my_plugin.wasm
+      dirs:
+        - seed-data
+      files:
+        - config.txt
+```
+
+Then run the sync phase:
+
+```bash
+icp sync my-canister
+```
+
+For remote distribution, host the `.wasm` and reference it with `url` plus a required `sha256`. See [Plugin Sync](../reference/configuration.md#plugin-sync) for all manifest fields.
+
+## Next Steps
+
+- [Sync Plugins](../concepts/sync-plugins.md) — The mechanism, interface, and sandbox in depth
+- [Plugin Sync (Configuration Reference)](../reference/configuration.md#plugin-sync) — The manifest fields
+- [Proxy Canister](proxy-canister.md) — How proxied update calls and cycles work
+- [`icp-sync-plugin` example](https://github.com/dfinity/icp-cli/tree/main/examples/icp-sync-plugin) — A complete working project
+
+
+---
+
 # icp-cli Documentation
 
 Build and deploy applications on the [Internet Computer](https://internetcomputer.org).
@@ -5048,6 +5347,7 @@ Step-by-step instructions for common tasks:
 - [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Creating Recipes](guides/creating-recipes.md) — Build custom recipes
 - [Creating Templates](guides/creating-templates.md) — Author project templates
+- [Writing a Sync Plugin](guides/writing-sync-plugins.md) — Author a sandboxed WebAssembly sync plugin
 
 ## Concepts
 
@@ -5057,6 +5357,7 @@ Understand how icp-cli works:
 - [Build, Deploy, Sync](concepts/build-deploy-sync.md) — The deployment lifecycle
 - [Environments and Networks](concepts/environments.md) — Deployment targets explained
 - [Recipes](concepts/recipes.md) — Templated build configurations
+- [Sync Plugins](concepts/sync-plugins.md) — Sandboxed WebAssembly components for the sync phase
 - [Canister Discovery](concepts/canister-discovery.md) — How canisters discover each other
 - [Binding Generation](concepts/binding-generation.md) — Type-safe canister interfaces
 
@@ -5072,6 +5373,7 @@ Complete technical specifications:
 ## Additional Resources
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
+- [Upgrading from icp-cli 0.2](migration/upgrading-from-v0-2.md) — Switch off the removed `type: assets` sync step
 - [Telemetry](telemetry.md) — What data is collected and how to opt out
 - [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases
 
@@ -5256,7 +5558,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
 ```
@@ -5267,7 +5569,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
         build:
@@ -5299,7 +5601,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
         build:
@@ -5820,6 +6122,162 @@ This allows gradual migration without disrupting existing workflows, as long as 
 - [Tutorial](../tutorial.md) — Quick start guide
 - [Concepts](../concepts/index.md) — Understand the icp-cli model
 - [Configuration Reference](../reference/configuration.md) — Full icp.yaml documentation
+
+
+---
+
+# Upgrading from icp-cli 0.2
+
+The built-in **`assets` sync step** (`type: assets`) is removed in releases after
+0.2.x — starting with the 0.3 release candidate and carried into 1.0.0. If you're
+upgrading a project from icp-cli 0.2.x, this guide shows how to switch to the
+plugin-based replacement.
+
+## What changed
+
+The `assets` sync step uploaded a directory to an asset canister from inside
+icp-cli core. That capability is retired: asset uploading now lives outside the
+CLI, in a recipe-provided [sync plugin](../concepts/sync-plugins.md). The
+`script` and `plugin` sync steps are unaffected.
+
+## Do you need to migrate?
+
+You're affected if your `icp.yaml` (or a per-canister `canister.yaml`) either:
+
+- contains a `type: assets` sync step, or
+- uses the `@dfinity/asset-canister` recipe at a version below `v2.2.0` (those
+  versions emit a `type: assets` step internally).
+
+After upgrading, any command that loads such a manifest (`icp deploy`,
+`icp sync`, …) fails to load it with a targeted error:
+
+```
+icp-cli no longer supports the `assets` sync step type. Switch to a `script` or
+`plugin` sync step. If this step comes from a recipe, check whether a newer
+version of the recipe uses a plugin-based solution.
+```
+
+Pick the path that matches how your project uploads assets:
+
+- [Recipe users](#recipe-users) — bump the `@dfinity/asset-canister` recipe version.
+- [Manual sync steps](#manual-sync-steps) — switch a hand-written `type: assets`
+  step to the certified-assets sync plugin.
+
+## Recipe users
+
+If you reference the `@dfinity/asset-canister` recipe, upgrade it to `v2.2.0`.
+That version emits a `plugin` sync step instead of the retired `assets` step;
+nothing else in your configuration changes.
+
+**Before:**
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.1.0"
+      configuration:
+        dir: www
+```
+
+**After:**
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.0"
+      configuration:
+        dir: www
+```
+
+The recipe's `configuration` (including `dir`) is unchanged. See the
+[asset-canister v2.2.0 release](https://github.com/dfinity/icp-cli-recipes/releases/tag/asset-canister-v2.2.0)
+for details.
+
+## Manual sync steps
+
+If your manifest declares `type: assets` directly, replace it with a `plugin`
+sync step that points at the certified-assets migration plugin.
+
+**Before:**
+
+```yaml
+sync:
+  steps:
+    - type: assets
+      dirs:
+        - www
+```
+
+**After:**
+
+```yaml
+sync:
+  steps:
+    - type: plugin
+      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.0-209d688/sync_plugin.wasm
+      sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
+      dirs:
+        - www
+```
+
+The plugin is published in the
+[certified-assets migration-v2.2.0 release](https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.0-209d688).
+It uploads the contents of a single directory to the asset canister being synced —
+the same job the old `assets` step did. `dirs` is the general
+[sync-plugin](../concepts/sync-plugins.md) field (a list, since a plugin may
+declare several directories), but this particular plugin reads **exactly one** —
+list a single entry. The `url`/`sha256` pin the exact wasm: icp-cli downloads it
+once, verifies the checksum, and caches it.
+
+Your **build step is unchanged** — keep building or providing the asset-canister
+wasm exactly as before. Only the sync step changes.
+
+### Convert `dir:` to `dirs:`
+
+The `assets` step accepted either a single `dir:` or a list `dirs:`. The `plugin`
+step only takes the list form, and this plugin reads exactly one directory from
+it. If you used the singular `dir:`, wrap it in a single-element `dirs:` list:
+
+**Before:**
+
+```yaml
+- type: assets
+  dir: dist
+```
+
+**After:**
+
+```yaml
+- type: plugin
+  url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.0-209d688/sync_plugin.wasm
+  sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
+  dirs:
+    - dist
+```
+
+If your old `assets` step listed **more than one** directory, consolidate the
+files into a single directory before uploading — this plugin accepts only one.
+
+## Verify
+
+After editing the manifest, redeploy:
+
+```bash
+icp deploy
+```
+
+The manifest now loads, the plugin downloads and its checksum is verified, and
+your assets upload exactly as they did with the built-in step.
+
+## See also
+
+- [Sync Plugins](../concepts/sync-plugins.md) — how the plugin sandbox works
+- [Plugin Sync (Configuration Reference)](../reference/configuration.md#plugin-sync) — the `plugin` step manifest fields
+- [Using Recipes](../guides/using-recipes.md) — referencing and pinning recipe versions
+
+[Browse all documentation →](../index.md)
 
 
 ---
@@ -7784,8 +8242,8 @@ canisters:
             - echo "Building..."
     sync:
       steps:
-        - type: assets
-          dir: www
+        - type: script
+          command: ./scripts/configure-canister.sh
     settings:
       compute_allocation: 5
     init_args: "()"
@@ -7861,31 +8319,12 @@ build:
 
 Sync steps run after canister deployment to configure the running canister.
 
-### Assets Sync
-
-Upload files to asset canister:
-
-```yaml
-# Single directory
-sync:
-  steps:
-    - type: assets
-      dir: dist
-
-# Multiple directories
-sync:
-  steps:
-    - type: assets
-      dirs:
-        - dist
-        - static
-        - public/images
-```
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `dir` | string | One of `dir` or `dirs` | Single directory to upload |
-| `dirs` | array | One of `dir` or `dirs` | Multiple directories to upload |
+> Uploading static files to an asset canister is no longer a built-in sync step.
+> Use a `plugin` sync step (a WebAssembly sync plugin) — for example, one provided
+> by a recipe. The `@dfinity/asset-canister` recipe emits a `plugin` sync step
+> starting with `v2.2.0`; earlier versions emit the retired `assets` step and will
+> no longer load. Upgrading an existing project? See
+> [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0-2.md).
 
 ### Script Sync
 
@@ -7901,6 +8340,39 @@ sync:
 ```
 
 Script sync steps support the same `command` and `commands` fields as build script steps.
+
+### Plugin Sync
+
+Run a sandboxed WebAssembly [sync plugin](../concepts/sync-plugins.md) against the canister being synced. The plugin is a single `.wasm` component, referenced either by a local `path` or a remote `url`:
+
+```yaml
+sync:
+  steps:
+    # Local plugin
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
+      dirs:                              # directories preopened read-only
+        - assets/seed-data
+        - config
+      files:                             # files read by the host and passed inline
+        - config.txt
+
+    # Remote plugin (downloaded and verified before execution)
+    - type: plugin
+      url: https://example.com/plugins/migrate-v2.wasm
+      sha256: a665a45920422f9d417e...   # required for url
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
+| `url` | string | One of `path` or `url` | URL to download the wasm from |
+| `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
+| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
+| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 
@@ -8175,7 +8647,7 @@ Supported formats:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.0"
       configuration:
         dir: dist
     settings:

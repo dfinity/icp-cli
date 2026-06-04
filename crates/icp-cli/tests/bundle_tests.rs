@@ -376,9 +376,9 @@ fn bundle_sanitizes_canister_name_for_paths() {
     );
 }
 
-/// A plugin sync `dir` that contains `..` components but still resolves inside the project
-/// must be accepted, and the `..` components must be lexically resolved before the path is
-/// written into the archive or the rewritten manifest.
+/// A plugin sync `dirs` entry that contains `..` components but still resolves inside the
+/// project must be accepted, and the `..` components must be lexically resolved before the path
+/// is written into the archive or the rewritten manifest.
 #[test]
 fn bundle_normalizes_dotdot_within_project() {
     let ctx = TestContext::new();
@@ -479,8 +479,8 @@ fn bundle_normalizes_dotdot_within_project() {
     );
 }
 
-/// A plugin sync step whose `dir` resolves *outside* the project directory must be rejected.
-/// Bundles can only reference files inside the project so the produced archive is portable.
+/// A plugin sync step whose `dirs` entry resolves *outside* the project directory must be
+/// rejected. Bundles can only reference files inside the project so the produced archive is portable.
 #[test]
 fn bundle_rejects_source_outside_project() {
     let ctx = TestContext::new();

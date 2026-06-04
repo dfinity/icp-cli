@@ -656,6 +656,193 @@ fn bundle_packages_plugin_sync_steps() {
     );
 }
 
+/// An `icp_manifest.yaml` next to the project manifest must be included in the bundle, with its
+/// top-level `screenshots` paths relocated under a top-level `screenshots/` folder and the
+/// referenced image files copied alongside. Unrelated metadata is preserved.
+#[test]
+fn bundle_includes_app_manifest_screenshots() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let shots_dir = project_dir.join("media");
+    create_dir_all(&shots_dir).expect("failed to create media dir");
+    write(&shots_dir.join("home.png"), b"home-bytes").expect("failed to write home.png");
+    write(&shots_dir.join("detail.png"), b"detail-bytes").expect("failed to write detail.png");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let app_manifest = formatdoc! {r#"
+        name: My App
+        description: an app we do not parse
+        screenshots:
+          - media/home.png
+          - media/detail.png
+    "#};
+    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+        .expect("failed to write app manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut home_bytes: Option<Vec<u8>> = None;
+    let mut detail_bytes: Option<Vec<u8>> = None;
+    let mut app_manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        match path.as_str() {
+            "icp_manifest.yaml" => {
+                entry
+                    .read_to_string(&mut app_manifest_yaml)
+                    .expect("failed to read icp_manifest.yaml");
+            }
+            "screenshots/home.png" => {
+                let mut buf = Vec::new();
+                entry
+                    .read_to_end(&mut buf)
+                    .expect("failed to read home.png");
+                home_bytes = Some(buf);
+            }
+            "screenshots/detail.png" => {
+                let mut buf = Vec::new();
+                entry
+                    .read_to_end(&mut buf)
+                    .expect("failed to read detail.png");
+                detail_bytes = Some(buf);
+            }
+            _ => {}
+        }
+    }
+
+    assert_eq!(
+        home_bytes.as_deref(),
+        Some(b"home-bytes".as_slice()),
+        "screenshots/home.png missing or wrong content"
+    );
+    assert_eq!(
+        detail_bytes.as_deref(),
+        Some(b"detail-bytes".as_slice()),
+        "screenshots/detail.png missing or wrong content"
+    );
+
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&app_manifest_yaml).expect("app manifest yaml is invalid");
+    assert_eq!(
+        parsed["screenshots"][0].as_str(),
+        Some("screenshots/home.png")
+    );
+    assert_eq!(
+        parsed["screenshots"][1].as_str(),
+        Some("screenshots/detail.png")
+    );
+    // Unrelated metadata must survive the rewrite.
+    assert_eq!(parsed["name"].as_str(), Some("My App"));
+    assert_eq!(
+        parsed["description"].as_str(),
+        Some("an app we do not parse")
+    );
+}
+
+/// Two screenshots whose basenames collide under the flat `screenshots/` folder must be rejected.
+#[test]
+fn bundle_rejects_screenshot_name_collision() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    create_dir_all(&project_dir.join("a")).expect("failed to create dir a");
+    create_dir_all(&project_dir.join("b")).expect("failed to create dir b");
+    write(&project_dir.join("a/shot.png"), b"a").expect("failed to write a/shot.png");
+    write(&project_dir.join("b/shot.png"), b"b").expect("failed to write b/shot.png");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let app_manifest = formatdoc! {r#"
+        screenshots:
+          - a/shot.png
+          - b/shot.png
+    "#};
+    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+        .expect("failed to write app manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("same bundle path").and(contains("shot.png")));
+}
+
+/// A screenshot path resolving outside the project directory must be rejected, like other bundle
+/// sources.
+#[test]
+fn bundle_rejects_screenshot_outside_project() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let outside = project_dir
+        .parent()
+        .expect("project dir has no parent")
+        .join("outside.png");
+    write(&outside, b"secret").expect("failed to write outside screenshot");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let app_manifest = formatdoc! {r#"
+        screenshots:
+          - ../outside.png
+    "#};
+    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+        .expect("failed to write app manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("outside the project directory"));
+}
+
 /// Projects with script sync steps must be rejected with a clear error.
 #[test]
 fn bundle_rejects_script_sync_step() {

@@ -25,7 +25,7 @@ use icp::{
     prelude::*,
     store_artifact,
 };
-use snafu::{ResultExt, Snafu};
+use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
 use crate::operations::build::{BuildManyError, build_many_with_progress_bar};
@@ -137,6 +137,42 @@ pub enum BundleError {
         file: String,
         source: fs::IoError,
     },
+
+    #[snafu(display("failed to read app manifest '{path}'"))]
+    ReadAppManifest { path: PathBuf, source: fs::IoError },
+
+    #[snafu(display("failed to parse app manifest '{path}'"))]
+    ParseAppManifest {
+        path: PathBuf,
+        source: serde_yaml::Error,
+    },
+
+    #[snafu(display("`screenshots` in app manifest '{path}' must be a list of file paths"))]
+    ScreenshotsNotSequence { path: PathBuf },
+
+    #[snafu(display("screenshot entries in app manifest '{path}' must be file path strings"))]
+    ScreenshotNotString { path: PathBuf },
+
+    #[snafu(display(
+        "screenshot path '{path}' resolves outside the project directory '{root}'; \
+         bundles cannot reference files outside the project"
+    ))]
+    ScreenshotEscapesProject { path: PathBuf, root: PathBuf },
+
+    #[snafu(display(
+        "screenshots {paths:?} both map to the same bundle path 'screenshots/{sanitized}'; \
+         rename one so they use distinct file names"
+    ))]
+    ScreenshotNameCollision {
+        sanitized: String,
+        paths: Vec<String>,
+    },
+
+    #[snafu(display("failed to serialize app manifest"))]
+    SerializeAppManifest { source: serde_yaml::Error },
+
+    #[snafu(display("failed to read screenshot '{path}'"))]
+    ReadScreenshot { path: PathBuf, source: fs::IoError },
 }
 
 /// In-memory bytes destined for a single tar entry.
@@ -164,6 +200,24 @@ struct InitArgsFile {
     src_path: PathBuf,
     archive_path: String,
 }
+
+/// The optional `icp_manifest.yaml` app-metadata file. We only understand its top-level
+/// `screenshots` list; everything else is preserved verbatim.
+struct AppManifest {
+    /// YAML to write at `APP_MANIFEST` in the archive. Identical to the source file unless a
+    /// screenshot path was rewritten.
+    yaml: String,
+    screenshots: Vec<ScreenshotFile>,
+}
+
+/// A screenshot referenced from `icp_manifest.yaml`, relocated under `screenshots/` in the bundle.
+struct ScreenshotFile {
+    src_path: PathBuf,
+    archive_path: String,
+}
+
+/// App-metadata manifest, included in bundles alongside the project manifest.
+const APP_MANIFEST: &str = "icp_manifest.yaml";
 
 /// Everything the canister section contributes to the archive, separate from the manifest items.
 #[derive(Default)]
@@ -206,6 +260,7 @@ pub(crate) async fn create_bundle(
 
     let (canister_items, bundle_artifacts) =
         prepare_canisters(&canisters, &*artifacts, pkg_cache).await?;
+    let app_manifest = prepare_app_manifest(project_dir, &canonical_project_dir)?;
     let networks = inline_networks(raw_manifest.networks, project_dir).await?;
     let (environments, init_args_files) = inline_environments(
         raw_manifest.environments,
@@ -226,6 +281,7 @@ pub(crate) async fn create_bundle(
         &bundle_manifest,
         &bundle_artifacts,
         &init_args_files,
+        app_manifest.as_ref(),
     )
 }
 
@@ -529,11 +585,94 @@ async fn inline_environments(
     Ok((out, init_args_files))
 }
 
+/// Load `icp_manifest.yaml` if present, rewriting its top-level `screenshots` paths to point at
+/// copies relocated under `screenshots/` in the bundle. Returns `None` when the file is absent.
+fn prepare_app_manifest(
+    project_dir: &Path,
+    canonical_project_dir: &Path,
+) -> Result<Option<AppManifest>, BundleError> {
+    let manifest_path = project_dir.join(APP_MANIFEST);
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let raw = fs::read_to_string(&manifest_path).context(ReadAppManifestSnafu {
+        path: &manifest_path,
+    })?;
+    let mut doc: serde_yaml::Value = serde_yaml::from_str(&raw).context(ParseAppManifestSnafu {
+        path: &manifest_path,
+    })?;
+
+    let Some(screenshots_val) = doc.get_mut("screenshots") else {
+        // No screenshots to relocate; embed the file unchanged.
+        return Ok(Some(AppManifest {
+            yaml: raw,
+            screenshots: Vec::new(),
+        }));
+    };
+    let seq = screenshots_val
+        .as_sequence_mut()
+        .context(ScreenshotsNotSequenceSnafu {
+            path: &manifest_path,
+        })?;
+
+    let mut screenshots = Vec::with_capacity(seq.len());
+    // Maps a relocated archive name back to the canonical source and original path it came from,
+    // so identical entries are deduplicated and distinct sources that flatten to the same name
+    // are reported as a collision.
+    let mut seen: HashMap<String, (PathBuf, String)> = HashMap::new();
+    for entry in seq.iter_mut() {
+        let orig = entry
+            .as_str()
+            .context(ScreenshotNotStringSnafu {
+                path: &manifest_path,
+            })?
+            .to_owned();
+        let src = project_dir.join(&orig);
+        let canon = canonicalize(&src)?;
+        if !canon.starts_with(canonical_project_dir) {
+            return ScreenshotEscapesProjectSnafu {
+                path: src,
+                root: canonical_project_dir.to_path_buf(),
+            }
+            .fail();
+        }
+
+        // Flatten into the top-level `screenshots/` folder by basename, sanitized the same way
+        // canister name segments are.
+        let base = canon.file_name().unwrap_or(orig.as_str());
+        let sanitized = path_segment(base);
+        let archive_path = format!("screenshots/{sanitized}");
+
+        match seen.get(&sanitized) {
+            Some((prev_canon, _)) if *prev_canon == canon => {}
+            Some((_, prev_orig)) => {
+                let mut paths = vec![prev_orig.clone(), orig.clone()];
+                paths.sort();
+                return ScreenshotNameCollisionSnafu { sanitized, paths }.fail();
+            }
+            None => {
+                seen.insert(sanitized.clone(), (canon.clone(), orig.clone()));
+                screenshots.push(ScreenshotFile {
+                    src_path: canon,
+                    archive_path: archive_path.clone(),
+                });
+            }
+        }
+
+        *entry = serde_yaml::Value::String(archive_path);
+    }
+
+    let yaml = serde_yaml::to_string(&doc).context(SerializeAppManifestSnafu)?;
+    Ok(Some(AppManifest { yaml, screenshots }))
+}
+
 fn write_archive(
     output: &Path,
     bundle_manifest: &ProjectManifest,
     artifacts: &BundleArtifacts,
     init_args_files: &[InitArgsFile],
+    app_manifest: Option<&AppManifest>,
 ) -> Result<(), BundleError> {
     let manifest_yaml = serde_yaml::to_string(bundle_manifest).context(SerializeManifestSnafu)?;
 
@@ -552,6 +691,16 @@ fn write_archive(
     archive.mode(tar::HeaderMode::Deterministic);
 
     append_bytes(&mut archive, "icp.yaml", manifest_yaml.as_bytes())?;
+
+    if let Some(app) = app_manifest {
+        append_bytes(&mut archive, APP_MANIFEST, app.yaml.as_bytes())?;
+        for shot in &app.screenshots {
+            let data = fs::read(&shot.src_path).context(ReadScreenshotSnafu {
+                path: shot.src_path.clone(),
+            })?;
+            append_bytes(&mut archive, &shot.archive_path, &data)?;
+        }
+    }
 
     for nb in &artifacts.wasms {
         append_bytes(&mut archive, &nb.archive_path, &nb.bytes)?;

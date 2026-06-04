@@ -117,7 +117,15 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let remote_principal = Principal::self_authenticating(&from_key);
 
     let auth = args.auth.clone();
-    let app = args.app.clone();
+    let app = args.app.clone().map(|app| {
+        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is.
+        // Temporary hack: NNS is the most common app that would break. Special-case it
+        if app == "nns.internetcomputer.org" {
+            "nns.ic0.app".to_string()
+        } else {
+            app
+        }
+    });
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {

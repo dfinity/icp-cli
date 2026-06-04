@@ -16,7 +16,6 @@ pub(crate) mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {
-    adapter::assets,
     adapter::plugin,
     adapter::prebuilt,
     canister::{

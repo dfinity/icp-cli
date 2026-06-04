@@ -680,7 +680,7 @@ fn bundle_packages_plugin_sync_steps() {
     );
 }
 
-/// An `icp_manifest.yaml` next to the project manifest must be included in the bundle, with its
+/// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
 /// top-level `screenshots` paths relocated under a top-level `screenshots/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.
 #[test]
@@ -711,7 +711,7 @@ fn bundle_includes_app_manifest_screenshots() {
           - media/home.png
           - media/detail.png
     "#};
-    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+    write_string(&project_dir.join("icp_appmanifest.yaml"), &app_manifest)
         .expect("failed to write app manifest");
 
     let bundle_path = project_dir.join("bundle.tar.gz");
@@ -738,10 +738,10 @@ fn bundle_includes_app_manifest_screenshots() {
             .into_owned();
 
         match path.as_str() {
-            "icp_manifest.yaml" => {
+            "icp_appmanifest.yaml" => {
                 entry
                     .read_to_string(&mut app_manifest_yaml)
-                    .expect("failed to read icp_manifest.yaml");
+                    .expect("failed to read icp_appmanifest.yaml");
             }
             "screenshots/home.png" => {
                 let mut buf = Vec::new();
@@ -817,7 +817,7 @@ fn bundle_rejects_screenshot_name_collision() {
           - a/shot.png
           - b/shot.png
     "#};
-    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+    write_string(&project_dir.join("icp_appmanifest.yaml"), &app_manifest)
         .expect("failed to write app manifest");
 
     ctx.icp()
@@ -856,7 +856,7 @@ fn bundle_rejects_screenshot_outside_project() {
         screenshots:
           - ../outside.png
     "#};
-    write_string(&project_dir.join("icp_manifest.yaml"), &app_manifest)
+    write_string(&project_dir.join("icp_appmanifest.yaml"), &app_manifest)
         .expect("failed to write app manifest");
 
     ctx.icp()

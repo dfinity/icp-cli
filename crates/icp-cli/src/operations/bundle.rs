@@ -200,7 +200,7 @@ struct InitArgsFile {
     archive_path: String,
 }
 
-/// The optional `icp_manifest.yaml` app-metadata file. We only understand its top-level
+/// The optional `icp_appmanifest.yaml` app-metadata file. We only understand its top-level
 /// `screenshots` list; all other keys are preserved semantically.
 struct AppManifest {
     /// YAML to write at `APP_MANIFEST` in the archive. The original source text is used when
@@ -209,14 +209,14 @@ struct AppManifest {
     screenshots: Vec<ScreenshotFile>,
 }
 
-/// A screenshot referenced from `icp_manifest.yaml`, relocated under `screenshots/` in the bundle.
+/// A screenshot referenced from `icp_appmanifest.yaml`, relocated under `screenshots/` in the bundle.
 struct ScreenshotFile {
     src_path: PathBuf,
     archive_path: String,
 }
 
 /// App-metadata manifest, included in bundles alongside the project manifest.
-const APP_MANIFEST: &str = "icp_manifest.yaml";
+const APP_MANIFEST: &str = "icp_appmanifest.yaml";
 
 /// Everything the canister section contributes to the archive, separate from the manifest items.
 #[derive(Default)]
@@ -554,7 +554,7 @@ async fn inline_environments(
     Ok((out, init_args_files))
 }
 
-/// Load `icp_manifest.yaml` if present, rewriting its top-level `screenshots` paths to point at
+/// Load `icp_appmanifest.yaml` if present, rewriting its top-level `screenshots` paths to point at
 /// copies relocated under `screenshots/` in the bundle. Returns `None` when the file is absent.
 fn prepare_app_manifest(
     project_dir: &Path,

@@ -202,10 +202,10 @@ struct InitArgsFile {
 }
 
 /// The optional `icp_manifest.yaml` app-metadata file. We only understand its top-level
-/// `screenshots` list; everything else is preserved verbatim.
+/// `screenshots` list; all other keys are preserved semantically.
 struct AppManifest {
-    /// YAML to write at `APP_MANIFEST` in the archive. Identical to the source file unless a
-    /// screenshot path was rewritten.
+    /// YAML to write at `APP_MANIFEST` in the archive. The original source text is used when
+    /// no screenshot relocation is needed; otherwise the YAML is re-serialized (formatting/comments may change).
     yaml: String,
     screenshots: Vec<ScreenshotFile>,
 }

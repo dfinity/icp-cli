@@ -133,6 +133,39 @@ sync:
 
 Script sync steps support the same `command` and `commands` fields as build script steps.
 
+### Plugin Sync
+
+Run a sandboxed WebAssembly [sync plugin](../concepts/sync-plugins.md) against the canister being synced. The plugin is a single `.wasm` component, referenced either by a local `path` or a remote `url`:
+
+```yaml
+sync:
+  steps:
+    # Local plugin
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
+      dirs:                              # directories preopened read-only
+        - assets/seed-data
+        - config
+      files:                             # files read by the host and passed inline
+        - config.txt
+
+    # Remote plugin (downloaded and verified before execution)
+    - type: plugin
+      url: https://example.com/plugins/migrate-v2.wasm
+      sha256: a665a45920422f9d417e...   # required for url
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
+| `url` | string | One of `path` or `url` | URL to download the wasm from |
+| `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
+| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
+| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+
 ## Recipes
 
 ### Recipe Reference

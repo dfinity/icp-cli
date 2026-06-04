@@ -155,6 +155,7 @@ export default defineConfig({
             { label: 'Using Recipes', slug: 'guides/using-recipes' },
             { label: 'Creating Recipes', slug: 'guides/creating-recipes' },
             { label: 'Creating Templates', slug: 'guides/creating-templates' },
+            { label: 'Writing a Sync Plugin', slug: 'guides/writing-sync-plugins' },
           ],
         },
         {
@@ -166,6 +167,7 @@ export default defineConfig({
             { label: 'Canister Discovery', slug: 'concepts/canister-discovery' },
             { label: 'Binding Generation', slug: 'concepts/binding-generation' },
             { label: 'Recipes', slug: 'concepts/recipes' },
+            { label: 'Sync Plugins', slug: 'concepts/sync-plugins' },
           ],
         },
         {

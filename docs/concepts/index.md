@@ -11,6 +11,7 @@ Understanding how icp-cli organizes and manages your project.
 - [Build, Deploy, Sync](build-deploy-sync.md) — The three phases of the deployment lifecycle
 - [Environments and Networks](environments.md) — Deployment targets and how they relate
 - [Recipes](recipes.md) — Templated, reusable build configurations
+- [Sync Plugins](sync-plugins.md) — Sandboxed WebAssembly components that run during the sync phase
 - [Canister Discovery](canister-discovery.md) — How canisters discover each other
 - [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
@@ -23,4 +24,5 @@ Understanding how icp-cli organizes and manages your project.
 | **Network** | An ICP network endpoint — local (managed by icp-cli) or remote (mainnet, testnet) |
 | **Environment** | A named deployment target combining a network with canister settings |
 | **Recipe** | A Handlebars template that generates build and sync configuration |
+| **Sync plugin** | A sandboxed WebAssembly component that runs post-deployment logic during `icp sync` |
 | **Principal** | A public identifier for an identity or canister on the Internet Computer |

@@ -112,12 +112,20 @@ The sync phase handles post-deployment operations that depend on the canister be
 ### Common Use Cases
 
 - **Asset canisters** — Upload static files after the canister is running
+- **Seeding or configuring state** — Make post-deployment canister calls
 
-### Asset Uploads
+### Plugin Sync Steps
 
-For frontend canisters, you typically upload your built assets after deployment.
-This is done with a `plugin` sync step (a WebAssembly sync plugin) — for example,
-one provided by a recipe — rather than a built-in step.
+A `plugin` sync step runs a sandboxed WebAssembly [sync plugin](sync-plugins.md)
+against the canister being synced. This is how post-deployment operations like
+asset uploads work — for frontend canisters you typically upload your built
+assets with a plugin provided by a recipe (such as `@dfinity/asset-canister`)
+rather than a built-in step.
+
+A plugin can call update and query methods on the canister and read directories
+and files you declare, all inside a WASI sandbox with no network or write access.
+See [Sync Plugins](sync-plugins.md) for the full mechanism and [Writing a Sync
+Plugin](../guides/writing-sync-plugins.md) to author your own.
 
 ### Script Sync Steps
 

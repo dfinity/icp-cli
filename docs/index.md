@@ -28,6 +28,7 @@ Step-by-step instructions for common tasks:
 - [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Creating Recipes](guides/creating-recipes.md) — Build custom recipes
 - [Creating Templates](guides/creating-templates.md) — Author project templates
+- [Writing a Sync Plugin](guides/writing-sync-plugins.md) — Author a sandboxed WebAssembly sync plugin
 
 ## Concepts
 
@@ -37,6 +38,7 @@ Understand how icp-cli works:
 - [Build, Deploy, Sync](concepts/build-deploy-sync.md) — The deployment lifecycle
 - [Environments and Networks](concepts/environments.md) — Deployment targets explained
 - [Recipes](concepts/recipes.md) — Templated build configurations
+- [Sync Plugins](concepts/sync-plugins.md) — Sandboxed WebAssembly components for the sync phase
 - [Canister Discovery](concepts/canister-discovery.md) — How canisters discover each other
 - [Binding Generation](concepts/binding-generation.md) — Type-safe canister interfaces
 

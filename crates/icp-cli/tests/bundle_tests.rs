@@ -96,13 +96,13 @@ async fn bundle_and_deploy() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "backend.wasm" => {
+            "canisters/backend.wasm" => {
                 found_backend_wasm = true;
             }
-            "frontend.wasm" => {
+            "canisters/frontend.wasm" => {
                 found_frontend_wasm = true;
             }
-            p if p.starts_with("frontend/www/") => {
+            p if p.starts_with("canisters/frontend/www/") => {
                 found_asset = true;
             }
             _ => {}
@@ -110,11 +110,17 @@ async fn bundle_and_deploy() {
     }
 
     assert!(found_manifest, "icp.yaml not found in bundle");
-    assert!(found_backend_wasm, "backend.wasm not found in bundle");
-    assert!(found_frontend_wasm, "frontend.wasm not found in bundle");
+    assert!(
+        found_backend_wasm,
+        "canisters/backend.wasm not found in bundle"
+    );
+    assert!(
+        found_frontend_wasm,
+        "canisters/frontend.wasm not found in bundle"
+    );
     assert!(
         found_asset,
-        "asset file not found under frontend/www/ in bundle"
+        "asset file not found under canisters/frontend/www/ in bundle"
     );
 
     // Manifest must contain pre-built steps and no script or recipe steps.
@@ -157,13 +163,7 @@ async fn bundle_and_deploy() {
 
     ctx.icp()
         .current_dir(&bundle_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -342,14 +342,17 @@ fn bundle_sanitizes_canister_name_for_paths() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "my_canister_.wasm" => {
+            "canisters/my_canister_.wasm" => {
                 found_wasm = true;
             }
             _ => {}
         }
     }
 
-    assert!(found_wasm, "my_canister_.wasm not found in bundle");
+    assert!(
+        found_wasm,
+        "canisters/my_canister_.wasm not found in bundle"
+    );
     assert!(
         manifest_yaml.contains("my_canister_.wasm"),
         "bundle manifest should reference sanitized wasm filename"
@@ -429,7 +432,7 @@ fn bundle_normalizes_dotdot_within_project() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            p if p.starts_with("my-canister/shared-assets/") => {
+            p if p.starts_with("canisters/my-canister/shared-assets/") => {
                 found_asset = true;
             }
             _ => {}
@@ -438,7 +441,7 @@ fn bundle_normalizes_dotdot_within_project() {
 
     assert!(
         found_asset,
-        "asset not found under my-canister/shared-assets/ in bundle"
+        "asset not found under canisters/my-canister/shared-assets/ in bundle"
     );
 
     // Parse the rewritten manifest and inspect the actual sync dir field rather than
@@ -448,7 +451,7 @@ fn bundle_normalizes_dotdot_within_project() {
     let dir = parsed["canisters"][0]["sync"]["steps"][0]["dir"]
         .as_str()
         .expect("expected sync step 0 to have a string `dir` field");
-    assert_eq!(dir, "my-canister/shared-assets");
+    assert_eq!(dir, "canisters/my-canister/shared-assets");
     assert!(
         !Path::new(dir)
             .components()
@@ -681,4 +684,108 @@ canisters:
         .assert()
         .failure()
         .stderr(contains("my-canister").and(contains("script sync step")));
+}
+
+/// Two canisters whose names sanitize to the same archive segment must be rejected up front,
+/// since their archive paths would otherwise collide silently.
+#[test]
+fn bundle_rejects_canister_name_collision() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    // `my canister` and `my!canister` both sanitize to `my_canister`.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: "my canister"
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+          - name: "my!canister"
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("sanitize to the same archive segment").and(contains("my_canister")));
+}
+
+/// The bundle output path must not live inside a directory that will be recursively archived,
+/// otherwise the bundle would include a partial copy of itself.
+#[test]
+fn bundle_rejects_output_inside_synced_dir() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let asset_dir = project_dir.join("www");
+    create_dir_all(&asset_dir).expect("failed to create asset dir");
+    write_string(&asset_dir.join("index.html"), "hello").expect("failed to write asset file");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: assets
+                  dir: www
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "www/bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("inside synced directory").and(contains("www")));
+}
+
+/// A managed-image network with an absolute bind-mount host path can't be reproduced on
+/// another machine, so bundling such a project must be rejected.
+#[test]
+fn bundle_rejects_absolute_bind_mount() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: docker-network
+            mode: managed
+            image: my-image:latest
+            port-mapping:
+              - "8080:8080"
+            mounts:
+              - /etc/host-secrets:/container/secrets
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("docker-network").and(contains("absolute host path")));
 }

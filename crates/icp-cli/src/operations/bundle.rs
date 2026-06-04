@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufWriter, Cursor, Write},
     sync::Arc,
@@ -260,15 +260,21 @@ async fn prepare_canister(
             canister: canister.name.clone(),
         })?;
     let sha256 = hex::encode(Sha256::digest(&wasm));
-    let wasm_filename = format!("{path_name}.wasm");
+    let wasm_filename = format!("canisters/{path_name}.wasm");
 
     let mut bundle_sync_steps = Vec::with_capacity(canister.sync.steps.len());
     let mut plugin_idx: usize = 0;
 
     for step in &canister.sync.steps {
         match step {
-            // validate_canisters rules this out
-            SyncStep::Script(_) => unreachable!("validated by validate_canisters"),
+            // validate_canisters rules this out up front; return the same error rather than
+            // panicking if that invariant is ever bypassed.
+            SyncStep::Script(_) => {
+                return ScriptSyncStepSnafu {
+                    canister: canister.name.clone(),
+                }
+                .fail();
+            }
             SyncStep::Assets(adapter) => {
                 bundle_sync_steps.push(prepare_asset_step(adapter, canister_path, &path_name, out));
             }
@@ -327,7 +333,7 @@ fn prepare_asset_step(
     let dirs = adapter.dir.as_vec();
     let mut prefixed: Vec<String> = Vec::with_capacity(dirs.len());
     for d in &dirs {
-        let archive_prefix = format!("{path_name}/{}", normalize_archive_dir(d));
+        let archive_prefix = format!("canisters/{path_name}/{}", normalize_archive_dir(d));
         out.asset_dirs.push(DirEntry {
             src_path: canister_path.join(d),
             archive_prefix: archive_prefix.clone(),
@@ -462,6 +468,10 @@ async fn inline_environments(
 
     let mut out = Vec::with_capacity(items.len());
     let mut init_args_files = Vec::new();
+    // Multiple environments can override the same canister's init_args from the same file,
+    // which resolves to an identical archive path (and identical source). Emit each archive
+    // entry once so we don't write duplicate tar headers for the same bytes.
+    let mut seen_archive_paths: HashSet<String> = HashSet::new();
 
     for item in items {
         let mut inlined = match item {
@@ -499,10 +509,12 @@ async fn inline_environments(
                         path_segment(canister_name),
                         normalize_archive_dir(orig_path)
                     );
-                    init_args_files.push(InitArgsFile {
-                        src_path: src,
-                        archive_path: archive_path.clone(),
-                    });
+                    if seen_archive_paths.insert(archive_path.clone()) {
+                        init_args_files.push(InitArgsFile {
+                            src_path: src,
+                            archive_path: archive_path.clone(),
+                        });
+                    }
                     *mia = ManifestInitArgs::Path {
                         path: archive_path,
                         format: fmt.clone(),
@@ -533,8 +545,10 @@ fn write_archive(
     // Record symlinks as Symlink entries rather than slurping their targets — keeps secrets
     // outside the project from leaking via a symlinked asset dir.
     archive.follow_symlinks(false);
-    // Strip mtime/uid/gid from headers written via append_dir_all so the archive is
-    // byte-reproducible across machines.
+    // Strip mtime/uid/gid from entry headers so they are metadata-normalized across machines.
+    // Note this does not make the archive fully byte-reproducible: `append_dir` relies on
+    // `append_dir_all`, which walks `read_dir` in the filesystem's order, so entry ordering
+    // within a directory can still differ between machines.
     archive.mode(tar::HeaderMode::Deterministic);
 
     append_bytes(&mut archive, "icp.yaml", manifest_yaml.as_bytes())?;

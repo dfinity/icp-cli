@@ -96,6 +96,15 @@ pub enum ConsolidateManifestError {
     ))]
     BinFormatInlineContent { canister: String },
 
+    #[snafu(display(
+        "canister '{canister}' lists controller '{controller}', but no canister with that \
+         name is declared in the project"
+    ))]
+    UnknownControllerCanister {
+        canister: String,
+        controller: String,
+    },
+
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
 }
@@ -258,9 +267,15 @@ pub async fn consolidate_manifest(
 
                 // Recipe
                 Instructions::Recipe { recipe } => {
-                    recipe_resolver.resolve(recipe).await.context(RecipeSnafu {
-                        recipe_type: recipe.recipe_type.clone(),
-                    })?
+                    let ctx = recipe::RecipeContext {
+                        canister_name: m.name.clone(),
+                    };
+                    recipe_resolver
+                        .resolve(recipe, &ctx)
+                        .await
+                        .context(RecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        })?
                 }
             };
 
@@ -299,6 +314,25 @@ pub async fn consolidate_manifest(
                         },
                     ));
                 }
+            }
+        }
+    }
+
+    // Validate that every canister-name controller reference points to a declared canister.
+    // Catching typos here turns "perpetual warning" into a clear load-time error.
+    for (canister_name, (_, canister)) in &canisters {
+        let Some(crefs) = &canister.settings.controllers else {
+            continue;
+        };
+        for cref in crefs {
+            if let Some(ref_name) = cref.canister_name()
+                && !canisters.contains_key(ref_name)
+            {
+                return UnknownControllerCanisterSnafu {
+                    canister: canister_name.to_owned(),
+                    controller: ref_name.to_owned(),
+                }
+                .fail();
             }
         }
     }

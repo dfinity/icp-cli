@@ -20,7 +20,7 @@ pub(crate) struct LoginArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
-    let (algorithm, storage, host) = ctx
+    let (algorithm, storage, host, domain, principal) = ctx
         .dirs
         .identity()?
         .with_read(async |dirs| {
@@ -32,10 +32,17 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
             match spec {
                 IdentitySpec::InternetIdentity {
                     algorithm,
+                    principal,
                     storage,
                     host,
-                    ..
-                } => Ok((algorithm.clone(), *storage, host.clone())),
+                    domain,
+                } => Ok((
+                    algorithm.clone(),
+                    *storage,
+                    host.clone(),
+                    domain.clone(),
+                    *principal,
+                )),
                 _ => NotIiSnafu { name: &args.name }.fail(),
             }
         })
@@ -55,7 +62,9 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
         .await?
         .context(LoadSessionKeySnafu)?;
 
-    let chain = ii::recv_delegation(&host, &der_public_key)
+    // Re-auth must resolve to the same II principal that was originally linked,
+    // so reuse the delegation domain captured at link time.
+    let chain = ii::recv_delegation(&host, domain.as_deref(), &der_public_key, Some(principal))
         .await
         .context(PollSnafu)?;
 

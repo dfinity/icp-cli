@@ -1,5 +1,6 @@
 User-agent: *
-Allow: /0.2/
+Allow: /0.3/
+Disallow: /0.2/
 Disallow: /0.1/
 Disallow: /main/
 

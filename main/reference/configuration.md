@@ -112,7 +112,7 @@ Sync steps run after canister deployment to configure the running canister.
 > Uploading static files to an asset canister is no longer a built-in sync step.
 > Use a `plugin` sync step (a WebAssembly sync plugin) — for example, one provided
 > by a recipe. The `@dfinity/asset-canister` recipe emits a `plugin` sync step
-> starting with `v2.2.0`; earlier versions emit the retired `assets` step and will
+> starting with `v2.2.1`; earlier versions emit the retired `assets` step and will
 > no longer load. Upgrading an existing project? See
 > [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0-2.md).
 
@@ -437,7 +437,7 @@ Supported formats:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.2.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
     settings:

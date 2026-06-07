@@ -98,7 +98,7 @@
 <li><strong>Sandboxed</strong> — it cannot open network sockets, spawn subprocesses, or touch the filesystem outside the directories you explicitly grant it.</li>
 <li><strong>Scoped to one canister</strong> — it can call update and query methods, but only on the canister being synced. The target is fixed by the host; the plugin cannot choose a different one.</li>
 </ul>
-<p>The most common way to get a sync plugin is through a <a href="../recipes/">recipe</a>. For example, the <code>@dfinity/asset-canister</code> recipe emits a <code>plugin</code> sync step (starting with <code>v2.2.0</code>) that uploads your built static files to the asset canister — so for everyday frontend deployment you never write a plugin yourself.</p>
+<p>The most common way to get a sync plugin is through a <a href="../recipes/">recipe</a>. For example, the <code>@dfinity/asset-canister</code> recipe emits a <code>plugin</code> sync step (starting with <code>v2.2.1</code>) that uploads your built static files to the asset canister — so for everyday frontend deployment you never write a plugin yourself.</p>
 <h2 id="how-a-plugin-runs">How a Plugin Runs</h2>
 <p>When a <code>plugin</code> sync step executes for a canister, icp-cli:</p>
 <ol>

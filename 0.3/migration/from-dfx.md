@@ -176,7 +176,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.2.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
 ```
@@ -187,7 +187,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.2.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
         build:
@@ -219,7 +219,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.2.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
         build:

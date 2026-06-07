@@ -20,7 +20,7 @@ CLI, in a recipe-provided [sync plugin](../concepts/sync-plugins.md). The
 You're affected if your `icp.yaml` (or a per-canister `canister.yaml`) either:
 
 - contains a `type: assets` sync step, or
-- uses the `@dfinity/asset-canister` recipe at a version below `v2.2.0` (those
+- uses the `@dfinity/asset-canister` recipe at a version below `v2.2.1` (those
   versions emit a `type: assets` step internally).
 
 After upgrading, any command that loads such a manifest (`icp deploy`,
@@ -40,7 +40,7 @@ Pick the path that matches how your project uploads assets:
 
 ## Recipe users
 
-If you reference the `@dfinity/asset-canister` recipe, upgrade it to `v2.2.0`.
+If you reference the `@dfinity/asset-canister` recipe, upgrade it to `v2.2.1`.
 That version emits a `plugin` sync step instead of the retired `assets` step;
 nothing else in your configuration changes.
 
@@ -61,13 +61,13 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.2.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: www
 ```
 
 The recipe's `configuration` (including `dir`) is unchanged. See the
-[asset-canister v2.2.0 release](https://github.com/dfinity/icp-cli-recipes/releases/tag/asset-canister-v2.2.0)
+[asset-canister v2.2.1 release](https://github.com/dfinity/icp-cli-recipes/releases/tag/asset-canister-v2.2.1)
 for details.
 
 ## Manual sync steps
@@ -91,14 +91,14 @@ sync:
 sync:
   steps:
     - type: plugin
-      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.0-209d688/sync_plugin.wasm
-      sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
+      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
+      sha256: ca7cb5666c30d2875f8d5e10535f8a53f97a86c79c263f7d5bdac2fdd1bbf83c
       dirs:
         - www
 ```
 
 The plugin is published in the
-[certified-assets migration-v2.2.0 release](https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.0-209d688).
+[certified-assets migration-v2.2.1 release](https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.1-6b48585).
 It uploads the contents of a single directory to the asset canister being synced —
 the same job the old `assets` step did. `dirs` is the general
 [sync-plugin](../concepts/sync-plugins.md) field (a list, since a plugin may
@@ -126,8 +126,8 @@ it. If you used the singular `dir:`, wrap it in a single-element `dirs:` list:
 
 ```yaml
 - type: plugin
-  url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.0-209d688/sync_plugin.wasm
-  sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
+  url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
+  sha256: ca7cb5666c30d2875f8d5e10535f8a53f97a86c79c263f7d5bdac2fdd1bbf83c
   dirs:
     - dist
 ```

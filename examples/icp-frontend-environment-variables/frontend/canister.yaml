@@ -15,7 +15,7 @@ build:
 sync:
   steps:
     - type: plugin
-      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.0-209d688/sync_plugin.wasm
+      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
       sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
       dirs:
         - app/dist

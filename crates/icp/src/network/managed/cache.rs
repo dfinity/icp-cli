@@ -14,6 +14,20 @@ use crate::prelude::*;
 
 const LAUNCHER_NAME: &str = "icp-cli-network-launcher";
 
+/// Build a GET request to GitHub with the standard `User-Agent` and, when
+/// `ICP_CLI_GITHUB_TOKEN` is set, a bearer token. Authenticating raises the
+/// rate limit from 60 to 5000 requests/hour, which matters in CI where many
+/// jobs share one runner IP. `reqwest` strips the `Authorization` header on
+/// cross-origin redirects, so it is safe to attach to release-asset downloads
+/// that redirect to a CDN.
+fn github_get(client: &Client, url: &str) -> reqwest::RequestBuilder {
+    let mut req = client.get(url).header("User-Agent", "icp-cli");
+    if let Ok(token) = std::env::var("ICP_CLI_GITHUB_TOKEN") {
+        req = req.bearer_auth(token);
+    }
+    req
+}
+
 /// Returns the resolved version and path for the cached launcher binary.
 /// For "latest", resolves the tag to the actual version (e.g. "v0.3.0").
 pub fn get_cached_launcher_version(
@@ -76,11 +90,7 @@ pub enum ReadCacheError {
 
 pub async fn get_latest_launcher_version(client: &Client) -> Result<String, DownloadLauncherError> {
     let url = "https://api.github.com/repos/dfinity/icp-cli-network-launcher/releases/latest";
-    let mut req = client.get(url).header("User-Agent", "icp-cli");
-    if let Ok(token) = std::env::var("ICP_CLI_GITHUB_TOKEN") {
-        req = req.bearer_auth(token);
-    }
-    let response: serde_json::Value = req
+    let response: serde_json::Value = github_get(client, url)
         .send()
         .await
         .context(LatestVersionFetchSnafu)?
@@ -140,8 +150,7 @@ pub async fn download_launcher_version(
     let url = format!(
         "https://github.com/dfinity/icp-cli-network-launcher/releases/download/{pkg_version}/icp-cli-network-launcher-{arch}-{os}-{pkg_version}.tar.gz"
     );
-    let stream = client
-        .get(&url)
+    let stream = github_get(client, &url)
         .send()
         .await
         .context(DownloadSnafu)?

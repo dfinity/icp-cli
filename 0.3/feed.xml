@@ -6,14 +6,14 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Sun, 07 Jun 2026 14:40:52 GMT</lastBuildDate>
-    <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+    <lastBuildDate>Mon, 08 Jun 2026 20:45:21 GMT</lastBuildDate>
+    <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/0.3/reference/configuration/</link>
       <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/reference/configuration/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -21,7 +21,7 @@
       <title>Migrating from dfx</title>
       <link>https://cli.internetcomputer.org/0.3/migration/from-dfx/</link>
       <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/migration/from-dfx/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -29,7 +29,7 @@
       <title>Upgrading from icp-cli 0.2</title>
       <link>https://cli.internetcomputer.org/0.3/migration/upgrading-from-v0-2/</link>
       <description>Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/migration/upgrading-from-v0-2/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -37,7 +37,7 @@
       <title>Creating Project Templates</title>
       <link>https://cli.internetcomputer.org/0.3/guides/creating-templates/</link>
       <description>Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/guides/creating-templates/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -45,7 +45,7 @@
       <title>Local Development</title>
       <link>https://cli.internetcomputer.org/0.3/guides/local-development/</link>
       <description>Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/guides/local-development/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -53,7 +53,7 @@
       <title>Using Recipes</title>
       <link>https://cli.internetcomputer.org/0.3/guides/using-recipes/</link>
       <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/guides/using-recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -61,7 +61,7 @@
       <title>Sync Plugins</title>
       <link>https://cli.internetcomputer.org/0.3/concepts/sync-plugins/</link>
       <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
-      <pubDate>Sun, 07 Jun 2026 13:59:11 GMT</pubDate>
+      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/0.3/concepts/sync-plugins/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>

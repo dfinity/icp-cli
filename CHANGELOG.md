@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+# v0.3.1
+
 * fix: Account seeding in new networks is now done via transfer instead of mint. This should eliminate minting ratelimit errors for users with a lot of local identities.
 
 # v0.3.0

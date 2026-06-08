@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* fix: Account seeding in new networks is now done via transfer instead of mint. This should eliminate minting ratelimit errors for users with a lot of local identities.
+
 # v0.3.0
 
 * feat: `icp identity link web` now lets you sign in with web-based identities, especially Internet Identity. You can use your NNS-UI or Oisy principals locally with `--app nns.ic0.app` or `--app oisy.com`. When the session expires, sign in again with `icp identity reauth`.

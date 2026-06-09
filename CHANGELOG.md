@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+# v0.3.2
+
 * feat: `icp canister call` now accepts `--candid <PATH>` to load the canister's Candid interface from a local `.did` file instead of fetching it from the network. The supplied interface drives method selection, argument building, and response decoding.
 
 # v0.3.1

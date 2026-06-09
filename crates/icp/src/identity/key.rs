@@ -397,13 +397,7 @@ fn load_webauth_identity(
         } => load_pbes2_identity(&doc, algorithm, password_func, &origin)?,
     };
 
-    // Clone all three consumed values in case the mainnet-key attempt fails and we need to retry
-    // with a different root key.
-    let inner_fb = Arc::clone(&inner);
-    let from_key_fb = from_key.clone();
-    let delegations_fb = signed_delegations.clone();
-
-    match DelegatedIdentity::new(from_key, Box::new(inner), signed_delegations) {
+    match DelegatedIdentity::new(from_key, Box::new(Arc::clone(&inner)), signed_delegations) {
         Ok(delegated) => Ok(Arc::new(delegated)),
         Err(mainnet_err) => {
             // Only attempt the fallback when a network root key is provided and it differs from
@@ -411,10 +405,13 @@ fn load_webauth_identity(
             let different_key = network_root_key.filter(|k| *k != IC_ROOT_KEY.as_slice());
 
             if let Some(network_key) = different_key {
+                // re-deserialize as ::new just ate the old values (better than an up-front clone since this path should be rare)
+                let (from_key, signed_delegations) = delegation::to_agent_types(&stored_chain)
+                    .expect("same conversion already succeeded");
                 match DelegatedIdentity::new_with_root_key(
-                    from_key_fb,
-                    Box::new(inner_fb),
-                    delegations_fb,
+                    from_key,
+                    Box::new(Arc::clone(&inner)),
+                    signed_delegations,
                     network_key,
                 ) {
                     Ok(delegated) => return Ok(Arc::new(delegated)),

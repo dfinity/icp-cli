@@ -29,6 +29,9 @@ Make a canister call
   - `bin`:
     Raw binary (only valid for file references)
 
+* `--candid <PATH>` — Path to a Candid (`.did`) file describing the canister's interface.
+
+   When set, this interface is used to assist method selection, build arguments, and decode the response, instead of fetching the canister's Candid interface from the network.
 * `--proxy <PROXY>` — Principal of a proxy canister to route the call through.
 
    When specified, instead of calling the target canister directly, the call will be sent to the proxy canister's `proxy` method, which forwards it to the target canister.

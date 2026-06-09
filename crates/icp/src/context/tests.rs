@@ -18,7 +18,7 @@ const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 async fn test_get_identity_default() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_identity(&IdentitySelection::Default).await;
+    let result = ctx.get_identity(&IdentitySelection::Default, None).await;
 
     assert!(result.is_ok());
 }
@@ -27,7 +27,7 @@ async fn test_get_identity_default() {
 async fn test_get_identity_anonymous() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_identity(&IdentitySelection::Anonymous).await;
+    let result = ctx.get_identity(&IdentitySelection::Anonymous, None).await;
 
     assert!(result.is_ok());
 }
@@ -44,7 +44,7 @@ async fn test_get_identity_named() {
     };
 
     let result = ctx
-        .get_identity(&IdentitySelection::Named("alice".to_string()))
+        .get_identity(&IdentitySelection::Named("alice".to_string()), None)
         .await;
 
     assert!(result.is_ok());
@@ -55,7 +55,7 @@ async fn test_get_identity_named_not_found() {
     let ctx = Context::mocked();
 
     let result = ctx
-        .get_identity(&IdentitySelection::Named("nonexistent".to_string()))
+        .get_identity(&IdentitySelection::Named("nonexistent".to_string()), None)
         .await;
 
     assert!(matches!(

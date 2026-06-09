@@ -11,7 +11,7 @@ pub(crate) struct PrincipalArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &PrincipalArgs) -> Result<(), anyhow::Error> {
-    let id = ctx.get_identity(&args.identity.clone().into()).await?;
+    let id = ctx.get_identity(&args.identity.clone().into(), None).await?;
 
     let principal = id
         .sender()

@@ -288,7 +288,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         return Ok(());
     }
 
-    let identity = ctx.get_identity(&selections.identity).await?;
+    let identity = ctx.get_identity(&selections.identity, None).await?;
     let caller = identity
         .sender()
         .map_err(|e| anyhow!("failed to get caller principal: {e}"))?;

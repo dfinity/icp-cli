@@ -151,7 +151,7 @@ pub(crate) struct UpdateArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
-    let identity = ctx.get_identity(&selections.identity).await?;
+    let identity = ctx.get_identity(&selections.identity, None).await?;
     let caller_principal = identity
         .sender()
         .map_err(|e| anyhow::anyhow!("failed to get caller principal: {e}"))?;

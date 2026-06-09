@@ -40,7 +40,9 @@ pub(crate) async fn exec(ctx: &Context, args: &AccountIdArgs) -> Result<(), anyh
     let principal = if let Some(p) = &args.of_principal {
         *p
     } else {
-        let id = ctx.get_identity(&args.identity.clone().into(), None).await?;
+        let id = ctx
+            .get_identity(&args.identity.clone().into(), None)
+            .await?;
         id.sender()
             .map_err(|e| anyhow::anyhow!("failed to load identity principal: {e}"))?
     };

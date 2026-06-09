@@ -13,6 +13,16 @@ env:
   CURL_HOME: .
   # Disable incremental compilation
   CARGO_INCREMENTAL: 0
+  # Reduce debug info in CI builds: smaller object files mean much faster
+  # linking (the dominant cost on Windows MSVC) and smaller caches.
+  # line-tables-only keeps file:line numbers in backtraces.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # Link with LLVM's lld-link instead of the slow MSVC link.exe. LLVM is
+  # preinstalled at C:\Program Files\LLVM on the windows-2025 image. This is
+  # only consumed when building the windows-msvc target, so it is a no-op on
+  # Linux/macOS, and being scoped to this workflow it does not affect the
+  # release/dist (thin-LTO) build, which keeps the default linker.
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: "C:/Program Files/LLVM/bin/lld-link.exe"
   # These variables should be shared with WSL
   WSLENV: CARGO_INCREMENTAL:CURL_HOME/p:CARGO_NET_RETRY:GITHUB_ENV/p:GITHUB_OUTPUT/p
 
@@ -69,6 +79,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Defender real-time scanning of every object/rlib it writes slows
+      # file-heavy Rust builds and cache extraction considerably on Windows.
+      - name: Exclude build dirs from Windows Defender
+        if: ${{ contains(matrix.os, 'windows') }}
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath `
+            "$env:GITHUB_WORKSPACE", `
+            "$env:USERPROFILE\.cargo", `
+            "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
+
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
@@ -98,6 +119,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Defender real-time scanning of every object/rlib it writes slows
+      # file-heavy Rust builds and cache extraction considerably on Windows.
+      - name: Exclude build dirs from Windows Defender
+        if: ${{ contains(matrix.os, 'windows') }}
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath `
+            "$env:GITHUB_WORKSPACE", `
+            "$env:USERPROFILE\.cargo", `
+            "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
 
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:

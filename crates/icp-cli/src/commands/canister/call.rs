@@ -58,6 +58,14 @@ pub(crate) struct CallArgs {
     #[arg(long, default_value = "candid")]
     pub(crate) args_format: ArgsFormat,
 
+    /// Path to a Candid (`.did`) file describing the canister's interface.
+    ///
+    /// When set, this interface is used to assist method selection, build
+    /// arguments, and decode the response, instead of fetching the canister's
+    /// Candid interface from the network.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) candid: Option<PathBuf>,
+
     /// Principal of a proxy canister to route the call through.
     ///
     /// When specified, instead of calling the target canister directly,
@@ -106,7 +114,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let candid_types = get_candid_type(&agent, cid).await;
+    let candid_types = match &args.candid {
+        Some(path) => Some(load_candid_from_file(path)?),
+        None => get_candid_type(&agent, cid).await,
+    };
 
     let method = if let Some(method) = &args.method {
         method.clone()
@@ -362,6 +373,23 @@ async fn get_candid_type(agent: &Agent, canister_id: Principal) -> Option<Canist
     let (type_env, ty) = candid_source.load().ok()?;
     let actor = ty?;
     Some(CanisterInterface {
+        env: type_env,
+        ty: actor,
+    })
+}
+
+/// Loads a Candid interface from a local `.did` file.
+///
+/// Unlike [`get_candid_type`], failures are surfaced to the caller because the
+/// user explicitly asked for this file to be used.
+fn load_candid_from_file(path: &Path) -> Result<CanisterInterface, anyhow::Error> {
+    let candid_source = CandidSource::File(path.as_std_path());
+    let (type_env, ty) = candid_source
+        .load()
+        .with_context(|| format!("failed to load Candid interface from {path}"))?;
+    let actor =
+        ty.ok_or_else(|| anyhow!("Candid file {path} does not declare a service interface"))?;
+    Ok(CanisterInterface {
         env: type_env,
         ty: actor,
     })

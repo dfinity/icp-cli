@@ -10,7 +10,6 @@ use crate::manifest::canister::SyncStep;
 use crate::package::PackageCache;
 use crate::prelude::*;
 
-mod assets;
 mod plugin;
 mod script;
 
@@ -32,9 +31,6 @@ pub struct Params {
 pub enum SynchronizeError {
     #[snafu(transparent)]
     Script { source: super::script::ScriptError },
-
-    #[snafu(transparent)]
-    Assets { source: assets::AssetsError },
 
     #[snafu(transparent)]
     Plugin { source: plugin::PluginError },
@@ -65,7 +61,6 @@ impl Synchronize for Syncer {
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
-            SyncStep::Assets(adapter) => Ok(assets::sync(adapter, params, agent).await?),
             SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
             SyncStep::Plugin(adapter) => Ok(plugin::sync(
                 adapter,

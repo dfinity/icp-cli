@@ -114,9 +114,10 @@ impl Context {
     pub async fn get_identity(
         &self,
         identity: &IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
     ) -> Result<Arc<dyn Identity>, GetIdentityError> {
         self.identity
-            .load(identity.clone())
+            .load(identity.clone(), network_root_key)
             .await
             .context(IdentityLoadSnafu {
                 identity: identity.clone(),
@@ -366,9 +367,11 @@ impl Context {
         identity: &IdentitySelection,
         environment: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentForEnvError> {
-        let id = self.get_identity(identity).await?;
         let env = self.get_environment(environment).await?;
         let access = self.network.access(&env.network).await?;
+        let id = self
+            .get_identity(identity, Some(access.root_key.clone()))
+            .await?;
         Ok(self.create_agent(id, access).await?)
     }
 
@@ -378,9 +381,11 @@ impl Context {
         identity: &IdentitySelection,
         network_selection: &NetworkSelection,
     ) -> Result<Agent, GetAgentForNetworkError> {
-        let id = self.get_identity(identity).await?;
         let network = self.get_network(network_selection).await?;
         let access = self.network.access(&network).await?;
+        let id = self
+            .get_identity(identity, Some(access.root_key.clone()))
+            .await?;
         Ok(self.create_agent(id, access).await?)
     }
 
@@ -406,7 +411,7 @@ impl Context {
         identity: &IdentitySelection,
         url: &Url,
     ) -> Result<Agent, GetAgentForUrlError> {
-        let id = self.get_identity(identity).await?;
+        let id = self.get_identity(identity, None).await?;
         let agent = self.agent.create(id, url.as_str()).await?;
         Ok(agent)
     }

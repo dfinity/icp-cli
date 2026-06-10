@@ -40,13 +40,55 @@ environments:
     network: docker-engine-network
 "#;
 
-/// This ID is dependent on the toplogy being served by pocket-ic
-/// NOTE: If the topology is changed (another subnet is added, etc) the ID may change.
-/// References:
-/// - http://localhost:8000/_/topology
-/// - http://localhost:8000/_/dashboard
-pub(crate) const SUBNET_ID: &str =
-    "cok7q-nnbiu-4xwf6-7gpqg-kwzft-mqypn-uepxh-mx2hy-q4wuy-5s5my-eae";
+/// Compiles the canister and plugin from `examples/icp-sync-plugin/` and returns
+/// (canister_wasm_path, plugin_wasm_path). Cargo caches the build so subsequent
+/// test runs are fast when sources haven't changed.
+pub(crate) fn build_sync_plugin_example() -> (camino::Utf8PathBuf, camino::Utf8PathBuf) {
+    let example_dir = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/icp-sync-plugin");
+    // Use CARGO env var when available (set by cargo test), fall back to PATH lookup.
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "canister",
+        ])
+        .current_dir(&example_dir)
+        .status()
+        .expect("failed to spawn cargo build for canister");
+    assert!(
+        status.success(),
+        "cargo build --target wasm32-unknown-unknown failed"
+    );
+
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "--target",
+            "wasm32-wasip2",
+            "--release",
+            "-p",
+            "plugin",
+        ])
+        .current_dir(&example_dir)
+        .status()
+        .expect("failed to spawn cargo build for plugin");
+
+    assert!(
+        status.success(),
+        "cargo build --target wasm32-wasip2 failed"
+    );
+
+    (
+        example_dir.join("target/wasm32-unknown-unknown/release/canister.wasm"),
+        example_dir.join("target/wasm32-wasip2/release/plugin.wasm"),
+    )
+}
 
 // Spawns a test server that expects a single request and responds with a 200 status code and the given body
 pub(crate) fn spawn_test_server(method: &str, path: &str, body: &[u8]) -> httptest::Server {

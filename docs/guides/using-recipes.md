@@ -54,7 +54,7 @@ For deploying an asset canister with frontend assets:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
 ```

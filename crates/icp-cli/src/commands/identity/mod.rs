@@ -26,9 +26,9 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Link(link::Command),
     List(list::ListArgs),
-    Reauth(reauth::ReauthArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),
+    Reauth(reauth::ReauthArgs),
     Rename(rename::RenameArgs),
 }
 

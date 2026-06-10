@@ -404,13 +404,7 @@ async fn identity_storage_forms() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1113,13 +1107,7 @@ async fn identity_link_hsm() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1377,13 +1365,7 @@ async fn identity_delegation_whoami() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 

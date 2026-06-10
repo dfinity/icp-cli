@@ -39,7 +39,7 @@ pub(crate) struct SignArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &SignArgs) -> Result<(), SignError> {
     let identity = ctx
-        .get_identity(&args.identity.clone().into())
+        .get_identity(&args.identity.clone().into(), None)
         .await
         .context(GetIdentitySnafu)?;
 

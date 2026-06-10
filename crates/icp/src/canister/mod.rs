@@ -12,7 +12,7 @@ pub mod recipe;
 pub mod sync;
 
 mod script;
-mod wasm;
+pub mod wasm;
 
 /// Controls who can read canister logs.
 /// Supports both string format ("controllers", "public") and object format ({ allowed_viewers: [...] }).
@@ -141,45 +141,125 @@ impl From<LogVisibilityDef> for LogVisibility {
     }
 }
 
+/// A reference to a controller: either an explicit principal or a canister name in this project.
+///
+/// During deserialization, principal text format is tried first; strings that don't parse as a
+/// principal are treated as canister names.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ControllerRef {
+    /// An explicitly specified principal (e.g. "2vxsx-fae")
+    Principal(candid::Principal),
+    /// A canister name from the same project (e.g. "my_canister")
+    CanisterName(String),
+}
+
+impl ControllerRef {
+    /// Resolve to a `Principal` using the provided ID mapping.
+    /// Returns `None` if this is a `CanisterName` not present in `ids`.
+    pub fn resolve(&self, ids: &crate::store_id::IdMapping) -> Option<candid::Principal> {
+        match self {
+            ControllerRef::Principal(p) => Some(*p),
+            ControllerRef::CanisterName(name) => ids.get(name).copied(),
+        }
+    }
+
+    /// If this is a `CanisterName`, returns the name; otherwise `None`.
+    pub fn canister_name(&self) -> Option<&str> {
+        match self {
+            ControllerRef::CanisterName(n) => Some(n),
+            ControllerRef::Principal(_) => None,
+        }
+    }
+}
+
+/// Partition a slice of controller references into resolved principals and unresolved canister
+/// names, using `ids` for name lookup.
+pub fn resolve_controllers(
+    crefs: &[ControllerRef],
+    ids: &crate::store_id::IdMapping,
+) -> (Vec<candid::Principal>, Vec<String>) {
+    let mut resolved = Vec::new();
+    let mut unresolved = Vec::new();
+    for cref in crefs {
+        match cref.resolve(ids) {
+            Some(p) => resolved.push(p),
+            None => {
+                if let Some(name) = cref.canister_name() {
+                    unresolved.push(name.to_owned());
+                }
+            }
+        }
+    }
+    (resolved, unresolved)
+}
+
+impl schemars::JsonSchema for ControllerRef {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ControllerRef")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A controller: either a principal text (e.g. '2vxsx-fae') or a canister name in this project (e.g. 'my_canister')"
+        })
+    }
+}
+
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
 pub struct Settings {
     /// Controls who can read canister logs.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_visibility: Option<LogVisibilityDef>,
 
     /// Compute allocation (0 to 100). Represents guaranteed compute capacity.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_allocation: Option<u64>,
 
     /// Memory allocation in bytes. If unset, memory is allocated dynamically.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_allocation: Option<MemoryAmount>,
 
     /// Freezing threshold in seconds. Controls how long a canister can be inactive before being frozen.
     /// Supports duration suffixes in YAML: s, m, h, d, w (e.g. "30d" or "4w").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub freezing_threshold: Option<DurationAmount>,
 
     /// Upper limit on cycles reserved for future resource payments.
     /// Memory allocations that would push the reserved balance above this limit will fail.
     /// Supports suffixes in YAML: k, m, b, t (e.g. "4t" or "4.3t").
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserved_cycles_limit: Option<CyclesAmount>,
 
     /// Wasm memory limit in bytes. Sets an upper bound for Wasm heap growth.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_memory_limit: Option<MemoryAmount>,
 
     /// Wasm memory threshold in bytes. Triggers a callback when exceeded.
     /// Supports suffixes in YAML: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb").
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_memory_threshold: Option<MemoryAmount>,
 
     /// Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value.
     /// Supports suffixes in YAML: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_memory_limit: Option<MemoryAmount>,
 
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment_variables: Option<HashMap<String, String>>,
+
+    /// Controllers for this canister. Each entry is either a principal text
+    /// (e.g. "2vxsx-fae") or the name of another canister in this project.
+    /// Named canisters that do not yet exist will be set as controllers once created.
+    #[serde(default)]
+    pub controllers: Option<Vec<ControllerRef>>,
 }
 
 impl From<Settings> for CanisterSettings {
@@ -369,6 +449,70 @@ allowed_viewers:
         assert_eq!(
             settings.log_memory_limit.as_ref().map(|m| m.get()),
             Some(2 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn controller_ref_deserializes_principal() {
+        let yaml = "\"2vxsx-fae\"";
+        let result: ControllerRef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            ControllerRef::Principal(Principal::from_text("2vxsx-fae").unwrap())
+        );
+    }
+
+    #[test]
+    fn controller_ref_deserializes_canister_name() {
+        let yaml = "\"my_canister\"";
+        let result: ControllerRef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            ControllerRef::CanisterName("my_canister".to_owned())
+        );
+    }
+
+    #[test]
+    fn controller_ref_resolve_principal() {
+        let p = Principal::from_text("aaaaa-aa").unwrap();
+        let cref = ControllerRef::Principal(p);
+        let ids = crate::store_id::IdMapping::new();
+        assert_eq!(cref.resolve(&ids), Some(p));
+    }
+
+    #[test]
+    fn controller_ref_resolve_canister_name_present() {
+        let p = Principal::from_text("aaaaa-aa").unwrap();
+        let cref = ControllerRef::CanisterName("backend".to_owned());
+        let mut ids = crate::store_id::IdMapping::new();
+        ids.insert("backend".to_owned(), p);
+        assert_eq!(cref.resolve(&ids), Some(p));
+    }
+
+    #[test]
+    fn controller_ref_resolve_canister_name_absent() {
+        let cref = ControllerRef::CanisterName("backend".to_owned());
+        let ids = crate::store_id::IdMapping::new();
+        assert_eq!(cref.resolve(&ids), None);
+    }
+
+    #[test]
+    fn settings_controllers_parses_mixed() {
+        let yaml = r#"
+controllers:
+  - "aaaaa-aa"
+  - "my_other_canister"
+"#;
+        let settings: Settings = serde_yaml::from_str(yaml).unwrap();
+        let controllers = settings.controllers.unwrap();
+        assert_eq!(controllers.len(), 2);
+        assert_eq!(
+            controllers[0],
+            ControllerRef::Principal(Principal::from_text("aaaaa-aa").unwrap())
+        );
+        assert_eq!(
+            controllers[1],
+            ControllerRef::CanisterName("my_other_canister".to_owned())
         );
     }
 

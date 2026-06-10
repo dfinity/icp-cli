@@ -355,6 +355,48 @@ impl TestContext {
         self.http_gateway_url.get().unwrap()
     }
 
+    /// Returns the ID of an application subnet of the running network.
+    ///
+    /// See [`subnet_id_by_kind`](Self::subnet_id_by_kind) for why discovery happens at runtime.
+    pub(crate) async fn application_subnet_id(&self) -> String {
+        self.subnet_id_by_kind("Application").await
+    }
+
+    /// Returns the ID of a CloudEngine subnet of the running network.
+    ///
+    /// See [`subnet_id_by_kind`](Self::subnet_id_by_kind) for why discovery happens at runtime.
+    pub(crate) async fn cloud_engine_subnet_id(&self) -> String {
+        self.subnet_id_by_kind("CloudEngine").await
+    }
+
+    /// Returns the ID of a subnet with the given `subnet_kind`, querying the running network's
+    /// `/_/topology` endpoint. A topology may contain more than one subnet of a kind; this
+    /// returns one of them and panics if none exist.
+    ///
+    /// Subnet IDs are derived deterministically from the launcher topology, so adding or
+    /// removing subnets shifts them. Discovering the ID at runtime keeps the tests robust
+    /// against launcher topology changes instead of hard-coding an ID.
+    ///
+    /// The network must be started and healthy before calling this.
+    async fn subnet_id_by_kind(&self, subnet_kind: &str) -> String {
+        let topology_url = self.gateway_url().join("/_/topology").unwrap();
+        let topology: serde_json::Value = reqwest::get(topology_url)
+            .await
+            .expect("failed to fetch topology")
+            .json()
+            .await
+            .expect("failed to parse topology");
+
+        topology["subnet_configs"]
+            .as_object()
+            .expect("subnet_configs should be an object")
+            .iter()
+            .find_map(|(id, config)| {
+                (config["subnet_kind"].as_str()? == subnet_kind).then_some(id.clone())
+            })
+            .unwrap_or_else(|| panic!("no {subnet_kind} subnet found in topology"))
+    }
+
     pub(crate) fn agent(&self) -> Agent {
         let agent = Agent::builder()
             .with_url(self.http_gateway_url.get().unwrap().as_str())

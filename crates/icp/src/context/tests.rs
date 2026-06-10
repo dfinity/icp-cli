@@ -9,6 +9,7 @@ use crate::{
     store_id::{Access as IdAccess, mock::MockInMemoryIdStore},
 };
 use candid::Principal;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 
 const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
@@ -17,7 +18,7 @@ const DEFAULT_LOCAL_NETWORK_URL: &str = "http://localhost:8000";
 async fn test_get_identity_default() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_identity(&IdentitySelection::Default).await;
+    let result = ctx.get_identity(&IdentitySelection::Default, None).await;
 
     assert!(result.is_ok());
 }
@@ -26,7 +27,7 @@ async fn test_get_identity_default() {
 async fn test_get_identity_anonymous() {
     let ctx = Context::mocked();
 
-    let result = ctx.get_identity(&IdentitySelection::Anonymous).await;
+    let result = ctx.get_identity(&IdentitySelection::Anonymous, None).await;
 
     assert!(result.is_ok());
 }
@@ -43,7 +44,7 @@ async fn test_get_identity_named() {
     };
 
     let result = ctx
-        .get_identity(&IdentitySelection::Named("alice".to_string()))
+        .get_identity(&IdentitySelection::Named("alice".to_string()), None)
         .await;
 
     assert!(result.is_ok());
@@ -54,7 +55,7 @@ async fn test_get_identity_named_not_found() {
     let ctx = Context::mocked();
 
     let result = ctx
-        .get_identity(&IdentitySelection::Named("nonexistent".to_string()))
+        .get_identity(&IdentitySelection::Named("nonexistent".to_string()), None)
         .await;
 
     assert!(matches!(
@@ -627,7 +628,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
     let local_env = Environment {
         name: LOCAL.to_string(),
         network: local_network,
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
@@ -635,7 +636,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
 
     let project = Project {
         dir: "/project".into(),
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
     };
@@ -698,7 +699,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
     let local_env = Environment {
         name: LOCAL.to_string(),
         network: custom_local_network,
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
@@ -706,7 +707,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
 
     let project = Project {
         dir: "/project".into(),
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
     };
@@ -795,7 +796,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
     let local_env = Environment {
         name: LOCAL.to_string(),
         network: custom_network,
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
     };
 
     let mut environments = HashMap::new();
@@ -803,7 +804,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
 
     let project = Project {
         dir: "/project".into(),
-        canisters: HashMap::new(), // No canisters needed for get_agent test
+        canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
     };

@@ -12,7 +12,7 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::commands::identity::{delegation::sign::DurationArg, link::ii};
+use crate::commands::identity::{delegation::sign::DurationArg, link::web};
 
 /// Re-authenticate an Internet Identity delegation or create a PEM session delegation
 #[derive(Debug, Args)]
@@ -23,7 +23,7 @@ pub(crate) struct ReauthArgs {
     /// Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is
     /// added when creating the delegation to account for clock drift.
     /// Required for PEM identities when session caching is disabled in settings.
-    /// Not applicable for Internet Identity (yet).
+    /// Not applicable for web-auth identities.
     #[arg(long)]
     duration: Option<DurationArg>,
 }
@@ -42,10 +42,12 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
         .await??;
 
     match spec {
-        IdentitySpec::InternetIdentity {
+        IdentitySpec::WebAuth {
             algorithm,
             storage,
             host,
+            domain,
+            principal,
             ..
         } => {
             if args.duration.is_some() {
@@ -57,20 +59,27 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
                 .dirs
                 .identity()?
                 .with_read(async |dirs| {
-                    key::load_ii_session_public_key(dirs, &args.name, &algorithm, &storage, || {
-                        password_func()
-                    })
+                    key::load_webauth_session_public_key(
+                        dirs,
+                        &args.name,
+                        &algorithm,
+                        &storage,
+                        password_func,
+                    )
                 })
                 .await?
                 .context(LoadSessionKeySnafu)?;
 
-            let chain = ii::recv_delegation(&host, &der_public_key)
-                .await
-                .context(PollSnafu)?;
+            // Re-auth must resolve to the same web-auth principal that was originally linked,
+            // so reuse the delegation domain captured at link time.
+            let chain =
+                web::recv_delegation(&host, domain.as_deref(), &der_public_key, Some(principal))
+                    .await
+                    .context(PollSnafu)?;
 
             ctx.dirs
                 .identity()?
-                .with_write(async |dirs| key::update_ii_delegation(dirs, &args.name, &chain))
+                .with_write(async |dirs| key::update_webauth_delegation(dirs, &args.name, &chain))
                 .await?
                 .context(UpdateDelegationSnafu)?;
 
@@ -105,7 +114,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
                         dirs,
                         &args.name,
                         &algorithm,
-                        || password_func(),
+                        password_func,
                         duration,
                     )
                 })
@@ -125,7 +134,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
 #[derive(Debug, Snafu)]
 pub(crate) enum LoginError {
     #[snafu(transparent)]
-    LockDir { source: icp::fs::lock::LockError },
+    LockIdentityDir { source: icp::fs::lock::LockError },
 
     #[snafu(transparent)]
     LoadManifest {
@@ -140,7 +149,7 @@ pub(crate) enum LoginError {
     #[snafu(display("no identity found with name `{name}`"))]
     IdentityNotFound { name: String },
 
-    #[snafu(display("`--duration` cannot be used with Internet Identity `{name}`"))]
+    #[snafu(display("`--duration` cannot be used with web-auth identity `{name}`"))]
     Duration { name: String },
 
     #[snafu(display(
@@ -151,15 +160,15 @@ pub(crate) enum LoginError {
     #[snafu(display("identity `{name}` does not support logins"))]
     UnsupportedIdentityType { name: String },
 
-    #[snafu(display("failed to load II session key"))]
+    #[snafu(display("failed to load web-auth session key"))]
     LoadSessionKey { source: key::LoadIdentityError },
 
-    #[snafu(display("failed during II authentication"))]
-    Poll { source: ii::IiRecvError },
+    #[snafu(display("failed during web authentication"))]
+    Poll { source: web::WebAuthRecvError },
 
     #[snafu(display("failed to update delegation"))]
     UpdateDelegation {
-        source: key::UpdateIiDelegationError,
+        source: key::UpdateWebAuthDelegationError,
     },
 
     #[snafu(display("failed to create PEM session delegation"))]

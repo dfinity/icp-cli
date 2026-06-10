@@ -114,7 +114,11 @@ pub enum LoadError {
 
 #[async_trait]
 pub trait Load: Sync + Send {
-    async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError>;
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError>;
 }
 
 /// A function that prompts for a password and returns it, or an error message.
@@ -148,7 +152,11 @@ impl Loader {
 
 #[async_trait]
 impl Load for Loader {
-    async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError> {
         if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&id) {
             if let Some(t) = storage_type {
                 self.telemetry_data.set_identity_type(*t);
@@ -156,8 +164,9 @@ impl Load for Loader {
             return Ok(Arc::clone(cached));
         }
 
-        let password_func = self.password_func.clone();
         let pem_session_duration = self.pem_session_duration;
+        let password_func = self.password_func.clone();
+        let nrk = network_root_key.as_deref();
         let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
                 self.dir
@@ -168,7 +177,8 @@ impl Load for Loader {
                             dirs,
                             &list,
                             &default_name,
-                            || password_func(),
+                            password_func,
+                            nrk,
                             pem_session_duration,
                         )?;
                         let storage_type =
@@ -186,7 +196,8 @@ impl Load for Loader {
                                 dirs,
                                 &IdentityList::load_from(dirs)?,
                                 "anonymous",
-                                || unreachable!(),
+                                Arc::new(|| unreachable!()),
+                                None,
                                 None,
                             )?,
                             Some(IdentityStorageType::Anonymous),
@@ -203,7 +214,8 @@ impl Load for Loader {
                             dirs,
                             &list,
                             name,
-                            || password_func(),
+                            password_func,
+                            nrk,
                             pem_session_duration,
                         )?;
                         let storage_type = list.identities.get(name).map(|spec| spec.into());
@@ -264,7 +276,11 @@ impl MockIdentityLoader {
 #[cfg(test)]
 #[async_trait]
 impl Load for MockIdentityLoader {
-    async fn load(&self, id: IdentitySelection) -> Result<Arc<dyn Identity>, LoadError> {
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        _network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError> {
         Ok(match id {
             IdentitySelection::Default => Arc::clone(&self.default),
 
@@ -314,11 +330,11 @@ mod tests {
             Arc::new(TelemetryData::default()),
         );
         let i1 = loader
-            .load(IdentitySelection::Named("test".to_string()))
+            .load(IdentitySelection::Named("test".to_string()), None)
             .await
             .unwrap();
         let i2 = loader
-            .load(IdentitySelection::Named("test".to_string()))
+            .load(IdentitySelection::Named("test".to_string()), None)
             .await
             .unwrap();
         assert!(Arc::ptr_eq(&i1, &i2));

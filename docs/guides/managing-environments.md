@@ -149,8 +149,10 @@ canisters:
             - npm run build
     sync:
       steps:
-        - type: assets
-          dir: dist
+        - type: plugin
+          path: ./plugins/upload-assets.wasm
+          dirs:
+            - dist
 
   - name: backend
     build:

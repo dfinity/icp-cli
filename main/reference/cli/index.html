@@ -595,8 +595,8 @@ Raw binary (only valid for file references)</li>
 <p>Warning: Removing yourself will cause you to lose control of the canister.</p>
 </li>
 <li>
-<p><code>--set-controller &#x3C;SET_CONTROLLER></code> — Replace the canister’s controller list with the specified principals.</p>
-<p>Warning: This removes all existing controllers not in the new list. If you don’t include yourself, you will lose control of the canister.</p>
+<p><code>--remove-all-controllers</code> — Remove all controllers.</p>
+<p>Warning: This will cause you to lose control of the canister, unless you add your user principal back in <code>--add-controller</code> in the same command.</p>
 </li>
 <li>
 <p><code>--compute-allocation &#x3C;COMPUTE_ALLOCATION></code> — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet’s compute capacity</p>

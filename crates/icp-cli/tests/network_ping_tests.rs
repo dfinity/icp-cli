@@ -86,6 +86,19 @@ fn ping_not_in_project() {
         .stderr(contains("Error: failed to locate project directory").trim());
 }
 
+#[test]
+fn ping_url_with_environment_conflicts() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["network", "ping", "http://localhost:4943", "-e", "staging"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Cannot specify both a network URL and environment",
+        ));
+}
+
 #[tokio::test]
 async fn ping_url() {
     let ctx = TestContext::new();
@@ -107,10 +120,10 @@ async fn ping_url() {
         .into_iter()
         .map(|byte| Value::Number(serde_json::Number::from(byte)))
         .collect::<Vec<Value>>();
-
+    // current_dir is set outside the project
     let output = ctx
         .icp()
-        .current_dir(&project_dir)
+        .current_dir(ctx.home_path())
         .args([
             "network",
             "ping",

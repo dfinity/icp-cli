@@ -179,7 +179,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
 ```
@@ -190,7 +190,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
         build:
@@ -222,7 +222,7 @@ canisters:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
         build:
@@ -336,8 +336,152 @@ Some dfx features work differently or aren't directly available:
 | Canister dependencies | Use bindings compatible with Canister Environment Variables |
 | `dfx generate` | Use language-specific tooling |
 | `dfx ledger` | `icp token` and `icp cycles` commands |
-| `dfx wallet` | Use `icp cycles balance` and `icp cycles transfer` |
+| `dfx wallet` | Use the [proxy canister pattern](../guides/proxy-canister.md) for forwarding calls with cycles; use `icp canister top-up` to fund a canister and `icp canister status` to check its balance |
 | `dfx upgrade` | Reinstall icp-cli |
+
+## Replacing the dfx Wallet Canister
+
+The dfx wallet canister served two main purposes:
+
+1. **Funded canister creation and upgrades** — dfx routed `dfx deploy` through the wallet so cycles could be attached to management canister calls.
+2. **Forwarded calls with cycles** — `dfx canister call --with-cycles` sent calls through the wallet, which attached cycles before forwarding.
+
+icp-cli replaces both with the [proxy canister pattern](../guides/proxy-canister.md): a lightweight canister with a single `proxy` method that forwards calls and attaches cycles. For cycle account management, icp-cli has dedicated `icp cycles` commands.
+
+### What the dfx Wallet Had That the Proxy Doesn't
+
+The wallet canister had features the proxy doesn't:
+
+| Feature | dfx wallet | icp-cli proxy |
+|---------|-----------|---------------|
+| Forwarding calls with cycles | ✅ `wallet_call()` | ✅ `proxy()` |
+| Funding canister creation | ✅ `wallet_create_canister()` | ✅ via `proxy()` |
+| Sending cycles to a canister | ✅ `wallet_send()` | Use `icp cycles transfer` |
+| Address book | ✅ | Not needed |
+| Event log / history | ✅ | Not needed |
+| Custodian system | ✅ | Use IC-level controllers |
+| Web UI | ✅ | Use `icp canister status` |
+
+The features the proxy lacks are either superseded by icp-cli commands or not necessary in a controller-based workflow.
+
+### Migration Strategy: Reinstall the Wallet WASM
+
+The recommended approach is to **reinstall the existing wallet canister with the proxy WASM**. This keeps the canister ID intact, which means:
+
+- ✅ **Cycles are preserved** — the cycle balance is IC-level state, not stored in WASM memory. Reinstalling the WASM does not touch it.
+- ✅ **Managed canister controllers are preserved** — any canister that lists the wallet as a controller continues to list the same canister ID (now the proxy). No controller updates needed.
+- ✅ **Identity access is preserved** — the wallet's own controllers (your identity principal) remain unchanged.
+- ❌ **Wallet-specific state is lost** — the address book, event log, and custodian list are stored in WASM stable memory and are wiped on reinstall. Back these up if you need them.
+
+### Step-by-Step Migration
+
+**Before you start**, record your wallet state:
+
+```bash
+# Note the wallet canister ID
+WALLET_ID=$(dfx identity get-wallet --network ic)
+echo "Wallet ID: $WALLET_ID"
+
+# Note the cycle balance
+dfx wallet balance --network ic
+```
+
+**Step 1 — Download the proxy WASM.**
+
+Get it from the [proxy-canister releases](https://github.com/dfinity/proxy-canister/releases):
+
+```bash
+curl -L -o proxy.wasm \
+  https://github.com/dfinity/proxy-canister/releases/download/v0.1.0/proxy.wasm
+```
+
+Verify the SHA-256 matches the published checksum before proceeding.
+
+**Step 2 — Reinstall the wallet canister with the proxy WASM.**
+
+```bash
+dfx canister install $WALLET_ID \
+  --mode reinstall \
+  --wasm proxy.wasm \
+  --yes \
+  --network ic
+```
+
+**Step 3 — Verify the migration.**
+
+Check that cycles are intact and the proxy is running:
+
+```bash
+# Cycle balance should be nearly unchanged (only reinstall cost deducted, ~3B cycles)
+dfx canister status $WALLET_ID --network ic
+
+# Verify a managed canister still lists the (now-proxy) canister as controller
+dfx canister info <your-managed-canister-id> --network ic
+```
+
+**Step 4 — Add your icp-cli identity as a controller** (if not already one).
+
+The proxy only accepts calls from its controllers. Import your dfx identity into icp-cli (see [Migrating Identities](#migrating-identities)) and verify the principals match. If you use a different identity in icp-cli, add it as a controller while you still have dfx access:
+
+```bash
+ICP_PRINCIPAL=$(icp identity principal)
+
+# Use dfx (while it still controls the proxy) to add the icp-cli identity
+dfx canister update-settings $WALLET_ID --add-controller $ICP_PRINCIPAL --network ic
+```
+
+**Step 5 — Use the proxy with icp-cli.**
+
+Set `PROXY_ID` to the former wallet canister ID:
+
+```bash
+export PROXY_ID=$WALLET_ID
+
+# Deploy through the proxy
+icp deploy -e ic --proxy $PROXY_ID
+
+# Call a canister with cycles attached
+icp canister call my-canister method '(args)' \
+  -e ic \
+  --proxy $PROXY_ID \
+  --cycles 500_000_000_000
+```
+
+### Alternative: Deploy a Fresh Proxy
+
+If you prefer to keep the wallet canister running (for example, to preserve the event log), deploy a separate proxy canister and gradually transition:
+
+```bash
+# 1. Create a new project from the proxy template
+icp new my-proxy --subfolder proxy
+cd my-proxy
+icp deploy -e ic
+
+# 2. For each managed canister, add the new proxy as a controller
+PROXY_ID=$(icp canister status -e ic --id-only proxy)
+dfx canister update-settings <canister-id> --add-controller $PROXY_ID --network ic
+
+# 3. Switch to icp-cli using the new proxy
+icp deploy -e ic --proxy $PROXY_ID
+
+# 4. Transfer remaining wallet cycles to the proxy
+dfx wallet balance --network ic  # check remaining balance
+dfx wallet send $PROXY_ID <amount> --network ic
+```
+
+The proxy starts with the cycles used for its initial deployment. Once you've verified everything works through the new proxy, transfer the remaining wallet balance into it to fully retire the old wallet. You can then optionally remove the wallet as a controller from your managed canisters.
+
+### Identity Considerations
+
+The proxy enforces controller-based access: only principals listed as controllers of the proxy can call its `proxy` method.
+
+Both dfx and icp-cli support importing identities from PEM files. After import, verify that the principal matches:
+
+```bash
+dfx identity get-principal --identity my-identity
+icp identity principal --identity my-identity
+# Both should print the same value
+```
 
 ## Migrating Identities
 

@@ -193,26 +193,14 @@ async fn deploy_to_other_projects_network() {
 
     ctx.icp()
         .current_dir(&projb)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "environment-1",
-        ])
+        .args(["deploy", "--environment", "environment-1"])
         .assert()
         .success();
 
     // Deploy project (second time)
     ctx.icp()
         .current_dir(&projb)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "environment-1",
-        ])
+        .args(["deploy", "--environment", "environment-1"])
         .assert()
         .success();
 
@@ -309,6 +297,54 @@ async fn network_seeds_preexisting_identities_icp_and_cycles_balances() {
         .assert()
         .stdout(contains("Balance: 0 cycles"))
         .success();
+}
+
+/// Network startup seeds every pre-existing identity by transferring ICP and cycles
+/// from the anonymous principal. Unlike the cycles-minting path it replaced, transfers
+/// are not rate-limited, so seeding scales to many identities at once. This creates 200
+/// identities before starting the network and verifies they all get funded — the old
+/// mint path would have tripped the CMC mint rate limit well before reaching 200.
+#[tokio::test]
+async fn network_seeds_many_identities_without_rate_limit() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#}, // contents
+    )
+    .expect("failed to write project manifest");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    // Create many identities BEFORE starting the network so they all get seeded at startup.
+    let identity_count = 200;
+    for i in 0..identity_count {
+        icp_client.create_identity(&format!("id-{i}"));
+    }
+
+    // Network start seeds all identities; it only writes a descriptor and reports healthy
+    // if every transfer succeeded. With the rate-limited mint path this would have failed.
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Spot-check the first and last identity to confirm the whole batch was funded.
+    for i in [0, identity_count - 1] {
+        let name = format!("id-{i}");
+        icp_client.use_identity(&name);
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["cycles", "balance", "--environment", "random-environment"])
+            .assert()
+            .stdout(contains("Balance: 1_000_000_000_000_000 cycles"))
+            .success();
+    }
 }
 
 #[tokio::test]

@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight';
 import rehypeExternalLinks from 'rehype-external-links';
 import rehypeRewriteLinks from './plugins/rehype-rewrite-links.mjs';
 import agentDocs from './plugins/astro-agent-docs.mjs';
+import mermaid from 'astro-mermaid';
 
 const SITE = (process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org').replace(/\/$/, '');
 
@@ -21,6 +22,7 @@ export default defineConfig({
     ],
   },
   integrations: [
+    mermaid({ autoTheme: true }),
     starlight({
       title: 'ICP CLI',
       description: 'Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP)',
@@ -148,10 +150,12 @@ export default defineConfig({
             { label: 'Managing Environments', slug: 'guides/managing-environments' },
             { label: 'Managing Identities', slug: 'guides/managing-identities' },
             { label: 'Tokens and Cycles', slug: 'guides/tokens-and-cycles' },
+            { label: 'Proxy Canister', slug: 'guides/proxy-canister' },
             { label: 'Containerized Networks', slug: 'guides/containerized-networks' },
             { label: 'Using Recipes', slug: 'guides/using-recipes' },
             { label: 'Creating Recipes', slug: 'guides/creating-recipes' },
             { label: 'Creating Templates', slug: 'guides/creating-templates' },
+            { label: 'Writing a Sync Plugin', slug: 'guides/writing-sync-plugins' },
           ],
         },
         {
@@ -163,6 +167,7 @@ export default defineConfig({
             { label: 'Canister Discovery', slug: 'concepts/canister-discovery' },
             { label: 'Binding Generation', slug: 'concepts/binding-generation' },
             { label: 'Recipes', slug: 'concepts/recipes' },
+            { label: 'Sync Plugins', slug: 'concepts/sync-plugins' },
           ],
         },
         {
@@ -178,6 +183,7 @@ export default defineConfig({
           label: 'Other',
           items: [
             { label: 'Migrating from dfx', slug: 'migration/from-dfx' },
+            { label: 'Upgrading from icp-cli 0.2', slug: 'migration/upgrading-from-v0-2' },
             { label: 'Telemetry', slug: 'telemetry' },
           ],
         },

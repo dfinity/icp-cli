@@ -20,6 +20,10 @@
         }
       ]
     },
+    "ControllerRef": {
+      "description": "A controller: either a principal text (e.g. '2vxsx-fae') or a canister name in this project (e.g. 'my_canister')",
+      "type": "string"
+    },
     "CyclesAmount": {
       "anyOf": [
         {
@@ -143,6 +147,17 @@
             "null"
           ]
         },
+        "controllers": {
+          "default": null,
+          "description": "Controllers for this canister. Each entry is either a principal text\n(e.g. \"2vxsx-fae\") or the name of another canister in this project.\nNamed canisters that do not yet exist will be set as controllers once created.",
+          "items": {
+            "$ref": "#/$defs/ControllerRef"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "environment_variables": {
           "additionalProperties": {
             "type": "string"
@@ -206,7 +221,6 @@
               "type": "null"
             }
           ],
-          "default": null,
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {

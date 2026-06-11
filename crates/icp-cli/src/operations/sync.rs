@@ -41,8 +41,9 @@ async fn sync_canister(
     proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
     pkg_cache: &PackageCache,
-) -> Result<(), SynchronizeError> {
+) -> Result<Vec<String>, SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
+    let mut stderr_lines = Vec::new();
 
     for (i, step) in canister_info.sync.steps.iter().enumerate() {
         // Indicate to user the current step being executed
@@ -72,10 +73,10 @@ async fn sync_canister(
         // Ensure background receiver drains all messages
         pb.end_step().await;
 
-        sync_result?;
+        stderr_lines.extend(sync_result?);
     }
 
-    Ok(())
+    Ok(stderr_lines)
 }
 
 /// Orchestrates syncing multiple canisters with progress tracking
@@ -128,6 +129,15 @@ pub(crate) async fn sync_many(
                     |err| format!("Failed to sync canister: {err}"),
                 )
                 .await;
+
+                // Print stderr lines the plugin emitted; the rolling buffer
+                // discards them on success, but they belong on the persistent
+                // output channel.
+                if let Ok(lines) = &result {
+                    for line in lines {
+                        eprintln!("[{}] {line}", canister_info.name);
+                    }
+                }
 
                 // Map error to include canister context for deferred printing
                 result.map_err(|error| SyncFailure {

@@ -55,13 +55,7 @@ async fn canister_settings_update_controllers() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -425,13 +419,7 @@ async fn canister_settings_update_log_visibility() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -731,8 +719,6 @@ async fn canister_settings_update_miscellaneous() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet",
-            common::SUBNET_ID,
             "--cycles",
             "120t", // 120T cycles because compute allocation is expensive
             "--environment",
@@ -859,13 +845,7 @@ async fn canister_settings_update_environment_variables() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1036,13 +1016,7 @@ async fn canister_settings_sync() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1220,13 +1194,7 @@ async fn canister_settings_sync_log_visibility() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1458,13 +1426,7 @@ async fn canister_settings_show() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1555,13 +1517,7 @@ async fn canister_settings_show_not_a_controller() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 

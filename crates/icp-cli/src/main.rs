@@ -345,8 +345,8 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::link::Command::Hsm(args) => {
                     commands::identity::link::hsm::exec(ctx, &args).await?
                 }
-                commands::identity::link::Command::Ii(args) => {
-                    commands::identity::link::ii::exec(ctx, &args).await?
+                commands::identity::link::Command::Web(args) => {
+                    commands::identity::link::web::exec(ctx, &args).await?
                 }
             },
 
@@ -362,8 +362,8 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::principal::exec(ctx, &args).await?
             }
 
-            commands::identity::Command::Login(args) => {
-                commands::identity::login::exec(ctx, &args).await?
+            commands::identity::Command::Reauth(args) => {
+                commands::identity::reauth::exec(ctx, &args).await?
             }
 
             commands::identity::Command::Rename(args) => {
@@ -405,6 +405,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
         Command::Project(cmd) => match cmd {
             commands::project::Command::Show(args) => {
                 commands::project::show::exec(ctx, &args).await?
+            }
+            commands::project::Command::Bundle(args) => {
+                commands::project::bundle::exec(ctx, &args).await?
             }
         },
 

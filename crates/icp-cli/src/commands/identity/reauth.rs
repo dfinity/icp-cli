@@ -10,17 +10,17 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::commands::identity::link::ii;
+use crate::commands::identity::link::web;
 
-/// Re-authenticate an Internet Identity delegation
+/// Re-authenticate a delegation-based identity
 #[derive(Debug, Args)]
-pub(crate) struct LoginArgs {
+pub(crate) struct ReauthArgs {
     /// Name of the identity to re-authenticate
     name: String,
 }
 
-pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginError> {
-    let (algorithm, storage, host) = ctx
+pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginError> {
+    let (algorithm, storage, host, domain, principal) = ctx
         .dirs
         .identity()?
         .with_read(async |dirs| {
@@ -30,13 +30,20 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
                 .get(&args.name)
                 .context(IdentityNotFoundSnafu { name: &args.name })?;
             match spec {
-                IdentitySpec::InternetIdentity {
+                IdentitySpec::WebAuth {
                     algorithm,
+                    principal,
                     storage,
                     host,
-                    ..
-                } => Ok((algorithm.clone(), *storage, host.clone())),
-                _ => NotIiSnafu { name: &args.name }.fail(),
+                    domain,
+                } => Ok((
+                    algorithm.clone(),
+                    *storage,
+                    host.clone(),
+                    domain.clone(),
+                    *principal,
+                )),
+                _ => NotDelegationSnafu { name: &args.name }.fail(),
             }
         })
         .await??;
@@ -45,7 +52,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
         .dirs
         .identity()?
         .with_read(async |dirs| {
-            key::load_ii_session_public_key(dirs, &args.name, &algorithm, &storage, || {
+            key::load_webauth_session_public_key(dirs, &args.name, &algorithm, &storage, || {
                 Password::new()
                     .with_prompt("Enter identity password")
                     .interact()
@@ -55,13 +62,15 @@ pub(crate) async fn exec(ctx: &Context, args: &LoginArgs) -> Result<(), LoginErr
         .await?
         .context(LoadSessionKeySnafu)?;
 
-    let chain = ii::recv_delegation(&host, &der_public_key)
+    // Re-auth must resolve to the same web-auth principal that was originally linked,
+    // so reuse the delegation domain captured at link time.
+    let chain = web::recv_delegation(&host, domain.as_deref(), &der_public_key, Some(principal))
         .await
         .context(PollSnafu)?;
 
     ctx.dirs
         .identity()?
-        .with_write(async |dirs| key::update_ii_delegation(dirs, &args.name, &chain))
+        .with_write(async |dirs| key::update_webauth_delegation(dirs, &args.name, &chain))
         .await?
         .context(UpdateDelegationSnafu)?;
 
@@ -84,18 +93,18 @@ pub(crate) enum LoginError {
     IdentityNotFound { name: String },
 
     #[snafu(display(
-        "identity `{name}` is not an Internet Identity; use `icp identity link ii` instead"
+        "identity `{name}` is not delegation-based; this command is not required to use it"
     ))]
-    NotIi { name: String },
+    NotDelegation { name: String },
 
-    #[snafu(display("failed to load II session key"))]
+    #[snafu(display("failed to load web-auth session key"))]
     LoadSessionKey { source: key::LoadIdentityError },
 
-    #[snafu(display("failed during II authentication"))]
-    Poll { source: ii::IiRecvError },
+    #[snafu(display("failed during web authentication"))]
+    Poll { source: web::WebAuthRecvError },
 
     #[snafu(display("failed to update delegation"))]
     UpdateDelegation {
-        source: key::UpdateIiDelegationError,
+        source: key::UpdateWebAuthDelegationError,
     },
 }

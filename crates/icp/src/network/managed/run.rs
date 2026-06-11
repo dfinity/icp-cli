@@ -3,10 +3,7 @@ use bigdecimal::BigDecimal;
 use camino_tempfile::Utf8TempDir;
 use candid::{Decode, Encode, Nat, Principal};
 use futures::future::{join, join_all};
-use ic_agent::{
-    Agent, AgentError, Identity,
-    identity::{AnonymousIdentity, Secp256k1Identity},
-};
+use ic_agent::{Agent, AgentError, identity::AnonymousIdentity};
 use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferResult};
 use ic_management_canister_types::CanisterSettings;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
@@ -15,18 +12,12 @@ use icp_canister_interfaces::{
         CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs,
         CreateCanisterResponse, CreationArgs,
     },
-    cycles_minting_canister::{
-        CYCLES_MINTING_CANISTER_PRINCIPAL, ConversionRateResponse, MEMO_MINT_CYCLES,
-        NotifyMintArgs, NotifyMintResponse,
-    },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
-use k256::SecretKey;
-use rand::{Rng, rng};
 use snafu::prelude::*;
 use std::{process::ExitStatus, time::Duration};
 use tokio::{process::Child, select, time::sleep};
@@ -537,7 +528,6 @@ pub async fn initialize_network(
         })?;
     agent.set_root_key(root_key.to_vec());
 
-    let icp_xdr_conversion_rate = get_icp_xdr_conversion_rate(&agent).await?;
     let icp_amount = 100_000_000_000_000u64;
     let display_icp_amount = BigDecimal::new(icp_amount.into(), 8).normalized();
     let seed_icp = join_all(
@@ -552,13 +542,18 @@ pub async fn initialize_network(
     let cycles_amount = 1_000_000_000_000_000u128; // 1_000T cycles
     let display_cycles_amount = BigDecimal::new(cycles_amount.into(), 12).normalized();
 
-    let seed_cycles = join_all(all_identities.iter().map(|account| {
-        debug!(
-            "Seeding {}T cycles to account {}",
-            display_cycles_amount, account
-        );
-        mint_cycles_to_account(&agent, *account, cycles_amount, icp_xdr_conversion_rate)
-    }));
+    let seed_cycles = join_all(
+        all_identities
+            .iter()
+            .filter(|account| **account != Principal::anonymous()) // Anon is pre-seeded with i128::MAX cycles by pocket-ic, which is what we transfer from
+            .map(|account| {
+                debug!(
+                    "Seeding {}T cycles to account {}",
+                    display_cycles_amount, account
+                );
+                transfer_cycles_to_account(&agent, *account, cycles_amount)
+            }),
+    );
     let (seed_icp_results, seed_cycles_results) = join(seed_icp, seed_cycles).await;
     seed_icp_results
         .into_iter()
@@ -622,85 +617,14 @@ pub enum InitializeNetworkError {
     Proxy { error: String },
 }
 
-async fn mint_cycles_to_account(
+/// Transfer cycles from the anonymous principal (pre-seeded with `i128::MAX`
+/// cycles by pocket-ic) to the given account via the cycles ledger.
+async fn transfer_cycles_to_account(
     agent: &Agent,
     account: Principal,
     amount: u128,
-    icp_xdr_conversion_rate: u64,
 ) -> Result<(), InitializeNetworkError> {
-    // First withdraw to a different account because notify_mint_cycles will fail if the depositing transaction is a mint TX
-    let mut tmp_key = [0_u8; 32];
-    rng().fill_bytes(&mut tmp_key);
-    let tmp_identity =
-        Secp256k1Identity::from_private_key(SecretKey::from_bytes(&tmp_key.into()).unwrap());
-    // one ICP ledger fee to acquire, one to transfer to CMC,
-    // one cycles ledger fee to mint, one to transfer back
-    let icp_to_convert =
-        (amount + CYCLES_LEDGER_BLOCK_FEE * 2).div_ceil(icp_xdr_conversion_rate as u128) as u64;
-    acquire_icp_to_account(
-        agent,
-        tmp_identity.sender().unwrap(),
-        icp_to_convert + ICP_LEDGER_BLOCK_FEE_E8S * 2,
-    )
-    .await?;
-    // Then transfer to the CMC account
-    let mut tmp_agent = agent.clone();
-    tmp_agent.set_identity(tmp_identity.clone());
-    let transfer_result = tmp_agent
-        .update(&ICP_LEDGER_PRINCIPAL, "transfer")
-        .with_arg(
-            Encode!(&TransferArgs {
-                memo: Memo(MEMO_MINT_CYCLES),
-                amount: Tokens::from_e8s(icp_to_convert),
-                fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
-                from_subaccount: None,
-                to: AccountIdentifier::new(
-                    &CYCLES_MINTING_CANISTER_PRINCIPAL,
-                    &Subaccount::from(tmp_identity.sender().unwrap()),
-                ),
-                created_at_time: None,
-            })
-            .unwrap(),
-        )
-        .await
-        .map_err(|err| InitializeNetworkError::SeedTokens {
-            error: format!("Failed to send transfer ICP to CMC request: {err}"),
-        })?;
-    let transfer_result = Decode!(&transfer_result, TransferResult).map_err(|err| {
-        InitializeNetworkError::SeedTokens {
-            error: format!("Failed to decode transfer ICP to CMC response: {err}"),
-        }
-    })?;
-    let block_index = transfer_result.map_err(|err| InitializeNetworkError::SeedTokens {
-        error: format!("Failed to transfer ICP to CMC: {err}"),
-    })?;
-
-    let mint_result = tmp_agent
-        .update(&CYCLES_MINTING_CANISTER_PRINCIPAL, "notify_mint_cycles")
-        .with_arg(
-            Encode!(&NotifyMintArgs {
-                block_index,
-                deposit_memo: None,
-                to_subaccount: None,
-            })
-            .unwrap(),
-        )
-        .await
-        .map_err(|err| InitializeNetworkError::SeedTokens {
-            error: format!("Failed to send notify mint cycles request: {err}"),
-        })?;
-    let mint_result = Decode!(&mint_result, NotifyMintResponse).map_err(|err| {
-        InitializeNetworkError::SeedTokens {
-            error: format!("Failed to decode notify mint cycles response: {err}"),
-        }
-    })?;
-    if let NotifyMintResponse::Err(err) = mint_result {
-        return SeedTokensSnafu {
-            error: format!("Failed to notify mint cycles: {err:?}"),
-        }
-        .fail();
-    }
-    let response = tmp_agent
+    let response = agent
         .update(&CYCLES_LEDGER_PRINCIPAL, "icrc1_transfer")
         .with_arg(
             Encode!(&TransferArg {
@@ -762,25 +686,6 @@ async fn acquire_icp_to_account(
         error: format!("Failed to transfer ICP: {err}"),
     })?;
     Ok(())
-}
-
-async fn get_icp_xdr_conversion_rate(agent: &Agent) -> Result<u64, InitializeNetworkError> {
-    let response = agent
-        .update(
-            &CYCLES_MINTING_CANISTER_PRINCIPAL,
-            "get_icp_xdr_conversion_rate",
-        )
-        .with_arg(Encode!().unwrap())
-        .await
-        .map_err(|e| InitializeNetworkError::SeedTokens {
-            error: format!("Failed to get ICP XDR conversion rate: {e}"),
-        })?;
-    let response = Decode!(&response, ConversionRateResponse).map_err(|e| {
-        InitializeNetworkError::SeedTokens {
-            error: format!("Failed to decode ICP XDR conversion rate response: {e}"),
-        }
-    })?;
-    Ok(response.data.xdr_permyriad_per_icp)
 }
 
 async fn install_candid_ui(

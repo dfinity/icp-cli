@@ -7,7 +7,7 @@ Build and deploy applications on the [Internet Computer](https://internetcompute
 
 ## Start Here
 
-- **[Quickstart](quickstart.md)** — Deploy a full-stack app in under 5 minutes
+- **[Quickstart](quickstart.md)** — Deploy a fullstack app in under 5 minutes
 - **[Tutorial](tutorial.md)** — Deploy your first app step by step
 
 ## Guides
@@ -23,10 +23,12 @@ Step-by-step instructions for common tasks:
 - [Managing Environments](guides/managing-environments.md) — Dev, staging, production workflows
 - [Managing Identities](guides/managing-identities.md) — Keys and authentication reference
 - [Tokens and Cycles](guides/tokens-and-cycles.md) — ICP tokens and cycles command reference
+- [Proxy Canister](guides/proxy-canister.md) — Forward calls with cycles or call canister-only methods
 - [Containerized Networks](guides/containerized-networks.md) — Docker-based local networks
 - [Using Recipes](guides/using-recipes.md) — Reusable build templates
 - [Creating Recipes](guides/creating-recipes.md) — Build custom recipes
 - [Creating Templates](guides/creating-templates.md) — Author project templates
+- [Writing a Sync Plugin](guides/writing-sync-plugins.md) — Author a sandboxed WebAssembly sync plugin
 
 ## Concepts
 
@@ -36,6 +38,7 @@ Understand how icp-cli works:
 - [Build, Deploy, Sync](concepts/build-deploy-sync.md) — The deployment lifecycle
 - [Environments and Networks](concepts/environments.md) — Deployment targets explained
 - [Recipes](concepts/recipes.md) — Templated build configurations
+- [Sync Plugins](concepts/sync-plugins.md) — Sandboxed WebAssembly components for the sync phase
 - [Canister Discovery](concepts/canister-discovery.md) — How canisters discover each other
 - [Binding Generation](concepts/binding-generation.md) — Type-safe canister interfaces
 
@@ -51,5 +54,6 @@ Complete technical specifications:
 ## Additional Resources
 
 - [Migrating from dfx](migration/from-dfx.md) — For existing dfx users
+- [Upgrading from icp-cli 0.2](migration/upgrading-from-v0-2.md) — Switch off the removed `type: assets` sync step
 - [Telemetry](telemetry.md) — What data is collected and how to opt out
 - [Examples](https://github.com/dfinity/icp-cli/tree/main/examples) — Sample projects for various use cases

@@ -1533,7 +1533,8 @@ async fn canister_settings_show_not_a_controller() {
             "--environment",
             "random-environment",
             "--force",
-            "--set-controller",
+            "--remove-all-controllers",
+            "--add-controller",
             principal_alice.as_str(),
         ])
         .assert()

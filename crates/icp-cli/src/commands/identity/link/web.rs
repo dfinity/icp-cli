@@ -507,17 +507,15 @@ async fn handle_callback(
 }
 
 fn guesstimate_origin(origin: &str) -> String {
-    let origin = origin
-        .split_once("://")
-        .map_or(origin, |(_, rest)| rest)
-        .trim_end_matches('/');
+    let hierarchy = origin.split_once("://").map_or(origin, |(_, rest)| rest);
+    let origin = hierarchy.split('/').next().unwrap_or(origin);
     if origin == "nns.internetcomputer.org" {
         // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is at the time of writing.
         // Temporary hack: NNS is the most common app that would break. Special-case it
         return "nns.ic0.app".to_string();
     }
     // Rewrite <principal>.icp0.io and <principal>.icp.net to <principal>.ic0.app, since that's what Internet Identity uses for them.
-    // Only required for icp.net at the time of writing, and could be obsolete in the future.
+    // May be done automatically by II in the future.
     let parts: Vec<_> = origin.split('.').collect();
     if parts.len() <= 2 {
         return origin.to_string();

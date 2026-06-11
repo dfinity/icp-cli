@@ -17,6 +17,33 @@ use super::misc::fetch_canister_metadata;
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
+/// CLI-facing choice for `wasm_memory_persistence` on EOP upgrades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum WasmMemoryPersistenceOpt {
+    /// Preserve canister main memory across upgrade (normal EOP upgrade).
+    Keep,
+    /// Discard canister main memory; only `stable` variables survive.
+    /// Dangerous — heap state is lost.
+    Replace,
+}
+
+impl WasmMemoryPersistenceOpt {
+    fn to_ic(self) -> WasmMemoryPersistence {
+        match self {
+            WasmMemoryPersistenceOpt::Keep => WasmMemoryPersistence::Keep,
+            WasmMemoryPersistenceOpt::Replace => WasmMemoryPersistence::Replace,
+        }
+    }
+}
+
+/// Returns true if the canister exposes the `enhanced-orthogonal-persistence`
+/// custom-section metadata (i.e. it is a Motoko EOP canister).
+pub(crate) async fn is_eop_canister(agent: &Agent, canister_id: &Principal) -> bool {
+    fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
+        .await
+        .is_some()
+}
+
 #[derive(Debug, Snafu)]
 pub enum InstallOperationError {
     #[snafu(display("Could not find build artifact for canister '{canister_name}'"))]
@@ -100,18 +127,24 @@ pub(crate) async fn install_canister(
     mode: CanisterInstallMode,
     status: CanisterStatusType,
     init_args: Option<&[u8]>,
+    wasm_memory_persistence: Option<WasmMemoryPersistenceOpt>,
 ) -> Result<(), InstallOperationError> {
     let mode = match mode {
         CanisterInstallMode::Upgrade(_) => {
-            // if this is a motoko canister using EOP
-            // we need to set additional options
-            if fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
-                .await
-                .is_some()
-            {
+            // if this is a motoko canister using EOP we need to set additional options.
+            // If the caller supplied an explicit override, trust it (the CLI layer has
+            // already validated that it's an EOP canister); otherwise auto-detect and
+            // default to Keep.
+            let persistence = match wasm_memory_persistence {
+                Some(opt) => Some(opt.to_ic()),
+                None => is_eop_canister(agent, canister_id)
+                    .await
+                    .then_some(WasmMemoryPersistence::Keep),
+            };
+            if let Some(persistence) = persistence {
                 CanisterInstallMode::Upgrade(Some(UpgradeFlags {
                     skip_pre_upgrade: None,
-                    wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                    wasm_memory_persistence: Some(persistence),
                 }))
             } else {
                 mode
@@ -361,6 +394,7 @@ pub(crate) async fn install_many(
                     mode,
                     status,
                     init_args.as_deref(),
+                    None,
                 )
                 .await
             }

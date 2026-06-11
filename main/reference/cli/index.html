@@ -390,6 +390,25 @@ or a “detached” canister on a network.</p>
 <p>Possible values: <code>auto</code>, <code>install</code>, <code>reinstall</code>, <code>upgrade</code></p>
 </li>
 <li>
+<p><code>--wasm-memory-persistence &#x3C;WASM_MEMORY_PERSISTENCE></code> — For Motoko canisters with enhanced orthogonal persistence (EOP), controls whether the canister’s main (Wasm) memory is preserved across an upgrade.</p>
+<p>Only valid with <code>--mode upgrade</code> on an EOP canister.</p>
+<ul>
+<li>
+<p><code>keep</code>: preserve main memory — the normal EOP upgrade (the default if this flag is omitted).</p>
+</li>
+<li>
+<p><code>replace</code>: discard main memory. DANGEROUS: any state not held in <code>stable</code> variables is lost. Requires interactive confirmation (or <code>--yes</code>).</p>
+</li>
+</ul>
+<p>Possible values:</p>
+<ul>
+<li><code>keep</code>:
+Preserve canister main memory across upgrade (normal EOP upgrade)</li>
+<li><code>replace</code>:
+Discard canister main memory; only <code>stable</code> variables survive. Dangerous — heap state is lost</li>
+</ul>
+</li>
+<li>
 <p><code>--wasm &#x3C;WASM></code> — Path to the WASM file to install. Uses the build output if not explicitly provided</p>
 </li>
 <li>
@@ -412,7 +431,7 @@ Raw binary (only valid for file references)</li>
 </ul>
 </li>
 <li>
-<p><code>-y</code>, <code>--yes</code> — Skip confirmation prompts, including the Candid interface compatibility check</p>
+<p><code>-y</code>, <code>--yes</code> — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for <code>--wasm-memory-persistence replace</code></p>
 </li>
 <li>
 <p><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</p>

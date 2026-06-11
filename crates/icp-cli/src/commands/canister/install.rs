@@ -128,7 +128,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
             );
             if args.yes {
                 info!("Proceeding without confirmation (--yes).");
-            } else {
+            } else if std::io::stdin().is_terminal() {
                 let confirmed = Confirm::new()
                     .with_prompt("Do you want to proceed?")
                     .default(false)
@@ -136,6 +136,11 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 if !confirmed {
                     bail!("Operation cancelled by user");
                 }
+            } else {
+                bail!(
+                    "Refusing to discard the canister's main memory without confirmation \
+                     in a non-interactive context. Use --yes to proceed."
+                );
             }
         }
     }

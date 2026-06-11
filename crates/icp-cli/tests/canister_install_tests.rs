@@ -1199,3 +1199,339 @@ async fn canister_install_through_proxy() {
         .success()
         .stdout(eq("(\"Hello, test!\")").trim());
 }
+
+/// `--wasm-memory-persistence keep` preserves a Motoko EOP canister's heap state
+/// across an upgrade, while `replace` discards it (only `stable`/persistent data in
+/// stable memory would survive, and a plain `var` lives in main memory).
+///
+/// Motoko enables enhanced orthogonal persistence (EOP) by default since moc 0.15.0,
+/// so a `persistent actor` built with moc 0.16.3 produces an EOP canister.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_install_wasm_memory_persistence_keep_and_replace() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Motoko toolchain.
+    write_string(
+        &project_dir.join("mops.toml"),
+        indoc! {r#"
+            [toolchain]
+            moc = "0.16.3"
+        "#},
+    )
+    .expect("failed to write mops.toml");
+
+    // A counter whose state lives in main (Wasm) memory: `count` is a plain heap `var`,
+    // preserved across upgrades only while main memory is kept.
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {"
+            persistent actor {
+                var count : Nat = 0;
+
+                public func inc() : async Nat {
+                    count += 1;
+                    count;
+                };
+
+                public query func get() : async Nat {
+                    count;
+                };
+            };
+        "},
+    )
+    .expect("failed to write main.mo");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--quiet",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Build up some heap state: count -> 3.
+    for _ in 0..3 {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                "call",
+                "--environment",
+                "random-environment",
+                "my-canister",
+                "inc",
+                "()",
+            ])
+            .assert()
+            .success();
+    }
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(3 : nat)").trim());
+
+    // Upgrade keeping main memory: heap state survives (no --yes needed; keep is the safe
+    // default and triggers no confirmation, and the Candid interface is unchanged).
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--mode",
+            "upgrade",
+            "--wasm-memory-persistence",
+            "keep",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(3 : nat)").trim());
+
+    // `replace` is dangerous and requires confirmation. In a non-interactive context (as
+    // here, with no TTY) it must refuse cleanly rather than erroring on the prompt, and it
+    // must not touch the canister's state.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--mode",
+            "upgrade",
+            "--wasm-memory-persistence",
+            "replace",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Use --yes to proceed"));
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(3 : nat)").trim());
+
+    // Upgrade replacing main memory: heap state is discarded, counter resets to 0.
+    // --yes bypasses the confirmation.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--mode",
+            "upgrade",
+            "--wasm-memory-persistence",
+            "replace",
+            "--yes",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(0 : nat)").trim());
+}
+
+/// `--wasm-memory-persistence` is rejected unless used with `--mode upgrade` on an EOP
+/// canister. The vendored `example_icp_mo.wasm` is a classic (non-EOP) Motoko canister,
+/// which lets us exercise both guardrails without building from source.
+#[tokio::test]
+async fn canister_install_wasm_memory_persistence_rejected_for_non_eop() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--quiet",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Default mode is `auto`, which is ambiguous for this flag -> rejected.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--wasm-memory-persistence",
+            "keep",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("can only be used with `--mode upgrade`"));
+
+    // Explicit non-upgrade mode is also rejected.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--mode",
+            "install",
+            "--wasm-memory-persistence",
+            "keep",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("can only be used with `--mode upgrade`"));
+
+    // Correct mode, but the target is not an EOP canister -> rejected.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--mode",
+            "upgrade",
+            "--wasm-memory-persistence",
+            "keep",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("not an EOP canister"));
+}

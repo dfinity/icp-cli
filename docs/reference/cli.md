@@ -303,7 +303,7 @@ Install a built WASM to a canister on a network
 
    - `keep`: preserve main memory — the normal EOP upgrade (the default if this flag is omitted).
 
-   - `replace`: discard main memory. DANGEROUS: any state not held in `stable` variables is lost. Requires interactive confirmation.
+   - `replace`: discard main memory. DANGEROUS: any state not held in `stable` variables is lost. Requires interactive confirmation (or `--yes`).
 
   Possible values:
   - `keep`:
@@ -326,7 +326,7 @@ Install a built WASM to a canister on a network
   - `bin`:
     Raw binary (only valid for file references)
 
-* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for `--wasm-memory-persistence replace`
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used

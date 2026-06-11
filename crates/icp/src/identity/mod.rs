@@ -170,9 +170,10 @@ impl Load for Loader {
         let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
-                        let list = IdentityList::load_from(dirs)?;
-                        let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
+                        let default_name =
+                            manifest::IdentityDefaults::load_from(dirs.read())?.default;
                         let identity = load_identity(
                             dirs,
                             &list,
@@ -190,11 +191,11 @@ impl Load for Loader {
 
             IdentitySelection::Anonymous => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         Ok((
                             load_identity(
                                 dirs,
-                                &IdentityList::load_from(dirs)?,
+                                &IdentityList::load_from(dirs.read())?,
                                 "anonymous",
                                 Arc::new(|| unreachable!()),
                                 None,
@@ -208,8 +209,8 @@ impl Load for Loader {
 
             IdentitySelection::Named(name) => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
-                        let list = IdentityList::load_from(dirs)?;
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
                         let identity = load_identity(
                             dirs,
                             &list,

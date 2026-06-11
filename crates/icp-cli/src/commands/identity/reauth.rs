@@ -92,7 +92,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
             ..
         } => {
             let duration = match &args.duration {
-                Some(d) => Duration::from_nanos(d.as_nanos()) + Duration::from_secs(5 * 60),
+                Some(d) => Duration::from_nanos(d.as_nanos()) + Duration::from_secs(2 * 60),
                 None => {
                     let settings = ctx
                         .dirs
@@ -109,7 +109,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
             let password_func = ctx.password_func.clone();
             ctx.dirs
                 .identity()?
-                .with_read(async |dirs| {
+                .with_write(async |dirs| {
                     key::create_explicit_pem_session(
                         dirs,
                         &args.name,

@@ -151,7 +151,7 @@ pub enum LoadIdentityError {
 }
 
 pub fn load_identity(
-    dirs: LRead<&IdentityPaths>,
+    dirs: LWrite<&IdentityPaths>,
     list: &IdentityList,
     name: &str,
     password_func: PasswordFunc,
@@ -185,7 +185,7 @@ pub fn load_identity(
         IdentitySpec::WebAuth {
             algorithm, storage, ..
         } => load_webauth_identity(
-            dirs,
+            dirs.read(),
             name,
             algorithm,
             storage,
@@ -196,7 +196,7 @@ pub fn load_identity(
         IdentitySpec::Delegation {
             algorithm, storage, ..
         } => load_webauth_identity(
-            dirs,
+            dirs.read(),
             name,
             algorithm,
             storage,
@@ -207,7 +207,7 @@ pub fn load_identity(
 }
 
 fn load_pem_identity(
-    dirs: LRead<&IdentityPaths>,
+    dirs: LWrite<&IdentityPaths>,
     name: &str,
     format: &PemFormat,
     algorithm: &IdentityKeyAlgorithm,
@@ -216,7 +216,7 @@ fn load_pem_identity(
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     // For password-protected PEMs, check for a valid cached session delegation first.
     if *format == PemFormat::Pbes2
-        && let Some(id) = try_load_pem_session(dirs, name)
+        && let Some(id) = try_load_pem_session(dirs.read(), name)
     {
         return Ok(id);
     }
@@ -433,6 +433,9 @@ pub enum CreateExplicitPemSessionError {
         path: PathBuf,
         source: delegation::SaveError,
     },
+
+    #[snafu(display("a calculated timestamp exceeds internal limits"))]
+    TimeWrap,
 }
 
 /// Creates a short-lived P256 session delegation signed by `identity`, stores the session
@@ -441,7 +444,7 @@ pub enum CreateExplicitPemSessionError {
 /// Returns an error if any step fails. Automatic callers silence errors via `let Ok(...) =`;
 /// explicit callers propagate them.
 fn create_pem_session_and_build_identity(
-    dirs: LRead<&IdentityPaths>,
+    dirs: LWrite<&IdentityPaths>,
     name: &str,
     identity: &dyn Identity,
     duration: std::time::Duration,
@@ -465,9 +468,10 @@ fn create_pem_session_and_build_identity(
             .expect("system clock before unix epoch")
             .as_nanos(),
     )
-    .expect("time wrapped around");
+    .ok()
+    .context(TimeWrapSnafu)?;
     let expiration =
-        now_nanos.saturating_add(duration.as_nanos().try_into().expect("time wrapped around"));
+        now_nanos.saturating_add(duration.as_nanos().try_into().ok().context(TimeWrapSnafu)?);
 
     let agent_delegation = AgentDelegation {
         pubkey: session_pubkey.clone(),
@@ -557,7 +561,7 @@ fn create_pem_session_and_build_identity(
 /// Unlike the automatic path (which silences errors), this propagates them.
 /// The `duration` should already include the 2-minute clock-drift boost.
 pub fn create_explicit_pem_session(
-    dirs: LRead<&IdentityPaths>,
+    dirs: LWrite<&IdentityPaths>,
     name: &str,
     algorithm: &IdentityKeyAlgorithm,
     password_func: PasswordFunc,
@@ -844,14 +848,14 @@ pub enum LoadIdentityInContextError {
 }
 
 pub async fn load_identity_in_context(
-    dirs: LRead<&IdentityPaths>,
+    dirs: LWrite<&IdentityPaths>,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
 ) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
     let identity = load_identity(
         dirs,
-        &IdentityList::load_from(dirs)?,
-        &(IdentityDefaults::load_from(dirs)?).default,
+        &IdentityList::load_from(dirs.read())?,
+        &(IdentityDefaults::load_from(dirs.read())?).default,
         password_func,
         None,
         pem_session_duration,

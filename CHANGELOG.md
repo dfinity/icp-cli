@@ -7,7 +7,7 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
-* feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity login <NAME> [--duration <DURATION>]`.
+* feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity reauth <NAME> [--duration <DURATION>]`.
 
 # v0.3.2
 

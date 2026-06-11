@@ -1,6 +1,6 @@
 use anyhow::{Context as _, anyhow, bail};
 use candid::types::{Type, TypeInner};
-use candid::{Encode, IDLArgs, Nat, Principal, TypeEnv, types::Function};
+use candid::{IDLArgs, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use candid_parser::utils::CandidSource;
@@ -8,15 +8,18 @@ use clap::{Args, ValueEnum};
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
-use icp::fs;
-use icp::manifest::InitArgsFormat;
+use icp::manifest::ArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;
-use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
+use serde::Serialize;
 use std::io::{self, Write};
-use tracing::warn;
+use tracing::{error, warn};
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata};
+use crate::{
+    commands::args::{self, load_args},
+    operations::misc::fetch_canister_metadata,
+    operations::proxy::update_or_proxy_raw,
+};
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
@@ -53,7 +56,15 @@ pub(crate) struct CallArgs {
 
     /// Format of the call arguments.
     #[arg(long, default_value = "candid")]
-    pub(crate) args_format: InitArgsFormat,
+    pub(crate) args_format: ArgsFormat,
+
+    /// Path to a Candid (`.did`) file describing the canister's interface.
+    ///
+    /// When set, this interface is used to assist method selection, build
+    /// arguments, and decode the response, instead of fetching the canister's
+    /// Candid interface from the network.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) candid: Option<PathBuf>,
 
     /// Principal of a proxy canister to route the call through.
     ///
@@ -79,6 +90,10 @@ pub(crate) struct CallArgs {
     /// How to interpret and display the response.
     #[arg(long, short, default_value = "auto")]
     pub(crate) output: CallOutputMode,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::Error> {
@@ -99,7 +114,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let candid_types = get_candid_type(&agent, cid).await;
+    let candid_types = match &args.candid {
+        Some(path) => Some(load_candid_from_file(path)?),
+        None => get_candid_type(&agent, cid).await,
+    };
 
     let method = if let Some(method) = &args.method {
         method.clone()
@@ -127,45 +145,36 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         Bytes(Vec<u8>),
     }
 
-    let resolved_args = match (&args.args, &args.args_file) {
-        (Some(value), None) => {
-            if args.args_format == InitArgsFormat::Bin {
-                bail!("--args-format bin requires --args-file, not a positional argument");
-            }
-            Some(match args.args_format {
-                InitArgsFormat::Candid => ResolvedArgs::Candid(
-                    parse_idl_args(value).context("failed to parse Candid arguments")?,
-                ),
-                InitArgsFormat::Hex => ResolvedArgs::Bytes(
-                    hex::decode(value).context("failed to decode hex arguments")?,
-                ),
-                InitArgsFormat::Bin => unreachable!(),
-            })
+    let resolved_args = match load_args(
+        args.args.as_deref(),
+        args.args_file.as_ref(),
+        &args.args_format,
+        "a positional argument",
+    )? {
+        None => None,
+        Some(icp::InitArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp::InitArgs::Text {
+            content,
+            format: ArgsFormat::Candid,
+        }) => Some(ResolvedArgs::Candid(
+            parse_idl_args(&content).context("failed to parse Candid arguments")?,
+        )),
+        Some(icp::InitArgs::Text {
+            content,
+            format: ArgsFormat::Hex,
+        }) => Some(ResolvedArgs::Bytes(
+            hex::decode(&content).context("failed to decode hex arguments")?,
+        )),
+        Some(icp::InitArgs::Text {
+            format: ArgsFormat::Bin,
+            ..
+        }) => {
+            unreachable!("load_args rejects bin format for inline values")
         }
-        (None, Some(file_path)) => Some(match args.args_format {
-            InitArgsFormat::Bin => {
-                let bytes = fs::read(file_path).context("failed to read args file")?;
-                ResolvedArgs::Bytes(bytes)
-            }
-            InitArgsFormat::Hex => {
-                let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                ResolvedArgs::Bytes(
-                    hex::decode(content.trim()).context("failed to decode hex from file")?,
-                )
-            }
-            InitArgsFormat::Candid => {
-                let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                ResolvedArgs::Candid(
-                    parse_idl_args(content.trim()).context("failed to parse Candid from file")?,
-                )
-            }
-        }),
-        (None, None) => None,
-        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
     };
 
     let arg_bytes = match (&declared_method, resolved_args) {
-        (_, None) if args.args_format != InitArgsFormat::Candid => {
+        (_, None) if args.args_format != ArgsFormat::Candid => {
             bail!("arguments must be provided when --args-format is not candid");
         }
         (None, None) => bail!(
@@ -192,8 +201,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
                 return Ok(());
             }
             arguments
-                .to_bytes()
-                .context("failed to serialize candid arguments")?
+                .to_bytes_with_types(type_env, &func.args)
+                .context("failed to serialize candid arguments with specific types")?
         }
         (Some(_), Some(ResolvedArgs::Bytes(bytes))) => bytes,
         (Some((type_env, func)), Some(ResolvedArgs::Candid(arguments))) => arguments
@@ -201,30 +210,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .context("failed to serialize candid arguments with specific types")?,
     };
 
-    let res = if let Some(proxy_cid) = args.proxy {
-        // Route the call through the proxy canister
-        let proxy_args = ProxyArgs {
-            canister_id: cid,
-            method: method.clone(),
-            args: arg_bytes,
-            cycles: Nat::from(args.cycles.get()),
-        };
-        let proxy_arg_bytes =
-            Encode!(&proxy_args).context("failed to encode proxy call arguments")?;
-
-        let proxy_res = agent
-            .update(&proxy_cid, "proxy")
-            .with_arg(proxy_arg_bytes)
-            .await?;
-
-        let proxy_result: (ProxyResult,) =
-            candid::decode_args(&proxy_res).context("failed to decode proxy canister response")?;
-
-        match proxy_result.0 {
-            ProxyResult::Ok(ok) => ok.result,
-            ProxyResult::Err(err) => bail!(err.format_error()),
-        }
-    } else if args.query {
+    let res = if args.query {
         // Preemptive check: error if Candid shows this is an update method
         if let Some((_, func)) = &declared_method
             && !func.is_query()
@@ -240,45 +226,108 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
             .call()
             .await?
     } else {
-        // Direct update call to the target canister
-        agent.update(&cid, &method).with_arg(arg_bytes).await?
+        update_or_proxy_raw(
+            &agent,
+            cid,
+            &method,
+            arg_bytes,
+            args.proxy,
+            None,
+            args.cycles.get(),
+        )
+        .await?
     };
 
     let mut term = Term::buffered_stdout();
-    let res_hex = || format!("response (hex): {}", hex::encode(&res));
+    let decoded = decode_response(&res, args.output, declared_method.as_ref());
 
-    match args.output {
-        CallOutputMode::Auto => {
-            if let Ok(ret) = try_decode_candid(&res, declared_method.as_ref()) {
-                print_candid_for_term(&mut term, &ret)
-                    .context("failed to print candid return value")?;
-            } else if let Ok(s) = std::str::from_utf8(&res) {
-                writeln!(term, "{s}")?;
-                term.flush()?;
-            } else {
-                writeln!(term, "{}", hex::encode(&res))?;
-                term.flush()?;
+    if args.json {
+        let envelope = JsonCallResponse::build(&res, decoded.as_ref().ok());
+        let write_result = serde_json::to_writer(&term, &envelope);
+        match (write_result, decoded) {
+            (Ok(()), decode_result) => {
+                decode_result?;
+            }
+            (Err(write_err), Err(decode_err)) => {
+                // Prefer the decode error; the write failure is incidental.
+                error!("failed to write JSON response: {write_err}");
+                return Err(decode_err);
+            }
+            (Err(write_err), Ok(_)) => {
+                return Err(write_err).context("failed to write JSON response");
             }
         }
-        CallOutputMode::Candid => {
-            let ret = try_decode_candid(&res, declared_method.as_ref()).with_context(res_hex)?;
-            print_candid_for_term(&mut term, &ret)
-                .context("failed to print candid return value")?;
-        }
-        CallOutputMode::Text => {
-            let s = std::str::from_utf8(&res)
-                .with_context(res_hex)
-                .context("response is not valid UTF-8")?;
-            writeln!(term, "{s}")?;
-            term.flush()?;
-        }
-        CallOutputMode::Hex => {
-            writeln!(term, "{}", hex::encode(&res))?;
-            term.flush()?;
+    } else {
+        match decoded? {
+            Decoded::Candid(ret) => print_candid_for_term(&mut term, &ret)
+                .context("failed to print candid return value")?,
+            Decoded::Text(s) => writeln!(term, "{s}")?,
+            Decoded::Bytes => writeln!(term, "{}", hex::encode(&res))?,
         }
     }
 
+    // term is buffered; this single flush covers all output paths (json and non-json).
+    term.flush()?;
+
     Ok(())
+}
+
+/// A response decoded according to the requested `CallOutputMode`.
+enum Decoded {
+    Candid(IDLArgs),
+    Text(String),
+    /// No decoding was attempted or all attempts failed; emit raw bytes as hex.
+    Bytes,
+}
+
+fn decode_response(
+    res: &[u8],
+    mode: CallOutputMode,
+    method: Option<&(TypeEnv, Function)>,
+) -> Result<Decoded, anyhow::Error> {
+    let res_hex = || format!("response (hex): {}", hex::encode(res));
+    match mode {
+        CallOutputMode::Auto => {
+            if let Ok(args) = try_decode_candid(res, method) {
+                Ok(Decoded::Candid(args))
+            } else if let Ok(s) = std::str::from_utf8(res) {
+                Ok(Decoded::Text(s.to_string()))
+            } else {
+                Ok(Decoded::Bytes)
+            }
+        }
+        CallOutputMode::Candid => try_decode_candid(res, method)
+            .map(Decoded::Candid)
+            .with_context(res_hex),
+        CallOutputMode::Text => std::str::from_utf8(res)
+            .map(|s| Decoded::Text(s.to_string()))
+            .with_context(res_hex)
+            .context("response is not valid UTF-8"),
+        CallOutputMode::Hex => Ok(Decoded::Bytes),
+    }
+}
+
+#[derive(Serialize)]
+struct JsonCallResponse {
+    response_bytes: String,
+    response_text: Option<String>,
+    response_candid: Option<String>,
+}
+
+impl JsonCallResponse {
+    fn build(res: &[u8], decoded: Option<&Decoded>) -> Self {
+        Self {
+            response_bytes: hex::encode(res),
+            response_text: match decoded {
+                Some(Decoded::Text(s)) => Some(s.clone()),
+                _ => None,
+            },
+            response_candid: match decoded {
+                Some(Decoded::Candid(args)) => Some(format!("{args}")),
+                _ => None,
+            },
+        }
+    }
 }
 
 /// Tries to decode the response as Candid. Returns `None` if decoding fails.
@@ -309,7 +358,6 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
     } else {
         writeln!(term, "{args}")?;
     }
-    term.flush()?;
     Ok(())
 }
 
@@ -325,6 +373,23 @@ async fn get_candid_type(agent: &Agent, canister_id: Principal) -> Option<Canist
     let (type_env, ty) = candid_source.load().ok()?;
     let actor = ty?;
     Some(CanisterInterface {
+        env: type_env,
+        ty: actor,
+    })
+}
+
+/// Loads a Candid interface from a local `.did` file.
+///
+/// Unlike [`get_candid_type`], failures are surfaced to the caller because the
+/// user explicitly asked for this file to be used.
+fn load_candid_from_file(path: &Path) -> Result<CanisterInterface, anyhow::Error> {
+    let candid_source = CandidSource::File(path.as_std_path());
+    let (type_env, ty) = candid_source
+        .load()
+        .with_context(|| format!("failed to load Candid interface from {path}"))?;
+    let actor =
+        ty.ok_or_else(|| anyhow!("Candid file {path} does not declare a service interface"))?;
+    Ok(CanisterInterface {
         env: type_env,
         ty: actor,
     })

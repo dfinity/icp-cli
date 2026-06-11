@@ -1,10 +1,80 @@
+<!--
+Convention: changes to experimental features live in a dedicated
+`## Experimental` subsection under each version. Experimental features
+may receive breaking changes between releases without a major version
+bump. Currently experimental: sync plugins.
+-->
+
 # Unreleased
 
 * feat!: Remove `--set-controller` and replace with a new flag `--remove-all-controllers`. For the old behavior, combine this flag with `--add-controller`
+
+# v0.3.2
+
+* feat: `icp canister call` now accepts `--candid <PATH>` to load the canister's Candid interface from a local `.did` file instead of fetching it from the network. The supplied interface drives method selection, argument building, and response decoding.
+
+# v0.3.1
+
+* fix: Account seeding in new networks is now done via transfer instead of mint. This should eliminate minting ratelimit errors for users with a lot of local identities.
+
+# v0.3.0
+
+* feat: `icp identity link web` now lets you sign in with web-based identities, especially Internet Identity. You can use your NNS-UI or Oisy principals locally with `--app nns.ic0.app` or `--app oisy.com`. When the session expires, sign in again with `icp identity reauth`.
+* BREAKING: removed the `assets` sync step type (`type: assets`). Asset uploading is no longer built into icp-cli — use a `script` or `plugin` sync step instead (for example, a recipe that provides a sync plugin). A manifest that still uses `type: assets` now fails to load with a message explaining the change.
+* feat: Recipe templates can now use `{{_.canister.name}}` to reference the canister's name from `icp.yaml` without repeating it in the `configuration:` block. The `_` namespace is reserved and cannot be overridden by user-provided configuration.
+
+# v0.2.7
+
+* feat: `script` sync steps now receive `ICP_CLI_ENVIRONMENT`, `ICP_CLI_NETWORK`, `ICP_CLI_CID` (the current canister's principal), and `ICP_CLI_CID_<NAME>` (every canister's principal) as environment variables.
+* fix: `icp canister call` with both `--json` and `-o hex` no longer prints both kinds of output at once.
+* fix: `icp` no longer picks up a stale inherited `$PWD` when launched as a subprocess via `chdir(2)` + `execve` (e.g. from a test harness). The logical `$PWD` path is now validated against `getcwd()` by inode before use, preserving symlink-aware project root discovery while ignoring stale values.
+
+## Experimental
+
+* feat(sync-plugin): Plugins can now surface messages that persist after the step completes. Anything the plugin writes to stderr (e.g. `eprintln!` in Rust) is streamed live in the rolling step view AND printed under the canister name once the step ends; stdout remains transient. The `exec()` return signature has changed from `result<option<string>, string>` to `result<_, string>` — plugins that returned a summary string should `eprintln!` it instead.
+
+# v0.2.6
+
+* feat: `icp token/cycles balance` now accept `--of-principal`
+* fix: The local wasm cache has moved from `.icp/cache/canisters/` to `.icp/cache/wasms/`. Existing cached files will be re-downloaded automatically on the next run.
+* fix: `icp canister call` now serializes arguments built via the interactive Candid assist prompt against the method's declared signature, matching the behavior of arguments passed on the command line. Previously, narrower values (e.g. a variant case from a multi-case variant) were encoded with a type table inferred only from the value, which the target canister rejected with errors like "Variant index N larger than length 1".
+
+## Experimental
+
+* feat(sync-plugin): Canister manifests now support a `plugin` sync step type. Plugins are WebAssembly components that run in a sandboxed environment and can drive arbitrary post-deployment logic against the canister being synced. See `crates/icp-sync-plugin/DESIGN.md` for details.
+* feat(sync-plugin): `icp sync` now accepts `--proxy` to route sync plugin calls to the target canister through a proxy canister.
+
+# v0.2.5
+
+* feat: `icp new --init` no longer requires specifying a project name. If non is provided, the containing folder's name is used as the project name
+* fix: `icp canister call --json` no longer produces blank output.
+
+# v0.2.4
+
+* feat: `icp identity delegation request/sign/use` now permit creating and importing identity delegations
+* feat: `icp identity import` now takes `--seed-curve`, for seed phrases for non-k256 keys.
+* fix: `icp canister settings show` now outputs only the canister settings, consistent with the command name
+* fix: Fail early when attempting to create an identity with an already existing name.
+* fix: Find icp.yaml even from within a symlinked folder.
+
+# v0.2.3
+
+* feat: Add `--proxy` to `icp canister` subcommands and `icp deploy` to route management canister calls through a proxy canister
+* feat: Add `--args`, `--args-file`, and `--args-format` flags to `icp deploy` to pass install arguments at the command line, overriding `init_args` in the manifest
+
+# v0.2.2
+
+Important: A network launcher more recent than v12.0.0-83c3f95e8c4ce28e02493df83df5f84a166451c0 is
+required to use internet identity.
+
+* feat: Many more commands support `--json` and `--quiet`.
+* feat: When a local network is started internet identity is available at id.ai.localhost
+* fix: Network would fail to start if a stale descriptor was present
+
+# v0.2.1
+
+* feat: icp-cli will now inform you if a new version is released. This can be disabled with `icp settings update-check`
 * fix: Duplicate identities no longer cause an error when starting a network
-
-# v0.2.1-beta.0
-
 * feat: Added support for creating canisters on cloud engine subnets. Note that local networks cannot yet create these subnets.
 * feat: Upgrading canisters now stops them before the upgrade and starts them again afterwards
 * feat: `icp canister logs` supports filtering by timestamp (`--since`, `--until`) and log index (`--since-index`, `--until-index`)

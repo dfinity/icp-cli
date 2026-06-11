@@ -1,8 +1,5 @@
 use indoc::formatdoc;
-use predicates::{
-    prelude::PredicateBooleanExt,
-    str::{contains, starts_with},
-};
+use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext,
@@ -58,13 +55,7 @@ async fn canister_settings_update_controllers() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -81,11 +72,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
-                .and(contains(principal_alice.as_str()).not()),
-        );
+        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str()).not()));
 
     // Add controller
     ctx.icp()
@@ -116,11 +103,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
-                .and(contains(principal_alice.as_str())),
-        );
+        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str())));
 
     // Add and remove controller.
     ctx.icp()
@@ -154,8 +137,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
+            contains("Controllers: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -189,11 +171,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
-                .and(contains(principal_bob.as_str()).not()),
-        );
+        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_bob.as_str()).not()));
 
     // Add multiple controllers
     ctx.icp()
@@ -227,8 +205,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
+            contains("Controllers: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -265,8 +242,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
+            contains("Controllers: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str()).not()),
         );
@@ -307,8 +283,8 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("2vxsx-fae").not())
+            contains("2vxsx-fae")
+                .not()
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -317,6 +293,85 @@ async fn canister_settings_update_controllers() {
 fn get_principal(client: &icp_cli::Client<'_>, identity: &str) -> String {
     client.create_identity(identity);
     client.get_principal(identity).to_string()
+}
+
+#[tokio::test]
+async fn canister_settings_update_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Add controller through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+            "--add-controller",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Verify the controller was added
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains(&proxy_cid).and(contains(principal_alice.as_str())));
 }
 
 #[tokio::test]
@@ -365,13 +420,7 @@ async fn canister_settings_update_log_visibility() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -388,7 +437,7 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(starts_with("Canister Id:").and(contains("Log visibility: Controllers")));
+        .stdout(contains("Log visibility: Controllers"));
 
     // Set log visibility to controllers
     ctx.icp()
@@ -419,7 +468,7 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(starts_with("Canister Id:").and(contains("Log visibility: Public")));
+        .stdout(contains("Log visibility: Public"));
 
     // Add log viewer.
     ctx.icp()
@@ -451,9 +500,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers:"))
-                .and(contains(principal_alice.as_str())),
+            contains("Log visibility: Allowed viewers:").and(contains(principal_alice.as_str())),
         );
 
     // Add and remove log viewer.
@@ -488,8 +535,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers:"))
+            contains("Log visibility: Allowed viewers:")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -523,10 +569,7 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers list is empty")),
-        );
+        .stdout(contains("Log visibility: Allowed viewers list is empty"));
 
     // Add multiple log viewers.
     ctx.icp()
@@ -560,8 +603,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers:"))
+            contains("Log visibility: Allowed viewers:")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -597,10 +639,7 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers list is empty")),
-        );
+        .stdout(contains("Log visibility: Allowed viewers list is empty"));
 
     // Set multiple log viewers.
     ctx.icp()
@@ -634,8 +673,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Log visibility: Allowed viewers:"))
+            contains("Log visibility: Allowed viewers:")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -682,8 +720,6 @@ async fn canister_settings_update_miscellaneous() {
         .current_dir(&project_dir)
         .args([
             "deploy",
-            "--subnet",
-            common::SUBNET_ID,
             "--cycles",
             "120t", // 120T cycles because compute allocation is expensive
             "--environment",
@@ -706,8 +742,7 @@ async fn canister_settings_update_miscellaneous() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Compute allocation: 0"))
+            contains("Compute allocation: 0")
                 .and(contains("Freezing threshold: 2_592_000"))
                 .and(contains("Reserved cycles limit: 5_000_000_000_000"))
                 .and(contains("Wasm memory limit: 3_221_225_472"))
@@ -760,8 +795,7 @@ async fn canister_settings_update_miscellaneous() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Compute allocation: 1"))
+            contains("Compute allocation: 1")
                 .and(contains("Memory allocation: 6_442_450_944"))
                 .and(contains("Freezing threshold: 8_640_000"))
                 .and(contains("Reserved cycles limit: 6_000_000_000_000"))
@@ -812,13 +846,7 @@ async fn canister_settings_update_environment_variables() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -836,10 +864,9 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Controllers: 2vxsx-fae"))
-                .and(contains("Environment Variables:"))
-                .and(contains("Name: PUBLIC_CANISTER_ID:my-canister")),
+            contains("Controllers: 2vxsx-fae")
+                .and(contains("Environment variables:"))
+                .and(contains("PUBLIC_CANISTER_ID:my-canister")),
         );
 
     // Add multiple environment variables
@@ -874,10 +901,9 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Environment Variables:"))
-                .and(contains("Name: var1, Value: value1"))
-                .and(contains("Name: var2, Value: value2")),
+            contains("Environment variables:")
+                .and(contains("var1: value1"))
+                .and(contains("var2: value2")),
         );
 
     // Add and remove environment variables
@@ -912,11 +938,10 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Environment Variables:"))
-                .and(contains("Name: var1, Value: value1").not())
-                .and(contains("Name: var2, Value: value2"))
-                .and(contains("Name: var3, Value: value3")),
+            contains("Environment variables:")
+                .and(contains("var1: value1").not())
+                .and(contains("var2: value2"))
+                .and(contains("var3: value3")),
         );
 
     // Remove multiple environment variables
@@ -951,10 +976,9 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            starts_with("Canister Id:")
-                .and(contains("Environment Variables:"))
-                .and(contains("Name: var2, Value: value2").not())
-                .and(contains("Name: var3, Value: value3").not()),
+            contains("Environment variables:")
+                .and(contains("var2: value2").not())
+                .and(contains("var3: value3").not()),
         );
 }
 
@@ -993,13 +1017,7 @@ async fn canister_settings_sync() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1177,13 +1195,7 @@ async fn canister_settings_sync_log_visibility() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1293,4 +1305,268 @@ async fn canister_settings_sync_log_visibility() {
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
     confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+}
+
+#[tokio::test]
+async fn canister_settings_sync_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Update manifest with memory_allocation setting
+    let pm_with_settings = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              memory_allocation: 10485760
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm_with_settings)
+        .expect("failed to write project manifest");
+
+    // Sync settings through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Verify the setting was applied
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Memory allocation: 10_485_760"));
+}
+
+#[tokio::test]
+async fn canister_settings_show() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Output starts with settings fields, not canister identity headers,
+    // and does not include fields from the full canister_status result.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains("Compute allocation:"))
+                .and(contains("Memory allocation:"))
+                .and(contains("Freezing threshold:"))
+                .and(contains("Reserved cycles limit:"))
+                .and(contains("Wasm memory limit:"))
+                .and(contains("Wasm memory threshold:"))
+                .and(contains("Log memory limit:"))
+                .and(contains("Log visibility:"))
+                .and(contains("Environment variables:")),
+        );
+
+    // JSON output contains settings field names.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains(r#""controllers""#)
+                .and(contains(r#""compute_allocation""#))
+                .and(contains(r#""memory_allocation""#))
+                .and(contains(r#""freezing_threshold""#))
+                .and(contains(r#""reserved_cycles_limit""#))
+                .and(contains(r#""wasm_memory_limit""#))
+                .and(contains(r#""wasm_memory_threshold""#))
+                .and(contains(r#""log_memory_limit""#))
+                .and(contains(r#""log_visibility""#))
+                .and(contains(r#""environment_variables""#)),
+        );
+}
+
+#[tokio::test]
+async fn canister_settings_show_not_a_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Transfer sole ownership to alice, removing the default identity as controller.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--force",
+            "--set-controller",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    // Default identity is no longer a controller — command must fail, no fallback.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure();
+
+    // Alice is a controller — command succeeds.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--identity",
+            "alice",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains(principal_alice.as_str()));
 }

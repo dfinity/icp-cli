@@ -2,13 +2,13 @@
 members = ["crates/*"]
 
 default-members = ["crates/icp-cli"]
-exclude = ["examples/icp-rust", "examples/icp-rust-recipe"]
+exclude = ["examples/icp-rust", "examples/icp-rust-recipe", "examples/icp-sync-plugin"]
 resolver = "3"
 
 [workspace.package]
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2024"
-version = "0.2.1-beta.0"
+version = "0.3.2"
 repository = "https://github.com/dfinity/icp-cli"
 rust-version = "1.88.0"
 license = "Apache-2.0"
@@ -20,11 +20,15 @@ anyhow = "1.0.100"
 assert_cmd = "2"
 async-dropper = { version = "0.3.0", features = ["tokio", "simple"] }
 async-trait = "0.1.88"
+axoupdater = "0.10.0"
+axum = "0.8"
+base64 = "0.22"
 backoff = { version = "0.4", features = ["tokio"] }
 bigdecimal = "0.4.10"
 bip32 = "0.5.0"
-bollard = "0.20.1"
+bollard = "0.20.2"
 byte-unit = "5.1.6"
+bytes = "1.11"
 camino = { version = "1.1.9", features = ["serde1"] }
 cargo-generate = "0.23.7"
 camino-tempfile = "1"
@@ -33,10 +37,12 @@ candid_parser = "0.3.0"
 clap = { version = "4.5.3", features = ["derive", "env"] }
 clap-markdown = "0.1.5"
 cryptoki = "0.12.0"
+console = "0.16.3"
 dialoguer = "0.12.0"
 directories = "6.0.0"
 dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
+crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
 fd-lock = "4.0.4"
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
@@ -44,17 +50,20 @@ futures = "0.3.31"
 glob = "0.3.2"
 handlebars = "6.3.2"
 hex = { version = "0.4.3", features = ["serde"] }
+hmac = { version = "0.13", features = ["zeroize"] }
+hybrid-array = { version = "0.4.10", features = ["zeroize"] }
 httptest = "0.16.3"
-ic-agent = { version = "0.46.0" }
-ic-asset = "0.28.0"
+ic-agent = { version = "0.47.0" }
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.7.1" }
-ic-utils = { version = "0.46.0" }
+ic-utils = { version = "0.47.0" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
-ic-identity-hsm = "0.46.0"
+icp-sync-plugin = { path = "crates/icp-sync-plugin" }
+ic-identity-hsm = "0.47.0"
 icrc-ledger-types = "0.1.10"
+indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"
@@ -66,6 +75,7 @@ mockall = "0.14.0"
 nix = { version = "0.31.2", features = ["process", "signal"] }
 notify = "8.2.0"
 num-bigint = "0.4.6"
+open = "5"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
 p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
@@ -74,7 +84,7 @@ predicates = "3"
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
 pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
-rand = "0.10.0"
+rand = "0.10.1"
 regex = "1.12.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "stream"] }
 schemars = { version = "1.0.4", features = ["derive", "url2"] }
@@ -86,13 +96,12 @@ serial_test = { version = "3.2.0", features = ["file_locks"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9.34"
-sha2 = "0.10.9"
+sha2 = { version = "0.11.0", features = ["zeroize"] }
 shellwords = "1.1.0"
-slog = "2.7.0"
 snafu = "0.9.0"
 strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = "0.38.4"
-tar = "0.4.44"
+tar = "0.4.46"
 tempfile = "3"
 test-tag = "0.1"
 time = { version = "0.3.47", features = ["formatting", "macros"] }
@@ -103,7 +112,9 @@ tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 wasmparser = "0.245.1"
-winreg = "0.55"
+wasmtime = { version = "45.0.0", features = ["component-model"] }
+wasmtime-wasi = { version = "45.0.0" }
+winreg = "0.56.0"
 wslpath2 = "0.1"
 zeroize = "1.8.1"
 

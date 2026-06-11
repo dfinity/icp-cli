@@ -1,9 +1,12 @@
 use clap::Subcommand;
 
+pub(crate) mod bundle;
 pub(crate) mod show;
 
-/// Display information about the current project
+/// Manage the current project
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Show(show::ShowArgs),
+    #[command(hide = true)]
+    Bundle(bundle::BundleArgs),
 }

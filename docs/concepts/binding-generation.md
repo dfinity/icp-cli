@@ -1,4 +1,7 @@
-# Binding Generation
+---
+title: Binding Generation
+description: Generate type-safe client code from Candid interface files to call canister methods with full type checking.
+---
 
 Understanding and using type-safe client code for calling canisters.
 

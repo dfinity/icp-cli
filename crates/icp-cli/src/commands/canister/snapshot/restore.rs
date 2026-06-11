@@ -1,12 +1,14 @@
 use anyhow::bail;
+use candid::Principal;
 use clap::Args;
-use ic_management_canister_types::{CanisterStatusType, LoadCanisterSnapshotArgs};
-use ic_utils::interfaces::ManagementCanister;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterStatusType, LoadCanisterSnapshotArgs,
+};
 use icp::context::Context;
 use tracing::info;
 
 use super::SnapshotId;
-use crate::commands::args;
+use crate::{commands::args, operations::proxy_management};
 
 /// Restore a canister from a snapshot
 #[derive(Debug, Args)]
@@ -16,6 +18,10 @@ pub(crate) struct RestoreArgs {
 
     /// The snapshot ID to restore (hex-encoded)
     snapshot_id: SnapshotId,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow::Error> {
@@ -36,11 +42,14 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
-
     // Check canister status - must be stopped to restore a snapshot
     let name = &args.cmd_args.canister;
-    let (status,) = mgmt.canister_status(&cid).await?;
+    let status = proxy_management::canister_status(
+        &agent,
+        args.proxy,
+        CanisterIdRecord { canister_id: cid },
+    )
+    .await?;
     match status.status {
         CanisterStatusType::Running => {
             bail!(
@@ -59,7 +68,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
         sender_canister_version: None,
     };
 
-    mgmt.load_canister_snapshot(&load_args).await?;
+    proxy_management::load_canister_snapshot(&agent, args.proxy, load_args).await?;
 
     info!(
         "Restored canister {name} ({cid}) from snapshot {id}",

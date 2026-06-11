@@ -7,11 +7,11 @@ use crate::canister::Settings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
-/// Format specifier for init args content.
+/// Format specifier for canister call/install args content.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "lowercase")]
-pub enum InitArgsFormat {
+pub enum ArgsFormat {
     /// Hex-encoded bytes
     Hex,
     /// Candid text format
@@ -48,30 +48,30 @@ pub enum ManifestInitArgs {
     Path {
         path: String,
         #[serde(default)]
-        format: InitArgsFormat,
+        format: ArgsFormat,
     },
     /// Inline value with explicit format.
     Value {
         value: String,
         #[serde(default)]
-        format: InitArgsFormat,
+        format: ArgsFormat,
     },
 }
 
 /// Represents the manifest describing a single canister.
 /// This struct is typically loaded from a `canister.yaml` file and defines
 /// the canister's name and how it should be built into WebAssembly.
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub struct CanisterManifest {
     /// The unique name of the canister as defined in this manifest.
     pub name: String,
 
     /// The configuration specifying the various settings when creating the canister.
     #[serde(default)]
-    #[schemars(with = "Option<Settings>")]
     pub settings: Settings,
 
     /// Initialization arguments passed to the canister during installation.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub init_args: Option<ManifestInitArgs>,
 
     #[serde(flatten)]
@@ -236,7 +236,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Instructions {
     Recipe {
@@ -249,6 +249,7 @@ pub enum Instructions {
         build: BuildSteps,
 
         /// The configuration specifying how to sync the canister
+        #[serde(skip_serializing_if = "Option::is_none")]
         sync: Option<SyncSteps>,
     },
 }
@@ -307,15 +308,45 @@ pub struct BuildSteps {
 /// type: script
 /// command: echo "synchronizing canister"
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SyncStep {
     /// Represents a canister synced using a custom script or command.
     /// This variant allows for flexible sync processes defined by the user.
     Script(adapter::script::Adapter),
 
-    /// Represents syncing of an assets canister
-    Assets(adapter::assets::Adapter),
+    /// Represents a sync step executed by a WebAssembly plugin running inside
+    /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
+    /// the canister being synced and read files from the declared `dirs`.
+    Plugin(adapter::plugin::Adapter),
+}
+
+impl<'de> Deserialize<'de> for SyncStep {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        // Mirrors `SyncStep` but with an `Assets` catch arm. The retired
+        // `type: assets` step is still recognized here at the parsing surface so
+        // we can emit a helpful, targeted error instead of serde's generic
+        // "unknown variant" message. `IgnoredAny` swallows any `dir`/`dirs`
+        // fields so the error fires regardless of the step's contents.
+        #[derive(Deserialize)]
+        #[serde(tag = "type", rename_all = "lowercase")]
+        enum Helper {
+            Script(adapter::script::Adapter),
+            Plugin(adapter::plugin::Adapter),
+            Assets(serde::de::IgnoredAny),
+        }
+
+        match Helper::deserialize(d)? {
+            Helper::Script(a) => Ok(SyncStep::Script(a)),
+            Helper::Plugin(a) => Ok(SyncStep::Plugin(a)),
+            Helper::Assets(_) => Err(serde::de::Error::custom(
+                "icp-cli no longer supports the `assets` sync step type. \
+                 Switch to a `script` or `plugin` sync step. If this step comes from a \
+                 recipe, check whether a newer version of the recipe uses a plugin-based \
+                 solution.",
+            )),
+        }
+    }
 }
 
 impl fmt::Display for SyncStep {
@@ -325,7 +356,13 @@ impl fmt::Display for SyncStep {
             "{}",
             match self {
                 SyncStep::Script(v) => format!("script {v}"),
-                SyncStep::Assets(v) => format!("assets {v}"),
+                SyncStep::Plugin(v) => {
+                    let src = match &v.source {
+                        adapter::prebuilt::SourceField::Local(l) => format!("path: {}", l.path),
+                        adapter::prebuilt::SourceField::Remote(r) => format!("url: {}", r.url),
+                    };
+                    format!("plugin {src}")
+                }
             }
         )
     }
@@ -346,7 +383,6 @@ mod tests {
     use crate::{
         manifest::{
             adapter::{
-                assets,
                 prebuilt::{self, RemoteSource, SourceField},
                 script,
             },
@@ -706,8 +742,8 @@ mod tests {
                       steps: []
                     sync:
                       steps:
-                        - type: assets
-                          dir: dist
+                        - type: script
+                          command: echo hi
             "#})
         {
             Ok(_) => {
@@ -723,7 +759,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_steps() {
+    fn sync_steps_plugin_local() {
         assert_eq!(
             validate_canister_yaml(indoc! {r#"
                 name: my-canister
@@ -733,8 +769,10 @@ mod tests {
                       command: dosomething.sh
                 sync:
                   steps:
-                    - type: assets
-                      dir: dist
+                    - type: plugin
+                      path: ./plugins/my-sync.wasm
+                      dirs:
+                        - assets/seed-data/
             "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
@@ -747,13 +785,134 @@ mod tests {
                         })]
                     },
                     sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Assets(assets::Adapter {
-                            dir: assets::DirField::Dir("dist".to_string()),
+                        steps: vec![SyncStep::Plugin(
+                            crate::manifest::adapter::plugin::Adapter {
+                                source: prebuilt::SourceField::Local(prebuilt::LocalSource {
+                                    path: "./plugins/my-sync.wasm".into(),
+                                }),
+                                sha256: None,
+                                dirs: Some(vec!["assets/seed-data/".to_string()]),
+                                files: None,
+                            }
+                        )]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn sync_steps_plugin_remote() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: plugin
+                      url: https://example.com/plugins/migrate-v2.wasm
+                      sha256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+            "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: Settings::default(),
+                init_args: None,
+                instructions: Instructions::BuildSync {
+                    build: BuildSteps {
+                        steps: vec![BuildStep::Script(script::Adapter {
+                            command: script::CommandField::Command("dosomething.sh".to_string()),
+                        })]
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Plugin(crate::manifest::adapter::plugin::Adapter {
+                            source: prebuilt::SourceField::Remote(prebuilt::RemoteSource {
+                                url: "https://example.com/plugins/migrate-v2.wasm".to_string(),
+                            }),
+                            sha256: Some(
+                                "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+                                    .to_string()
+                            ),
+                            dirs: None,
+                            files: None,
                         })]
                     }),
                 },
             },
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "plugin with `url` requires `sha256`")]
+    fn sync_steps_plugin_remote_without_sha256_is_rejected() {
+        validate_canister_yaml(indoc! {r#"
+            name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: dosomething.sh
+            sync:
+              steps:
+                - type: plugin
+                  url: https://example.com/plugins/migrate-v2.wasm
+        "#});
+    }
+
+    /// The retired `type: assets` sync step is still recognized at the parsing
+    /// surface, but deserialization fails with a helpful, targeted message.
+    #[test]
+    fn sync_step_assets_is_rejected() {
+        for fixture in [
+            // single dir
+            indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: assets
+                      dir: dist
+            "#},
+            // multiple dirs
+            indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: assets
+                      dirs:
+                        - dist
+            "#},
+            // no dir field at all
+            indoc! {r#"
+                name: my-canister
+                build:
+                  steps:
+                    - type: script
+                      command: dosomething.sh
+                sync:
+                  steps:
+                    - type: assets
+            "#},
+        ] {
+            match serde_yaml::from_str::<CanisterManifest>(fixture) {
+                Ok(_) => panic!("`type: assets` should no longer deserialize"),
+                Err(err) => {
+                    let msg = format!("{err}");
+                    assert!(
+                        msg.contains("no longer supports") && msg.contains("assets"),
+                        "expected a helpful `assets` removal error but got: {err}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -767,7 +926,7 @@ mod tests {
             ia,
             ManifestInitArgs::Path {
                 path: "./args.bin".to_string(),
-                format: InitArgsFormat::Bin,
+                format: ArgsFormat::Bin,
             }
         );
     }
@@ -783,7 +942,7 @@ mod tests {
             ia,
             ManifestInitArgs::Value {
                 value: "(42)".to_string(),
-                format: InitArgsFormat::Candid,
+                format: ArgsFormat::Candid,
             }
         );
     }
@@ -798,7 +957,7 @@ mod tests {
             ia,
             ManifestInitArgs::Value {
                 value: "(42)".to_string(),
-                format: InitArgsFormat::Candid,
+                format: ArgsFormat::Candid,
             }
         );
     }

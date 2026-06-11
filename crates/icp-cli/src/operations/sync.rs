@@ -1,11 +1,14 @@
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, export::Principal};
+use ic_agent::Agent;
 use icp::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
+    package::PackageCache,
     prelude::PathBuf,
 };
 use snafu::prelude::*;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tracing::error;
 
@@ -32,9 +35,15 @@ async fn sync_canister(
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
+    environment: &str,
+    network: &str,
+    canister_ids: &BTreeMap<String, Principal>,
+    proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
-) -> Result<(), SynchronizeError> {
+    pkg_cache: &PackageCache,
+) -> Result<Vec<String>, SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
+    let mut stderr_lines = Vec::new();
 
     for (i, step) in canister_info.sync.steps.iter().enumerate() {
         // Indicate to user the current step being executed
@@ -50,19 +59,24 @@ async fn sync_canister(
                 &Params {
                     path: canister_path.clone(),
                     cid: canister_id,
+                    environment: environment.to_owned(),
+                    network: network.to_owned(),
+                    canister_ids: canister_ids.clone(),
+                    proxy,
                 },
                 agent,
                 Some(tx),
+                pkg_cache,
             )
             .await;
 
         // Ensure background receiver drains all messages
         pb.end_step().await;
 
-        sync_result?;
+        stderr_lines.extend(sync_result?);
     }
 
-    Ok(())
+    Ok(stderr_lines)
 }
 
 /// Orchestrates syncing multiple canisters with progress tracking
@@ -70,7 +84,12 @@ pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    environment: String,
+    network: String,
+    canister_ids: BTreeMap<String, Principal>,
+    proxy: Option<Principal>,
     debug: bool,
+    pkg_cache: &PackageCache,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -81,12 +100,26 @@ pub(crate) async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
+            let environment = environment.clone();
+            let network = network.clone();
+            let canister_ids = canister_ids.clone();
 
             async move {
                 // Define the sync logic
-                let sync_result =
-                    sync_canister(&syncer, &agent, canister_path, cid, &canister_info, &mut pb)
-                        .await;
+                let sync_result = sync_canister(
+                    &syncer,
+                    &agent,
+                    canister_path,
+                    cid,
+                    &canister_info,
+                    &environment,
+                    &network,
+                    &canister_ids,
+                    proxy,
+                    &mut pb,
+                    pkg_cache,
+                )
+                .await;
 
                 // Execute with progress tracking for final state
                 let result = ProgressManager::execute_with_progress(
@@ -96,6 +129,15 @@ pub(crate) async fn sync_many(
                     |err| format!("Failed to sync canister: {err}"),
                 )
                 .await;
+
+                // Print stderr lines the plugin emitted; the rolling buffer
+                // discards them on success, but they belong on the persistent
+                // output channel.
+                if let Ok(lines) = &result {
+                    for line in lines {
+                        eprintln!("[{}] {line}", canister_info.name);
+                    }
+                }
 
                 // Map error to include canister context for deferred printing
                 result.map_err(|error| SyncFailure {
@@ -126,6 +168,14 @@ pub(crate) async fn sync_many(
                 failure.canister_name, failure.canister_id,
             );
             error!("'{}'", failure.error);
+            {
+                use std::error::Error;
+                let mut cause = failure.error.source();
+                while let Some(err) = cause {
+                    error!("  caused by: {err}");
+                    cause = err.source();
+                }
+            }
             for line in &failure.progress_output {
                 error!("{line}");
             }

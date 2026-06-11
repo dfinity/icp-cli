@@ -2,16 +2,19 @@ use anyhow::Error;
 use clap::{CommandFactory, Parser};
 use commands::Command;
 use icp::prelude::*;
-use tracing::{Instrument, debug, subscriber::set_global_default, trace_span};
+use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 use crate::{
+    dist::dist_update_suggestion,
     logging::{UserLayer, debug_layer},
+    operations::update_check::update_check,
     version::{git_sha, icp_cli_version_str},
 };
 
 mod artifacts;
 mod commands;
+mod dist;
 mod logging;
 pub(crate) mod operations;
 mod options;
@@ -152,10 +155,27 @@ async fn main() -> Result<(), Error> {
     let ctx = icp::context::initialize(cli.project_root_override, cli.debug, password_func)?;
 
     let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
+
+    // Run update check in the background
+    let update_check = tokio::spawn({
+        let ctx = ctx.clone();
+        async move { update_check(&ctx).await }
+    });
+
     let result = dispatch(&ctx, command).instrument(trace_span).await;
 
     if let Some(session) = telemetry_session {
         session.finish(result.is_ok(), &ctx.telemetry_data);
+    }
+
+    // Show update nag after command output
+    if let Some(latest) = update_check.await.unwrap_or(None) {
+        let suggestion = dist_update_suggestion(&latest)
+            .unwrap_or("See https://github.com/dfinity/icp-cli/releases for upgrade instructions.");
+        info!(
+            "A newer version of icp-cli is available: {latest} (current: {current}). {suggestion}",
+            current = icp_cli_version_str(),
+        );
     }
 
     result?;
@@ -297,6 +317,18 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::default::exec(ctx, &args).await?
             }
 
+            commands::identity::Command::Delegation(cmd) => match cmd {
+                commands::identity::delegation::Command::Request(args) => {
+                    commands::identity::delegation::request::exec(ctx, &args).await?
+                }
+                commands::identity::delegation::Command::Sign(args) => {
+                    commands::identity::delegation::sign::exec(ctx, &args).await?
+                }
+                commands::identity::delegation::Command::Use(args) => {
+                    commands::identity::delegation::r#use::exec(ctx, &args).await?
+                }
+            },
+
             commands::identity::Command::Delete(args) => {
                 commands::identity::delete::exec(ctx, &args).await?
             }
@@ -313,6 +345,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::identity::link::Command::Hsm(args) => {
                     commands::identity::link::hsm::exec(ctx, &args).await?
                 }
+                commands::identity::link::Command::Web(args) => {
+                    commands::identity::link::web::exec(ctx, &args).await?
+                }
             },
 
             commands::identity::Command::List(args) => {
@@ -325,6 +360,10 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
 
             commands::identity::Command::Principal(args) => {
                 commands::identity::principal::exec(ctx, &args).await?
+            }
+
+            commands::identity::Command::Reauth(args) => {
+                commands::identity::reauth::exec(ctx, &args).await?
             }
 
             commands::identity::Command::Rename(args) => {
@@ -366,6 +405,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
         Command::Project(cmd) => match cmd {
             commands::project::Command::Show(args) => {
                 commands::project::show::exec(ctx, &args).await?
+            }
+            commands::project::Command::Bundle(args) => {
+                commands::project::bundle::exec(ctx, &args).await?
             }
         },
 

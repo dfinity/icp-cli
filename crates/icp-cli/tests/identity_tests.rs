@@ -57,6 +57,42 @@ fn identity_import_seed() {
 }
 
 #[test]
+fn identity_import_seed_curve() {
+    // Seed: "equip will roof matter pink blind book anxiety banner elbow sun young"
+    // p256:   SLIP-0010 "Nist256p1 seed", path m/44'/223'/0'/0/0
+    // ed25519: SLIP-0010 "ed25519 seed",  path m/44'/223'/0'/0'/0'
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(b"equip will roof matter pink blind book anxiety banner elbow sun young")
+        .unwrap();
+    let path = file.into_temp_path();
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["identity", "import", "alice_p256", "--from-seed-file"])
+        .arg(&path)
+        .args(["--seed-curve", "prime256v1"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice_p256"])
+        .assert()
+        .success()
+        .stdout(eq("gu6g3-gzs4p-fyjio-reppd-qk7ef-lhput-eg36s-ofyim-gi6y4-ce3qs-zqe").trim());
+
+    ctx.icp()
+        .args(["identity", "import", "alice_ed25519", "--from-seed-file"])
+        .arg(&path)
+        .args(["--seed-curve", "ed25519"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["identity", "principal", "--identity", "alice_ed25519"])
+        .assert()
+        .success()
+        .stdout(eq("z2yk5-gbsi4-5eudl-y5q6u-qaqmf-37gjy-r66iy-oiqvb-d5nbr-5odxa-4qe").trim());
+}
+
+#[test]
 fn identity_import_pem() {
     // from plaintext sec1
     let ctx = TestContext::new();
@@ -368,13 +404,7 @@ async fn identity_storage_forms() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1026,7 +1056,7 @@ async fn identity_link_hsm() {
         .arg(&pin_file)
         .assert()
         .success()
-        .stderr(contains("Identity \"hsm-identity\" linked to HSM"));
+        .stderr(contains("Identity `hsm-identity` linked to HSM"));
 
     // Verify the identity appears in the list
     ctx.icp()
@@ -1077,13 +1107,7 @@ async fn identity_link_hsm() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -1223,6 +1247,171 @@ fn identity_link_hsm_rename() {
         .trim();
 
     assert_eq!(principal_before_str, principal_after_str);
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn identity_delegation_whoami() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Import a root identity to sign the delegation
+    ctx.icp()
+        .args(["identity", "import", "root-identity", "--from-pem"])
+        .arg(ctx.make_asset("decrypted_sec1_k256.pem"))
+        .assert()
+        .success();
+
+    // Create a pending delegation identity, capturing the session public key PEM
+    let request_output = ctx
+        .icp()
+        .args([
+            "identity",
+            "delegation",
+            "request",
+            "delegated-identity",
+            "--storage",
+            "plaintext",
+        ])
+        .assert()
+        .success();
+    let pem_str = str::from_utf8(&request_output.get_output().stdout).unwrap();
+
+    // Write the session public key PEM to a temp file for the sign step
+    let key_pem_file = ctx.home_path().join("session-key.pem");
+    std::fs::write(&key_pem_file, pem_str).unwrap();
+
+    // Sign a delegation from root-identity to the session key
+    let sign_output = ctx
+        .icp()
+        .args([
+            "identity",
+            "delegation",
+            "sign",
+            "--identity",
+            "root-identity",
+            "--key-pem",
+        ])
+        .arg(&key_pem_file)
+        .args(["--duration", "1d"])
+        .assert()
+        .success();
+    let chain_json = str::from_utf8(&sign_output.get_output().stdout).unwrap();
+
+    // Write the delegation chain JSON to a temp file for the use step
+    let chain_json_file = ctx.home_path().join("delegation-chain.json");
+    std::fs::write(&chain_json_file, chain_json).unwrap();
+
+    // Complete the delegation identity with the signed chain
+    ctx.icp()
+        .args([
+            "identity",
+            "delegation",
+            "use",
+            "delegated-identity",
+            "--from-json",
+        ])
+        .arg(&chain_json_file)
+        .assert()
+        .success();
+
+    // Both identities should present the same principal: the root's principal
+    // (delegation chains are rooted at the signing key)
+    let root_principal = str::from_utf8(
+        &ctx.icp()
+            .args(["identity", "principal", "--identity", "root-identity"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    let delegated_principal = str::from_utf8(
+        &ctx.icp()
+            .args(["identity", "principal", "--identity", "delegated-identity"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    assert_eq!(root_principal, delegated_principal);
+
+    // Set up project manifest with whoami canister built via Motoko recipe
+    ctx.copy_asset_dir("whoami_canister", &project_dir);
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: whoami
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Call whoami with root-identity
+    let root_whoami = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "root-identity",
+            "whoami",
+            "whoami",
+            "()",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    // Call whoami with delegated-identity — the canister sees the root's principal
+    let delegated_whoami = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "delegated-identity",
+            "whoami",
+            "whoami",
+            "()",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    assert_eq!(root_whoami, delegated_whoami);
 }
 
 #[test]

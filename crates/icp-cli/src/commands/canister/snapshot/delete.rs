@@ -1,11 +1,11 @@
+use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::DeleteCanisterSnapshotArgs;
-use ic_utils::interfaces::ManagementCanister;
 use icp::context::Context;
 use tracing::info;
 
 use super::SnapshotId;
-use crate::commands::args;
+use crate::{commands::args, operations::proxy_management};
 
 /// Delete a canister snapshot
 #[derive(Debug, Args)]
@@ -15,6 +15,10 @@ pub(crate) struct DeleteArgs {
 
     /// The snapshot ID to delete (hex-encoded)
     snapshot_id: SnapshotId,
+
+    /// Principal of a proxy canister to route the management canister call through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow::Error> {
@@ -35,14 +39,12 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    let mgmt = ManagementCanister::create(&agent);
-
     let delete_args = DeleteCanisterSnapshotArgs {
         canister_id: cid,
         snapshot_id: args.snapshot_id.0.clone(),
     };
 
-    mgmt.delete_canister_snapshot(&delete_args).await?;
+    proxy_management::delete_canister_snapshot(&agent, args.proxy, delete_args).await?;
 
     let name = &args.cmd_args.canister;
     info!(

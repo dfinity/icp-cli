@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use serde::Serialize;
 use snafu::prelude::*;
 use tokio::sync::Mutex;
@@ -11,7 +12,7 @@ use candid_parser::parse_idl_args;
 use crate::{
     canister::{Settings, recipe::Resolve},
     manifest::{
-        InitArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
+        ArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
         ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
         load_manifest_from_path,
@@ -46,10 +47,7 @@ const DATA_DIR: &str = "data";
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum InitArgs {
     /// Text content (inline or loaded from file). Format is always known.
-    Text {
-        content: String,
-        format: InitArgsFormat,
-    },
+    Text { content: String, format: ArgsFormat },
     /// Raw binary bytes (from a file with `format: bin`). Used directly.
     Binary(Vec<u8>),
 }
@@ -72,12 +70,12 @@ impl InitArgs {
         match self {
             InitArgs::Binary(bytes) => Ok(bytes.clone()),
             InitArgs::Text { content, format } => match format {
-                InitArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
-                InitArgsFormat::Candid => {
+                ArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
+                ArgsFormat::Candid => {
                     let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
                     args.to_bytes().context(CandidEncodeSnafu)
                 }
-                InitArgsFormat::Bin => {
+                ArgsFormat::Bin => {
                     unreachable!("binary format cannot appear in InitArgs::Text")
                 }
             },
@@ -119,7 +117,7 @@ pub struct Network {
 pub struct Environment {
     pub name: String,
     pub network: Network,
-    pub canisters: HashMap<String, (PathBuf, Canister)>,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
 }
 
 impl Environment {
@@ -148,7 +146,7 @@ impl Environment {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Project {
     pub dir: PathBuf,
-    pub canisters: HashMap<String, (PathBuf, Canister)>,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
 }
@@ -303,7 +301,7 @@ impl MockProjectLoader {
             },
         };
 
-        let mut canisters = HashMap::new();
+        let mut canisters = IndexMap::new();
         canisters.insert(
             "backend".to_string(),
             ("/project".into(), backend_canister.clone()),
@@ -312,7 +310,7 @@ impl MockProjectLoader {
         let mut networks = HashMap::new();
         networks.insert("local".to_string(), local_network.clone());
 
-        let mut env_canisters = HashMap::new();
+        let mut env_canisters = IndexMap::new();
         env_canisters.insert("backend".to_string(), ("/project".into(), backend_canister));
 
         let default_env = Environment {
@@ -468,7 +466,7 @@ impl MockProjectLoader {
         };
 
         // Setup canisters map
-        let mut canisters = HashMap::new();
+        let mut canisters = IndexMap::new();
         canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -489,7 +487,7 @@ impl MockProjectLoader {
         networks.insert("ic".to_string(), ic_network.clone());
 
         // Create dev environment (all canisters on local)
-        let mut dev_canisters = HashMap::new();
+        let mut dev_canisters = IndexMap::new();
         dev_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -510,7 +508,7 @@ impl MockProjectLoader {
         };
 
         // Create test environment (backend and frontend on staging)
-        let mut test_canisters = HashMap::new();
+        let mut test_canisters = IndexMap::new();
         test_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister.clone()),
@@ -527,7 +525,7 @@ impl MockProjectLoader {
         };
 
         // Create prod environment (backend and frontend on ic)
-        let mut prod_canisters = HashMap::new();
+        let mut prod_canisters = IndexMap::new();
         prod_canisters.insert(
             "backend".to_string(),
             ("/project/backend".into(), backend_canister),
@@ -596,7 +594,7 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{Resolve, ResolveError};
+    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
     use crate::manifest::{
         ProjectRootLocate, ProjectRootLocateError,
         canister::{BuildSteps, SyncSteps},
@@ -625,7 +623,11 @@ mod tests {
 
     #[async_trait]
     impl Resolve for MockRecipeResolver {
-        async fn resolve(&self, _recipe: &Recipe) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        async fn resolve(
+            &self,
+            _recipe: &Recipe,
+            _context: &RecipeContext,
+        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             use crate::manifest::adapter::prebuilt::{
                 Adapter as PrebuiltAdapter, LocalSource, SourceField,
             };

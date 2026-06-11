@@ -1,7 +1,11 @@
+use std::io::stdout;
+
 use byte_unit::{Byte, UnitType};
+use candid::Principal;
 use clap::Args;
 use icp::context::Context;
 use icp::prelude::*;
+use serde::Serialize;
 use tracing::info;
 
 use super::SnapshotId;
@@ -30,6 +34,18 @@ pub(crate) struct UploadArgs {
     /// Resume a previously interrupted upload
     #[arg(long)]
     resume: bool,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    json: bool,
+
+    /// Suppress human-readable output; print only snapshot ID
+    #[arg(long, short, conflicts_with = "json")]
+    quiet: bool,
+
+    /// Principal of a proxy canister to route the management canister calls through.
+    #[arg(long)]
+    proxy: Option<Principal>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow::Error> {
@@ -92,7 +108,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 // Upload metadata to create a new snapshot
                 let replace_snapshot = args.replace.as_ref().map(|s| s.0.as_slice());
                 let result =
-                    upload_snapshot_metadata(&agent, cid, &metadata, replace_snapshot).await?;
+                    upload_snapshot_metadata(&agent, args.proxy, cid, &metadata, replace_snapshot)
+                        .await?;
 
                 let snapshot_id_hex = hex::encode(&result.snapshot_id);
                 info!("Created snapshot {snapshot_id_hex} for upload");
@@ -112,6 +129,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     let pb = create_transfer_progress_bar(metadata.wasm_module_size, "WASM module");
                     upload_blob_from_file(
                         &agent,
+                        args.proxy,
                         cid,
                         &snapshot_id_bytes,
                         BlobType::WasmModule,
@@ -132,6 +150,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     let pb = create_transfer_progress_bar(metadata.wasm_memory_size, "WASM memory");
                     upload_blob_from_file(
                         &agent,
+                        args.proxy,
                         cid,
                         &snapshot_id_bytes,
                         BlobType::WasmMemory,
@@ -153,6 +172,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         create_transfer_progress_bar(metadata.stable_memory_size, "Stable memory");
                     upload_blob_from_file(
                         &agent,
+                        args.proxy,
                         cid,
                         &snapshot_id_bytes,
                         BlobType::StableMemory,
@@ -177,8 +197,15 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 for chunk_hash in &metadata.wasm_chunk_store {
                     let hash_hex = hex::encode(&chunk_hash.hash);
                     if !progress.wasm_chunks_uploaded.contains(&hash_hex) {
-                        upload_wasm_chunk(&agent, cid, &snapshot_id_bytes, &chunk_hash.hash, paths)
-                            .await?;
+                        upload_wasm_chunk(
+                            &agent,
+                            args.proxy,
+                            cid,
+                            &snapshot_id_bytes,
+                            &chunk_hash.hash,
+                            paths,
+                        )
+                        .await?;
                         progress.wasm_chunks_uploaded.insert(hash_hex);
                         save_upload_progress(&progress, paths)?;
                     }
@@ -189,7 +216,18 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Clean up progress file on success
             delete_upload_progress(paths)?;
 
-            println!("Snapshot {} uploaded successfully", progress.snapshot_id);
+            if args.json {
+                serde_json::to_writer(
+                    stdout(),
+                    &JsonSnapshotUpload {
+                        snapshot_id: progress.snapshot_id.clone(),
+                    },
+                )?;
+            } else if args.quiet {
+                println!("{}", progress.snapshot_id);
+            } else {
+                println!("Snapshot {} uploaded successfully", progress.snapshot_id);
+            }
 
             Ok::<_, anyhow::Error>(progress.snapshot_id)
         })
@@ -198,4 +236,9 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
     info!("Use `icp canister snapshot restore {name} {snapshot_id}` to restore from this snapshot");
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonSnapshotUpload {
+    snapshot_id: String,
 }

@@ -1,4 +1,7 @@
-# Local Development
+---
+title: Local Development
+description: Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
+---
 
 This guide covers the day-to-day development workflow with icp-cli.
 
@@ -62,7 +65,7 @@ icp canister call backend get_user '("alice")' --query
 
 ### Forwarding Cycles with the Proxy Canister
 
-Managed networks include a proxy canister that forwards calls with cycles attached. This is useful for testing methods that require cycles:
+Managed networks include a proxy canister that forwards calls with cycles attached. This is useful for testing methods that require cycles or methods only callable by other canisters:
 
 ```bash
 icp canister call my-canister method '(args)' \
@@ -71,6 +74,15 @@ icp canister call my-canister method '(args)' \
 ```
 
 The proxy canister's principal is shown in `icp network status` output.
+
+**Identity and controller access:** when the network starts, icp-cli sets all identities that exist at that moment as controllers of the proxy. Switching between those identities works without any extra steps. If you create a new identity *after* the network is already running, it won't be a controller yet — add it before using the proxy:
+
+```bash
+PROXY=$(icp network status --json | jq -r .proxy_canister_principal)
+icp canister settings update $PROXY --add-controller $(icp identity principal --identity new-identity)
+```
+
+On connected networks like `ic` mainnet, you deploy your own proxy — see the [Proxy Canister guide](proxy-canister.md).
 
 ### Viewing Project State
 
@@ -120,7 +132,7 @@ The `@dfinity/asset-canister` recipe deploys this pre-built canister and syncs y
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist  # Your built frontend files
 ```

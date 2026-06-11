@@ -1,7 +1,11 @@
+use std::io::stdout;
+
 use bigdecimal::BigDecimal;
+use candid::Principal;
 use clap::Args;
 use icp::context::Context;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
+use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
@@ -17,6 +21,18 @@ pub(crate) struct BalanceArgs {
     /// The subaccount to check the balance for
     #[arg(long, value_parser = parse_subaccount)]
     pub(crate) subaccount: Option<[u8; 32]>,
+
+    /// Check the balance of this principal instead of the current identity
+    #[arg(long)]
+    pub(crate) of_principal: Option<Principal>,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only the balance
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow::Error> {
@@ -30,16 +46,34 @@ pub(crate) async fn exec(ctx: &Context, args: &BalanceArgs) -> Result<(), anyhow
             &selections.environment,
         )
         .await?;
+    let owner = args
+        .of_principal
+        .unwrap_or_else(|| agent.get_principal().unwrap());
 
     // Get the balance from the ledger
-    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL, args.subaccount).await?;
+    let cycles = get_raw_balance(&agent, CYCLES_LEDGER_PRINCIPAL, owner, args.subaccount).await?;
     let cycles_amount = TokenAmount {
         amount: BigDecimal::from_biguint(cycles.0, 0),
         symbol: "cycles".to_string(),
     };
 
-    // Output information
-    println!("Balance: {cycles_amount}");
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonBalance {
+                balance: cycles_amount.to_string(),
+            },
+        )?;
+    } else if args.quiet {
+        println!("{cycles_amount}");
+    } else {
+        println!("Balance: {cycles_amount}");
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonBalance {
+    balance: String,
 }

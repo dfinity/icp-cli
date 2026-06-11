@@ -11,17 +11,18 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use tracing::info;
 
 use crate::{
-    commands::canister::create,
+    commands::{args::ArgsOpt, canister::create},
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
-        create::CreateOperation,
+        create::{CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
-        settings::sync_settings_many,
+        settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
     options::{EnvironmentOpt, IdentityOpt},
@@ -30,6 +31,19 @@ use crate::{
 
 /// Deploy a project to an environment
 #[derive(Args, Debug)]
+#[command(after_long_help = "\
+When deploying a single canister, you can pass arguments to the install call
+using --args or --args-file:
+
+    # Pass inline Candid arguments
+    icp deploy my_canister --args '(42 : nat)'
+
+    # Pass arguments from a file
+    icp deploy my_canister --args-file ./args.did
+
+    # Pass raw bytes
+    icp deploy my_canister --args-file ./args.bin --args-format bin
+")]
 pub(crate) struct DeployArgs {
     /// Canister names
     pub(crate) names: Vec<String>,
@@ -39,8 +53,12 @@ pub(crate) struct DeployArgs {
     pub(crate) mode: String,
 
     /// The subnet to use for the canisters being deployed.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "proxy")]
     pub(crate) subnet: Option<Principal>,
+
+    /// Principal of a proxy canister to route management canister calls through.
+    #[arg(long, conflicts_with = "subnet")]
+    pub(crate) proxy: Option<Principal>,
 
     /// One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple.
     #[arg(long)]
@@ -60,6 +78,15 @@ pub(crate) struct DeployArgs {
 
     #[command(flatten)]
     pub(crate) environment: EnvironmentOpt,
+
+    /// Output command results as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Arguments to pass to the canister on install.
+    /// Only valid when deploying a single canister. Takes priority over `init_args` in the manifest.
+    #[command(flatten)]
+    pub(crate) args_opt: ArgsOpt,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
@@ -79,6 +106,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // Skip doing any work if no canisters are targeted
     if cnames.is_empty() {
         return Ok(());
+    }
+
+    if args.args_opt.is_some() && cnames.len() != 1 {
+        anyhow::bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
     let canisters_to_build = try_join_all(
@@ -123,9 +154,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if canisters_to_create.is_empty() {
         info!("All canisters already exist");
     } else {
+        let target = match (args.subnet, args.proxy) {
+            (Some(subnet), _) => CreateTarget::Subnet(subnet),
+            (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+            _ => CreateTarget::None,
+        };
         let create_operation = CreateOperation::new(
             agent.clone(),
-            args.subnet,
+            target,
             args.cycles.get(),
             existing_canisters.into_values().collect(),
         );
@@ -157,10 +193,23 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                     let canister_name = canisters_to_create
                         .get(idx)
                         .expect("should have tried to create every canister");
-                    println!("Created canister {canister_name} with ID {id}");
+                    if !args.json {
+                        println!("Created canister {canister_name} with ID {id}");
+                    }
                     ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
                         .await
                         .map_err(|e| anyhow!(e))?;
+                    // Apply controller settings for any already-created canister that was
+                    // waiting for this one to exist (e.g. created via `icp canister create`).
+                    sync_controller_dependents(
+                        ctx,
+                        &agent,
+                        args.proxy,
+                        canister_name,
+                        &environment_selection,
+                    )
+                    .await
+                    .map_err(|e| anyhow!(e))?;
                 }
                 Err(err) => {
                     error = Some(err.into());
@@ -207,17 +256,24 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     set_binding_env_vars_many(
         agent.clone(),
+        args.proxy,
         &env.name,
         target_canisters.clone(),
-        canister_list,
+        canister_list.clone(),
         ctx.debug,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(agent.clone(), target_canisters, ctx.debug)
-        .await
-        .map_err(|e| anyhow!(e))?;
+    sync_settings_many(
+        agent.clone(),
+        args.proxy,
+        target_canisters,
+        canister_list,
+        ctx.debug,
+    )
+    .await
+    .map_err(|e| anyhow!(e))?;
 
     // Install the selected canisters
 
@@ -234,17 +290,22 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .map_err(|e| anyhow!(e))?;
 
             let (mode, status) =
-                resolve_install_mode_and_status(&agent, name, &cid, &args.mode).await?;
+                resolve_install_mode_and_status(&agent, args.proxy, name, &cid, &args.mode).await?;
 
             let env = ctx.get_environment(&environment_selection).await?;
             let (_canister_path, canister_info) =
                 env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            let init_args_bytes = canister_info
-                .init_args
-                .as_ref()
-                .map(|ia| ia.to_bytes())
-                .transpose()?;
+            // CLI --args/--args-file take priority over manifest init_args
+            let init_args_bytes = if args.args_opt.is_some() {
+                args.args_opt.resolve_bytes()?
+            } else {
+                canister_info
+                    .init_args
+                    .as_ref()
+                    .map(|ia| ia.to_bytes())
+                    .transpose()?
+            };
 
             Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, init_args_bytes))
         }
@@ -267,7 +328,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     info!("Installing canisters:");
 
-    install_many(agent.clone(), canisters, ctx.artifacts.clone(), ctx.debug).await?;
+    install_many(
+        agent.clone(),
+        args.proxy,
+        canisters,
+        ctx.artifacts.clone(),
+        ctx.debug,
+    )
+    .await?;
 
     // Sync the selected canisters
 
@@ -305,13 +373,43 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if sync_canisters.is_empty() {
         info!("No canisters have sync steps configured");
     } else {
+        // TODO: When `--proxy` is used and the canister was newly created, the proxy
+        // canister is its only controller. Sync steps (e.g. asset uploads to a frontend
+        // canister) will fail because the user's identity lacks the required permissions.
+        // The fix is to make a proxy call to the frontend canister's `grant_permission`
+        // method to permit the user identity to upload assets directly before syncing.
         info!("Syncing canisters:");
 
-        sync_many(ctx.syncer.clone(), agent.clone(), sync_canisters, ctx.debug).await?;
+        let canister_ids: BTreeMap<String, Principal> = ctx
+            .ids_by_environment(&environment_selection)
+            .await?
+            .into_iter()
+            .collect();
+
+        let pkg_cache = ctx.dirs.package_cache()?;
+        sync_many(
+            ctx.syncer.clone(),
+            agent.clone(),
+            sync_canisters,
+            environment_selection.name().to_owned(),
+            env.network.name.clone(),
+            canister_ids,
+            args.proxy,
+            ctx.debug,
+            &pkg_cache,
+        )
+        .await?;
     }
 
     // Print URLs for deployed canisters
-    print_canister_urls(ctx, &environment_selection, agent.clone(), &cnames).await?;
+    print_canister_urls(
+        ctx,
+        &environment_selection,
+        agent.clone(),
+        &cnames,
+        args.json,
+    )
+    .await?;
 
     Ok(())
 }
@@ -353,6 +451,7 @@ async fn print_canister_urls(
     environment_selection: &EnvironmentSelection,
     agent: Agent,
     canister_names: &[String],
+    json: bool,
 ) -> Result<(), anyhow::Error> {
     use icp::network::custom_domains::{canister_gateway_url, gateway_domain};
 
@@ -369,7 +468,11 @@ async fn print_canister_urls(
         }
     };
 
-    println!("Deployed canisters:");
+    let mut json_canisters = Vec::new();
+
+    if !json {
+        println!("Deployed canisters:");
+    }
 
     for name in canister_names {
         let canister_id = match ctx
@@ -393,10 +496,18 @@ async fn print_canister_urls(
 
             if has_http {
                 let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
-                println!("  {name}: {canister_url}");
+                if json {
+                    json_canisters.push(JsonDeployedCanister {
+                        name: name.clone(),
+                        canister_id,
+                        url: Some(canister_url.to_string()),
+                    });
+                } else {
+                    println!("  {name}: {canister_url}");
+                }
             } else {
                 // For canisters without http_request, show the Candid UI URL
-                if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                let url = if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
                     let domain = gateway_domain(http_gateway_url);
                     let mut candid_url = canister_gateway_url(http_gateway_url, ui_id, None);
                     if domain.is_some() {
@@ -404,17 +515,57 @@ async fn print_canister_urls(
                     } else {
                         candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
                     }
-                    println!("  {name} (Candid UI): {candid_url}");
+                    if !json {
+                        println!("  {name} (Candid UI): {candid_url}");
+                    }
+                    Some(candid_url.to_string())
                 } else {
-                    println!("  {name}: {canister_id} (Candid UI not available)");
+                    if !json {
+                        println!("  {name}: {canister_id} (Candid UI not available)");
+                    }
+                    None
+                };
+                if json {
+                    json_canisters.push(JsonDeployedCanister {
+                        name: name.clone(),
+                        canister_id,
+                        url,
+                    });
                 }
             }
+        } else if json {
+            json_canisters.push(JsonDeployedCanister {
+                name: name.clone(),
+                canister_id,
+                url: None,
+            });
         } else {
             println!("  {name}: {canister_id} (No gateway URL available)");
         }
     }
 
+    if json {
+        serde_json::to_writer(
+            std::io::stdout(),
+            &JsonDeploy {
+                canisters: json_canisters,
+            },
+        )?;
+    }
+
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonDeploy {
+    canisters: Vec<JsonDeployedCanister>,
+}
+
+#[derive(Serialize)]
+struct JsonDeployedCanister {
+    name: String,
+    canister_id: Principal,
+    url: Option<String>,
 }
 
 /// Gets the Candid UI canister ID for the network

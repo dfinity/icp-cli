@@ -1,4 +1,7 @@
-# Guides
+---
+title: Guides
+description: Step-by-step guides covering installation, local development, deployment, identity management, and more.
+---
 
 Step-by-step instructions for common tasks. Each guide assumes you've completed the [Tutorial](../tutorial.md).
 
@@ -29,3 +32,4 @@ Step-by-step instructions for common tasks. Each guide assumes you've completed 
 
 - [Creating Recipes](creating-recipes.md) — Build custom recipe templates
 - [Creating Templates](creating-templates.md) — Author project templates for `icp new`
+- [Writing a Sync Plugin](writing-sync-plugins.md) — Author a sandboxed WebAssembly sync plugin

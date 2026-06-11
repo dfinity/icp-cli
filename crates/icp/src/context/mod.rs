@@ -69,6 +69,7 @@ pub enum CanisterSelection {
     Principal(Principal),
 }
 
+#[derive(Clone)]
 pub struct Context {
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Arc<dyn directories::Access>,
@@ -110,9 +111,10 @@ impl Context {
     pub async fn get_identity(
         &self,
         identity: &IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
     ) -> Result<Arc<dyn Identity>, GetIdentityError> {
         self.identity
-            .load(identity.clone())
+            .load(identity.clone(), network_root_key)
             .await
             .context(IdentityLoadSnafu {
                 identity: identity.clone(),
@@ -362,9 +364,11 @@ impl Context {
         identity: &IdentitySelection,
         environment: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentForEnvError> {
-        let id = self.get_identity(identity).await?;
         let env = self.get_environment(environment).await?;
         let access = self.network.access(&env.network).await?;
+        let id = self
+            .get_identity(identity, Some(access.root_key.clone()))
+            .await?;
         Ok(self.create_agent(id, access).await?)
     }
 
@@ -374,9 +378,11 @@ impl Context {
         identity: &IdentitySelection,
         network_selection: &NetworkSelection,
     ) -> Result<Agent, GetAgentForNetworkError> {
-        let id = self.get_identity(identity).await?;
         let network = self.get_network(network_selection).await?;
         let access = self.network.access(&network).await?;
+        let id = self
+            .get_identity(identity, Some(access.root_key.clone()))
+            .await?;
         Ok(self.create_agent(id, access).await?)
     }
 
@@ -402,7 +408,7 @@ impl Context {
         identity: &IdentitySelection,
         url: &Url,
     ) -> Result<Agent, GetAgentForUrlError> {
-        let id = self.get_identity(identity).await?;
+        let id = self.get_identity(identity, None).await?;
         let agent = self.agent.create(id, url.as_str()).await?;
         Ok(agent)
     }
@@ -547,9 +553,15 @@ impl Context {
                 env_mappings.insert(env_name.clone(), mapping);
             }
         }
-        if let Err(e) =
-            crate::network::custom_domains::write_custom_domains(status_dir, domain, &env_mappings)
-        {
+        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(desc.ii, domain)
+            .into_iter()
+            .collect();
+        if let Err(e) = crate::network::custom_domains::write_custom_domains(
+            status_dir,
+            domain,
+            &env_mappings,
+            &extra,
+        ) {
             tracing::warn!("Failed to update custom domains: {e}");
         }
     }

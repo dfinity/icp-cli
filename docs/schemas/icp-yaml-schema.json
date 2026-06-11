@@ -44,7 +44,7 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a Pre-built canister build adapter.",
+      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
       "properties": {
         "sha256": {
           "description": "Optional sha256 checksum of the WASM",
@@ -57,37 +57,67 @@
       "type": "object"
     },
     "Adapter3": {
-      "description": "Configuration for a custom canister build adapter.",
-      "oneOf": [
+      "anyOf": [
         {
-          "description": "Directory used to synchronize an assets canister",
-          "properties": {
-            "dir": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "dir"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/LocalSource",
+          "description": "Local path on-disk to read a WASM file from"
         },
         {
-          "description": "Set of directories used to synchronize an assets canister",
-          "properties": {
-            "dirs": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "dirs"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/RemoteSource",
+          "description": "Remote url to fetch a WASM file from"
         }
       ],
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
+      "properties": {
+        "dirs": {
+          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "Files (relative to canister directory) the host reads and passes to\nthe plugin as part of `sync-exec-input.files`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sha256": {
+          "description": "Optional sha256 checksum of the wasm file.\nOptional for `path`; required for `url`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
+    },
+    "ArgsFormat": {
+      "description": "Format specifier for canister call/install args content.",
+      "oneOf": [
+        {
+          "const": "hex",
+          "description": "Hex-encoded bytes",
+          "type": "string"
+        },
+        {
+          "const": "candid",
+          "description": "Candid text format",
+          "type": "string"
+        },
+        {
+          "const": "bin",
+          "description": "Raw binary (only valid for file references)",
+          "type": "string"
+        }
+      ]
     },
     "BuildStep": {
       "description": "Identifies the type of adapter used to build the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: do_something.sh\n```",
@@ -192,24 +222,9 @@
           "type": "string"
         },
         "settings": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Settings"
-            },
-            {
-              "type": "null"
-            }
-          ],
+          "$ref": "#/$defs/Settings",
           "default": {
-            "compute_allocation": null,
-            "environment_variables": null,
-            "freezing_threshold": null,
-            "log_memory_limit": null,
-            "log_visibility": null,
-            "memory_allocation": null,
-            "reserved_cycles_limit": null,
-            "wasm_memory_limit": null,
-            "wasm_memory_threshold": null
+            "controllers": null
           },
           "description": "The configuration specifying the various settings when creating the canister."
         }
@@ -267,6 +282,10 @@
         }
       },
       "type": "object"
+    },
+    "ControllerRef": {
+      "description": "A controller: either a principal text (e.g. '2vxsx-fae') or a canister name in this project (e.g. 'my_canister')",
+      "type": "string"
     },
     "CyclesAmount": {
       "anyOf": [
@@ -373,26 +392,6 @@
         }
       },
       "type": "object"
-    },
-    "InitArgsFormat": {
-      "description": "Format specifier for init args content.",
-      "oneOf": [
-        {
-          "const": "hex",
-          "description": "Hex-encoded bytes",
-          "type": "string"
-        },
-        {
-          "const": "candid",
-          "description": "Candid text format",
-          "type": "string"
-        },
-        {
-          "const": "bin",
-          "description": "Raw binary (only valid for file references)",
-          "type": "string"
-        }
-      ]
     },
     "Item": {
       "anyOf": [
@@ -634,7 +633,7 @@
               "description": "HTTP gateway configuration"
             },
             "ii": {
-              "description": "Set up the Internet Identity canister",
+              "description": "Set up the Internet Identity canister. Makes internet identity available at\nid.ai.localhost:<port>",
               "type": [
                 "boolean",
                 "null"
@@ -680,7 +679,7 @@
           "description": "File reference with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "path": {
@@ -696,7 +695,7 @@
           "description": "Inline value with explicit format.",
           "properties": {
             "format": {
-              "$ref": "#/$defs/InitArgsFormat",
+              "$ref": "#/$defs/ArgsFormat",
               "default": "candid"
             },
             "value": {
@@ -768,11 +767,7 @@
       "properties": {
         "configuration": {
           "additionalProperties": true,
-          "default": {},
-          "type": [
-            "object",
-            "null"
-          ]
+          "type": "object"
         },
         "sha256": {
           "description": "Optional sha256 checksum for the recipe template.\nIf provided, the integrity of the recipe will be verified against this hash",
@@ -812,6 +807,17 @@
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "controllers": {
+          "default": null,
+          "description": "Controllers for this canister. Each entry is either a principal text\n(e.g. \"2vxsx-fae\") or the name of another canister in this project.\nNamed canisters that do not yet exist will be set as controllers once created.",
+          "items": {
+            "$ref": "#/$defs/ControllerRef"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -878,7 +884,6 @@
               "type": "null"
             }
           ],
-          "default": null,
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
         "wasm_memory_limit": {
@@ -937,10 +942,10 @@
         },
         {
           "$ref": "#/$defs/Adapter3",
-          "description": "Represents syncing of an assets canister",
+          "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
           "properties": {
             "type": {
-              "const": "assets",
+              "const": "plugin",
               "type": "string"
             }
           },
@@ -973,31 +978,25 @@
   "description": "Schema for ProjectManifest",
   "properties": {
     "canisters": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item"
       },
-      "type": [
-        "array",
-        "null"
-      ]
+      "type": "array"
     },
     "environments": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item3"
       },
-      "type": [
-        "array",
-        "null"
-      ]
+      "type": "array"
     },
     "networks": {
+      "default": [],
       "items": {
         "$ref": "#/$defs/Item2"
       },
-      "type": [
-        "array",
-        "null"
-      ]
+      "type": "array"
     }
   },
   "title": "ProjectManifest",

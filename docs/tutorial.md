@@ -1,8 +1,11 @@
-# Tutorial
+---
+title: Tutorial
+description: Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
+---
 
-This tutorial walks through deploying a full-stack app on the Internet Computer, explaining each step along the way.
+This tutorial walks through deploying a fullstack app on the Internet Computer, explaining each step along the way.
 
-> **Already did the Quickstart?** This tutorial covers the same steps with detailed explanations. The Quickstart used `--define` flags to skip the interactive prompts — here you'll see what those prompts are and what they mean.
+> **Already did the Quickstart?** This tutorial covers the same steps with detailed explanations. The Quickstart used `--silent` to skip the interactive prompts — here you'll see what those prompts are and what they mean.
 
 ## What is a Canister?
 
@@ -46,31 +49,29 @@ mops --version
 ## Create a Project
 
 ```bash
-icp new my-project
+icp new hello-icp
 ```
 
 You'll see three prompts:
 
-**1. Template selection** — Choose `hello-world` for a full-stack app with backend and frontend.
+**1. Template selection** — Choose `hello-world` for a fullstack app with backend and frontend.
 
 **2. Backend language** — Choose `motoko` (or `rust` if you prefer).
 
 **3. Network type** — Choose `Default` for native local networks. On Windows, Docker is always used regardless of this setting.
 
-> **Tip:** The Quickstart skipped these prompts using `--define` flags:
+> **Tip:** The Quickstart skipped these prompts using `--silent`, which applies the template's default values:
 > ```bash
-> icp new my-project --subfolder hello-world \
->   --define backend_type=motoko \
->   --define frontend_type=react \
->   --define network_type=Default
+> icp new hello-icp --subfolder hello-world --silent && cd hello-icp
 > ```
+> To override a default, add `--define <placeholder>=<value>` (for example, `--define backend_type=rust`).
 
 Templates are fetched from the [icp-cli-templates](https://github.com/dfinity/icp-cli-templates) repository by default. You can also [create your own templates](guides/creating-templates.md).
 
 Enter the project directory:
 
 ```bash
-cd my-project
+cd hello-icp
 ```
 
 Your project contains:
@@ -150,7 +151,7 @@ You should see: `("Hello, World!")`
 
 The argument format `'("World")'` is [Candid](https://docs.internetcomputer.org/building-apps/interact-with-canisters/candid/candid-concepts) — the interface description language for the Internet Computer.
 
-### Interactive Arguments
+### Interactive Mode
 
 Don't want to type Candid manually? Omit the argument and icp-cli will prompt you interactively:
 
@@ -159,6 +160,14 @@ icp canister call backend greet
 ```
 
 You'll see a prompt asking for the `name` parameter — just type `World` and press Enter. This works for any method with any argument types, making it easy to explore canister APIs without memorizing Candid syntax.
+
+You can also omit the method name to get an interactive method picker:
+
+```bash
+icp canister call backend
+```
+
+This lists all available methods on the canister and lets you select one, which is handy when you're exploring an unfamiliar canister.
 
 ## Stop the Network
 
@@ -170,7 +179,7 @@ icp network stop
 
 ## Next Steps
 
-You've deployed a full-stack app on the Internet Computer! Continue your journey:
+You've deployed a fullstack app on the Internet Computer! Continue your journey:
 
 - [Local Development](guides/local-development.md) — Learn the day-to-day development workflow
 - [Deploying to Mainnet](guides/deploying-to-mainnet.md) — Go live on the Internet Computer

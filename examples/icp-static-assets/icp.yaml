@@ -1,5 +1,3 @@
-# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
-
 canisters:
   - name: my-canister
 
@@ -11,6 +9,8 @@ canisters:
 
     sync:
       steps:
-        - type: assets
+        - type: plugin
+          url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
+          sha256: ca7cb5666c30d2875f8d5e10535f8a53f97a86c79c263f7d5bdac2fdd1bbf83c
           dirs:
             - www

@@ -1,0 +1,44 @@
+[
+  {
+    // Static assets built by Astro — content-hashed filenames, cache forever
+    "match": "**/_astro/**",
+    "headers": {
+      "Cache-Control": "public, max-age=31536000, immutable"
+    }
+  },
+  {
+    // Search index
+    "match": "**/pagefind/**",
+    "headers": {
+      "Cache-Control": "public, max-age=31536000, immutable"
+    }
+  },
+  {
+    // HTML pages — short cache so updates are visible quickly
+    "match": "**/*.html",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
+  },
+  {
+    // Markdown endpoints and llms.txt — short cache so updates are visible quickly
+    "match": "**/*.{md,txt}",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
+  },
+  {
+    // Version list — very short cache so version switcher sees updates quickly
+    "match": "versions.json",
+    "headers": {
+      "Cache-Control": "public, max-age=60"
+    }
+  },
+  {
+    // Matomo analytics — short cache so site ID changes are picked up quickly
+    "match": "matomo.js",
+    "headers": {
+      "Cache-Control": "public, max-age=300"
+    }
+  }
+]

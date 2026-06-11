@@ -1495,3 +1495,353 @@ async fn canister_migrate_id() {
         .assert()
         .failure();
 }
+
+/// Tests the full snapshot workflow through a proxy: create -> list -> download -> upload -> restore -> delete
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_snapshot_workflow_through_proxy() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let snapshot_dir = ctx.create_project_dir("snapshot");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 1 : opt nat8)"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy with initial value 1
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Verify initial value is 1
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("\"1\""));
+
+    // Stop canister before creating snapshot
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Create a snapshot through proxy
+    let create_output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_output_str = String::from_utf8_lossy(&create_output);
+    assert!(
+        create_output_str.contains("Created snapshot"),
+        "Expected 'Created snapshot' in output, got: {}",
+        create_output_str
+    );
+
+    let snapshot_id = create_output_str
+        .lines()
+        .find(|line| line.contains("Created snapshot"))
+        .and_then(|line| line.split_whitespace().nth(2))
+        .expect("Could not extract snapshot ID from output");
+
+    // List snapshots through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "list",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains(snapshot_id));
+
+    // Download the snapshot through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "download",
+            "my-canister",
+            snapshot_id,
+            "--output",
+            snapshot_dir.as_str(),
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stderr(contains("Snapshot downloaded"));
+
+    assert!(
+        snapshot_dir.join("metadata.json").exists(),
+        "metadata.json should exist after download"
+    );
+
+    // Upload the snapshot back through proxy
+    let upload_output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "upload",
+            "my-canister",
+            "--input",
+            snapshot_dir.as_str(),
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let uploaded_snapshot_id = String::from_utf8_lossy(&upload_output)
+        .lines()
+        .find(|line| line.contains("uploaded successfully"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .expect("Could not extract uploaded snapshot ID")
+        .to_string();
+
+    // Delete the uploaded snapshot (cleanup)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "delete",
+            "my-canister",
+            &uploaded_snapshot_id,
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Start, reinstall with new value, then restore from snapshot
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "start",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+            "--mode",
+            "reinstall",
+            "--args",
+            "(opt 99 : opt nat8)",
+        ])
+        .assert()
+        .success();
+
+    // Verify value is now 99
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("\"99\""));
+
+    // Stop and restore from snapshot through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "restore",
+            "my-canister",
+            snapshot_id,
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stderr(contains("Restored canister"));
+
+    // Start and verify value is back to 1
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "start",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("\"1\""));
+
+    // Delete the snapshot through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "delete",
+            "my-canister",
+            snapshot_id,
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stderr(contains("Deleted snapshot"));
+
+    // List snapshots - should be empty
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "snapshot",
+            "list",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("No snapshots found"));
+}

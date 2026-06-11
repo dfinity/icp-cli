@@ -2,6 +2,7 @@ use clap::{Subcommand, ValueEnum};
 
 pub(crate) mod account_id;
 pub(crate) mod default;
+pub(crate) mod delegation;
 pub(crate) mod delete;
 pub(crate) mod export;
 pub(crate) mod import;
@@ -9,6 +10,7 @@ pub(crate) mod link;
 pub(crate) mod list;
 pub(crate) mod new;
 pub(crate) mod principal;
+pub(crate) mod reauth;
 pub(crate) mod rename;
 
 /// Manage your identities
@@ -16,6 +18,8 @@ pub(crate) mod rename;
 pub(crate) enum Command {
     AccountId(account_id::AccountIdArgs),
     Default(default::DefaultArgs),
+    #[command(subcommand)]
+    Delegation(delegation::Command),
     Delete(delete::DeleteArgs),
     Export(export::ExportArgs),
     Import(import::ImportArgs),
@@ -24,6 +28,7 @@ pub(crate) enum Command {
     List(list::ListArgs),
     New(new::NewArgs),
     Principal(principal::PrincipalArgs),
+    Reauth(reauth::ReauthArgs),
     Rename(rename::RenameArgs),
 }
 

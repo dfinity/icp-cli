@@ -1,4 +1,7 @@
-# Canister Migration
+---
+title: Canister Migration
+description: Move a canister to a different subnet while optionally preserving its state and canister ID.
+---
 
 Move a canister to a different subnet. Depending on your needs, you can preserve just the canister's state, or both its state and canister ID.
 

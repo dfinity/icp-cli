@@ -9,7 +9,9 @@ use predicates::{
     str::{PredicateStrExt, contains},
 };
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, build_sync_plugin_example, clients,
+};
 
 mod common;
 
@@ -58,14 +60,7 @@ async fn sync_adapter_script_single() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "--debug",
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["--debug", "deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stderr(contains("syncing").trim());
@@ -132,14 +127,7 @@ async fn sync_adapter_script_multiple() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "--debug",
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["--debug", "deploy", "--environment", "random-environment"])
         .assert()
         .success()
         .stderr(contains("first").and(contains("second")));
@@ -159,21 +147,14 @@ async fn sync_adapter_script_multiple() {
         .stderr(contains("first").and(contains("second")));
 }
 
+/// The `assets` sync step type was removed. A manifest that still uses it must
+/// fail to load with a helpful, targeted message (and must not name a specific
+/// recipe).
 #[tokio::test]
-async fn sync_adapter_static_assets() {
+async fn sync_step_assets_is_rejected() {
     let ctx = TestContext::new();
-
-    // Setup project
     let project_dir = ctx.create_project_dir("icp");
-    let assets_dir = project_dir.join("www");
 
-    // Create assets directory
-    create_dir_all(&assets_dir).expect("failed to create assets directory");
-
-    // Create simple index page
-    write_string(&assets_dir.join("index.html"), "hello").expect("failed to create index page");
-
-    // Project manifest
     let pm = formatdoc! {r#"
         canisters:
           - name: my-canister
@@ -187,95 +168,23 @@ async fn sync_adapter_static_assets() {
               steps:
                 - type: assets
                   dirs:
-                    - {assets_dir}
-
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
+                    - www
     "#};
 
-    write_string(
-        &project_dir.join("icp.yaml"), // path
-        &pm,                           // contents
-    )
-    .expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network").await;
-
-    // Wait for network
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    let network_port = ctx
-        .wait_for_network_descriptor(&project_dir, "random-network")
-        .gateway_port;
-
-    // Deploy project
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
-        .mint_cycles(10 * TRILLION);
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["project", "show"])
         .assert()
-        .success();
-
-    let id_mapping_path = project_dir
-        .join(".icp")
-        .join("cache")
-        .join("mappings")
-        .join("random-environment.ids.json");
-
-    let id_mapping_content: IdMapping =
-        icp::fs::json::load(&id_mapping_path).expect("failed to read ID mapping file");
-
-    let cid = id_mapping_content
-        .get("my-canister")
-        .expect("canister ID not found");
-
-    // Invoke sync
-    ctx.icp()
-        .current_dir(project_dir)
-        .args(["sync", "my-canister", "--environment", "random-environment"])
-        .assert()
-        .success();
-
-    // Verify that assets canister was synced via canisterId query param
-    let resp = reqwest::get(format!("http://localhost:{network_port}/?canisterId={cid}"))
-        .await
-        .expect("request failed");
-
-    let out = resp
-        .text()
-        .await
-        .expect("failed to read canister response body");
-
-    assert_eq!(out, "hello");
-
-    // Verify that the friendly domain also works
-    let friendly_domain = "my-canister.random-environment.localhost";
-    let client = reqwest::Client::builder()
-        .resolve(
-            friendly_domain,
-            std::net::SocketAddr::from(([127, 0, 0, 1], network_port)),
-        )
-        .build()
-        .expect("failed to build reqwest client");
-    let resp = client
-        .get(format!("http://{friendly_domain}:{network_port}/"))
-        .send()
-        .await
-        .expect("friendly domain request failed");
-    let out = resp
-        .text()
-        .await
-        .expect("failed to read friendly domain response body");
-    assert_eq!(out, "hello");
+        .failure()
+        .stderr(
+            contains("no longer supports")
+                .and(contains("assets"))
+                // The message stays recipe-agnostic; it must not leak a specific
+                // recipe identifier.
+                .and(contains("@dfinity/asset-canister").not()),
+        );
 }
 
 #[tokio::test]
@@ -380,13 +289,7 @@ async fn sync_multiple_canisters() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "random-environment",
-        ])
+        .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
 
@@ -409,6 +312,232 @@ async fn sync_multiple_canisters() {
         .stderr(contains("DEBUG icp::progress: syncing canister-a"))
         .stderr(contains("DEBUG icp::progress: syncing canister-b"))
         .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
+}
+
+#[tokio::test]
+async fn sync_plugin_registers_seed_data() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // Create seed-data directory with fruit files
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&seed_data.join("fruit-02.txt"), "banana").expect("failed to write fruit-02.txt");
+    write_string(&seed_data.join("fruit-03.txt"), "cherry").expect("failed to write fruit-03.txt");
+
+    // Manifest: pre-built canister wasm + plugin sync step pointing at the pre-built plugin wasm.
+    // dirs is relative to the project directory and preopened read-only inside the plugin's WASI sandbox.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Mint cycles and deploy. deploy also runs the sync step: the plugin calls
+    // set_uploader (user is controller, so the direct call is permitted), then
+    // calls register for each fruit file directly with the user identity as the uploader.
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Query the canister to verify all three fruits were registered
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("apple")
+                .and(contains("banana"))
+                .and(contains("cherry")),
+        );
+}
+
+#[tokio::test]
+async fn sync_script_icp_env_vars() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // canister-a verifies all four env vars; canister-b verifies cross-canister CID visibility.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "ENV=$ICP_CLI_ENVIRONMENT NET=$ICP_CLI_NETWORK CID=$ICP_CLI_CID B_CID=$ICP_CLI_CID_CANISTER_B"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "B_SEES_A=$ICP_CLI_CID_CANISTER_A"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    let id_mapping: IdMapping = icp::fs::json::load(
+        &project_dir
+            .join(".icp")
+            .join("cache")
+            .join("mappings")
+            .join("random-environment.ids.json"),
+    )
+    .expect("failed to read ID mapping");
+
+    let cid_a = id_mapping
+        .get("canister-a")
+        .expect("canister-a ID not found")
+        .to_text();
+
+    let cid_b = id_mapping
+        .get("canister-b")
+        .expect("canister-b ID not found")
+        .to_text();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["--debug", "sync", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stderr(contains("ENV=random-environment"))
+        .stderr(contains("NET=random-network"))
+        .stderr(contains(format!("CID={cid_a}")))
+        .stderr(contains(format!("B_CID={cid_b}")))
+        .stderr(contains(format!("B_SEES_A={cid_a}")));
+}
+
+#[tokio::test]
+async fn sync_plugin_routes_through_proxy() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // Create seed-data directory with fruit files
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&seed_data.join("fruit-02.txt"), "banana").expect("failed to write fruit-02.txt");
+    write_string(&seed_data.join("fruit-03.txt"), "cherry").expect("failed to write fruit-03.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network (the proxy canister is automatically deployed)
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy through proxy so the proxy canister becomes a controller of my-canister.
+    // deploy also runs the sync step: the plugin routes set_uploader through the proxy
+    // (direct: false, proxy is controller), then calls register directly with the user identity.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Query the canister to verify all three fruits were registered
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("apple")
+                .and(contains("banana"))
+                .and(contains("cherry")),
+        );
 }
 
 #[tokio::test]
@@ -479,13 +608,7 @@ async fn sync_all_canisters_in_environment() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args([
-            "deploy",
-            "--subnet",
-            common::SUBNET_ID,
-            "--environment",
-            "test-env",
-        ])
+        .args(["deploy", "--environment", "test-env"])
         .assert()
         .success();
 

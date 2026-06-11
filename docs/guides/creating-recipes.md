@@ -1,4 +1,7 @@
-# Creating Recipes
+---
+title: Creating Recipes
+description: Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+---
 
 Recipes are reusable build templates that you can create to encode your team's build conventions or share them with the community.
 
@@ -13,14 +16,14 @@ build:
   steps:
     - type: script
       commands:
-        - echo "Building {{ name }}..."
+        - echo "Building {{_.canister.name}}..."
 
 {{! # optional sync step }}
 sync:
   steps:
     - type: script
       commands:
-        - echo "Syncing {{ name }}..."
+        - echo "Syncing {{_.canister.name}}..."
 ```
 
 ## Basic Recipe Example
@@ -76,7 +79,7 @@ build:
   steps:
     - type: script
       commands:
-        - cargo build --package {{configuration.package}}
+        - cargo build --package {{ package }}
 ```
 
 ### Conditionals
@@ -90,10 +93,10 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - ic-wasm target/wasm32-unknown-unknown/release/{{configuration.package}}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - ic-wasm target/wasm32-unknown-unknown/release/{{ package }}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - cp target/wasm32-unknown-unknown/debug/{{configuration.package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - cp target/wasm32-unknown-unknown/debug/{{ package }}.wasm "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 
@@ -142,6 +145,55 @@ canisters:
 ### Default Values
 
 Use `{{#if}}` with `{{else}}` for defaults, refer to the examples above.
+
+## Built-in Recipe Variables
+
+icp-cli automatically injects variables into every recipe template under the reserved `_` namespace. These are available alongside any user-provided `configuration:` values and cannot be overridden by them.
+
+| Variable | Value |
+|---|---|
+| `{{_.canister.name}}` | The canister name as defined in `icp.yaml` |
+
+Use `{{_.canister.name}}` whenever a recipe needs to refer to the canister being built — this avoids requiring users to repeat the name in the `configuration:` block.
+
+Built-in recipe variables work with all Handlebars helpers. For example, the `replace` helper can produce the underscore form of a name required by Rust WASM artifact filenames:
+
+```
+- cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
+- cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+```
+
+User-provided overrides can still be supported with an `{{#if}}` fallback for cases where the user needs to supply a different name (e.g. when the Cargo package name differs from the canister name):
+
+```
+{{#if package}}{{package}}{{else}}{{_.canister.name}}{{/if}}
+```
+
+### Built-in recipe variables vs. environment variables
+
+icp-cli provides two distinct kinds of variables to recipes:
+
+- **`{{_.*}}` built-in recipe variables** — injected at _render time_, when the recipe template is expanded into build/sync steps. Use these in Handlebars expressions.
+- **`$ICP_*` environment variables** — set at _execution time_, when the rendered build commands actually run. Use these inside shell commands.
+
+`{{_.canister.name}}` is available at render time because it is read from `icp.yaml` before any build command is run. `$ICP_WASM_OUTPUT_PATH` must be an environment variable because it is a temporary path computed dynamically at execution time.
+
+## Environment Variables
+
+Recipe scripts have access to runtime environment variables set by icp-cli.
+
+**Build script steps** receive:
+
+- `ICP_WASM_OUTPUT_PATH` — Where to write the compiled WASM file
+
+**Sync script steps** receive:
+
+- `ICP_CLI_ENVIRONMENT` — The current environment name (e.g. `local`, `staging`)
+- `ICP_CLI_NETWORK` — The current network name (e.g. `local`, `ic`)
+- `ICP_CLI_CID` — The canister ID of the canister being synced
+- `ICP_CLI_CID_<NAME>` — The canister ID of every canister with a registered ID in the current environment
+
+See [Environment Variables Reference](../reference/environment-variables.md) for full details.
 
 ## Testing Recipes
 

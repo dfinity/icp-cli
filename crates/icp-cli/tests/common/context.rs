@@ -95,6 +95,7 @@ impl TestContext {
         #[cfg(unix)]
         cmd.env("HOME", self.home_path())
             .env_remove("ICP_HOME")
+            .env_remove("PWD") // don't inherit from the tester's shell
             // Also set XDG directories to ensure isolation on Linux
             .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
             .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
@@ -120,52 +121,6 @@ impl TestContext {
         }
 
         cmd
-    }
-
-    #[cfg(unix)]
-    pub(crate) async fn launcher_path(&self) -> PathBuf {
-        use icp::directories::{Access, Directories};
-        if let Ok(var) = env::var("ICP_CLI_NETWORK_LAUNCHER_PATH") {
-            PathBuf::from(var)
-        } else {
-            // replicate the command's logic to only perform it if needed, and perform it in the user home instead of the test home
-            let cache = Directories::new()
-                .unwrap()
-                .package_cache()
-                .unwrap()
-                .into_write()
-                .await
-                .unwrap();
-            if let Some((_, path)) =
-                icp::network::managed::cache::get_cached_launcher_version_if_fresh(
-                    cache.as_ref().read(),
-                    "latest",
-                )
-                .unwrap()
-            {
-                path
-            } else {
-                let (_ver, path) = icp::network::managed::cache::download_launcher_version(
-                    cache.as_ref(),
-                    "latest",
-                    &reqwest::Client::new(),
-                )
-                .await
-                .unwrap();
-                path
-            }
-        }
-    }
-
-    pub(crate) async fn launcher_path_or_nothing(&self) -> PathBuf {
-        #[cfg(unix)]
-        {
-            self.launcher_path().await
-        }
-        #[cfg(windows)]
-        {
-            PathBuf::new()
-        }
     }
 
     fn build_os_path(bin_dir: &Path) -> OsString {
@@ -239,17 +194,18 @@ impl TestContext {
                 // Also set XDG directories to ensure isolation on Linux
                 .env("XDG_CONFIG_HOME", self.home_path().join(".config"))
                 .env("XDG_DATA_HOME", self.home_path().join(".local/share"))
-                .env("XDG_CACHE_HOME", self.home_path().join(".cache"));
+                .env("XDG_CACHE_HOME", self.home_path().join(".cache"))
+                .env("PWD", project_dir);
         }
         // run in portable mode on Windows, the user directory cannot be mocked
         #[cfg(windows)]
         cmd.env("ICP_HOME", self.home_path().join("icp"));
         cmd.arg("network").arg("start").arg(name);
         #[cfg(unix)]
-        {
-            let launcher_path = self.launcher_path().await;
-            cmd.env("ICP_CLI_NETWORK_LAUNCHER_PATH", launcher_path);
-        }
+        cmd.env(
+            "ICP_CLI_NETWORK_LAUNCHER_PATH",
+            test_network_launcher_path(),
+        );
 
         eprintln!("Running network in {project_dir}");
 
@@ -395,6 +351,52 @@ impl TestContext {
             .expect("Failed to write network descriptor file");
     }
 
+    pub(crate) fn gateway_url(&self) -> &Url {
+        self.http_gateway_url.get().unwrap()
+    }
+
+    /// Returns the ID of an application subnet of the running network.
+    ///
+    /// See [`subnet_id_by_kind`](Self::subnet_id_by_kind) for why discovery happens at runtime.
+    pub(crate) async fn application_subnet_id(&self) -> String {
+        self.subnet_id_by_kind("Application").await
+    }
+
+    /// Returns the ID of a CloudEngine subnet of the running network.
+    ///
+    /// See [`subnet_id_by_kind`](Self::subnet_id_by_kind) for why discovery happens at runtime.
+    pub(crate) async fn cloud_engine_subnet_id(&self) -> String {
+        self.subnet_id_by_kind("CloudEngine").await
+    }
+
+    /// Returns the ID of a subnet with the given `subnet_kind`, querying the running network's
+    /// `/_/topology` endpoint. A topology may contain more than one subnet of a kind; this
+    /// returns one of them and panics if none exist.
+    ///
+    /// Subnet IDs are derived deterministically from the launcher topology, so adding or
+    /// removing subnets shifts them. Discovering the ID at runtime keeps the tests robust
+    /// against launcher topology changes instead of hard-coding an ID.
+    ///
+    /// The network must be started and healthy before calling this.
+    async fn subnet_id_by_kind(&self, subnet_kind: &str) -> String {
+        let topology_url = self.gateway_url().join("/_/topology").unwrap();
+        let topology: serde_json::Value = reqwest::get(topology_url)
+            .await
+            .expect("failed to fetch topology")
+            .json()
+            .await
+            .expect("failed to parse topology");
+
+        topology["subnet_configs"]
+            .as_object()
+            .expect("subnet_configs should be an object")
+            .iter()
+            .find_map(|(id, config)| {
+                (config["subnet_kind"].as_str()? == subnet_kind).then_some(id.clone())
+            })
+            .unwrap_or_else(|| panic!("no {subnet_kind} subnet found in topology"))
+    }
+
     pub(crate) fn agent(&self) -> Agent {
         let agent = Agent::builder()
             .with_url(self.http_gateway_url.get().unwrap().as_str())
@@ -440,20 +442,67 @@ impl TestContext {
             .as_ref()
     }
 
+    /// Get the proxy canister principal from network status JSON output.
+    pub(crate) fn get_proxy_cid(&self, project_dir: &Path, network: &str) -> String {
+        let output = self
+            .icp()
+            .current_dir(project_dir)
+            .args(["network", "status", network, "--json"])
+            .output()
+            .expect("failed to get network status");
+        let status_json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
+        status_json
+            .get("proxy_canister_principal")
+            .and_then(|v| v.as_str())
+            .expect("proxy canister principal not found in network status")
+            .to_string()
+    }
+
     pub(crate) fn docker_pull_network(&self) {
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION")
+        ));
+    }
+
+    pub(crate) fn docker_pull_engine_network(&self) {
+        self.docker_pull_image(concat!(
+            "ghcr.io/dfinity/icp-cli-network-launcher:",
+            env!("TEST_NETWORK_LAUNCHER_VERSION"),
+            "-engine"
+        ));
+    }
+
+    fn docker_pull_image(&self, image: &str) {
         let platform = if cfg!(target_arch = "aarch64") {
             "linux/arm64"
         } else {
             "linux/amd64"
         };
         Command::new("docker")
-            .args([
-                "pull",
-                "--platform",
-                platform,
-                "ghcr.io/dfinity/icp-cli-network-launcher:v11.0.0",
-            ])
+            .args(["pull", "--platform", platform, image])
             .assert()
             .success();
     }
+}
+
+/// Returns the path to the pre-downloaded test network launcher binary.
+///
+/// Panics with a clear message if the launcher has not been downloaded yet.
+/// Run `scripts/download_test_network_launcher.sh` from the repository root first.
+fn test_network_launcher_path() -> PathBuf {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("CARGO_MANIFEST_DIR has unexpected structure");
+    let path = workspace_root.join("target/test-fixture/icp-cli-network-launcher");
+    #[cfg(unix)]
+    assert!(
+        path.exists(),
+        "Test network launcher not found at `{}`.\n\
+         Run `scripts/download_test_network_launcher.sh` from the repository root before running integration tests.",
+        path
+    );
+    path
 }

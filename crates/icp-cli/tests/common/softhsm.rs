@@ -76,7 +76,8 @@ struct GlobalSoftHsmState {
     /// return `CKR_FUNCTION_FAILED` on Windows with SoftHSM2's file-based object store.
     /// This may be a locking bug in SoftHSM2's Windows port or a file-system-level
     /// interference (e.g. antivirus briefly locking token files). Serializing key
-    /// generation eliminates the issue regardless of the exact cause.
+    /// generation greatly reduces the frequency, but does not eliminate it entirely,
+    /// so callers also retry the generation a few times (see [`SoftHsmContext::new`]).
     keygen_lock: std::sync::Mutex<()>,
     // Keep the temp dir alive for the duration of the process
     _token_dir: camino_tempfile::Utf8TempDir,
@@ -178,22 +179,65 @@ impl SoftHsmContext {
         let key_id_bytes = key_num.to_be_bytes();
         let key_id_hex = hex::encode(key_id_bytes);
 
-        // Serialize key generation to prevent intermittent CKR_FUNCTION_FAILED on Windows.
+        // Serialize key generation to reduce intermittent CKR_FUNCTION_FAILED on Windows.
         // See `keygen_lock` field documentation for details.
-        let _keygen_guard = global.keygen_lock.lock().unwrap();
+        //
+        // Recover from a poisoned lock: an earlier test thread may have panicked while
+        // holding it (e.g. after exhausting the retries below). The lock guards no shared
+        // in-memory state — it only serializes PKCS#11 calls — so continuing is safe.
+        let _keygen_guard = global
+            .keygen_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-        // Use the shared PKCS#11 instance from global state
-        let all_slots = global.pkcs11.get_all_slots().expect("failed to get slots");
+        // Generation still fails transiently on Windows even under the lock, so retry a
+        // few times with a short backoff before giving up. Each attempt opens a fresh
+        // session so a half-failed attempt can't leave us with bad session state.
+        const MAX_ATTEMPTS: u32 = 5;
+        let mut slot_index = None;
+        for attempt in 1..=MAX_ATTEMPTS {
+            match Self::try_generate_key_pair(global, key_id_bytes, key_num) {
+                Ok(index) => {
+                    slot_index = Some(index);
+                    break;
+                }
+                Err(e) if attempt < MAX_ATTEMPTS => {
+                    eprintln!(
+                        "key pair generation attempt {attempt}/{MAX_ATTEMPTS} failed: {e}; retrying"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(100 * attempt as u64));
+                }
+                Err(e) => panic!("failed to generate key pair after {MAX_ATTEMPTS} attempts: {e}"),
+            }
+        }
+        let slot_index = slot_index.expect("key generation loop exited without a result");
+
+        Self {
+            library_path: global.library_path.clone(),
+            config_path: global.config_path.clone(),
+            slot_index,
+            key_id: key_id_hex,
+            user_pin: TEST_USER_PIN.to_string(),
+        }
+    }
+
+    /// Perform a single key-pair generation attempt, returning the slot index on success.
+    ///
+    /// Opens a fresh session each call so a transient failure leaves no lingering state.
+    /// Callers retry this on transient `CKR_FUNCTION_FAILED` errors (see [`Self::new`]).
+    fn try_generate_key_pair(
+        global: &GlobalSoftHsmState,
+        key_id_bytes: [u8; 8],
+        key_num: u64,
+    ) -> Result<usize, cryptoki::error::Error> {
+        let all_slots = global.pkcs11.get_all_slots()?;
         let slot = all_slots.first().copied().expect("no slots available");
 
-        let session = global
-            .pkcs11
-            .open_rw_session(slot)
-            .expect("failed to open session");
+        let session = global.pkcs11.open_rw_session(slot)?;
         // Login as user - ignore "already logged in" since tests share the PKCS#11 instance
         match session.login(UserType::User, Some(&AuthPin::new(TEST_USER_PIN.into()))) {
             Ok(()) | Err(cryptoki::error::Error::Pkcs11(RvError::UserAlreadyLoggedIn, _)) => {}
-            Err(e) => panic!("failed to login as user: {e}"),
+            Err(e) => return Err(e),
         }
 
         let pub_template = vec![
@@ -217,22 +261,12 @@ impl SoftHsmContext {
             Attribute::Sign(true),
         ];
 
-        session
-            .generate_key_pair(&Mechanism::EccKeyPairGen, &pub_template, &priv_template)
-            .expect("failed to generate key pair");
+        session.generate_key_pair(&Mechanism::EccKeyPairGen, &pub_template, &priv_template)?;
 
-        let slot_index = all_slots
+        Ok(all_slots
             .iter()
             .position(|s| *s == slot)
-            .expect("slot not found");
-
-        Self {
-            library_path: global.library_path.clone(),
-            config_path: global.config_path.clone(),
-            slot_index,
-            key_id: key_id_hex,
-            user_pin: TEST_USER_PIN.to_string(),
-        }
+            .expect("slot not found"))
     }
 
     /// Get the library path as a string for CLI arguments

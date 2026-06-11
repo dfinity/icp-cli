@@ -1,4 +1,7 @@
-# Using Recipes
+---
+title: Using Recipes
+description: Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
+---
 
 Recipes are reusable build templates that simplify canister configuration. Instead of writing build steps from scratch, you reference a recipe that expands into the full configuration.
 
@@ -51,7 +54,7 @@ For deploying an asset canister with frontend assets:
 canisters:
   - name: frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
 ```

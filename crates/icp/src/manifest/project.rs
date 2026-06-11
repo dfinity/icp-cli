@@ -1,23 +1,20 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::manifest::{
     Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
 };
 
-#[derive(Debug, PartialEq, JsonSchema, Deserialize)]
+#[derive(Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<CanisterManifest>>>")]
     pub canisters: Vec<Item<CanisterManifest>>,
 
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<NetworkManifest>>>")]
     pub networks: Vec<Item<NetworkManifest>>,
 
     #[serde(default)]
-    #[schemars(with = "Option<Vec<Item<EnvironmentManifest>>>")]
     pub environments: Vec<Item<EnvironmentManifest>>,
 }
 
@@ -30,7 +27,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
-            InitArgsFormat, ManifestInitArgs,
+            ArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -459,7 +456,7 @@ mod tests {
                             "canister-2".to_string(),
                             ManifestInitArgs::Value {
                                 value: "4449444c0000".to_string(),
-                                format: InitArgsFormat::Hex,
+                                format: ArgsFormat::Hex,
                             },
                         ),
                     ])),

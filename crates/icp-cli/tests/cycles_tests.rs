@@ -240,10 +240,16 @@ async fn cycles_transfer() {
         .success();
 
     // Check bob's balance
-    icp_client.use_identity("bob");
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["cycles", "balance", "--environment", "random-environment"])
+        .args([
+            "cycles",
+            "balance",
+            "--of-principal",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
         .assert()
         .stdout(contains("Balance: 2_000_000_000_000 cycles"))
         .success();

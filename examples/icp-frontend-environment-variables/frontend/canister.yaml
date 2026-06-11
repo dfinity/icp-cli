@@ -1,5 +1,3 @@
-# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/canister-yaml-schema.json
-
 name: frontend
 
 build:
@@ -16,6 +14,8 @@ build:
 
 sync:
   steps:
-    - type: assets
+    - type: plugin
+      url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
+      sha256: 297c2ef05680d47ac70688d6cebed9bc3a41b2302f400739f894f4f413e6a5ee
       dirs:
         - app/dist

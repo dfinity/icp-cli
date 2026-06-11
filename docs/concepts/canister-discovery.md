@@ -1,4 +1,7 @@
-# Canister Discovery
+---
+title: Canister Discovery
+description: How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
+---
 
 How icp-cli enables canisters to discover each other through automatic ID injection.
 

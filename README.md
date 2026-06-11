@@ -26,7 +26,7 @@ If you're coming from dfx (the previous Internet Computer SDK), see the **[Migra
 
 ## Documentation
 
-📚 **[Full Documentation Site](https://dfinity.github.io/icp-cli/)** — Complete guides, tutorials, and reference
+📚 **[Full Documentation Site](https://cli.internetcomputer.org)** — Complete guides, tutorials, and reference
 
 Or browse the markdown docs directly:
 
@@ -107,9 +107,6 @@ cargo fmt && cargo clippy
 # Preview documentation site locally
 cd docs-site && npm install && npm run dev
 # Opens at http://localhost:4321
-
-# Prepare docs for build (runs automatically during build)
-./scripts/prepare-docs.sh
 ```
 
 Documentation structure follows the [Diátaxis framework](https://diataxis.fr/):

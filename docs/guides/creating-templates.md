@@ -1,4 +1,7 @@
-# Creating Project Templates
+---
+title: Creating Project Templates
+description: Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
+---
 
 Project templates let users scaffold new ICP projects with `icp new`. This guide covers creating custom templates for your team or the community.
 
@@ -88,7 +91,7 @@ canisters:
   {% if include_frontend %}
   - name: {{project-name}}-frontend
     recipe:
-      type: "@dfinity/asset-canister@v2.1.0"
+      type: "@dfinity/asset-canister@v2.2.1"
       configuration:
         dir: dist
   {% endif %}

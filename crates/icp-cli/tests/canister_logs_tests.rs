@@ -365,3 +365,82 @@ async fn canister_logs_filter_by_timestamp() {
         .success()
         .stdout(contains("Timestamped message"));
 }
+
+// Ignored: fetch_canister_logs is not yet available in replicated mode.
+// Tracking: https://github.com/dfinity/portal/pull/6106
+#[ignore]
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_logs_through_proxy() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let proxy_cid = ctx.get_proxy_cid(&project_dir, "random-network");
+
+    // Deploy logger through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "logger",
+            "--proxy",
+            &proxy_cid,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Create some logs by calling through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "logger",
+            "log",
+            "(\"Proxy log message\")",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success();
+
+    // Fetch logs through proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Proxy log message"));
+}

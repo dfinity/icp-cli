@@ -1,4 +1,7 @@
-# Installation
+---
+title: Installation
+description: Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
+---
 
 Set up everything you need to build and deploy canisters on the Internet Computer.
 
@@ -160,7 +163,7 @@ The network launcher downloads automatically on first use. If it fails:
 
 ## Next Steps
 
-- [Quickstart](../quickstart.md) — Deploy a full-stack app in under 5 minutes
+- [Quickstart](../quickstart.md) — Deploy a fullstack app in under 5 minutes
 - [Tutorial](../tutorial.md) — Understand each step in detail
 - [Local Development](local-development.md) — Day-to-day workflow
 

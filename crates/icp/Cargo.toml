@@ -14,6 +14,7 @@ bollard = { workspace = true }
 camino = { workspace = true }
 camino-tempfile = { workspace = true }
 candid = { workspace = true }
+crypto-bigint = { workspace = true }
 candid_parser = { workspace = true }
 clap = { workspace = true, optional = true }
 directories = { workspace = true }
@@ -26,15 +27,18 @@ futures = { workspace = true }
 glob = { workspace = true }
 handlebars = { workspace = true }
 hex = { workspace = true }
+hmac = { workspace = true }
+hybrid-array = { workspace = true }
 ic-agent = { workspace = true }
-ic-asset = { workspace = true }
 ic-ed25519 = { workspace = true }
 ic-identity-hsm = { workspace = true }
 ic-ledger-types = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-utils = { workspace = true }
 icp-canister-interfaces = { workspace = true }
+icp-sync-plugin = { workspace = true }
 icrc-ledger-types = { workspace = true }
+indexmap = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 k256 = { workspace = true }
@@ -57,7 +61,6 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 sha2 = { workspace = true }
 shellwords = { workspace = true }
-slog = { workspace = true }
 snafu = { workspace = true }
 strum = { workspace = true }
 sysinfo = { workspace = true }

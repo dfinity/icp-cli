@@ -1,7 +1,10 @@
+use std::io::stdout;
+
 use bigdecimal::BigDecimal;
 use clap::Args;
 use icp::context::Context;
 use icp::parsers::parse_token_amount;
+use serde::Serialize;
 
 use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
 use crate::commands::parsers::parse_subaccount;
@@ -30,6 +33,14 @@ pub(crate) struct TransferArgs {
 
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    pub(crate) json: bool,
+
+    /// Suppress human-readable output; print only the block index
+    #[arg(long, short)]
+    pub(crate) quiet: bool,
 }
 
 pub(crate) async fn exec(
@@ -65,11 +76,26 @@ pub(crate) async fn exec(
     let transfer_info =
         transfer(&agent, args.from_subaccount, token, &args.amount, &receiver).await?;
 
-    // Output information
-    println!(
-        "Transferred {} to {} in block {}",
-        transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
-    );
+    if args.json {
+        serde_json::to_writer(
+            stdout(),
+            &JsonTransfer {
+                block_index: transfer_info.block_index.to_string(),
+            },
+        )?;
+    } else if args.quiet {
+        println!("{}", transfer_info.block_index);
+    } else {
+        println!(
+            "Transferred {} to {} in block {}",
+            transfer_info.transferred, transfer_info.receiver_display, transfer_info.block_index
+        );
+    }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonTransfer {
+    block_index: String,
 }

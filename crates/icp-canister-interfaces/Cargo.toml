@@ -8,4 +8,5 @@ publish.workspace = true
 [dependencies]
 bigdecimal = { workspace = true }
 candid = { workspace = true }
+ic-management-canister-types = { workspace = true }
 serde = { workspace = true }

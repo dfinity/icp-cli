@@ -1,4 +1,7 @@
-# Build, Deploy, Sync
+---
+title: Build, Deploy, Sync
+description: Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
+---
 
 Canisters go through three distinct phases when moving from source code to running on the Internet Computer.
 
@@ -95,8 +98,12 @@ When deploying a canister for the first time:
 When the canister already exists:
 
 1. The existing canister is located by ID
-2. New WASM code is **upgraded** (preserving stable memory)
-3. Settings are updated if changed
+2. The canister is **stopped** (waits for in-flight messages to finish)
+3. New WASM code is **upgraded** (preserving stable memory)
+4. The canister is **started** again
+5. Settings are updated if changed
+
+Stopping the canister before upgrading ensures no messages are being processed during the code swap, preventing potential data inconsistencies.
 
 ## Sync Phase
 
@@ -105,17 +112,43 @@ The sync phase handles post-deployment operations that depend on the canister be
 ### Common Use Cases
 
 - **Asset canisters** — Upload static files after the canister is running
+- **Seeding or configuring state** — Make post-deployment canister calls
 
-### Asset Sync
+### Plugin Sync Steps
 
-For frontend canisters, sync uploads your built assets:
+A `plugin` sync step runs a sandboxed WebAssembly [sync plugin](sync-plugins.md)
+against the canister being synced. This is how post-deployment operations like
+asset uploads work — for frontend canisters you typically upload your built
+assets with a plugin provided by a recipe (such as `@dfinity/asset-canister`)
+rather than a built-in step.
+
+A plugin can call update and query methods on the canister and read directories
+and files you declare, all inside a WASI sandbox with no network or write access.
+See [Sync Plugins](sync-plugins.md) for the full mechanism and [Writing a Sync
+Plugin](../guides/writing-sync-plugins.md) to author your own.
+
+### Script Sync Steps
+
+You can also run arbitrary shell commands in sync steps:
 
 ```yaml
 sync:
   steps:
-    - type: assets
-      dir: dist
+    - type: script
+      commands:
+        - my-tool upload --canister "$ICP_CLI_CID" --env "$ICP_CLI_ENVIRONMENT"
 ```
+
+### Environment Variables
+
+Script sync steps have access to:
+
+- `ICP_CLI_ENVIRONMENT` — The current environment name (e.g. `local`, `staging`)
+- `ICP_CLI_NETWORK` — The current network name (e.g. `local`, `ic`)
+- `ICP_CLI_CID` — The canister ID of the canister being synced
+- `ICP_CLI_CID_<NAME>` — The canister ID of every canister with a registered ID in the current environment (name uppercased, non-alphanumeric characters replaced with `_`)
+
+See [Environment Variables Reference](../reference/environment-variables.md#sync-script-variables) for full details.
 
 ### When Sync Runs
 
@@ -158,7 +191,7 @@ The `icp deploy` command is a composite command that executes multiple steps in 
 **Subsequent deployments:**
 - Skip the canister creation
 - Settings and Canister Environment Variables are applied if they've changed.
-- WASM code is upgraded, preserving canister state
+- Canisters are stopped, WASM code is upgraded (preserving canister state), then canisters are restarted
 
 Unlike `icp canister create` (which prints "already exists" and exits), `icp deploy` silently skips creation for existing canisters and continues with the remaining steps.
 

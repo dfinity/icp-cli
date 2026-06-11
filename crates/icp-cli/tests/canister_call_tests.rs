@@ -210,6 +210,120 @@ async fn canister_call_with_arguments_from_file() {
 }
 
 #[tokio::test]
+async fn canister_call_with_candid_file() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // A Candid interface describing the canister's `greet` method.
+    write_string(
+        &project_dir.join("service.did"),
+        r#"service : { "greet" : (text) -> (text) query }"#,
+    )
+    .expect("failed to write candid file");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Deploy canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // Calling with a local Candid file uses that interface instead of fetching
+    // it from the network. The typed decode recovers the expected response.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--candid",
+            "service.did",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // The supplied interface — not the network's — drives method typing.
+    // Declaring `greet` as an update method makes `--query` reject the call,
+    // even though the canister actually exposes `greet` as a query. This proves
+    // the local file overrides what the network would report.
+    write_string(
+        &project_dir.join("update.did"),
+        r#"service : { "greet" : (text) -> (text) }"#,
+    )
+    .expect("failed to write candid file");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--query",
+            "--candid",
+            "update.did",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("update method"));
+
+    // A missing or unparsable file is surfaced as an error rather than silently
+    // falling back to the network.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--candid",
+            "does-not-exist.did",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("failed to load Candid interface"));
+}
+
+#[tokio::test]
 async fn canister_call_through_proxy() {
     let ctx = TestContext::new();
 
@@ -421,6 +535,72 @@ async fn canister_call_output_modes() {
         stdout, expected_text,
         "text output must equal GREET_HEX decoded as UTF-8"
     );
+}
+
+#[tokio::test]
+async fn canister_call_json_output() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("write manifest");
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let out = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "--json",
+            "my-canister",
+            "greet",
+            "(\"world\")",
+        ])
+        .output()
+        .expect("run call");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Regression: stdout was blank because the buffered term was never flushed.
+    assert!(
+        !out.stdout.is_empty(),
+        "stdout must not be blank with --json"
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout must be valid JSON");
+    // Candid encoding of ("Hello, world!") — didc encode '("Hello, world!")'
+    assert_eq!(
+        json["response_bytes"],
+        "4449444c0001710d48656c6c6f2c20776f726c6421"
+    );
+    assert_eq!(json["response_candid"], "(\"Hello, world!\")");
+    assert!(json["response_text"].is_null());
 }
 
 #[tokio::test]

@@ -1,3 +1,5 @@
+use std::io::stdout;
+
 use anyhow::Context as _;
 use bip39::{Language, Mnemonic, MnemonicType};
 use clap::Args;
@@ -6,13 +8,15 @@ use elliptic_curve::zeroize::Zeroizing;
 use icp::{
     fs::write_string,
     identity::{
-        key::{CreateFormat, IdentityKey, create_identity, validate_password},
-        seed::derive_default_key_from_seed,
+        key::{CreateFormat, create_identity, validate_password},
+        manifest::{IdentityKeyAlgorithm, IdentityList},
+        seed::derive_key_from_seed_slip10,
     },
     prelude::*,
 };
 
 use icp::context::Context;
+use serde::Serialize;
 use tracing::{info, warn};
 
 use crate::commands::identity::StorageMode;
@@ -34,9 +38,30 @@ pub(crate) struct NewArgs {
     /// Write the seed phrase to a file instead of printing to stdout
     #[arg(long, value_name = "FILE")]
     output_seed: Option<PathBuf>,
+
+    /// Output command results as JSON
+    #[arg(long, conflicts_with = "quiet")]
+    json: bool,
+
+    /// Suppress human-readable output; print only the seed phrase
+    #[arg(long, short)]
+    quiet: bool,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Error> {
+    ctx.dirs
+        .identity()?
+        .with_read(async |dirs| -> Result<(), anyhow::Error> {
+            let list = IdentityList::load_from(dirs).context("failed to load identity list")?;
+            anyhow::ensure!(
+                !list.identities.contains_key(&args.name),
+                "identity `{}` already exists",
+                args.name
+            );
+            Ok(())
+        })
+        .await??;
+
     let mnemonic = Mnemonic::new(
         MnemonicType::for_key_size(256).context("failed to get mnemonic type")?,
         Language::English,
@@ -70,7 +95,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
             create_identity(
                 dirs,
                 &args.name,
-                IdentityKey::Secp256k1(derive_default_key_from_seed(&mnemonic)),
+                derive_key_from_seed_slip10(&mnemonic, &IdentityKeyAlgorithm::Secp256k1),
                 format,
             )
         })
@@ -95,9 +120,25 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
             warn!(
                 "Write the seed phrase down and store it in a secure location. If you lose it, you will lose access to your identity."
             );
-            println!("Your seed phrase: {mnemonic}");
+            if args.json {
+                serde_json::to_writer(
+                    stdout(),
+                    &JsonNew {
+                        seed_phrase: mnemonic.to_string(),
+                    },
+                )?;
+            } else if args.quiet {
+                println!("{mnemonic}");
+            } else {
+                println!("Your seed phrase: {mnemonic}");
+            }
         }
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JsonNew {
+    seed_phrase: String,
 }

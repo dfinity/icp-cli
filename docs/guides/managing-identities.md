@@ -1,4 +1,7 @@
-# Managing Identities
+---
+title: Managing Identities
+description: Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+---
 
 This is a detailed reference for identity management. If you're deploying to mainnet for the first time, start with [Deploying to Mainnet](deploying-to-mainnet.md) instead.
 
@@ -136,6 +139,62 @@ Or enter interactively:
 ```bash
 icp identity import my-identity --read-seed-phrase
 ```
+
+## Linking a Web-Based Identity
+
+Sign in to a web-based authentication service and link the resulting identity into icp-cli. **Internet Identity** is one example; the icp-cli default points at [id.ai](https://id.ai), but any service that publishes a `/.well-known/cli-auth-config` for the icp-cli web-auth protocol works the same way.
+
+With Internet Identity, every app sees a *different* principal for the same user. Linking a web-based identity means picking which app you want to sign in *as*. Pass that app's domain with `--app`:
+
+```bash
+# Sign in as your NNS identity
+icp identity link web nns-identity --app nns.ic0.app
+
+# Sign in as your OISY identity
+icp identity link web oisy-identity --app oisy.com
+```
+
+This opens your browser at the auth provider's sign-in page. Once you complete sign-in, the browser hands the delegation back to icp-cli and the identity is stored locally under the chosen name. The resulting principal matches the one the app would see in its own UI. Note that apps may use `alternativeOrigin` with II - the correct domain is `nns.ic0.app`, not `nns.internetcomputer.org`, which would give you a different principal.
+
+When `--app` is omitted, the auth provider picks its own default (id.ai uses `cli.id.ai`):
+
+```bash
+icp identity link web my-cli-identity
+```
+
+### Using a Different Auth Provider
+
+To sign in through a service other than id.ai, for example a different Internet Identity frontend or a self-hosted auth domain, pass its domain with `--auth`:
+
+```bash
+icp identity link web my-identity --auth identity.example.com
+```
+
+The auth domain must serve a `/.well-known/cli-auth-config` describing its login path. `--auth` and `--app` can be combined.
+
+### Storage
+
+Web-linked identities support the same [storage options](#storage-options) as `icp identity new`; the keyring (default) or a password-protected file holds the session key that the delegation authorizes.
+
+### Re-Authenticating an Expired Identity
+
+Delegations granted by web sign-in eventually expire. When that happens, refresh the identity:
+
+```bash
+icp identity reauth my-identity
+```
+
+This opens your browser again to sign in. You must complete sign-in as the **same** identity originally linked; if a different one comes back, the CLI rejects it and prompts you to retry in the same browser session.
+
+## Choosing a Creation Command
+
+icp-cli has three commands that produce an identity, distinguished by where the signing key lives:
+
+- **`icp identity new`** generates a fresh key locally.
+- **`icp identity import`** takes an existing key (a PEM file or seed phrase) and stores it locally.
+- **`icp identity link`** creates an identity whose key is held elsewhere: `link hsm` for a hardware device (such as a YubiKey via PKCS#11), `link web` for a web-based identity such as Internet Identity.
+
+All three produce identities that work identically with downstream commands like `deploy`, `canister`, and `cycles`.
 
 ## Exporting Identities
 

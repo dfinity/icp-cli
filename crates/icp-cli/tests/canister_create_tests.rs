@@ -4,8 +4,12 @@ use predicates::{
     prelude::PredicateBooleanExt,
     str::{contains, starts_with},
 };
+use test_tag::tag;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
+    TestContext, clients,
+};
 use icp::{fs::write_string, prelude::*};
 
 mod common;
@@ -66,6 +70,68 @@ async fn canister_create() {
     assert!(
         id_mapping_path.exists(),
         "ID mapping file should exist at {id_mapping_path}"
+    );
+}
+
+/// Verifies that `canister create --subnet <id>` creates the canister on the requested subnet.
+///
+/// The network is configured with multiple application subnets so the placement is an actual
+/// choice: if `--subnet` were ignored (and a subnet picked by default instead), the canister
+/// could land on a different one and the assertion would fail.
+#[tokio::test]
+async fn canister_create_on_requested_subnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+            subnets: [application, application]
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let subnet_id = ctx.application_subnet_id().await;
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--subnet",
+            &subnet_id,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister must be created on exactly the subnet we requested.
+    let actual_subnet = clients::registry(&ctx)
+        .get_subnet_for_canister(icp_client.get_canister_id("my-canister"))
+        .await;
+    assert_eq!(
+        actual_subnet.to_string(),
+        subnet_id,
+        "canister should be created on the requested subnet"
     );
 }
 
@@ -389,6 +455,38 @@ fn canister_create_nonexistent_canister() {
 }
 
 #[test]
+fn canister_create_unknown_controller_name() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" references "typo" as a controller, but no canister with that name is
+    // declared. consolidate_manifest must reject the manifest at load time rather than
+    // letting it through as a perpetual warning.
+    let pm = indoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - typo
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "create", "a"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "canister 'a' lists controller 'typo', but no canister with that name is declared in the project",
+        ));
+}
+
+#[test]
 fn canister_create_canister_not_in_environment() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
@@ -536,4 +634,438 @@ async fn canister_create_detached() {
         ])
         .assert()
         .failure();
+}
+
+#[tokio::test]
+async fn canister_create_through_proxy() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Get the proxy canister ID from network status
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "random-network", "--json"])
+        .output()
+        .expect("failed to get network status");
+    let status_json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("failed to parse network status JSON");
+    let proxy_cid = status_json
+        .get("proxy_canister_principal")
+        .and_then(|v| v.as_str())
+        .expect("proxy canister principal not found in network status")
+        .to_string();
+
+    // Create canister through the proxy
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--proxy",
+            &proxy_cid,
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Created canister my-canister with ID"));
+
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("random-environment.ids.json");
+    assert!(
+        id_mapping_path.exists(),
+        "ID mapping file should exist at {id_mapping_path}"
+    );
+}
+
+#[tokio::test]
+async fn canister_create_with_fixed_controller_principals() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // "aaaaa-aa" is the management canister principal — a convenient fixed value.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - "aaaaa-aa"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The controller list must include both the declared principal and the active identity
+    // (2vxsx-fae = anonymous principal). The greenfield injection ensures the caller retains
+    // access even when manifest controllers are set.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains("aaaaa-aa"))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_resolved_canister_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" lists "b" as a controller by name.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - b
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    // Create "b" first so that when "a" is created the controller reference resolves immediately.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let b_principal = client.get_canister_id("b").to_string();
+
+    // Creating "a" should produce no warning: "b" is already on-chain.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("has not been created yet").not());
+
+    // "a"'s controllers must include "b"'s principal and the active identity (2vxsx-fae).
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(b_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Canister "a" lists "b" as a controller by name.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: a
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - b
+          - name: b
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    // Create "a" before "b" — "b" is unresolved, so a warning must be emitted.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains(
+            "Controller canister 'b' for 'a' has not been created yet",
+        ));
+
+    // At this point "a" is only controlled by the active identity; "b" is not yet a controller.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Controllers: 2vxsx-fae"));
+
+    // Creating "b" triggers sync_controller_dependents, which updates "a"'s controller list.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "b",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let b_principal = client.get_canister_id("b").to_string();
+
+    // After "b" is created, "a"'s controllers must include "b"'s principal.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "a",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(b_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tokio::test]
+async fn canister_create_with_self_as_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // A canister that lists itself as a controller. The ID is unknown at create time,
+    // so the reference is unresolved initially and resolved by sync_controller_dependents
+    // once the ID is registered.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+            settings:
+              controllers:
+                - my-canister
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(100 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let canister_principal = client.get_canister_id("my-canister").to_string();
+
+    // The canister must appear in its own controller list alongside the active identity.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("Controllers:")
+                .and(contains(canister_principal.as_str()))
+                .and(contains("2vxsx-fae")),
+        );
+}
+
+#[tag(docker)]
+#[tokio::test]
+async fn canister_create_cloud_engine() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_DOCKER_ENGINE}
+        {ENVIRONMENT_DOCKER_ENGINE}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.docker_pull_engine_network();
+    let _guard = ctx
+        .start_network_in(&project_dir, "docker-engine-network")
+        .await;
+    ctx.ping_until_healthy(&project_dir, "docker-engine-network");
+
+    // Find the CloudEngine subnet by querying the topology endpoint
+    // TODO replace with a subnet selection parameter once we have one
+    let cloud_engine_subnet_id = ctx.cloud_engine_subnet_id().await;
+
+    // Create the canister on the CloudEngine subnet
+    // Only the admin can do this. In local envs, the admin is the anonymous principal
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--subnet",
+            &cloud_engine_subnet_id,
+            "--environment",
+            "docker-engine-environment",
+        ])
+        .assert()
+        .success();
+
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("docker-engine-environment.ids.json");
+    assert!(
+        id_mapping_path.exists(),
+        "ID mapping file should exist at {id_mapping_path}"
+    );
 }

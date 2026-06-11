@@ -34,15 +34,16 @@ fn validate_name(s: &str) -> Result<String, String> {
 /// Under the hood templates are generated with `cargo-generate`.
 /// See the cargo-generate docs for a guide on how to write your own templates:
 /// https://docs.rs/cargo-generate/0.23.7/cargo_generate/
-#[derive(Clone, Debug, Args)]
+#[derive(Clone, Debug, Default, Args)]
 pub struct IcpGenerateArgs {
     #[command(flatten)]
     pub template_path: IcpTemplatePath,
 
     /// Directory to create / project name; if the name isn't in kebab-case, it will be converted
     /// to kebab-case unless `--force` is given.
-    #[arg(value_parser = validate_name)]
-    pub name: String,
+    /// Optional when `--init` is used: defaults to the name of the current directory.
+    #[arg(value_parser = validate_name, required_unless_present = "init")]
+    pub name: Option<String>,
 
     /// Don't convert the project name to kebab-case before creating the directory. Note that
     /// `icp-cli` won't overwrite an existing directory, even if `--force` is given.
@@ -58,9 +59,11 @@ pub struct IcpGenerateArgs {
     #[arg(long, action)]
     pub continue_on_error: bool,
 
-    /// If silent mode is set all variables will be extracted from the template_values_file. If a
-    /// value is missing the project generation will fail
-    #[arg(long, short, requires("name"), action)]
+    /// Non-interactive mode: suppresses all prompts. Unset variables fall back to their
+    /// template-defined defaults; generation fails if a required variable has no default.
+    /// Combine with --define to supply values for variables that have no default in the template.
+    /// Use for CI or automated/agent contexts.
+    #[arg(long, short, action)]
     pub silent: bool,
 
     /// Specify the VCS used to initialize the generated template.
@@ -77,7 +80,9 @@ pub struct IcpGenerateArgs {
     #[arg(long = "gitconfig", value_parser, value_name="GITCONFIG_FILE", help_heading = heading::GIT_PARAMETERS)]
     pub gitconfig: Option<PathBuf>,
 
-    /// Define a value for use during template expansion. E.g `--define foo=bar`
+    /// Set a template variable in KEY=VALUE format (e.g. --define project_name=my-app).
+    /// Variable names are template-specific. Suppresses the interactive prompt for that variable.
+    /// Required in --silent mode for any template variable that has no default value.
     #[arg(long, short, number_of_values = 1, value_parser, help_heading = heading::OUTPUT_PARAMETERS)]
     pub define: Vec<String>,
 
@@ -104,33 +109,11 @@ pub struct IcpGenerateArgs {
     pub skip_submodules: bool,
 }
 
-impl Default for IcpGenerateArgs {
-    fn default() -> Self {
-        Self {
-            template_path: IcpTemplatePath::default(),
-            name: "".to_string(), // name is a required arg
-            force: false,
-            quiet: false,
-            continue_on_error: false,
-            silent: false,
-            vcs: None,
-            ssh_identity: None,
-            gitconfig: None,
-            define: Vec::default(),
-            init: false,
-            destination: None,
-            force_git_init: false,
-            overwrite: false,
-            skip_submodules: false,
-        }
-    }
-}
-
 impl From<IcpGenerateArgs> for GenerateArgs {
     fn from(f: IcpGenerateArgs) -> Self {
         Self {
             template_path: f.template_path.into(),
-            name: Some(f.name),
+            name: f.name,
             force: f.force,
             quiet: f.quiet,
             continue_on_error: f.continue_on_error,
@@ -196,6 +179,23 @@ impl From<IcpTemplatePath> for TemplatePath {
     }
 }
 
+fn resolve_name(args: &IcpGenerateArgs) -> Result<Option<String>, anyhow::Error> {
+    if args.name.is_some() {
+        return Ok(args.name.clone());
+    }
+
+    let cwd = std::env::current_dir().context("Failed to get current directory")?;
+    let dir_name = cwd
+        .file_name()
+        .context("Current directory has no name")?
+        .to_str()
+        .context("Current directory name is not valid UTF-8")?;
+    let name = validate_name(dir_name).map_err(|e| {
+        anyhow::anyhow!("Current directory name '{dir_name}' is not a valid project name: {e}")
+    })?;
+    Ok(Some(name))
+}
+
 pub(crate) async fn exec(
     ctx: &icp::context::Context,
     args: &IcpGenerateArgs,
@@ -206,8 +206,11 @@ pub(crate) async fn exec(
         anyhow::bail!("--quiet and --debug cannot be used together");
     }
 
-    let mut generate_args: GenerateArgs = args.clone().into();
-    generate_args.verbose = ctx.debug; // There is a global --debug flag
+    let mut args = args.clone();
+    args.name = resolve_name(&args)?;
+
+    let mut generate_args: GenerateArgs = args.into();
+    generate_args.verbose = ctx.debug;
     let generate_args = generate_args.clone();
 
     debug!("Generating project with {generate_args:#?}");

@@ -24,6 +24,7 @@ use icp::{
     prelude::*,
 };
 use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rand::RngExt as _;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
@@ -107,9 +108,10 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let identity_key = key::IdentityKey::Ed25519(secret_key.clone());
     let basic = BasicIdentity::from_raw_key(&secret_key.serialize_raw());
     let der_public_key = basic.public_key().expect("ed25519 always has a public key");
+    let origin = args.app.as_deref().map(guesstimate_origin);
 
     // Linking creates a brand-new identity, so there is no principal to match against.
-    let chain = recv_delegation(&args.auth, args.app.as_deref(), &der_public_key, None)
+    let chain = recv_delegation(&args.auth, origin.as_deref(), &der_public_key, None)
         .await
         .context(PollSnafu)?;
 
@@ -117,15 +119,6 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let remote_principal = Principal::self_authenticating(&from_key);
 
     let auth = args.auth.clone();
-    let app = args.app.clone().map(|app| {
-        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is.
-        // Temporary hack: NNS is the most common app that would break. Special-case it
-        if app == "nns.internetcomputer.org" {
-            "nns.ic0.app".to_string()
-        } else {
-            app
-        }
-    });
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
@@ -137,7 +130,7 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
                 remote_principal,
                 create_format,
                 auth,
-                app,
+                origin,
             )
         })
         .await?
@@ -511,4 +504,31 @@ async fn handle_callback(
 
     finish(&state, Ok(chain));
     Redirect::to(&state.success_url).into_response()
+}
+
+fn guesstimate_origin(origin: &str) -> String {
+    let origin = origin
+        .split_once("://")
+        .map_or(origin, |(_, rest)| rest)
+        .trim_end_matches('/');
+    if origin == "nns.internetcomputer.org" {
+        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is at the time of writing.
+        // Temporary hack: NNS is the most common app that would break. Special-case it
+        return "nns.ic0.app".to_string();
+    }
+    // Rewrite <principal>.icp0.io and <principal>.icp.net to <principal>.ic0.app, since that's what Internet Identity uses for them.
+    // Only required for icp.net at the time of writing, and could be obsolete in the future.
+    let parts: Vec<_> = origin.split('.').collect();
+    if parts.len() <= 2 {
+        return origin.to_string();
+    }
+    let (stem, root) = parts.split_at(parts.len() - 2);
+    if (root == ["icp0", "io"] || root == ["icp", "net"])
+        && (stem.len() == 1 || (stem.len() == 2 && stem[1] == "raw"))
+        && Principal::from_text(stem[0]).is_ok()
+    {
+        stem.iter().chain(&["ic0", "app"]).format(".").to_string()
+    } else {
+        origin.to_string()
+    }
 }

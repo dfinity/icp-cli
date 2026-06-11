@@ -6,7 +6,7 @@ pub const SECOND: u64 = 1;
 pub const MINUTE: u64 = 60 * SECOND;
 
 pub const IC_MAINNET_NETWORK_API_URL: &str = "https://icp-api.io";
-pub const IC_MAINNET_NETWORK_GATEWAY_URL: &str = "https://icp0.io";
+pub const IC_MAINNET_NETWORK_GATEWAY_URL: &str = "https://icp.net";
 /// Name of the implicit IC mainnet network and its implicit environment
 pub const IC: &str = "ic";
 /// Name of the implicit local managed network and its implicit environment

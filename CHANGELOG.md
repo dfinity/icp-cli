@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* feat: The default gateway domain is now `icp.net`, not `icp0.io`.
+* fix: Web-auth identities now correctly use `ic0.app` for their delegation domains, not `icp0.io` or `icp.net`.
 * feat!: Remove `--set-controller` and replace with a new flag `--remove-all-controllers`. For the old behavior, combine this flag with `--add-controller`
 
 # v0.3.2

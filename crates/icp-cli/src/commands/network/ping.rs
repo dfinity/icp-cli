@@ -49,6 +49,14 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
         && let Ok(url) = Url::parse(name)
         && (url.scheme() == "http" || url.scheme() == "https")
     {
+        // A URL and an environment flag are mutually exclusive, same as a name and an environment.
+        if args.network_selection.environment.is_some() {
+            bail!(
+                "Cannot specify both a network URL and environment. \
+                 Use either a URL or -e/--environment, not both."
+            );
+        }
+
         // URL supplied directly: skip project loading
         ctx.get_agent_for_url(&IdentitySelection::Anonymous, &url)
             .await?

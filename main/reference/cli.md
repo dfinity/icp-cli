@@ -69,6 +69,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp settings update-check`↴](#icp-settings-update-check)
+* [`icp settings session-length`↴](#icp-settings-session-length)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -947,7 +948,7 @@ Manage your identities
 * `list` — List the identities
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
-* `reauth` — Re-authenticate a delegation-based identity
+* `reauth` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
 * `rename` — Rename an identity
 
 
@@ -1237,13 +1238,17 @@ Display the principal for the current identity
 
 ## `icp identity reauth`
 
-Re-authenticate a delegation-based identity
+Re-authenticate an Internet Identity delegation or create a PEM session delegation
 
-**Usage:** `icp identity reauth <NAME>`
+**Usage:** `icp identity reauth [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
 * `<NAME>` — Name of the identity to re-authenticate
+
+###### **Options:**
+
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for web-auth identities
 
 
 
@@ -1545,6 +1550,7 @@ Configure user settings
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
 * `telemetry` — Enable or disable anonymous usage telemetry
 * `update-check` — Enable or disable the CLI update check
+* `session-length` — Set the session length for password-protected PEM identities
 
 
 
@@ -1590,6 +1596,20 @@ Enable or disable the CLI update check
 
   Possible values: `releases`, `betas`, `disabled`
 
+
+
+
+## `icp settings session-length`
+
+Set the session length for password-protected PEM identities
+
+**Usage:** `icp settings session-length [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
+
+   Note that due to clock drift, 2 minutes are added to the given value, so `5m` produces a 7-minute-expiry delegation. `disabled` turns off session caching entirely.
 
 
 

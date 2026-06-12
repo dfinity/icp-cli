@@ -9,6 +9,7 @@ Configure user settings
 * [`autocontainerize`](settings-autocontainerize.md) — Use Docker for the network launcher even when native mode is requested
 * [`telemetry`](settings-telemetry.md) — Enable or disable anonymous usage telemetry
 * [`update-check`](settings-update-check.md) — Enable or disable the CLI update check
+* [`session-length`](settings-session-length.md) — Set the session length for password-protected PEM identities
 
 
 

@@ -298,6 +298,20 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
+* `--wasm-memory-persistence <WASM_MEMORY_PERSISTENCE>` — For Motoko canisters with enhanced orthogonal persistence (EOP), controls whether the canister's main (Wasm) memory is preserved across an upgrade.
+
+   Only valid with `--mode upgrade` on an EOP canister.
+
+   - `keep`: preserve main memory — the normal EOP upgrade (the default if this flag is omitted).
+
+   - `replace`: discard main memory. DANGEROUS: any state not held in `stable` variables is lost. Requires interactive confirmation (or `--yes`).
+
+  Possible values:
+  - `keep`:
+    Preserve canister main memory across upgrade (normal EOP upgrade)
+  - `replace`:
+    Discard canister main memory; only `stable` variables survive. Dangerous — heap state is lost
+
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
 * `--args-file <ARGS_FILE>` — Path to a file containing arguments
@@ -313,7 +327,7 @@ Install a built WASM to a canister on a network
   - `bin`:
     Raw binary (only valid for file references)
 
-* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for `--wasm-memory-persistence replace`
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -468,9 +482,9 @@ Change a canister's settings to specified values
 * `--remove-controller <REMOVE_CONTROLLER>` — Remove one or more principals from the canister's controller list.
 
    Warning: Removing yourself will cause you to lose control of the canister.
-* `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
+* `--remove-all-controllers` — Remove all controllers.
 
-   Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
+   Warning: This will cause you to lose control of the canister, unless you add your user principal back in `--add-controller` in the same command.
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds

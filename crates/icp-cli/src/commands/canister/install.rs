@@ -14,7 +14,10 @@ use crate::{
     commands::args::{self, ArgsOpt},
     operations::{
         candid_compat::{CandidCompatibility, check_candid_compatibility},
-        install::{install_canister, resolve_install_mode_and_status},
+        install::{
+            WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
+            resolve_install_mode_and_status,
+        },
     },
 };
 
@@ -25,6 +28,19 @@ pub(crate) struct InstallArgs {
     #[arg(long, short, default_value = "auto", value_parser = ["auto", "install", "reinstall", "upgrade"])]
     pub(crate) mode: String,
 
+    /// For Motoko canisters with enhanced orthogonal persistence (EOP), controls whether
+    /// the canister's main (Wasm) memory is preserved across an upgrade.
+    ///
+    /// Only valid with `--mode upgrade` on an EOP canister.
+    ///
+    /// - `keep`: preserve main memory — the normal EOP upgrade (the default if this flag
+    ///   is omitted).
+    ///
+    /// - `replace`: discard main memory. DANGEROUS: any state not held in `stable`
+    ///   variables is lost. Requires interactive confirmation (or `--yes`).
+    #[arg(long, value_enum)]
+    pub(crate) wasm_memory_persistence: Option<WasmMemoryPersistenceOpt>,
+
     /// Path to the WASM file to install. Uses the build output if not explicitly provided.
     #[arg(long)]
     pub(crate) wasm: Option<PathBuf>,
@@ -32,7 +48,8 @@ pub(crate) struct InstallArgs {
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,
 
-    /// Skip confirmation prompts, including the Candid interface compatibility check.
+    /// Skip confirmation prompts, including the Candid interface compatibility check and
+    /// the dangerous-operation prompt for `--wasm-memory-persistence replace`.
     #[arg(long, short)]
     pub(crate) yes: bool,
 
@@ -84,6 +101,50 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     // If you add .did support to this code, consider extracting/unifying with the logic from call.rs
     let init_args_bytes = args.args_opt.resolve_bytes()?;
 
+    // Validate --wasm-memory-persistence: only meaningful for upgrades of EOP canisters.
+    if let Some(persistence) = args.wasm_memory_persistence {
+        if args.mode != "upgrade" {
+            bail!(
+                "--wasm-memory-persistence can only be used with `--mode upgrade` \
+                 (got `--mode {}`). It has no effect for install/reinstall, and `auto` \
+                 is ambiguous; pass `--mode upgrade` explicitly.",
+                args.mode
+            );
+        }
+        if !is_eop_canister(&agent, &canister_id).await {
+            bail!(
+                "--wasm-memory-persistence only applies to Motoko canisters with enhanced \
+                 orthogonal persistence (EOP). The target canister is not an EOP canister."
+            );
+        }
+        if persistence == WasmMemoryPersistenceOpt::Replace {
+            warn!(
+                "--wasm-memory-persistence=replace will DISCARD the canister's \
+                 main (Wasm) memory."
+            );
+            warn!(
+                "Only state held in `stable` variables survives. Heap state is lost \
+                 and cannot be recovered."
+            );
+            if args.yes {
+                info!("Proceeding without confirmation (--yes).");
+            } else if std::io::stdin().is_terminal() {
+                let confirmed = Confirm::new()
+                    .with_prompt("Do you want to proceed?")
+                    .default(false)
+                    .interact()?;
+                if !confirmed {
+                    bail!("Operation cancelled by user");
+                }
+            } else {
+                bail!(
+                    "Refusing to discard the canister's main memory without confirmation \
+                     in a non-interactive context. Use --yes to proceed."
+                );
+            }
+        }
+    }
+
     let canister_display = args.cmd_args.canister.to_string();
     let (install_mode, status) = resolve_install_mode_and_status(
         &agent,
@@ -132,6 +193,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         install_mode,
         status,
         init_args_bytes.as_deref(),
+        args.wasm_memory_persistence,
     )
     .await?;
 

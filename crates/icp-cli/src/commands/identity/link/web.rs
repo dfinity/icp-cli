@@ -24,7 +24,6 @@ use icp::{
     prelude::*,
 };
 use indicatif::{ProgressBar, ProgressStyle};
-use itertools::Itertools;
 use rand::RngExt as _;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
@@ -108,7 +107,16 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let identity_key = key::IdentityKey::Ed25519(secret_key.clone());
     let basic = BasicIdentity::from_raw_key(&secret_key.serialize_raw());
     let der_public_key = basic.public_key().expect("ed25519 always has a public key");
-    let origin = args.app.as_deref().map(guesstimate_origin);
+
+    let origin = args.app.clone().map(|app| {
+        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is.
+        // Temporary hack: NNS is the most common app that would break. Special-case it
+        if app == "nns.internetcomputer.org" {
+            "nns.ic0.app".to_string()
+        } else {
+            app
+        }
+    });
 
     // Linking creates a brand-new identity, so there is no principal to match against.
     let chain = recv_delegation(&args.auth, origin.as_deref(), &der_public_key, None)
@@ -504,111 +512,4 @@ async fn handle_callback(
 
     finish(&state, Ok(chain));
     Redirect::to(&state.success_url).into_response()
-}
-
-fn guesstimate_origin(maybe_origin: &str) -> String {
-    let hierarchy = maybe_origin
-        .split_once("://")
-        .map_or(maybe_origin, |(_, rest)| rest);
-    let origin = hierarchy.split('/').next().unwrap_or(hierarchy);
-    if origin == "nns.internetcomputer.org" {
-        // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is at the time of writing.
-        // Temporary hack: NNS is the most common app that would break. Special-case it
-        return "nns.ic0.app".to_string();
-    }
-    // Rewrite <principal>.icp0.io and <principal>.icp.net to <principal>.ic0.app, since that's what Internet Identity uses for them.
-    // May be done automatically by II in the future.
-    let parts: Vec<_> = origin.split('.').collect();
-    if parts.len() <= 2 {
-        return origin.to_string();
-    }
-    let (stem, root) = parts.split_at(parts.len() - 2);
-    if (root == ["icp0", "io"] || root == ["icp", "net"])
-        && (stem.len() == 1 || (stem.len() == 2 && stem[1] == "raw"))
-        && Principal::from_text(stem[0]).is_ok()
-    {
-        stem.iter().chain(&["ic0", "app"]).format(".").to_string()
-    } else {
-        origin.to_string()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::guesstimate_origin;
-
-    // A real, valid canister principal used to build boundary-node origins.
-    const PRINCIPAL: &str = "bkyz2-fmaaa-aaaaa-qaaaq-cai";
-
-    #[test]
-    fn strips_scheme_and_path() {
-        assert_eq!(guesstimate_origin("oisy.com"), "oisy.com");
-        assert_eq!(guesstimate_origin("https://oisy.com"), "oisy.com");
-        assert_eq!(guesstimate_origin("https://oisy.com/login"), "oisy.com");
-        assert_eq!(guesstimate_origin("http://oisy.com/a/b/c"), "oisy.com");
-        assert_eq!(guesstimate_origin("https://oisy.com/"), "oisy.com");
-    }
-
-    #[test]
-    fn nns_is_special_cased() {
-        assert_eq!(
-            guesstimate_origin("nns.internetcomputer.org"),
-            "nns.ic0.app"
-        );
-        assert_eq!(
-            guesstimate_origin("https://nns.internetcomputer.org/"),
-            "nns.ic0.app"
-        );
-    }
-
-    #[test]
-    fn rewrites_boundary_node_origins_to_ic0_app() {
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.icp0.io")),
-            format!("{PRINCIPAL}.ic0.app")
-        );
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.icp.net")),
-            format!("{PRINCIPAL}.ic0.app")
-        );
-        assert_eq!(
-            guesstimate_origin(&format!("https://{PRINCIPAL}.icp0.io/")),
-            format!("{PRINCIPAL}.ic0.app")
-        );
-    }
-
-    #[test]
-    fn rewrites_raw_boundary_node_origins() {
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.raw.icp0.io")),
-            format!("{PRINCIPAL}.raw.ic0.app")
-        );
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.raw.icp.net")),
-            format!("{PRINCIPAL}.raw.ic0.app")
-        );
-    }
-
-    #[test]
-    fn leaves_unrecognized_origins_untouched() {
-        // Already on ic0.app — not a known rewrite source.
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.ic0.app")),
-            format!("{PRINCIPAL}.ic0.app")
-        );
-        // Bare two-label domains short-circuit before the principal check.
-        assert_eq!(guesstimate_origin("icp0.io"), "icp0.io");
-        // A non-principal stem doesn't get rewritten.
-        assert_eq!(guesstimate_origin("foo.icp0.io"), "foo.icp0.io");
-        // A subdomain that isn't `raw` isn't a recognized boundary-node shape.
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.www.icp0.io")),
-            format!("{PRINCIPAL}.www.icp0.io")
-        );
-        // Right principal, wrong root domain.
-        assert_eq!(
-            guesstimate_origin(&format!("{PRINCIPAL}.example.com")),
-            format!("{PRINCIPAL}.example.com")
-        );
-    }
 }

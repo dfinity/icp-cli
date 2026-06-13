@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use ic_agent::Identity;
@@ -119,11 +122,12 @@ pub trait Load: Sync + Send {
 }
 
 /// A function that prompts for a password and returns it, or an error message.
-pub type PasswordFunc = Box<dyn Fn() -> Result<String, String> + Send + Sync>;
+pub type PasswordFunc = Arc<dyn Fn() -> Result<String, String> + Send + Sync>;
 
 pub struct Loader {
     dir: IdentityDirectories,
     password_func: PasswordFunc,
+    pem_session_duration: Option<Duration>,
     telemetry_data: Arc<TelemetryData>,
     #[allow(clippy::type_complexity)]
     cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
@@ -133,11 +137,13 @@ impl Loader {
     pub fn new(
         dir: IdentityDirectories,
         password_func: PasswordFunc,
+        pem_session_duration: Option<Duration>,
         telemetry_data: Arc<TelemetryData>,
     ) -> Self {
         Self {
             dir,
             password_func,
+            pem_session_duration,
             telemetry_data,
             cache: Mutex::new(HashMap::new()),
         }
@@ -158,16 +164,24 @@ impl Load for Loader {
             return Ok(Arc::clone(cached));
         }
 
-        let password_func = &self.password_func;
+        let pem_session_duration = self.pem_session_duration;
+        let password_func = self.password_func.clone();
         let nrk = network_root_key.as_deref();
         let (identity, storage_type) = match &id {
             IdentitySelection::Default => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
-                        let list = IdentityList::load_from(dirs)?;
-                        let default_name = manifest::IdentityDefaults::load_from(dirs)?.default;
-                        let identity =
-                            load_identity(dirs, &list, &default_name, password_func, nrk)?;
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
+                        let default_name =
+                            manifest::IdentityDefaults::load_from(dirs.read())?.default;
+                        let identity = load_identity(
+                            dirs,
+                            &list,
+                            &default_name,
+                            password_func,
+                            nrk,
+                            pem_session_duration,
+                        )?;
                         let storage_type =
                             list.identities.get(&default_name).map(|spec| spec.into());
                         Ok((identity, storage_type))
@@ -177,13 +191,14 @@ impl Load for Loader {
 
             IdentitySelection::Anonymous => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
                         Ok((
                             load_identity(
                                 dirs,
-                                &IdentityList::load_from(dirs)?,
+                                &IdentityList::load_from(dirs.read())?,
                                 "anonymous",
-                                || unreachable!(),
+                                Arc::new(|| unreachable!()),
+                                None,
                                 None,
                             )?,
                             Some(IdentityStorageType::Anonymous),
@@ -194,9 +209,16 @@ impl Load for Loader {
 
             IdentitySelection::Named(name) => {
                 self.dir
-                    .with_read(async |dirs| -> Result<_, LoadIdentityInContextError> {
-                        let list = IdentityList::load_from(dirs)?;
-                        let identity = load_identity(dirs, &list, name, password_func, nrk)?;
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
+                        let identity = load_identity(
+                            dirs,
+                            &list,
+                            name,
+                            password_func,
+                            nrk,
+                            pem_session_duration,
+                        )?;
                         let storage_type = list.identities.get(name).map(|spec| spec.into());
                         Ok((identity, storage_type))
                     })
@@ -304,7 +326,8 @@ mod tests {
         .unwrap();
         let loader = Loader::new(
             dirs,
-            Box::new(|| unimplemented!()),
+            Arc::new(|| unimplemented!()),
+            None,
             Arc::new(TelemetryData::default()),
         );
         let i1 = loader

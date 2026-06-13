@@ -1,80 +1,132 @@
+use std::time::Duration;
+
 use clap::Args;
-use dialoguer::Password;
 use icp::{
     context::Context,
     identity::{
         key,
-        manifest::{IdentityList, IdentitySpec},
+        manifest::{IdentityList, IdentitySpec, PemFormat},
     },
+    settings::Settings,
 };
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
-use crate::commands::identity::link::web;
+use crate::commands::identity::{delegation::sign::DurationArg, link::web};
 
-/// Re-authenticate a delegation-based identity
+/// Re-authenticate an Internet Identity delegation or create a PEM session delegation
 #[derive(Debug, Args)]
 pub(crate) struct ReauthArgs {
     /// Name of the identity to re-authenticate
     name: String,
+
+    /// Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is
+    /// added when creating the delegation to account for clock drift.
+    /// Required for PEM identities when session caching is disabled in settings.
+    /// Not applicable for web-auth identities.
+    #[arg(long)]
+    duration: Option<DurationArg>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginError> {
-    let (algorithm, storage, host, domain, principal) = ctx
+    let spec = ctx
         .dirs
         .identity()?
         .with_read(async |dirs| {
             let list = IdentityList::load_from(dirs)?;
-            let spec = list
-                .identities
+            list.identities
                 .get(&args.name)
-                .context(IdentityNotFoundSnafu { name: &args.name })?;
-            match spec {
-                IdentitySpec::WebAuth {
-                    algorithm,
-                    principal,
-                    storage,
-                    host,
-                    domain,
-                } => Ok((
-                    algorithm.clone(),
-                    *storage,
-                    host.clone(),
-                    domain.clone(),
-                    *principal,
-                )),
-                _ => NotDelegationSnafu { name: &args.name }.fail(),
-            }
+                .cloned()
+                .context(IdentityNotFoundSnafu { name: &args.name })
         })
         .await??;
 
-    let der_public_key = ctx
-        .dirs
-        .identity()?
-        .with_read(async |dirs| {
-            key::load_webauth_session_public_key(dirs, &args.name, &algorithm, &storage, || {
-                Password::new()
-                    .with_prompt("Enter identity password")
-                    .interact()
-                    .map_err(|e| e.to_string())
-            })
-        })
-        .await?
-        .context(LoadSessionKeySnafu)?;
+    match spec {
+        IdentitySpec::WebAuth {
+            algorithm,
+            storage,
+            host,
+            domain,
+            principal,
+            ..
+        } => {
+            if args.duration.is_some() {
+                return DurationSnafu { name: &args.name }.fail();
+            }
 
-    // Re-auth must resolve to the same web-auth principal that was originally linked,
-    // so reuse the delegation domain captured at link time.
-    let chain = web::recv_delegation(&host, domain.as_deref(), &der_public_key, Some(principal))
-        .await
-        .context(PollSnafu)?;
+            let password_func = ctx.password_func.clone();
+            let der_public_key = ctx
+                .dirs
+                .identity()?
+                .with_read(async |dirs| {
+                    key::load_webauth_session_public_key(
+                        dirs,
+                        &args.name,
+                        &algorithm,
+                        &storage,
+                        password_func,
+                    )
+                })
+                .await?
+                .context(LoadSessionKeySnafu)?;
 
-    ctx.dirs
-        .identity()?
-        .with_write(async |dirs| key::update_webauth_delegation(dirs, &args.name, &chain))
-        .await?
-        .context(UpdateDelegationSnafu)?;
+            // Re-auth must resolve to the same web-auth principal that was originally linked,
+            // so reuse the delegation domain captured at link time.
+            let chain =
+                web::recv_delegation(&host, domain.as_deref(), &der_public_key, Some(principal))
+                    .await
+                    .context(PollSnafu)?;
 
-    info!("Identity `{}` re-authenticated", args.name);
+            ctx.dirs
+                .identity()?
+                .with_write(async |dirs| key::update_webauth_delegation(dirs, &args.name, &chain))
+                .await?
+                .context(UpdateDelegationSnafu)?;
+
+            info!("Identity `{}` re-authenticated", args.name);
+        }
+
+        IdentitySpec::Pem {
+            format: PemFormat::Pbes2,
+            algorithm,
+            ..
+        } => {
+            let duration = match &args.duration {
+                Some(d) => Duration::from_nanos(d.as_nanos()) + Duration::from_secs(2 * 60),
+                None => {
+                    let settings = ctx
+                        .dirs
+                        .settings()?
+                        .with_read(async |dirs| Settings::load_from(dirs))
+                        .await??;
+                    settings
+                        .session_length
+                        .map(|m| Duration::from_secs((u64::from(m) + 2) * 60))
+                        .context(DurationRequiredSnafu { name: &args.name })?
+                }
+            };
+
+            let password_func = ctx.password_func.clone();
+            ctx.dirs
+                .identity()?
+                .with_write(async |dirs| {
+                    key::create_explicit_pem_session(
+                        dirs,
+                        &args.name,
+                        &algorithm,
+                        password_func,
+                        duration,
+                    )
+                })
+                .await?
+                .context(CreatePemSessionSnafu)?;
+
+            info!("Session delegation created for identity `{}`", args.name);
+        }
+        _ => {
+            return UnsupportedIdentityTypeSnafu { name: &args.name }.fail();
+        }
+    }
 
     Ok(())
 }
@@ -89,13 +141,24 @@ pub(crate) enum LoginError {
         source: icp::identity::manifest::LoadIdentityManifestError,
     },
 
+    #[snafu(transparent)]
+    LoadSettings {
+        source: icp::settings::LoadSettingsError,
+    },
+
     #[snafu(display("no identity found with name `{name}`"))]
     IdentityNotFound { name: String },
 
+    #[snafu(display("`--duration` cannot be used with web-auth identity `{name}`"))]
+    Duration { name: String },
+
     #[snafu(display(
-        "identity `{name}` is not delegation-based; this command is not required to use it"
+        "session caching is disabled; specify `--duration` to create a session delegation for `{name}`"
     ))]
-    NotDelegation { name: String },
+    DurationRequired { name: String },
+
+    #[snafu(display("identity `{name}` does not support logins"))]
+    UnsupportedIdentityType { name: String },
 
     #[snafu(display("failed to load web-auth session key"))]
     LoadSessionKey { source: key::LoadIdentityError },
@@ -106,5 +169,10 @@ pub(crate) enum LoginError {
     #[snafu(display("failed to update delegation"))]
     UpdateDelegation {
         source: key::UpdateWebAuthDelegationError,
+    },
+
+    #[snafu(display("failed to create PEM session delegation"))]
+    CreatePemSession {
+        source: key::CreateExplicitPemSessionError,
     },
 }

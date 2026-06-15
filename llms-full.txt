@@ -1,4 +1,4 @@
-# ICP CLI Documentation (v0.3)
+# ICP CLI Documentation (v1.0)
 
 > Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
 
@@ -15,68 +15,68 @@ https://skills.internetcomputer.org/.well-known/skills/{name}/{file}
 Skills contain correct dependency versions, configuration formats, and common pitfalls that prevent build failures.
 Always prefer skill guidance over general documentation when both cover the same topic.
 
-- [icp-cli Documentation](https://cli.internetcomputer.org/0.3/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
+- [icp-cli Documentation](https://cli.internetcomputer.org/1.0/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
 
 ## Start Here
 
-- [Quickstart](https://cli.internetcomputer.org/0.3/quickstart.md): Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
-- [Telemetry](https://cli.internetcomputer.org/0.3/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
-- [Tutorial](https://cli.internetcomputer.org/0.3/tutorial.md): Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
+- [Quickstart](https://cli.internetcomputer.org/1.0/quickstart.md): Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
+- [Telemetry](https://cli.internetcomputer.org/1.0/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
+- [Tutorial](https://cli.internetcomputer.org/1.0/tutorial.md): Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
 
 ## Guides
 
-- [Canister Migration](https://cli.internetcomputer.org/0.3/guides/canister-migration.md): Move a canister to a different subnet while optionally preserving its state and canister ID.
-- [Canister Snapshots](https://cli.internetcomputer.org/0.3/guides/canister-snapshots.md): Back up, transfer, and restore full canister state using snapshots.
-- [Using Containerized Networks](https://cli.internetcomputer.org/0.3/guides/containerized-networks.md): Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
-- [Creating Recipes](https://cli.internetcomputer.org/0.3/guides/creating-recipes.md): Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
-- [Creating Project Templates](https://cli.internetcomputer.org/0.3/guides/creating-templates.md): Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
-- [Deploying to IC Mainnet](https://cli.internetcomputer.org/0.3/guides/deploying-to-mainnet.md): Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
-- [Deploying to Specific Subnets](https://cli.internetcomputer.org/0.3/guides/deploying-to-specific-subnets.md): Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
-- [Guides](https://cli.internetcomputer.org/0.3/guides/index.md): Step-by-step guides covering installation, local development, deployment, identity management, and more.
-- [Installation](https://cli.internetcomputer.org/0.3/guides/installation.md): Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
-- [Local Development](https://cli.internetcomputer.org/0.3/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
-- [Managing Environments](https://cli.internetcomputer.org/0.3/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
-- [Managing Identities](https://cli.internetcomputer.org/0.3/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
-- [Proxy Canister](https://cli.internetcomputer.org/0.3/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
-- [Tokens and Cycles](https://cli.internetcomputer.org/0.3/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
-- [Using Recipes](https://cli.internetcomputer.org/0.3/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
-- [Writing a Sync Plugin](https://cli.internetcomputer.org/0.3/guides/writing-sync-plugins.md): Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.
+- [Canister Migration](https://cli.internetcomputer.org/1.0/guides/canister-migration.md): Move a canister to a different subnet while optionally preserving its state and canister ID.
+- [Canister Snapshots](https://cli.internetcomputer.org/1.0/guides/canister-snapshots.md): Back up, transfer, and restore full canister state using snapshots.
+- [Using Containerized Networks](https://cli.internetcomputer.org/1.0/guides/containerized-networks.md): Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
+- [Creating Recipes](https://cli.internetcomputer.org/1.0/guides/creating-recipes.md): Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+- [Creating Project Templates](https://cli.internetcomputer.org/1.0/guides/creating-templates.md): Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
+- [Deploying to IC Mainnet](https://cli.internetcomputer.org/1.0/guides/deploying-to-mainnet.md): Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
+- [Deploying to Specific Subnets](https://cli.internetcomputer.org/1.0/guides/deploying-to-specific-subnets.md): Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
+- [Guides](https://cli.internetcomputer.org/1.0/guides/index.md): Step-by-step guides covering installation, local development, deployment, identity management, and more.
+- [Installation](https://cli.internetcomputer.org/1.0/guides/installation.md): Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
+- [Local Development](https://cli.internetcomputer.org/1.0/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
+- [Managing Environments](https://cli.internetcomputer.org/1.0/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
+- [Managing Identities](https://cli.internetcomputer.org/1.0/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+- [Proxy Canister](https://cli.internetcomputer.org/1.0/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
+- [Tokens and Cycles](https://cli.internetcomputer.org/1.0/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
+- [Using Recipes](https://cli.internetcomputer.org/1.0/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
+- [Writing a Sync Plugin](https://cli.internetcomputer.org/1.0/guides/writing-sync-plugins.md): Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.
 
 ## Concepts
 
-- [Binding Generation](https://cli.internetcomputer.org/0.3/concepts/binding-generation.md): Generate type-safe client code from Candid interface files to call canister methods with full type checking.
-- [Build, Deploy, Sync](https://cli.internetcomputer.org/0.3/concepts/build-deploy-sync.md): Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
-- [Canister Discovery](https://cli.internetcomputer.org/0.3/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
-- [Environments and Networks](https://cli.internetcomputer.org/0.3/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
-- [Concepts](https://cli.internetcomputer.org/0.3/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
-- [Project Model](https://cli.internetcomputer.org/0.3/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
-- [Recipes](https://cli.internetcomputer.org/0.3/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
-- [Sync Plugins](https://cli.internetcomputer.org/0.3/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
+- [Binding Generation](https://cli.internetcomputer.org/1.0/concepts/binding-generation.md): Generate type-safe client code from Candid interface files to call canister methods with full type checking.
+- [Build, Deploy, Sync](https://cli.internetcomputer.org/1.0/concepts/build-deploy-sync.md): Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
+- [Canister Discovery](https://cli.internetcomputer.org/1.0/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
+- [Environments and Networks](https://cli.internetcomputer.org/1.0/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
+- [Concepts](https://cli.internetcomputer.org/1.0/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+- [Project Model](https://cli.internetcomputer.org/1.0/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
+- [Recipes](https://cli.internetcomputer.org/1.0/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
+- [Sync Plugins](https://cli.internetcomputer.org/1.0/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
 
 ## Reference
 
-- [Canister Settings Reference](https://cli.internetcomputer.org/0.3/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
-- [CLI Reference](https://cli.internetcomputer.org/0.3/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
-  - [`icp build`](https://cli.internetcomputer.org/0.3/reference/cli/build.md): Build canisters
-  - [`icp canister`](https://cli.internetcomputer.org/0.3/reference/cli/canister.md): Perform canister operations against a network
-  - [`icp cycles`](https://cli.internetcomputer.org/0.3/reference/cli/cycles.md): Mint and manage cycles
-  - [`icp deploy`](https://cli.internetcomputer.org/0.3/reference/cli/deploy.md): Deploy a project to an environment
-  - [`icp environment`](https://cli.internetcomputer.org/0.3/reference/cli/environment.md): Show information about the current project environments
-  - [`icp identity`](https://cli.internetcomputer.org/0.3/reference/cli/identity.md): Manage your identities
-  - [`icp network`](https://cli.internetcomputer.org/0.3/reference/cli/network.md): Launch and manage local test networks
-  - [`icp new`](https://cli.internetcomputer.org/0.3/reference/cli/new.md): Create a new ICP project from a template
-  - [`icp project`](https://cli.internetcomputer.org/0.3/reference/cli/project.md): Manage the current project
-  - [`icp settings`](https://cli.internetcomputer.org/0.3/reference/cli/settings.md): Configure user settings
-  - [`icp sync`](https://cli.internetcomputer.org/0.3/reference/cli/sync.md): Synchronize canisters
-  - [`icp token`](https://cli.internetcomputer.org/0.3/reference/cli/token.md): Perform token transactions
-- [Configuration Reference](https://cli.internetcomputer.org/0.3/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
-- [Environment Variables Reference](https://cli.internetcomputer.org/0.3/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
-- [Reference](https://cli.internetcomputer.org/0.3/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
+- [Canister Settings Reference](https://cli.internetcomputer.org/1.0/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
+- [CLI Reference](https://cli.internetcomputer.org/1.0/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+  - [`icp build`](https://cli.internetcomputer.org/1.0/reference/cli/build.md): Build canisters
+  - [`icp canister`](https://cli.internetcomputer.org/1.0/reference/cli/canister.md): Perform canister operations against a network
+  - [`icp cycles`](https://cli.internetcomputer.org/1.0/reference/cli/cycles.md): Mint and manage cycles
+  - [`icp deploy`](https://cli.internetcomputer.org/1.0/reference/cli/deploy.md): Deploy a project to an environment
+  - [`icp environment`](https://cli.internetcomputer.org/1.0/reference/cli/environment.md): Show information about the current project environments
+  - [`icp identity`](https://cli.internetcomputer.org/1.0/reference/cli/identity.md): Manage your identities
+  - [`icp network`](https://cli.internetcomputer.org/1.0/reference/cli/network.md): Launch and manage local test networks
+  - [`icp new`](https://cli.internetcomputer.org/1.0/reference/cli/new.md): Create a new ICP project from a template
+  - [`icp project`](https://cli.internetcomputer.org/1.0/reference/cli/project.md): Manage the current project
+  - [`icp settings`](https://cli.internetcomputer.org/1.0/reference/cli/settings.md): Configure user settings
+  - [`icp sync`](https://cli.internetcomputer.org/1.0/reference/cli/sync.md): Synchronize canisters
+  - [`icp token`](https://cli.internetcomputer.org/1.0/reference/cli/token.md): Perform token transactions
+- [Configuration Reference](https://cli.internetcomputer.org/1.0/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
+- [Environment Variables Reference](https://cli.internetcomputer.org/1.0/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
+- [Reference](https://cli.internetcomputer.org/1.0/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
 
 ## Other
 
-- [Migrating from dfx](https://cli.internetcomputer.org/0.3/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
-- [Upgrading from icp-cli 0.2](https://cli.internetcomputer.org/0.3/migration/upgrading-from-v0-2.md): Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.
+- [Migrating from dfx](https://cli.internetcomputer.org/1.0/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
+- [Upgrading from icp-cli 0.2](https://cli.internetcomputer.org/1.0/migration/upgrading-from-v0-2.md): Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.
 
 
 ---
@@ -609,7 +609,7 @@ networks:
 
 Use connected networks for shared testnets and production.
 
-There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. For most custom connected networks there isn't a difference, so you can specify both using `url`. But when they differ (as on ICP mainnet where the API is at `icp-api.io` and the HTTP gateway at `icp0.io`), specify them separately:
+There are two URLs associated with connected networks, `api-url` and `http-gateway-url`. The API URL is where tools like icp-cli and agent-rs programmatically talk to canisters, while the HTTP gateway URL is where you can access canisters' webpages in your browser. For most custom connected networks there isn't a difference, so you can specify both using `url`. But when they differ (as on ICP mainnet where the API is at `icp-api.io` and the HTTP gateway at `icp.net`), specify them separately:
 
 ```yaml
 networks:
@@ -6712,6 +6712,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp settings autocontainerize`↴](#icp-settings-autocontainerize)
 * [`icp settings telemetry`↴](#icp-settings-telemetry)
 * [`icp settings update-check`↴](#icp-settings-update-check)
+* [`icp settings session-length`↴](#icp-settings-session-length)
 * [`icp sync`↴](#icp-sync)
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
@@ -6937,6 +6938,20 @@ Install a built WASM to a canister on a network
 
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
+* `--wasm-memory-persistence <WASM_MEMORY_PERSISTENCE>` — For Motoko canisters with enhanced orthogonal persistence (EOP), controls whether the canister's main (Wasm) memory is preserved across an upgrade.
+
+   Only valid with `--mode upgrade` on an EOP canister.
+
+   - `keep`: preserve main memory — the normal EOP upgrade (the default if this flag is omitted).
+
+   - `replace`: discard main memory. DANGEROUS: any state not held in `stable` variables is lost. Requires interactive confirmation (or `--yes`).
+
+  Possible values:
+  - `keep`:
+    Preserve canister main memory across upgrade (normal EOP upgrade)
+  - `replace`:
+    Discard canister main memory; only `stable` variables survive. Dangerous — heap state is lost
+
 * `--wasm <WASM>` — Path to the WASM file to install. Uses the build output if not explicitly provided
 * `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
 * `--args-file <ARGS_FILE>` — Path to a file containing arguments
@@ -6952,7 +6967,7 @@ Install a built WASM to a canister on a network
   - `bin`:
     Raw binary (only valid for file references)
 
-* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
+* `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for `--wasm-memory-persistence replace`
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
@@ -7107,9 +7122,9 @@ Change a canister's settings to specified values
 * `--remove-controller <REMOVE_CONTROLLER>` — Remove one or more principals from the canister's controller list.
 
    Warning: Removing yourself will cause you to lose control of the canister.
-* `--set-controller <SET_CONTROLLER>` — Replace the canister's controller list with the specified principals.
+* `--remove-all-controllers` — Remove all controllers.
 
-   Warning: This removes all existing controllers not in the new list. If you don't include yourself, you will lose control of the canister.
+   Warning: This will cause you to lose control of the canister, unless you add your user principal back in `--add-controller` in the same command.
 * `--compute-allocation <COMPUTE_ALLOCATION>` — Compute allocation percentage (0-100). Represents a guaranteed share of a subnet's compute capacity
 * `--memory-allocation <MEMORY_ALLOCATION>` — Memory allocation in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--freezing-threshold <FREEZING_THRESHOLD>` — Freezing threshold. Controls how long a canister can be inactive before being frozen. Supports duration suffixes: s (seconds), m (minutes), h (hours), d (days), w (weeks). A bare number is treated as seconds
@@ -7576,7 +7591,7 @@ Manage your identities
 * `list` — List the identities
 * `new` — Create a new identity
 * `principal` — Display the principal for the current identity
-* `reauth` — Re-authenticate a delegation-based identity
+* `reauth` — Re-authenticate an Internet Identity delegation or create a PEM session delegation
 * `rename` — Rename an identity
 
 
@@ -7866,13 +7881,17 @@ Display the principal for the current identity
 
 ## `icp identity reauth`
 
-Re-authenticate a delegation-based identity
+Re-authenticate an Internet Identity delegation or create a PEM session delegation
 
-**Usage:** `icp identity reauth <NAME>`
+**Usage:** `icp identity reauth [OPTIONS] <NAME>`
 
 ###### **Arguments:**
 
 * `<NAME>` — Name of the identity to re-authenticate
+
+###### **Options:**
+
+* `--duration <DURATION>` — Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is added when creating the delegation to account for clock drift. Required for PEM identities when session caching is disabled in settings. Not applicable for web-auth identities
 
 
 
@@ -7924,19 +7943,22 @@ Examples:
 
     # Ping default 'local' network
     icp network ping
-  
+
     # Ping explicit network
     icp network ping mynetwork
-  
+
+    # Ping by URL (no project required)
+    icp network ping http://localhost:4943
+
     # Ping using environment flag
     icp network ping -e staging
-  
+
     # Ping using ICP_ENVIRONMENT variable
     ICP_ENVIRONMENT=staging icp network ping
-  
+
     # Name overrides ICP_ENVIRONMENT
     ICP_ENVIRONMENT=staging icp network ping local
-  
+
     # Wait until healthy
     icp network ping --wait-healthy
 
@@ -8171,6 +8193,7 @@ Configure user settings
 * `autocontainerize` — Use Docker for the network launcher even when native mode is requested
 * `telemetry` — Enable or disable anonymous usage telemetry
 * `update-check` — Enable or disable the CLI update check
+* `session-length` — Set the session length for password-protected PEM identities
 
 
 
@@ -8216,6 +8239,20 @@ Enable or disable the CLI update check
 
   Possible values: `releases`, `betas`, `disabled`
 
+
+
+
+## `icp settings session-length`
+
+Set the session length for password-protected PEM identities
+
+**Usage:** `icp settings session-length [VALUE]`
+
+###### **Arguments:**
+
+* `<VALUE>` — Duration (e.g. `5m`, `1h`, `2d`) or `disabled`. If omitted, prints the current value.
+
+   Note that due to clock drift, 2 minutes are added to the given value, so `5m` produces a 7-minute-expiry delegation. `disabled` turns off session caching entirely.
 
 
 

@@ -96,16 +96,18 @@ jobs:
 
       # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
       # now flags as untrusted on every `brew install` (including the one inside
-      # setup-rust-toolchain below). We use neither, so untap them up front to
-      # keep the logs clean. --force because azure/bicep has an installed formula
-      # (bicep) that brew otherwise refuses to untap; one tap per line so a
-      # missing tap in a future image can't stop the other. Must run before any
-      # brew install to suppress the warning.
+      # setup-rust-toolchain below). We use neither. bicep (from azure/bicep) is
+      # the only formula installed from them, so uninstall it first; then both
+      # taps untap cleanly without --force (which would untap but warn about the
+      # installed formula). || true keeps the step green if a future image no
+      # longer ships these. Must run before any brew install to suppress the
+      # warning.
       - name: Untap unused Homebrew taps (macOS)
         if: ${{ contains(matrix.os, 'macos') }}
         run: |
-          brew untap --force aws/tap || true
-          brew untap --force azure/bicep || true
+          brew uninstall bicep || true
+          brew untap aws/tap || true
+          brew untap azure/bicep || true
 
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.
@@ -153,15 +155,17 @@ jobs:
       # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
       # now flags as untrusted on every `brew install` (including the one inside
       # setup-rust-toolchain below and our provision-macos-test.sh). We use
-      # neither, so untap them up front to keep the logs clean. --force because
-      # azure/bicep has an installed formula (bicep) that brew otherwise refuses
-      # to untap; one tap per line so a missing tap in a future image can't stop
-      # the other. Must run before any brew install to suppress the warning.
+      # neither. bicep (from azure/bicep) is the only formula installed from
+      # them, so uninstall it first; then both taps untap cleanly without --force
+      # (which would untap but warn about the installed formula). || true keeps
+      # the step green if a future image no longer ships these. Must run before
+      # any brew install to suppress the warning.
       - name: Untap unused Homebrew taps (macOS)
         if: ${{ contains(matrix.os, 'macos') }}
         run: |
-          brew untap --force aws/tap || true
-          brew untap --force azure/bicep || true
+          brew uninstall bicep || true
+          brew untap aws/tap || true
+          brew untap azure/bicep || true
 
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.

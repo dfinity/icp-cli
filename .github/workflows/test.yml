@@ -94,6 +94,15 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
 
+      # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
+      # now flags as untrusted on every `brew install` (including the one inside
+      # setup-rust-toolchain below). We use neither, so untap them up front to
+      # keep the logs clean. Guarded so it stays green if an image stops shipping
+      # them. Must run before any brew install to suppress the warning.
+      - name: Untap unused Homebrew taps (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: brew untap aws/tap azure/bicep 2>/dev/null || true
+
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.
       # Remove it so only the rust-toolchain.toml-pinned version remains.
@@ -136,6 +145,16 @@ jobs:
             "$env:GITHUB_WORKSPACE", `
             "$env:USERPROFILE\.cargo", `
             "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
+
+      # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
+      # now flags as untrusted on every `brew install` (including the one inside
+      # setup-rust-toolchain below and our provision-macos-test.sh). We use
+      # neither, so untap them up front to keep the logs clean. Guarded so it
+      # stays green if an image stops shipping them. Must run before any brew
+      # install to suppress the warning.
+      - name: Untap unused Homebrew taps (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: brew untap aws/tap azure/bicep 2>/dev/null || true
 
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.

@@ -80,7 +80,7 @@ jobs:
           cache-bin: false
 
       - name: Run Lint
-        run: cargo clippy --verbose --tests --benches -- -D warnings
+        run: cargo clippy --tests --benches -- -D warnings
         env:
           RUST_BACKTRACE: 1
 

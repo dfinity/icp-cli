@@ -94,6 +94,21 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: ./.github/scripts/provision-linux-build.sh
 
+      # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
+      # now flags as untrusted on every `brew install` (including the one inside
+      # setup-rust-toolchain below). We use neither. bicep (from azure/bicep) is
+      # the only formula installed from them, so uninstall it first; then both
+      # taps untap cleanly without --force (which would untap but warn about the
+      # installed formula). || true keeps the step green if a future image no
+      # longer ships these. Must run before any brew install to suppress the
+      # warning.
+      - name: Untap unused Homebrew taps (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: |
+          brew uninstall bicep || true
+          brew untap aws/tap || true
+          brew untap azure/bicep || true
+
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.
       # Remove it so only the rust-toolchain.toml-pinned version remains.
@@ -105,7 +120,7 @@ jobs:
           cache-shared-key: ${{ runner.os }}-test
           cache-bin: false
 
-      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+      - uses: t1m0thyj/unlock-keyring@cbcf205c879ebd86add70bab3a6abfcce59a5cae # 1.2.0
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
       - name: Run unit tests
@@ -137,6 +152,21 @@ jobs:
             "$env:USERPROFILE\.cargo", `
             "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
 
+      # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
+      # now flags as untrusted on every `brew install` (including the one inside
+      # setup-rust-toolchain below and our provision-macos-test.sh). We use
+      # neither. bicep (from azure/bicep) is the only formula installed from
+      # them, so uninstall it first; then both taps untap cleanly without --force
+      # (which would untap but warn about the installed formula). || true keeps
+      # the step green if a future image no longer ships these. Must run before
+      # any brew install to suppress the warning.
+      - name: Untap unused Homebrew taps (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: |
+          brew uninstall bicep || true
+          brew untap aws/tap || true
+          brew untap azure/bicep || true
+
       # rust-cache hashes all installed toolchains; the runner image's `stable`
       # drifts as the image updates, which moves the cache key and causes misses.
       # Remove it so only the rust-toolchain.toml-pinned version remains.
@@ -163,7 +193,7 @@ jobs:
 
       - name: Setup WSL2 (Windows)
         if: ${{ contains(matrix.os, 'windows') }}
-        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
 
@@ -172,22 +202,23 @@ jobs:
         run: .github/scripts/init-docker.sh
         shell: wsl-bash_Ubuntu-22.04 {0}
 
-      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+      - uses: t1m0thyj/unlock-keyring@cbcf205c879ebd86add70bab3a6abfcce59a5cae # 1.2.0
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
+      # mops is only needed for the Motoko (moc) tests, which are all
+      # #[cfg(unix)], so skip it on Windows. Install the CLI directly rather
+      # than via dfinity/setup-mops, which only wraps this same script with a
+      # Linux/macOS-only package cache and Node 20 actions (setup-node/cache).
       - name: Install mops
-        uses: dfinity/setup-mops@3e94e453352269b34137b5ce49f09a8df81bed7d # v1.4.1
-
-      - name: Verify mops installation
+        if: ${{ !contains(matrix.os, 'windows') }}
         run: |
+          curl -fsSL cli.mops.one/install.sh | sh
           which mops
           mops --version
 
       - name: Install ic-wasm
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
-
-      - name: Verify ic-wasm installation
         run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/ic-wasm/releases/download/0.9.10/ic-wasm-installer.sh | sh
           which ic-wasm
           ic-wasm --version
 

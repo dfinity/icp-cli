@@ -191,17 +191,14 @@ jobs:
         run: .github/scripts/provision-windows-test.ps1
         shell: pwsh
 
-      # WSL2 exists solely to host the Docker daemon, so only set it up for the
-      # Windows jobs whose tests need Docker (matrix.needs_docker). This skips
-      # ~1 min of setup on the majority of Windows jobs that never use Docker.
       - name: Setup WSL2 (Windows)
-        if: ${{ contains(matrix.os, 'windows') && matrix.needs_docker }}
+        if: ${{ contains(matrix.os, 'windows') }}
         uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
 
       - name: Setup Docker in WSL2 (Windows)
-        if: ${{ contains(matrix.os, 'windows') && matrix.needs_docker }}
+        if: ${{ contains(matrix.os, 'windows') }}
         run: .github/scripts/init-docker.sh
         shell: wsl-bash_Ubuntu-22.04 {0}
 

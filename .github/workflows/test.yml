@@ -105,7 +105,7 @@ jobs:
           cache-shared-key: ${{ runner.os }}-test
           cache-bin: false
 
-      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+      - uses: t1m0thyj/unlock-keyring@cbcf205c879ebd86add70bab3a6abfcce59a5cae # 1.2.0
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
       - name: Run unit tests
@@ -172,7 +172,7 @@ jobs:
         run: .github/scripts/init-docker.sh
         shell: wsl-bash_Ubuntu-22.04 {0}
 
-      - uses: t1m0thyj/unlock-keyring@e481cdc8833d4417a58f40734e8f197183317047
+      - uses: t1m0thyj/unlock-keyring@cbcf205c879ebd86add70bab3a6abfcce59a5cae # 1.2.0
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
       - name: Install mops

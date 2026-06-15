@@ -108,16 +108,7 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let basic = BasicIdentity::from_raw_key(&secret_key.serialize_raw());
     let der_public_key = basic.public_key().expect("ed25519 always has a public key");
 
-    // Linking creates a brand-new identity, so there is no principal to match against.
-    let chain = recv_delegation(&args.auth, args.app.as_deref(), &der_public_key, None)
-        .await
-        .context(PollSnafu)?;
-
-    let from_key = hex::decode(&chain.public_key).context(DecodeFromKeySnafu)?;
-    let remote_principal = Principal::self_authenticating(&from_key);
-
-    let auth = args.auth.clone();
-    let app = args.app.clone().map(|app| {
+    let origin = args.app.clone().map(|app| {
         // If an app uses alternativeOrigins, (a) that's the required domain, and (b) there's no way to know what it is.
         // Temporary hack: NNS is the most common app that would break. Special-case it
         if app == "nns.internetcomputer.org" {
@@ -126,6 +117,16 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
             app
         }
     });
+
+    // Linking creates a brand-new identity, so there is no principal to match against.
+    let chain = recv_delegation(&args.auth, origin.as_deref(), &der_public_key, None)
+        .await
+        .context(PollSnafu)?;
+
+    let from_key = hex::decode(&chain.public_key).context(DecodeFromKeySnafu)?;
+    let remote_principal = Principal::self_authenticating(&from_key);
+
+    let auth = args.auth.clone();
     ctx.dirs
         .identity()?
         .with_write(async |dirs| {
@@ -137,7 +138,7 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
                 remote_principal,
                 create_format,
                 auth,
-                app,
+                origin,
             )
         })
         .await?

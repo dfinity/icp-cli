@@ -4,4 +4,4 @@
 # "icp deploy --network staging" would deploy a second set of canisters to mainnet
 name: staging
 mode: connected
-url: https://icp0.io
+url: https://icp.net

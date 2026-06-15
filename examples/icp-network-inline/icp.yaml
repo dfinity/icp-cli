@@ -12,4 +12,4 @@ canisters:
 networks:
   - name: staging
     mode: connected
-    url: https://icp0.io
+    url: https://icp.net

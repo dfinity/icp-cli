@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 12 Jun 2026 15:55:04 GMT</lastBuildDate>
-    <pubDate>Fri, 12 Jun 2026 15:51:40 GMT</pubDate>
+    <lastBuildDate>Mon, 15 Jun 2026 12:32:56 GMT</lastBuildDate>
+    <pubDate>Mon, 15 Jun 2026 12:31:24 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Environments and Networks</title>
+      <link>https://cli.internetcomputer.org/main/concepts/environments/</link>
+      <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
+      <pubDate>Mon, 15 Jun 2026 12:31:24 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/environments/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
@@ -183,14 +191,6 @@
       <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
       <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environments and Networks</title>
-      <link>https://cli.internetcomputer.org/main/concepts/environments/</link>
-      <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
-      <pubDate>Fri, 27 Mar 2026 21:01:53 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/environments/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

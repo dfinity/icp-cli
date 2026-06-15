@@ -7,6 +7,7 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* feat: The default gateway domain is now `icp.net`, not `icp0.io`.
 * feat: Password-protected identities now only need your password once per session. The session length defaults to 5 minutes and can be changed with `icp settings session-length <DURATION>` (e.g. `30m`, `1h`) or turned off with `icp settings session-length disabled`. You can also explicitly create or refresh a session with `icp identity reauth <NAME> [--duration <DURATION>]`.
 * feat!: Remove `--set-controller` and replace with a new flag `--remove-all-controllers`. For the old behavior, combine this flag with `--add-controller`
 

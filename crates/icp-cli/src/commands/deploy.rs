@@ -503,9 +503,9 @@ async fn wait_until_serving_queries(
                 .with_arg(Vec::<u8>::new())
                 .call();
             let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
-                Ok(Ok(_)) => true,                        // replied -> Running
-                Ok(Err(err)) => !is_stopped_reject(&err), // reject: ready unless "stopped"
-                Err(_elapsed) => false,                   // probe timed out -> inconclusive
+                Ok(Ok(_)) => true,                       // replied -> Running
+                Ok(Err(err)) => is_serving_reject(&err), // non-stopped reject -> Running
+                Err(_elapsed) => false,                  // probe timed out -> inconclusive
             };
 
             if ready {
@@ -530,21 +530,27 @@ async fn wait_until_serving_queries(
     }
 }
 
-/// True when a query reject means the canister is Stopped/Stopping — i.e. a
-/// replica lagging behind a recent restart — as opposed to a reject from a Running
-/// canister (e.g. "no such query method"). Matched on the IC error code
-/// (IC0508 = stopped, IC0509 = stopping) with a message-substring fallback.
-fn is_stopped_reject(err: &AgentError) -> bool {
+/// True when a query error is a *reject from the replica* that indicates the
+/// canister is Running and serving — i.e. a positive readiness signal.
+///
+/// A reject means the replica processed the request to a verdict (e.g. "no such
+/// query method"), so the canister is up — unless the reject says it is
+/// stopped/stopping (IC0508/IC0509, with a message-substring fallback), which is
+/// a replica still lagging behind the restart. Every other `AgentError`
+/// (transport, HTTP, timeout, …) is inconclusive — not evidence the canister is
+/// serving — and returns false so the caller retries rather than proceeding.
+fn is_serving_reject(err: &AgentError) -> bool {
     let reject = match err {
         AgentError::CertifiedReject { reject, .. }
         | AgentError::UncertifiedReject { reject, .. } => reject,
         _ => return false,
     };
-    matches!(
+    let stopped = matches!(
         reject.error_code.as_deref(),
         Some("IC0508") | Some("IC0509")
     ) || reject.reject_message.contains("is stopped")
-        || reject.reject_message.contains("is stopping")
+        || reject.reject_message.contains("is stopping");
+    !stopped
 }
 
 /// Checks if a canister has an `http_request` function by querying it

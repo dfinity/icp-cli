@@ -8,9 +8,13 @@ use test_tag::tag;
 
 use crate::common::{
     ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
-    TestContext, clients,
+    TestContext, build_sync_plugin_example, clients,
 };
-use icp::{fs::write_string, prelude::*, store_id::IdMapping};
+use icp::{
+    fs::{create_dir_all, write_string},
+    prelude::*,
+    store_id::IdMapping,
+};
 
 mod common;
 
@@ -1236,4 +1240,121 @@ async fn deploy_sync_script_icp_env_vars() {
         .stderr(contains(format!("CID={cid_a}")))
         .stderr(contains(format!("B_CID={cid_b}")))
         .stderr(contains(format!("B_SEES_A={cid_a}")));
+}
+
+/// Regression: a canister that enters `icp deploy` non-Running (e.g. parked
+/// Stopped by a canister pool, or left Stopped by an earlier interrupted deploy)
+/// must be started before the asset sync plugin runs. `install_code` is
+/// status-preserving, so without the explicit start the plugin's first canister
+/// call would fail with IC0508 ("canister is stopped ... does not have a
+/// CallContextManager"). After deploy the canister is left Running.
+#[tokio::test]
+async fn deploy_starts_stopped_canister_before_sync() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // Seed data the plugin uploads via direct canister calls during sync.
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // First deploy creates, installs, and syncs; the canister ends Running.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Stop it to simulate a canister handed to deploy in a non-Running state.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Stopped"));
+
+    // Deploy again. install_code leaves the canister Stopped, so deploy must
+    // start it before the plugin sync runs. Before the fix this failed with
+    // IC0508 inside the sync plugin's first canister call.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // The canister is left Running after a deploy that syncs.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Status: Running"));
+
+    // The plugin's direct canister calls succeeded against the restarted canister.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("apple"));
 }

@@ -3,6 +3,7 @@ use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::Agent;
+use ic_management_canister_types::{CanisterId, CanisterIdRecord};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -22,6 +23,7 @@ use crate::{
         candid_compat::check_candid_compatibility_many,
         create::{CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
+        proxy_management,
         settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
@@ -373,6 +375,30 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     if sync_canisters.is_empty() {
         info!("No canisters have sync steps configured");
     } else {
+        // Asset sync requires the canister to be Running. install_code is status-
+        // preserving, so a canister that entered deploy Stopped/Stopping (handed out
+        // Stopped from a pool, or left so by an earlier interrupted deploy) is still
+        // not Running here. Start each canister we're about to sync. Per the IC spec
+        // start_canister is synchronous — its Ok reply means the canister is already
+        // Running, so no status poll is needed — and idempotent (no-op if Running).
+        let proxy = args.proxy;
+        try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
+            let agent = agent.clone();
+            let cid = *cid;
+            async move {
+                proxy_management::start_canister(
+                    &agent,
+                    proxy,
+                    CanisterIdRecord {
+                        canister_id: CanisterId::from(cid),
+                    },
+                )
+                .await
+                .map_err(|e| anyhow!(e))
+            }
+        }))
+        .await?;
+
         // TODO: When `--proxy` is used and the canister was newly created, the proxy
         // canister is its only controller. Sync steps (e.g. asset uploads to a frontend
         // canister) will fail because the user's identity lacks the required permissions.

@@ -487,38 +487,47 @@ async fn wait_until_serving_queries(
     canister_id: Principal,
 ) -> Result<(), anyhow::Error> {
     const REQUIRED_CONSECUTIVE: u32 = 2;
-    const MAX_ATTEMPTS: u32 = 60;
+    // Total wall-clock budget for the whole wait — the hard cap on the failure
+    // path. PROBE_TIMEOUT below only bounds a single hung probe (so retries keep
+    // flowing); this outer budget is what guarantees we give up promptly, rather
+    // than attempts * (probe timeout + interval).
+    const READINESS_BUDGET: Duration = Duration::from_secs(30);
     const POLL_INTERVAL: Duration = Duration::from_millis(500);
-    const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+    const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
-    let mut consecutive_ready: u32 = 0;
-    for _ in 0..MAX_ATTEMPTS {
-        let probe = agent
-            .query(&canister_id, READINESS_PROBE_METHOD)
-            .with_arg(Vec::<u8>::new())
-            .call();
-        let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
-            Ok(Ok(_)) => true,                        // replied -> Running
-            Ok(Err(err)) => !is_stopped_reject(&err), // reject: ready unless "stopped"
-            Err(_elapsed) => false,                   // probe timed out -> inconclusive
-        };
+    let poll = async {
+        let mut consecutive_ready: u32 = 0;
+        loop {
+            let probe = agent
+                .query(&canister_id, READINESS_PROBE_METHOD)
+                .with_arg(Vec::<u8>::new())
+                .call();
+            let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
+                Ok(Ok(_)) => true,                        // replied -> Running
+                Ok(Err(err)) => !is_stopped_reject(&err), // reject: ready unless "stopped"
+                Err(_elapsed) => false,                   // probe timed out -> inconclusive
+            };
 
-        if ready {
-            consecutive_ready += 1;
-            if consecutive_ready >= REQUIRED_CONSECUTIVE {
-                return Ok(());
+            if ready {
+                consecutive_ready += 1;
+                if consecutive_ready >= REQUIRED_CONSECUTIVE {
+                    return;
+                }
+            } else {
+                consecutive_ready = 0;
             }
-        } else {
-            consecutive_ready = 0;
+            tokio::time::sleep(POLL_INTERVAL).await;
         }
-        tokio::time::sleep(POLL_INTERVAL).await;
-    }
+    };
 
-    bail!(
-        "canister {canister_id} did not start serving queries within ~{}s after being \
-         started; the asset sync plugin's first call would fail. Re-run the deploy.",
-        (MAX_ATTEMPTS as u64 * POLL_INTERVAL.as_millis() as u64) / 1000
-    )
+    match tokio::time::timeout(READINESS_BUDGET, poll).await {
+        Ok(()) => Ok(()),
+        Err(_elapsed) => bail!(
+            "canister {canister_id} did not start serving queries within {}s after being \
+             started; the asset sync plugin's first call would fail. Re-run the deploy.",
+            READINESS_BUDGET.as_secs()
+        ),
+    }
 }
 
 /// True when a query reject means the canister is Stopped/Stopping — i.e. a

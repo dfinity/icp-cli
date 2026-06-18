@@ -1,8 +1,8 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use candid::{CandidType, Principal};
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord};
 use icp::parsers::CyclesAmount;
 use icp::{
@@ -13,6 +13,7 @@ use icp::{
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::time::Duration;
 use tracing::info;
 
 use crate::{
@@ -399,6 +400,20 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         }))
         .await?;
 
+        // start_canister is synchronous, so each canister is now Running in the
+        // subnet's *certified* state — but IC query calls are eventually-consistent
+        // reads, answered by a single replica that may still lag the height at which
+        // the restart committed and would then observe the just-vacated Stopped state.
+        // The sync plugin's first calls are queries, so without this wait sync can fail
+        // with a transient IC0508 right after a restart. Wait until the query path
+        // consistently sees the canister Running before handing off.
+        try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
+            let agent = agent.clone();
+            let cid = *cid;
+            async move { wait_until_serving_queries(&agent, cid).await }
+        }))
+        .await?;
+
         // TODO: When `--proxy` is used and the canister was newly created, the proxy
         // canister is its only controller. Sync steps (e.g. asset uploads to a frontend
         // canister) will fail because the user's identity lacks the required permissions.
@@ -438,6 +453,87 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await?;
 
     Ok(())
+}
+
+/// A method name no real canister exports — used purely as a liveness probe.
+/// Querying it is side-effect-free: the replica rejects an unknown method before
+/// any canister code runs (no cycles, no logs, no state change), and the reject
+/// reason tells us whether the canister is serving queries yet.
+const READINESS_PROBE_METHOD: &str = "<icp-cli readiness probe>";
+
+/// Wait until the canister's *query* path consistently observes it as Running.
+///
+/// After `start_canister` the canister is Running in the subnet's certified
+/// state, but query calls are eventually-consistent reads: each is answered by a
+/// single replica that may still lag the restart's commit height and would then
+/// see the just-vacated Stopped state. The sync plugin's first calls are queries,
+/// so without this wait sync can fail with a transient IC0508 right after a
+/// restart.
+///
+/// We probe with a query for a method no canister exports and classify the result:
+///
+/// - a reject of "is stopped"/"is stopping" (IC0508/IC0509) means the replica is
+///   still lagging behind the restart.
+/// - any other reject (e.g. "no query method"), or a reply, means the replica got
+///   far enough to answer for a non-status reason, so it sees the canister Running.
+/// - a transport or timeout error is inconclusive.
+///
+/// We require a few consecutive ready observations, spaced out so they may land on
+/// different replicas, to raise confidence the lagging set has drained. This is not
+/// a hard guarantee — query reads are per-node and boundary nodes load-balance
+/// across replicas — but it makes the post-restart race rare.
+async fn wait_until_serving_queries(
+    agent: &Agent,
+    canister_id: Principal,
+) -> Result<(), anyhow::Error> {
+    const REQUIRED_CONSECUTIVE: u32 = 2;
+    const MAX_ATTEMPTS: u32 = 60;
+    const POLL_INTERVAL: Duration = Duration::from_millis(500);
+    const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let mut consecutive_ready: u32 = 0;
+    for _ in 0..MAX_ATTEMPTS {
+        let probe = agent
+            .query(&canister_id, READINESS_PROBE_METHOD)
+            .with_arg(Vec::<u8>::new())
+            .call();
+        let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
+            Ok(Ok(_)) => true,                        // replied -> Running
+            Ok(Err(err)) => !is_stopped_reject(&err), // reject: ready unless "stopped"
+            Err(_elapsed) => false,                   // probe timed out -> inconclusive
+        };
+
+        if ready {
+            consecutive_ready += 1;
+            if consecutive_ready >= REQUIRED_CONSECUTIVE {
+                return Ok(());
+            }
+        } else {
+            consecutive_ready = 0;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+
+    bail!(
+        "canister {canister_id} did not start serving queries within ~{}s after being \
+         started; the asset sync plugin's first call would fail. Re-run the deploy.",
+        (MAX_ATTEMPTS as u64 * POLL_INTERVAL.as_millis() as u64) / 1000
+    )
+}
+
+/// True when a query reject means the canister is Stopped/Stopping — i.e. a
+/// replica lagging behind a recent restart — as opposed to a reject from a Running
+/// canister (e.g. "no such query method"). Matched on the IC error code
+/// (IC0508 = stopped, IC0509 = stopping) with a message-substring fallback.
+fn is_stopped_reject(err: &AgentError) -> bool {
+    let reject = match err {
+        AgentError::CertifiedReject { reject, .. }
+        | AgentError::UncertifiedReject { reject, .. } => reject,
+        _ => return false,
+    };
+    matches!(reject.error_code.as_deref(), Some("IC0508") | Some("IC0509"))
+        || reject.reject_message.contains("is stopped")
+        || reject.reject_message.contains("is stopping")
 }
 
 /// Checks if a canister has an `http_request` function by querying it

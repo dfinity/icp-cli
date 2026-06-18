@@ -531,8 +531,10 @@ fn is_stopped_reject(err: &AgentError) -> bool {
         | AgentError::UncertifiedReject { reject, .. } => reject,
         _ => return false,
     };
-    matches!(reject.error_code.as_deref(), Some("IC0508") | Some("IC0509"))
-        || reject.reject_message.contains("is stopped")
+    matches!(
+        reject.error_code.as_deref(),
+        Some("IC0508") | Some("IC0509")
+    ) || reject.reject_message.contains("is stopped")
         || reject.reject_message.contains("is stopping")
 }
 

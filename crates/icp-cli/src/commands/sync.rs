@@ -1,13 +1,15 @@
+use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use futures::future::try_join_all;
+use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 
 use crate::{
-    operations::sync::sync_many,
+    operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -80,6 +82,37 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         info!("No canisters have sync steps configured");
         return Ok(());
     }
+
+    // icp sync is sync-only and does not manage lifecycle: unlike deploy it will
+    // NOT start the canister for the user. Asset sync requires a Running canister,
+    // so detect a non-Running canister up front and abort with an actionable error
+    // instead of letting the plugin's first call fail with a cryptic IC0508
+    // ("canister is stopped ... does not have a CallContextManager").
+    let proxy = args.proxy;
+    try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
+        let agent = agent.clone();
+        let cid = *cid;
+        async move {
+            let status = proxy_management::canister_status(
+                &agent,
+                proxy,
+                CanisterIdRecord {
+                    canister_id: CanisterId::from(cid),
+                },
+            )
+            .await
+            .map_err(|e| anyhow!(e))?
+            .status;
+            if !matches!(status, CanisterStatusType::Running) {
+                bail!(
+                    "Canister {cid} is {status:?}; asset sync requires it to be Running. \
+                     Start it with `icp canister start {cid}` and retry."
+                );
+            }
+            Ok::<_, anyhow::Error>(())
+        }
+    }))
+    .await?;
 
     info!("Syncing canisters:");
 

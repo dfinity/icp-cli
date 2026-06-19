@@ -147,6 +147,84 @@ async fn sync_adapter_script_multiple() {
         .stderr(contains("first").and(contains("second")));
 }
 
+/// `icp sync` does not manage canister lifecycle (unlike `icp deploy`, it must
+/// not auto-start a canister the user may have stopped deliberately). When the
+/// target canister is not Running it must abort up front with an actionable
+/// error instead of letting the sync plugin's first call fail with a cryptic
+/// IC0508. The sync step must never run.
+#[tokio::test]
+async fn sync_aborts_when_canister_not_running() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deploy leaves the canister Running.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Stop it: sync must detect this and abort rather than auto-start.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "stop",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // sync aborts early with an actionable message; the `echo "syncing"` step
+    // never runs, so its runtime progress output must not appear. (The `--debug`
+    // config dump echoes the step's command text, so we check for the runtime
+    // `DEBUG icp::progress: syncing` marker rather than the bare word "syncing".)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args([
+            "--debug",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            contains("asset sync requires it to be Running")
+                .and(contains("icp canister start"))
+                .and(contains("DEBUG icp::progress: syncing").not()),
+        );
+}
+
 /// The `assets` sync step type was removed. A manifest that still uses it must
 /// fail to load with a helpful, targeted message (and must not name a specific
 /// recipe).

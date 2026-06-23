@@ -6,23 +6,23 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Tue, 16 Jun 2026 17:43:42 GMT</lastBuildDate>
-    <pubDate>Mon, 15 Jun 2026 12:31:24 GMT</pubDate>
+    <lastBuildDate>Tue, 23 Jun 2026 18:18:41 GMT</lastBuildDate>
+    <pubDate>Tue, 23 Jun 2026 18:16:45 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Tue, 23 Jun 2026 18:16:45 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Environments and Networks</title>
       <link>https://cli.internetcomputer.org/main/concepts/environments/</link>
       <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
       <pubDate>Mon, 15 Jun 2026 12:31:24 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/environments/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Fri, 12 Jun 2026 15:51:40 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

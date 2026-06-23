@@ -910,6 +910,11 @@ pub enum CreateIdentityError {
     #[snafu(display("delegation chain failed validation"))]
     CreateIdentityValidateChain { source: DelegationError },
 
+    #[snafu(display(
+        "delegation chain has already expired (or is about to); import a freshly signed chain"
+    ))]
+    CreateIdentityDelegationExpired,
+
     #[snafu(display("failed to create delegation directory"))]
     CreateIdentityDelegationDir { source: crate::fs::IoError },
 
@@ -982,6 +987,16 @@ pub fn create_identity(
             }
             Err(e) => return Err(e).context(CreateIdentityValidateChainSnafu),
         }
+
+        // Reject a chain that has already expired (or falls within the load-time grace
+        // window): it would import successfully but then fail on every later load with
+        // `DelegationExpired`. Mirrors the expiry check in `load_webauth_identity`.
+        if delegation::is_expiring_soon(chain, TWO_MINUTES_NANOS)
+            .context(CreateIdentityConvertChainSnafu)?
+        {
+            return CreateIdentityDelegationExpiredSnafu.fail();
+        }
+
         ic_agent::export::Principal::self_authenticating(&from_key)
     } else {
         match &key {

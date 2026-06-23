@@ -899,13 +899,16 @@ pub enum CreateIdentityError {
     #[snafu(display("invalid session public key in delegation chain"))]
     CreateIdentityDecodeLeafKey { source: hex::FromHexError },
 
-    #[snafu(display("invalid root public key in delegation chain"))]
-    CreateIdentityDecodeRootKey { source: hex::FromHexError },
-
     #[snafu(display(
         "the imported key does not match the session key the delegation chain was issued to"
     ))]
     CreateIdentityKeyMismatch,
+
+    #[snafu(display("malformed delegation chain"))]
+    CreateIdentityConvertChain { source: delegation::ConversionError },
+
+    #[snafu(display("delegation chain failed validation"))]
+    CreateIdentityValidateChain { source: DelegationError },
 
     #[snafu(display("failed to create delegation directory"))]
     CreateIdentityDelegationDir { source: crate::fs::IoError },
@@ -946,23 +949,11 @@ pub fn create_identity(
     // comes from the chain's root key, and the imported key is verified to be the session
     // key the chain delegates to (catching the wrong key here, not as a load-time failure).
     let principal = if let Some(chain) = delegation {
-        let session_public_key = match &key {
-            IdentityKey::Secp256k1(secret_key) => {
-                Secp256k1Identity::from_private_key(secret_key.clone())
-                    .public_key()
-                    .expect("secp256k1 always has a public key")
-            }
-            IdentityKey::Prime256v1(secret_key) => {
-                Prime256v1Identity::from_private_key(secret_key.clone())
-                    .public_key()
-                    .expect("p256 always has a public key")
-            }
-            IdentityKey::Ed25519(secret_key) => {
-                BasicIdentity::from_raw_key(&secret_key.serialize_raw())
-                    .public_key()
-                    .expect("ed25519 always has a public key")
-            }
-        };
+        // The imported key must be the session key the chain's leaf delegation was issued to.
+        // Check that explicitly first, for a clearer error than the full validation below gives.
+        let session_public_key = session_identity_for_validation(&key)
+            .public_key()
+            .expect("non-anonymous identity always has a public key");
         let leaf = chain
             .delegations
             .last()
@@ -973,7 +964,27 @@ pub fn create_identity(
             leaf_public_key == session_public_key,
             CreateIdentityKeyMismatchSnafu
         );
-        let from_key = hex::decode(&chain.public_key).context(CreateIdentityDecodeRootKeySnafu)?;
+
+        // Validate the whole chain in memory before persisting anything, so a structurally
+        // broken chain fails here rather than on every later load. A canister-signature
+        // mismatch only means the chain targets a non-mainnet network, so warn and continue
+        // (mirrors `link_webauth_identity`).
+        let (from_key, delegations) =
+            delegation::to_agent_types(chain).context(CreateIdentityConvertChainSnafu)?;
+        match DelegatedIdentity::new(
+            from_key.clone(),
+            session_identity_for_validation(&key),
+            delegations,
+        ) {
+            Ok(_) => {}
+            Err(DelegationError::InvalidCanisterSignature(_)) => {
+                warn!(
+                    "delegation chain for identity `{name}` did not validate against the IC \
+                     mainnet root key; this identity may only be valid for a particular network"
+                );
+            }
+            Err(e) => return Err(e).context(CreateIdentityValidateChainSnafu),
+        }
         ic_agent::export::Principal::self_authenticating(&from_key)
     } else {
         match &key {
@@ -1037,14 +1048,10 @@ pub fn create_identity(
         }
     }
 
-    if let Some(chain) = delegation {
-        let delegation_path = dirs
-            .ensure_delegation_chain_path(name)
-            .context(CreateIdentityDelegationDirSnafu)?;
-        delegation::save(&delegation_path, chain).context(CreateIdentitySaveDelegationSnafu {
-            path: &delegation_path,
-        })?;
-    }
+    // Whether a session key was just stored in the keyring that must be rolled back if the
+    // writes below fail: the manifest would never be written, so `identity remove` could not
+    // later find the orphaned `delegation:<name>` credential.
+    let rollback_keyring = delegation.is_some() && matches!(format, CreateFormat::Keyring);
 
     let spec = if delegation.is_some() {
         let storage = match format {
@@ -1079,8 +1086,28 @@ pub fn create_identity(
             },
         }
     };
-    identity_list.identities.insert(name.to_string(), spec);
-    identity_list.write_to(dirs)?;
+
+    let persist = || -> Result<(), CreateIdentityError> {
+        if let Some(chain) = delegation {
+            let delegation_path = dirs
+                .ensure_delegation_chain_path(name)
+                .context(CreateIdentityDelegationDirSnafu)?;
+            delegation::save(&delegation_path, chain).context(
+                CreateIdentitySaveDelegationSnafu {
+                    path: &delegation_path,
+                },
+            )?;
+        }
+        identity_list.identities.insert(name.to_string(), spec);
+        identity_list.write_to(dirs)?;
+        Ok(())
+    };
+    if let Err(e) = persist() {
+        if rollback_keyring && let Ok(entry) = Entry::new(SERVICE_NAME, &dlg_keyring_key(name)) {
+            let _ = entry.delete_credential();
+        }
+        return Err(e);
+    }
 
     Ok(())
 }

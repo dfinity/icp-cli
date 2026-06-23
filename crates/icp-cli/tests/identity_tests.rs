@@ -1330,6 +1330,41 @@ fn identity_import_delegation() {
         .assert()
         .failure()
         .stderr(contains("does not match the session key"));
+
+    // A chain whose signature does not verify must be rejected at import, not persisted to
+    // fail on every later load. Tamper with the (correctly-keyed) chain's signature.
+    let mut chain: serde_json::Value =
+        serde_json::from_slice(&sign_output.get_output().stdout).unwrap();
+    let sig = chain["delegations"][0]["signature"].as_str().unwrap();
+    let tampered_sig: String = sig
+        .chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if i == 0 {
+                if c == 'a' { 'b' } else { 'a' }
+            } else {
+                c
+            }
+        })
+        .collect();
+    chain["delegations"][0]["signature"] = serde_json::Value::String(tampered_sig);
+    let tampered_chain_file = ctx.home_path().join("tampered-chain.json");
+    std::fs::write(&tampered_chain_file, serde_json::to_vec(&chain).unwrap()).unwrap();
+
+    ctx.icp()
+        .args([
+            "identity",
+            "import",
+            "tampered",
+            "--storage",
+            "plaintext",
+            "--from-pem",
+        ])
+        .arg(ctx.make_asset("decrypted_sec1_p256.pem"))
+        .arg("--delegation")
+        .arg(&tampered_chain_file)
+        .assert()
+        .failure();
 }
 
 #[cfg(unix)] // moc

@@ -892,41 +892,109 @@ pub enum CreateIdentityError {
 
     #[snafu(display("identity `{name}` already exists"))]
     IdentityAlreadyExists { name: String },
+
+    #[snafu(display("delegation chain contains no delegations"))]
+    CreateIdentityEmptyDelegation,
+
+    #[snafu(display("invalid session public key in delegation chain"))]
+    CreateIdentityDecodeLeafKey { source: hex::FromHexError },
+
+    #[snafu(display("invalid root public key in delegation chain"))]
+    CreateIdentityDecodeRootKey { source: hex::FromHexError },
+
+    #[snafu(display(
+        "the imported key does not match the session key the delegation chain was issued to"
+    ))]
+    CreateIdentityKeyMismatch,
+
+    #[snafu(display("failed to create delegation directory"))]
+    CreateIdentityDelegationDir { source: crate::fs::IoError },
+
+    #[snafu(display("failed to save delegation chain to `{path}`"))]
+    CreateIdentitySaveDelegation {
+        path: PathBuf,
+        source: delegation::SaveError,
+    },
 }
 
+/// Creates a new identity from `key`, stored according to `format`.
+///
+/// If `delegation` is supplied, the identity is registered as a delegation-based identity
+/// (as if created via `icp identity delegation use`): `key` is stored as the chain's
+/// session key, the chain is saved to disk, and the identity's principal is derived from
+/// the chain's root key. `key` must be the session key the chain's leaf delegation was
+/// issued to, which is verified before anything is written.
 pub fn create_identity(
     dirs: LWrite<&IdentityPaths>,
     name: &str,
     key: IdentityKey,
     format: CreateFormat,
+    delegation: Option<&delegation::DelegationChain>,
 ) -> Result<(), CreateIdentityError> {
     let mut identity_list = IdentityList::load_from(dirs.read())?;
     ensure!(
         !identity_list.identities.contains_key(name),
         IdentityAlreadyExistsSnafu { name }
     );
-    let principal = match &key {
-        IdentityKey::Secp256k1(secret_key) => {
-            Secp256k1Identity::from_private_key(secret_key.clone())
-                .sender()
-                .expect("infallible method")
-        }
-        IdentityKey::Prime256v1(secret_key) => {
-            Prime256v1Identity::from_private_key(secret_key.clone())
-                .sender()
-                .expect("infallible method")
-        }
-        IdentityKey::Ed25519(secret_key) => {
-            BasicIdentity::from_raw_key(&secret_key.serialize_raw())
-                .sender()
-                .expect("infallible method")
-        }
-    };
-    let algorithm = match key {
+    let algorithm = match &key {
         IdentityKey::Secp256k1(_) => IdentityKeyAlgorithm::Secp256k1,
         IdentityKey::Prime256v1(_) => IdentityKeyAlgorithm::Prime256v1,
         IdentityKey::Ed25519(_) => IdentityKeyAlgorithm::Ed25519,
     };
+
+    // For a plain identity the principal is the key's own; for a delegation identity it
+    // comes from the chain's root key, and the imported key is verified to be the session
+    // key the chain delegates to (catching the wrong key here, not as a load-time failure).
+    let principal = if let Some(chain) = delegation {
+        let session_public_key = match &key {
+            IdentityKey::Secp256k1(secret_key) => {
+                Secp256k1Identity::from_private_key(secret_key.clone())
+                    .public_key()
+                    .expect("secp256k1 always has a public key")
+            }
+            IdentityKey::Prime256v1(secret_key) => {
+                Prime256v1Identity::from_private_key(secret_key.clone())
+                    .public_key()
+                    .expect("p256 always has a public key")
+            }
+            IdentityKey::Ed25519(secret_key) => {
+                BasicIdentity::from_raw_key(&secret_key.serialize_raw())
+                    .public_key()
+                    .expect("ed25519 always has a public key")
+            }
+        };
+        let leaf = chain
+            .delegations
+            .last()
+            .context(CreateIdentityEmptyDelegationSnafu)?;
+        let leaf_public_key =
+            hex::decode(&leaf.delegation.pubkey).context(CreateIdentityDecodeLeafKeySnafu)?;
+        ensure!(
+            leaf_public_key == session_public_key,
+            CreateIdentityKeyMismatchSnafu
+        );
+        let from_key = hex::decode(&chain.public_key).context(CreateIdentityDecodeRootKeySnafu)?;
+        ic_agent::export::Principal::self_authenticating(&from_key)
+    } else {
+        match &key {
+            IdentityKey::Secp256k1(secret_key) => {
+                Secp256k1Identity::from_private_key(secret_key.clone())
+                    .sender()
+                    .expect("infallible method")
+            }
+            IdentityKey::Prime256v1(secret_key) => {
+                Prime256v1Identity::from_private_key(secret_key.clone())
+                    .sender()
+                    .expect("infallible method")
+            }
+            IdentityKey::Ed25519(secret_key) => {
+                BasicIdentity::from_raw_key(&secret_key.serialize_raw())
+                    .sender()
+                    .expect("infallible method")
+            }
+        }
+    };
+
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
         IdentityKey::Prime256v1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
@@ -935,7 +1003,8 @@ pub fn create_identity(
             .try_into()
             .expect("infallible PKI encoding"),
     };
-    // store key material
+    // store key material. Delegation session keys stored in the keyring use the
+    // `delegation:` prefix so `load_webauth_session_pem` can find them.
     match &format {
         CreateFormat::Plaintext => {
             let pem = doc
@@ -951,7 +1020,12 @@ pub fn create_identity(
             let pem = doc
                 .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
-            let entry = Entry::new(SERVICE_NAME, name).context(CreateEntrySnafu)?;
+            let username = if delegation.is_some() {
+                dlg_keyring_key(name)
+            } else {
+                name.to_string()
+            };
+            let entry = Entry::new(SERVICE_NAME, &username).context(CreateEntrySnafu)?;
             let res = entry.set_password(&pem);
             #[cfg(target_os = "linux")]
             if let Err(keyring::Error::NoStorageAccess(err)) = &res
@@ -962,21 +1036,48 @@ pub fn create_identity(
             res.context(SetEntryPasswordSnafu)?;
         }
     }
-    let spec = match format {
-        CreateFormat::Plaintext => IdentitySpec::Pem {
-            format: PemFormat::Plaintext,
+
+    if let Some(chain) = delegation {
+        let delegation_path = dirs
+            .ensure_delegation_chain_path(name)
+            .context(CreateIdentityDelegationDirSnafu)?;
+        delegation::save(&delegation_path, chain).context(CreateIdentitySaveDelegationSnafu {
+            path: &delegation_path,
+        })?;
+    }
+
+    let spec = if delegation.is_some() {
+        let storage = match format {
+            CreateFormat::Plaintext => DelegationKeyStorage::Pem {
+                format: PemFormat::Plaintext,
+            },
+            CreateFormat::Pbes2 { .. } => DelegationKeyStorage::Pem {
+                format: PemFormat::Pbes2,
+            },
+            CreateFormat::Keyring => DelegationKeyStorage::Keyring,
+        };
+        IdentitySpec::Delegation {
             algorithm,
             principal,
-        },
-        CreateFormat::Pbes2 { .. } => IdentitySpec::Pem {
-            format: PemFormat::Pbes2,
-            algorithm,
-            principal,
-        },
-        CreateFormat::Keyring => IdentitySpec::Keyring {
-            principal,
-            algorithm,
-        },
+            storage,
+        }
+    } else {
+        match format {
+            CreateFormat::Plaintext => IdentitySpec::Pem {
+                format: PemFormat::Plaintext,
+                algorithm,
+                principal,
+            },
+            CreateFormat::Pbes2 { .. } => IdentitySpec::Pem {
+                format: PemFormat::Pbes2,
+                algorithm,
+                principal,
+            },
+            CreateFormat::Keyring => IdentitySpec::Keyring {
+                principal,
+                algorithm,
+            },
+        }
     };
     identity_list.identities.insert(name.to_string(), spec);
     identity_list.write_to(dirs)?;

@@ -319,6 +319,7 @@ mod tests {
                 "test",
                 IdentityKey::Secp256k1(SecretKey::from_bytes(&k.into()).unwrap()),
                 CreateFormat::Plaintext,
+                None,
             )
             .unwrap();
         })

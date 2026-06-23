@@ -97,6 +97,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
                 &args.name,
                 derive_key_from_seed_slip10(&mnemonic, &IdentityKeyAlgorithm::Secp256k1),
                 format,
+                None,
             )
         })
         .await??;

@@ -3,11 +3,15 @@ use clap::{ArgGroup, Args};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::identity::{
+    delegation::DelegationChain,
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_key_from_seed_slip10,
 };
-use icp::{fs::read_to_string, prelude::*};
+use icp::{
+    fs::{json, read_to_string},
+    prelude::*,
+};
 use itertools::Itertools;
 use k256::Secp256k1;
 use p256::NistP256;
@@ -65,6 +69,12 @@ pub(crate) struct ImportArgs {
     /// Curve for SLIP-0010 key derivation from a seed phrase
     #[arg(long, value_enum, default_value_t = IdentityKeyAlgorithm::Secp256k1, requires = "seed")]
     seed_curve: IdentityKeyAlgorithm,
+
+    /// Attach a signed delegation chain (JSON with keys `publicKey` and `delegations`)
+    ///
+    /// For security, in most cases it is better to use `icp identity delegation` instead.
+    #[arg(long, value_name = "FILE")]
+    delegation: Option<PathBuf>,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow::Error> {
@@ -89,6 +99,12 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
             }
         }
     };
+    let chain = args
+        .delegation
+        .as_deref()
+        .map(json::load::<DelegationChain>)
+        .transpose()?;
+
     if let Some(from_pem) = &args.from_pem {
         import_from_pem(
             ctx,
@@ -97,18 +113,35 @@ pub(crate) async fn exec(ctx: &Context, args: &ImportArgs) -> Result<(), anyhow:
             args.decryption_password_from_file.as_deref(),
             args.assert_key_type.clone(),
             format,
+            chain.as_ref(),
         )
         .await?;
     } else if let Some(path) = &args.from_seed_file {
         let phrase = read_to_string(path).context(ReadSeedFileSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase, args.seed_curve.clone(), format).await?;
+        import_from_seed_phrase(
+            ctx,
+            &args.name,
+            &phrase,
+            args.seed_curve.clone(),
+            format,
+            chain.as_ref(),
+        )
+        .await?;
     } else if args.read_seed_phrase {
         let phrase = Password::new()
             .with_prompt("Enter seed phrase")
             .with_confirmation("Re-enter seed phrase", "Seed phrases do not match")
             .interact()
             .context(ReadSeedPhraseFromTerminalSnafu)?;
-        import_from_seed_phrase(ctx, &args.name, &phrase, args.seed_curve.clone(), format).await?;
+        import_from_seed_phrase(
+            ctx,
+            &args.name,
+            &phrase,
+            args.seed_curve.clone(),
+            format,
+            chain.as_ref(),
+        )
+        .await?;
     } else {
         unreachable!();
     }
@@ -131,6 +164,7 @@ async fn import_from_pem(
     decryption_password_file: Option<&Path>,
     known_key_type: Option<IdentityKeyAlgorithm>,
     format: CreateFormat,
+    delegation: Option<&DelegationChain>,
 ) -> Result<(), LoadKeyError> {
     // the pem file may be in SEC1 format or PKCS#8 format
     // - if SEC1, the key algorithm can be embedded, separate, or missing
@@ -183,7 +217,7 @@ async fn import_from_pem(
 
     ctx.dirs
         .identity()?
-        .with_write(async move |dirs| create_identity(dirs, name, key, format))
+        .with_write(async move |dirs| create_identity(dirs, name, key, format, delegation))
         .await??;
 
     Ok(())
@@ -380,12 +414,13 @@ async fn import_from_seed_phrase(
     phrase: &str,
     algorithm: IdentityKeyAlgorithm,
     format: CreateFormat,
+    delegation: Option<&DelegationChain>,
 ) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_key_from_seed_slip10(&mnemonic, &algorithm);
     ctx.dirs
         .identity()?
-        .with_write(async move |dirs| create_identity(dirs, name, key, format))
+        .with_write(async move |dirs| create_identity(dirs, name, key, format, delegation))
         .await??;
     Ok(())
 }

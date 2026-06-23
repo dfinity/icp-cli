@@ -1126,6 +1126,9 @@ Import a new identity
 
   Possible values: `secp256k1`, `prime256v1`, `ed25519`
 
+* `--delegation <FILE>` — Attach a signed delegation chain (JSON with keys `publicKey` and `delegations`)
+
+   For security, in most cases it is better to use `icp identity delegation` instead.
 
 
 

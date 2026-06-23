@@ -904,11 +904,10 @@ pub enum CreateIdentityError {
     ))]
     CreateIdentityKeyMismatch,
 
-    #[snafu(display("malformed delegation chain"))]
-    CreateIdentityConvertChain { source: delegation::ConversionError },
-
-    #[snafu(display("delegation chain failed validation"))]
-    CreateIdentityValidateChain { source: DelegationError },
+    #[snafu(transparent)]
+    CreateIdentityValidateDelegationChain {
+        source: ValidateDelegationChainError,
+    },
 
     #[snafu(display(
         "delegation chain has already expired (or is about to); import a freshly signed chain"
@@ -972,28 +971,13 @@ pub fn create_identity(
         );
 
         // Validate the whole chain in memory before persisting anything, so a structurally
-        // broken chain fails here rather than on every later load. A canister-signature
-        // mismatch only means the chain targets a non-mainnet network, so warn and continue
-        // (mirrors `link_webauth_identity`).
-        let (from_key, delegations) =
-            delegation::to_agent_types(chain).context(CreateIdentityConvertChainSnafu)?;
-        match DelegatedIdentity::new(from_key.clone(), session, delegations) {
-            Ok(_) => {}
-            Err(DelegationError::InvalidCanisterSignature(_)) => {
-                warn!(
-                    "delegation chain for identity `{name}` did not validate against the IC \
-                     mainnet root key; this identity may only be valid for a particular network"
-                );
-            }
-            Err(e) => return Err(e).context(CreateIdentityValidateChainSnafu),
-        }
+        // broken chain fails here rather than on every later load.
+        let from_key = validate_session_delegation_chain(name, session, chain)?;
 
         // Reject a chain that has already expired (or falls within the load-time grace
         // window): it would import successfully but then fail on every later load with
         // `DelegationExpired`. Mirrors the expiry check in `load_webauth_identity`.
-        if delegation::is_expiring_soon(chain, TWO_MINUTES_NANOS)
-            .context(CreateIdentityConvertChainSnafu)?
-        {
+        if delegation::is_expiring_soon(chain, TWO_MINUTES_NANOS).context(ConvertChainSnafu)? {
             return CreateIdentityDelegationExpiredSnafu.fail();
         }
 
@@ -1666,11 +1650,10 @@ pub enum CreatePendingDelegationError {
         source: delegation::SaveError,
     },
 
-    #[snafu(display("failed to decode delegation chain fields"))]
-    DlgConvertChain { source: delegation::ConversionError },
-
-    #[snafu(display("delegation chain is structurally invalid"))]
-    DlgValidateChain { source: DelegationError },
+    #[snafu(transparent)]
+    DlgValidateDelegationChain {
+        source: ValidateDelegationChainError,
+    },
 }
 
 /// Constructs a temporary signing identity directly from an [`IdentityKey`], used to validate a
@@ -1681,6 +1664,41 @@ fn session_identity_for_validation(key: &IdentityKey) -> Box<dyn Identity> {
         IdentityKey::Secp256k1(k) => Box::new(Secp256k1Identity::from_private_key(k.clone())),
         IdentityKey::Prime256v1(k) => Box::new(Prime256v1Identity::from_private_key(k.clone())),
     }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ValidateDelegationChainError {
+    #[snafu(display("malformed delegation chain"))]
+    ConvertChain { source: delegation::ConversionError },
+
+    #[snafu(display("delegation chain failed validation"))]
+    ValidateChain { source: DelegationError },
+}
+
+/// Validates that `chain` connects its root key to `session`'s public key and returns the
+/// DER-encoded chain root (`from_key`), from which the identity's principal is derived.
+///
+/// The chain is verified against the IC mainnet root key. A canister-signature mismatch is
+/// downgraded to a warning (the chain most likely targets a non-mainnet network); any other
+/// validation failure is an error. `session` is the temporary signing identity built from the
+/// session key (see [`session_identity_for_validation`]) and is consumed by the validation.
+fn validate_session_delegation_chain(
+    name: &str,
+    session: Box<dyn Identity>,
+    chain: &delegation::DelegationChain,
+) -> Result<Vec<u8>, ValidateDelegationChainError> {
+    let (from_key, delegations) = delegation::to_agent_types(chain).context(ConvertChainSnafu)?;
+    match DelegatedIdentity::new(from_key.clone(), session, delegations) {
+        Ok(_) => {}
+        Err(DelegationError::InvalidCanisterSignature(_)) => {
+            warn!(
+                "delegation chain for identity `{name}` did not validate against the IC mainnet \
+                 root key; this identity may only be valid for a particular network"
+            );
+        }
+        Err(e) => return Err(e).context(ValidateChainSnafu),
+    }
+    Ok(from_key)
 }
 
 /// Links a web-auth identity to a new named identity.
@@ -1710,21 +1728,8 @@ pub fn link_webauth_identity(
     };
 
     // Validate the delegation chain against the mainnet root key before storing it.
-    // An InvalidCanisterSignature error means the chain was likely issued by a canister on a
-    // different network; warn and continue. Any other error means the chain is structurally broken.
-    let (from_key, delegations) =
-        delegation::to_agent_types(chain).context(DlgConvertChainSnafu)?;
-    let inner = session_identity_for_validation(&key);
-    match DelegatedIdentity::new(from_key, inner, delegations) {
-        Ok(_) => {}
-        Err(DelegationError::InvalidCanisterSignature(_)) => {
-            warn!(
-                "delegation chain for identity `{name}` did not validate against the IC mainnet \
-                 root key; this identity may only be valid for a particular network"
-            );
-        }
-        Err(e) => return Err(CreatePendingDelegationError::DlgValidateChain { source: e }),
-    }
+    let session = session_identity_for_validation(&key);
+    validate_session_delegation_chain(name, session, chain)?;
 
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),

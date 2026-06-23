@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+* feat: `icp identity import` can now be used with a `--delegation` flag to import a delegated identity. This is most useful for containers or other internal-only delegations; for anything involving a network, `icp identity delegation request` remains the recommended way to work with delegations.
+
 # v1.0.0
 
 * feat: The default gateway domain is now `icp.net`, not `icp0.io`.

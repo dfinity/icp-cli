@@ -70,7 +70,7 @@ pub(crate) struct ImportArgs {
     #[arg(long, value_enum, default_value_t = IdentityKeyAlgorithm::Secp256k1, requires = "seed")]
     seed_curve: IdentityKeyAlgorithm,
 
-    /// Attach a signed delegation chain (JSON with keys `publicKey` and `delegations`)
+    /// Attach a signed delegation chain JSON (same format as `icp identity delegation sign`).
     ///
     /// For security, in most cases it is better to use `icp identity delegation` instead.
     #[arg(long, value_name = "FILE")]

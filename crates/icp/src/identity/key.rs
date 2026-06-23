@@ -951,7 +951,8 @@ pub fn create_identity(
     let principal = if let Some(chain) = delegation {
         // The imported key must be the session key the chain's leaf delegation was issued to.
         // Check that explicitly first, for a clearer error than the full validation below gives.
-        let session_public_key = session_identity_for_validation(&key)
+        let session = session_identity_for_validation(&key);
+        let session_public_key = session
             .public_key()
             .expect("non-anonymous identity always has a public key");
         let leaf = chain
@@ -971,11 +972,7 @@ pub fn create_identity(
         // (mirrors `link_webauth_identity`).
         let (from_key, delegations) =
             delegation::to_agent_types(chain).context(CreateIdentityConvertChainSnafu)?;
-        match DelegatedIdentity::new(
-            from_key.clone(),
-            session_identity_for_validation(&key),
-            delegations,
-        ) {
+        match DelegatedIdentity::new(from_key.clone(), session, delegations) {
             Ok(_) => {}
             Err(DelegationError::InvalidCanisterSignature(_)) => {
                 warn!(

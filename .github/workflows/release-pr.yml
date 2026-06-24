@@ -1,0 +1,161 @@
+name: Release - open PR
+
+# Opens a release-related PR authored by the pr-automation-bot-public GitHub App.
+# Because the bot (not the release driver) authors the PR, a single release driver
+# can approve it without needing a second human reviewer.
+#
+# Driven by scripts/release.sh. Two kinds of PR:
+#   - version-bump:  bump the workspace version + Cargo.lock + CHANGELOG
+#   - docs-versions: add the new minor version to docs-site/versions.json
+#
+# This workflow only opens the PR; the release script merges it after approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'Which release PR to open'
+        required: true
+        type: choice
+        options:
+          - version-bump
+          - docs-versions
+      version:
+        description: 'Release version without v prefix (e.g. 1.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate version
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$VERSION' is not a valid stable version (expected X.Y.Z)."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "MINOR=${VERSION%.*}" >> "$GITHUB_ENV"
+
+      - name: Setup Rust
+        if: inputs.kind == 'version-bump'
+        uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+
+      - name: Prepare version bump
+        if: inputs.kind == 'version-bump'
+        run: |
+          # Bump [workspace.package] version (only that section's `version` key)
+          awk -v ver="$VERSION" '
+            /^\[/ { section = $0 }
+            section == "[workspace.package]" && /^version[[:space:]]*=/ { print "version = \"" ver "\""; next }
+            { print }
+          ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+
+          # Sync the workspace member versions in Cargo.lock (touches nothing else)
+          cargo update --workspace
+
+          # Warn if there are no unreleased entries to promote
+          UNREL=$(awk '/^# Unreleased[[:space:]]*$/{f=1;next} f&&/^# /{exit} f{print}' CHANGELOG.md | grep -c '[^[:space:]]' || true)
+          if [ "$UNREL" -eq 0 ]; then
+            echo "::warning::No entries under '# Unreleased' — the # v$VERSION section will be empty."
+          fi
+
+          # Insert a "# vX.Y.Z" header below "# Unreleased", promoting its entries
+          awk -v ver="v$VERSION" '
+            done { print; next }
+            !seen { print; if ($0 ~ /^# Unreleased[[:space:]]*$/) seen = 1; next }
+            /^[[:space:]]*$/ { print; next }
+            { print "# " ver; print ""; print; done = 1 }
+          ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+
+          {
+            echo "BRANCH=release/v$VERSION"
+            echo "TITLE=chore: release v$VERSION"
+            echo "FILES=Cargo.toml Cargo.lock CHANGELOG.md"
+          } >> "$GITHUB_ENV"
+
+          cat > pr-body.md <<EOF
+          ## Summary
+
+          Release v$VERSION.
+
+          - \`Cargo.toml\`: workspace version bumped to \`$VERSION\`
+          - \`Cargo.lock\`: workspace member versions synced
+          - \`CHANGELOG.md\`: \`# Unreleased\` entries promoted under \`# v$VERSION\`
+
+          ### Review checklist
+          - [ ] CI is green
+          - [ ] CHANGELOG entries look correct and complete
+          - [ ] Version number is correct
+
+          Opened by \`scripts/release.sh\`. Approve to let the release proceed.
+          EOF
+
+      - name: Prepare docs versions
+        if: inputs.kind == 'docs-versions'
+        run: |
+          # Make $MINOR the latest version: drop any existing entry for it,
+          # prepend it as latest, and clear `latest` from the others.
+          jq --arg v "$MINOR" '
+            .versions = ([{version: $v, latest: true}]
+              + (.versions | map(select(.version != $v)) | map(del(.latest))))
+          ' docs-site/versions.json > docs-site/versions.json.tmp \
+            && mv docs-site/versions.json.tmp docs-site/versions.json
+
+          if git diff --quiet docs-site/versions.json; then
+            echo "::error::docs-site/versions.json already lists v$MINOR as latest — nothing to do."
+            exit 1
+          fi
+
+          {
+            echo "BRANCH=release/docs-v$VERSION"
+            echo "TITLE=chore: update docs site to v$MINOR"
+            echo "FILES=docs-site/versions.json"
+          } >> "$GITHUB_ENV"
+
+          cat > pr-body.md <<EOF
+          ## Summary
+
+          - \`docs-site/versions.json\`: add \`v$MINOR\` as the new latest version
+
+          Updates the docs version switcher and root redirect to point to the new
+          release. Merge only after the versioned docs for \`/$MINOR/\` are deployed —
+          \`scripts/release.sh\` waits for that before merging.
+
+          Opened by \`scripts/release.sh\`. Approve to let the release proceed.
+          EOF
+
+      - name: Create GitHub App token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_CLIENT_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "pr-automation-bot-public[bot]"
+          git config user.email "pr-automation-bot-public[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git"
+          git checkout -b "$BRANCH"
+          git add $FILES
+          git commit -m "$TITLE"
+          git push origin "$BRANCH" --force
+
+          existing=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq 'length')
+          if [[ "$existing" == "0" ]]; then
+            gh pr create --title "$TITLE" --body-file pr-body.md --base main --head "$BRANCH"
+          else
+            echo "PR already open on $BRANCH, branch updated."
+          fi

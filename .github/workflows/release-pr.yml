@@ -59,22 +59,28 @@ jobs:
             { print }
           ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
 
-          # Sync the workspace member versions in Cargo.lock (touches nothing else)
+          # Re-lock only the workspace members' own versions in Cargo.lock.
+          # `--workspace` restricts the update to workspace packages; it does NOT
+          # touch dependency versions (verified: only the member version lines change).
           cargo update --workspace
 
-          # Warn if there are no unreleased entries to promote
-          UNREL=$(awk '/^# Unreleased[[:space:]]*$/{f=1;next} f&&/^# /{exit} f{print}' CHANGELOG.md | grep -c '[^[:space:]]' || true)
-          if [ "$UNREL" -eq 0 ]; then
-            echo "::warning::No entries under '# Unreleased' — the # v$VERSION section will be empty."
+          # Insert a "# vX.Y.Z" header below "# Unreleased", promoting its entries.
+          # Idempotent: skip if that header already exists (e.g. re-dispatched after merge).
+          if grep -qE "^# v$VERSION[[:space:]]*$" CHANGELOG.md; then
+            echo "::notice::CHANGELOG already has a '# v$VERSION' section — leaving it as-is."
+          else
+            # Warn if there are no unreleased entries to promote
+            UNREL=$(awk '/^# Unreleased[[:space:]]*$/{f=1;next} f&&/^# /{exit} f{print}' CHANGELOG.md | grep -c '[^[:space:]]' || true)
+            if [ "$UNREL" -eq 0 ]; then
+              echo "::warning::No entries under '# Unreleased' — the # v$VERSION section will be empty."
+            fi
+            awk -v ver="v$VERSION" '
+              done { print; next }
+              !seen { print; if ($0 ~ /^# Unreleased[[:space:]]*$/) seen = 1; next }
+              /^[[:space:]]*$/ { print; next }
+              { print "# " ver; print ""; print; done = 1 }
+            ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
           fi
-
-          # Insert a "# vX.Y.Z" header below "# Unreleased", promoting its entries
-          awk -v ver="v$VERSION" '
-            done { print; next }
-            !seen { print; if ($0 ~ /^# Unreleased[[:space:]]*$/) seen = 1; next }
-            /^[[:space:]]*$/ { print; next }
-            { print "# " ver; print ""; print; done = 1 }
-          ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
 
           {
             echo "BRANCH=release/v$VERSION"

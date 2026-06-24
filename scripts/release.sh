@@ -152,9 +152,16 @@ confirm "Proceed?"
 # 1. Version-bump PR
 # ============================================================================
 step "Step 1/6 — Version-bump PR"
-ensure_release_pr version-bump "release/$TAG"
-wait_for_checks "release/$TAG"
-wait_for_approval_and_merge "release/$TAG"
+git fetch -q origin main || fail "Could not fetch origin/main."
+main_version=$(git show origin/main:Cargo.toml \
+  | awk -F'"' '/^\[/{s=$0} s=="[workspace.package]"&&/^version[[:space:]]*=/{print $2; exit}')
+if [[ "$main_version" == "$VERSION" ]]; then
+  info "origin/main is already at $VERSION — bump already merged, skipping step 1."
+else
+  ensure_release_pr version-bump "release/$TAG"
+  wait_for_checks "release/$TAG"
+  wait_for_approval_and_merge "release/$TAG"
+fi
 
 # ============================================================================
 # 2. Tag and push
@@ -186,7 +193,7 @@ info "GitHub Release: https://github.com/$REPO/releases/tag/$TAG"
 # 4. Publish to npm
 # ============================================================================
 step "Step 4/6 — Publish to npm"
-dispatch_and_watch "Publish to npm" "$REPO" "version=$TAG" "npm_package_version=$VERSION"
+dispatch_and_watch release-npm.yml "$REPO" "version=$TAG" "npm_package_version=$VERSION"
 info "NPM: https://www.npmjs.com/package/@icp-sdk/icp-cli/v/$VERSION"
 
 # ============================================================================
@@ -200,7 +207,10 @@ wait_for_approval_and_merge "update/icp-cli-beta-$VERSION" "$TAP_REPO"
 # 6. Docs versions.json (new minor only)
 # ============================================================================
 step "Step 6/6 — Docs site versions"
-current_latest=$(jq -r '.versions[] | select(.latest==true) | .version' docs-site/versions.json)
+current_latest=$(jq -r '[.versions[] | select(.latest==true) | .version]
+  | if length==1 then .[0] elif length==0 then "" else "MULTIPLE" end' docs-site/versions.json) \
+  || fail "Could not parse docs-site/versions.json."
+[[ "$current_latest" == "MULTIPLE" ]] && fail "docs-site/versions.json has multiple 'latest:true' entries — fix it before releasing."
 if [[ "$current_latest" == "$MINOR" ]]; then
   info "docs-site/versions.json already lists v$MINOR as latest — nothing to do."
 else

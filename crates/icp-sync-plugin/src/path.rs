@@ -12,7 +12,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 ///
 /// Callers reject such paths before resolving them; `first_symlink_component`
 /// only inspects `Normal` components and so would not otherwise catch these.
-pub fn escapes_base(rel: &str) -> bool {
+pub(crate) fn escapes_base(rel: &str) -> bool {
     Utf8Path::new(rel).components().any(|c| {
         matches!(
             c,
@@ -43,7 +43,7 @@ pub fn escapes_base(rel: &str) -> bool {
 /// [`escapes_base`] first); `.` components are ignored. Components that do not
 /// exist are not symlinks, so a missing path returns `None` and the subsequent
 /// read or preopen surfaces the not-found error.
-pub fn first_symlink_component(base: &Utf8Path, rel: &str) -> Option<Utf8PathBuf> {
+pub(crate) fn first_symlink_component(base: &Utf8Path, rel: &str) -> Option<Utf8PathBuf> {
     let mut host = base.to_path_buf();
     let mut relative = Utf8PathBuf::new();
     for component in Utf8Path::new(rel).components() {

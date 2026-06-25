@@ -157,6 +157,22 @@ pub enum RunPluginError {
         dir: Utf8PathBuf,
     },
 
+    #[snafu(display(
+        "plugin file '{name}' is not a safe relative path (no absolute paths or '..' allowed)"
+    ))]
+    UnsafeFile { name: String },
+
+    #[snafu(display(
+        "plugin file '{name}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin files"
+    ))]
+    SymlinkFile { name: String, link: Utf8PathBuf },
+
+    #[snafu(display("failed to read plugin input file at {path}"))]
+    ReadFile {
+        source: std::io::Error,
+        path: Utf8PathBuf,
+    },
+
     #[snafu(display("failed to instantiate wasm component at {path}"))]
     Instantiate {
         source: wasmtime::Error,
@@ -177,7 +193,7 @@ pub fn run_plugin(
     wasm_path: Utf8PathBuf,
     base_dir: Utf8PathBuf,
     dirs: Vec<String>,
-    files: Vec<(String, String)>,
+    files: Vec<String>,
     target_canister_id: Principal,
     agent: Agent,
     proxy: Option<Principal>,
@@ -231,12 +247,12 @@ pub fn run_plugin(
     // same relative path it used in the manifest.
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
     for dir in &dirs {
-        ensure!(!crate::escapes_base(dir), UnsafeDirSnafu { dir });
+        ensure!(!crate::path::escapes_base(dir), UnsafeDirSnafu { dir });
         // Reject symlinks in the declared path: neither the final entry nor any
         // intermediate component may be a symlink, so the preopen cannot escape
         // `base_dir` to a target elsewhere on disk. (Symlinks *inside* a preopen
         // that escape it are separately rejected by the WASI sandbox.)
-        if let Some(link) = crate::first_symlink_component(&base_dir, dir) {
+        if let Some(link) = crate::path::first_symlink_component(&base_dir, dir) {
             return SymlinkDirSnafu { dir, link }.fail();
         }
         let host_path = base_dir.join(dir);
@@ -248,6 +264,24 @@ pub fn run_plugin(
                 FilePerms::READ,
             )
             .context(PreopenDirSnafu { dir: host_path })?;
+    }
+
+    // Read each declared file on the host and pass its content inline. The same
+    // path-safety checks as `dirs` apply: reject escaping or symlinked paths so
+    // a read cannot leave `base_dir`.
+    let mut file_inputs: Vec<FileInput> = Vec::with_capacity(files.len());
+    for name in &files {
+        ensure!(!crate::path::escapes_base(name), UnsafeFileSnafu { name });
+        if let Some(link) = crate::path::first_symlink_component(&base_dir, name) {
+            return SymlinkFileSnafu { name, link }.fail();
+        }
+        let path = base_dir.join(name);
+        let content =
+            std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
+        file_inputs.push(FileInput {
+            name: name.clone(),
+            content,
+        });
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
@@ -297,10 +331,7 @@ pub fn run_plugin(
         canister_id: target_canister_id.to_text(),
         environment,
         dirs,
-        files: files
-            .into_iter()
-            .map(|(name, content)| FileInput { name, content })
-            .collect(),
+        files: file_inputs,
         identity_principal: identity_principal.to_text(),
         proxy_canister_id: proxy.map(|p| p.to_text()),
     };
@@ -561,6 +592,53 @@ mod tests {
             None,
         );
         assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
+    }
+
+    #[test]
+    fn read_file_error_on_missing_file() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec!["nonexistent_file.txt".to_string()],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "test".to_string(),
+            None,
+        );
+        assert!(matches!(result, Err(RunPluginError::ReadFile { .. })));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_file_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        use std::os::unix::fs::symlink;
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::write(base.join("real.txt"), b"data").expect("write real file");
+        symlink(base.join("real.txt"), base.join("link.txt")).expect("create symlink");
+
+        let result = run_plugin(
+            wasm_path.into(),
+            base.to_path_buf(),
+            vec![],
+            vec!["link.txt".to_string()],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "test".to_string(),
+            None,
+        );
+        assert!(matches!(result, Err(RunPluginError::SymlinkFile { .. })));
     }
 
     #[test]

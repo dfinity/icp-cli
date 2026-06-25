@@ -1,5 +1,5 @@
-//! Path-safety helpers shared between the host runtime (`dirs` preopens) and
-//! the CLI's plugin sync (`files` reads).
+//! Path-safety helpers used by the host runtime to validate declared `dirs`/`files`
+//! entries before preopening directories or reading files under the canister base dir.
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 

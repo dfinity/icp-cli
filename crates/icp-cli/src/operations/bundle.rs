@@ -238,9 +238,11 @@ pub(crate) async fn create_bundle(
 ) -> Result<(), BundleError> {
     validate_canisters(&canisters)?;
     let canonical_project_dir = canonicalize(project_dir)?;
-    let canonical_sync_dirs = validate_source_paths(&canisters, &canonical_project_dir)?;
-    validate_output_path(output, &canonical_sync_dirs)?;
 
+    // Build before validating source paths: a canister's synced directories
+    // (e.g. a frontend `dist`) are commonly produced by its own build step, so
+    // they may not exist on disk until the build has run. Canonicalizing them
+    // first would fail with "No such file or directory" for those build outputs.
     build_many_with_progress_bar(
         canisters.clone(),
         builder,
@@ -249,6 +251,9 @@ pub(crate) async fn create_bundle(
         debug,
     )
     .await?;
+
+    let canonical_sync_dirs = validate_source_paths(&canisters, &canonical_project_dir)?;
+    validate_output_path(output, &canonical_sync_dirs)?;
 
     // Re-read the raw manifest to preserve networks and environments verbatim.
     let raw_manifest: ProjectManifest =

@@ -13,7 +13,7 @@ const MAX_WASM_STACK: usize = 512 * 1024;
 const PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
 
 use bytes::Bytes;
-use camino::{Utf8Component, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use snafu::prelude::*;
@@ -231,11 +231,7 @@ pub fn run_plugin(
     // same relative path it used in the manifest.
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
     for dir in &dirs {
-        let p = Utf8PathBuf::from(dir);
-        ensure!(
-            !p.is_absolute() && !p.components().any(|c| c == Utf8Component::ParentDir),
-            UnsafeDirSnafu { dir }
-        );
+        ensure!(!crate::escapes_base(dir), UnsafeDirSnafu { dir });
         // Reject symlinks in the declared path: neither the final entry nor any
         // intermediate component may be a symlink, so the preopen cannot escape
         // `base_dir` to a target elsewhere on disk. (Symlinks *inside* a preopen

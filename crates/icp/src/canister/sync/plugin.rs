@@ -68,12 +68,8 @@ pub(super) async fn sync(
 
     let mut files: Vec<(String, String)> = Vec::new();
     for name in adapter.files.as_deref().unwrap_or(&[]) {
-        let p = Utf8PathBuf::from(name);
         ensure!(
-            !p.is_absolute()
-                && !p
-                    .components()
-                    .any(|c| c == camino::Utf8Component::ParentDir),
+            !icp_sync_plugin::escapes_base(name),
             UnsafeFilePathSnafu { name }
         );
         // Reject symlinks in the declared path: neither the final entry nor any

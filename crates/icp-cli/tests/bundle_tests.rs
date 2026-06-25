@@ -523,6 +523,71 @@ fn bundle_rejects_source_outside_project() {
         .stderr(contains("my-canister").and(contains("outside the project directory")));
 }
 
+/// A plugin's synced directory is often an output of the canister's own build
+/// step (e.g. a frontend `dist` produced by `npm run build`), so it does not
+/// exist when bundling validates the sync sources, before the build. Validation
+/// must resolve sync paths lexically (no canonicalization) so a not-yet-built
+/// directory is accepted; the build then creates it before it is archived.
+#[test]
+fn bundle_accepts_synced_dir_created_by_build_step() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    // `generated-assets` is created by the build step; it does not exist on disk
+    // before `icp project bundle` runs.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  commands:
+                    - mkdir -p generated-assets
+                    - printf hello > generated-assets/index.html
+                    - cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  dirs:
+                    - generated-assets
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    // The build-produced directory is archived under the plugin's `dirs/` area.
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+    let mut found_asset = false;
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "plugins/my-canister/0/dirs/generated-assets/index.html" {
+            found_asset = true;
+        }
+    }
+    assert!(
+        found_asset,
+        "build-produced synced dir was not archived in the bundle"
+    );
+}
+
 /// Bundle a canister with two plugin sync steps and verify the archive layout: per-plugin
 /// wasm at `plugins/{canister}/{idx}.wasm`, preopened dirs at `plugins/{canister}/{idx}/dirs/`,
 /// input files at `plugins/{canister}/{idx}/files/`. Also verify the rewritten manifest

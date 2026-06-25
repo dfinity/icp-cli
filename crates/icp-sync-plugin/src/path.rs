@@ -59,24 +59,52 @@ pub(crate) fn first_symlink_component(base: &Utf8Path, rel: &str) -> Option<Utf8
     None
 }
 
+#[cfg(test)]
+mod escapes_base_tests {
+    use super::*;
+
+    #[test]
+    fn plain_relative_paths_are_safe() {
+        assert!(!escapes_base("a/b"));
+        assert!(!escapes_base("./a"));
+        assert!(!escapes_base("a/b/file.txt"));
+    }
+
+    #[test]
+    fn parent_and_root_components_escape() {
+        assert!(escapes_base("../a"));
+        assert!(escapes_base("a/../b"));
+        // An absolute path carries a `RootDir` component on every platform.
+        assert!(escapes_base("/abs"));
+    }
+
+    // On Windows a drive-relative path like `C:foo` has a `Prefix` component
+    // yet is NOT absolute, so an `is_absolute()` check alone would admit it and
+    // joining it onto a base would discard the base. `escapes_base` must reject
+    // it. (On Unix the same string is just an ordinary filename — see below.)
+    #[cfg(windows)]
+    #[test]
+    fn windows_drive_and_unc_prefixes_escape() {
+        assert!(escapes_base("C:foo")); // drive-relative (prefix, no root)
+        assert!(escapes_base(r"C:\foo")); // absolute (prefix + root)
+        assert!(escapes_base(r"\\server\share\x")); // UNC prefix
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_treats_drive_prefix_as_a_plain_name() {
+        // There is no `Prefix` parsing on Unix, so `C:foo` is just a (weird)
+        // filename with no escaping component.
+        assert!(!escapes_base("C:foo"));
+    }
+}
+
 #[cfg(all(test, unix))]
-mod tests {
+mod symlink_tests {
     use super::*;
     use std::os::unix::fs::symlink;
 
     use camino_tempfile::tempdir;
-
-    #[test]
-    fn escapes_base_flags_unsafe_components() {
-        assert!(!escapes_base("a/b"));
-        assert!(!escapes_base("./a"));
-        assert!(escapes_base("../a"));
-        assert!(escapes_base("a/../b"));
-        // Absolute paths carry a `RootDir` component on this (Unix) host. The
-        // Windows drive-prefix case (`C:foo`) only parses as `Prefix` on
-        // Windows and so cannot be exercised here.
-        assert!(escapes_base("/abs"));
-    }
 
     #[test]
     fn plain_relative_path_has_no_symlink() {

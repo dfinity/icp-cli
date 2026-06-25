@@ -770,7 +770,7 @@ fn validate_canisters(canisters: &[(PathBuf, Canister)]) -> Result<(), BundleErr
     Ok(())
 }
 
-/// Canonicalize every asset/plugin source path and confirm it lives inside the canonical
+/// Make every asset/plugin source path absolute and confirm it lives inside the
 /// project directory. Returns the canonical sync-directory paths for use in output-overlap
 /// detection.
 fn validate_source_paths(
@@ -846,6 +846,7 @@ fn resolve_within_project(
         .build()
     };
 
+    let project_dir = project_dir.strip_prefix(".").unwrap_or(project_dir);
     let rel = src.strip_prefix(project_dir).map_err(|_| escapes())?;
 
     let mut components: Vec<&str> = Vec::new();

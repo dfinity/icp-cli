@@ -23,5 +23,8 @@ wasmtime-wasi.workspace = true
 [build-dependencies]
 camino.workspace = true
 
+[dev-dependencies]
+camino-tempfile.workspace = true
+
 [lints]
 workspace = true

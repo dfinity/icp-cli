@@ -79,6 +79,19 @@ each `dir` from `base_dir.join(dir)` and passes `files` inline in
 lines (see stdio capture below); `stdio`, when set, receives the rolling
 progress lines live.
 
+### Declared-path safety (no symlinks)
+
+Declared `dirs`/`files` entries are resolved on the host *before* the WASI
+sandbox boundary, so the lexical "relative, no `..`" check is not enough: a
+declared entry that *is* a symlink — or that traverses a symlinked parent
+component — would let a preopen or a host read resolve to a target outside the
+canister directory. `first_symlink_component` (in `path.rs`, shared with the
+CLI's `files` reader) walks each component of the declared path under
+`base_dir` and rejects the entry if any prefix is a symlink. Symlinks are
+forbidden outright for now; the restriction can be relaxed later if a safe use
+case emerges. (Symlinks *inside* a preopen that escape it are a separate
+concern, already rejected by the WASI sandbox — cap-std — at runtime.)
+
 ### `HostState` and bindgen
 
 ```rust
@@ -145,5 +158,6 @@ pub struct Adapter {
 ### `crates/icp/src/canister/sync/plugin.rs`
 
 Resolves the wasm (local read or remote HTTP fetch into the package cache),
-verifies sha256, reads the inline `files` (rejecting absolute or `..` paths),
-then calls `icp_sync_plugin::run_plugin(...)`.
+verifies sha256, reads the inline `files` (rejecting absolute, `..`, or
+symlinked paths via `first_symlink_component`), then calls
+`icp_sync_plugin::run_plugin(...)`.

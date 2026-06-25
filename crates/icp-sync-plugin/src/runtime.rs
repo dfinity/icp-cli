@@ -146,6 +146,11 @@ pub enum RunPluginError {
     ))]
     UnsafeDir { dir: String },
 
+    #[snafu(display(
+        "plugin dir '{dir}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin dirs"
+    ))]
+    SymlinkDir { dir: String, link: Utf8PathBuf },
+
     #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
     PreopenDir {
         source: wasmtime::Error,
@@ -231,6 +236,13 @@ pub fn run_plugin(
             !p.is_absolute() && !p.components().any(|c| c == Utf8Component::ParentDir),
             UnsafeDirSnafu { dir }
         );
+        // Reject symlinks in the declared path: neither the final entry nor any
+        // intermediate component may be a symlink, so the preopen cannot escape
+        // `base_dir` to a target elsewhere on disk. (Symlinks *inside* a preopen
+        // that escape it are separately rejected by the WASI sandbox.)
+        if let Some(link) = crate::first_symlink_component(&base_dir, dir) {
+            return SymlinkDirSnafu { dir, link }.fail();
+        }
         let host_path = base_dir.join(dir);
         wasi_builder
             .preopened_dir(
@@ -526,6 +538,33 @@ mod tests {
             None,
         );
         assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_dir_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        use std::os::unix::fs::symlink;
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("real")).expect("create real dir");
+        symlink(base.join("real"), base.join("link")).expect("create symlink");
+
+        let result = run_plugin(
+            wasm_path.into(),
+            base.to_path_buf(),
+            vec!["link".to_string()],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "test".to_string(),
+            None,
+        );
+        assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
     }
 
     #[test]

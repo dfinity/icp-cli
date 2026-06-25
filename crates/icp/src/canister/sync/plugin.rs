@@ -18,6 +18,11 @@ pub enum PluginError {
     ))]
     UnsafeFilePath { name: String },
 
+    #[snafu(display(
+        "plugin file '{name}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin files"
+    ))]
+    SymlinkFile { name: String, link: Utf8PathBuf },
+
     #[snafu(display("failed to read plugin input file at '{path}'"))]
     ReadFile {
         source: crate::fs::IoError,
@@ -71,6 +76,12 @@ pub(super) async fn sync(
                     .any(|c| c == camino::Utf8Component::ParentDir),
             UnsafeFilePathSnafu { name }
         );
+        // Reject symlinks in the declared path: neither the final entry nor any
+        // intermediate component may be a symlink, so the host read cannot
+        // escape the canister directory to a file elsewhere on disk.
+        if let Some(link) = icp_sync_plugin::first_symlink_component(&params.path, name) {
+            return SymlinkFileSnafu { name, link }.fail();
+        }
         let abs = params.path.join(name);
         let content = read_to_string(abs.as_ref()).context(ReadFileSnafu { path: abs })?;
         files.push((name.clone(), content));

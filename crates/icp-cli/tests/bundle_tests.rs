@@ -525,11 +525,11 @@ fn bundle_rejects_source_outside_project() {
 
 /// A plugin's synced directory is often an output of the canister's own build
 /// step (e.g. a frontend `dist` produced by `npm run build`), so it does not
-/// exist when bundling starts. Bundling must run the build before it validates
-/// and archives the sync sources — otherwise canonicalizing the not-yet-built
-/// directory fails with "No such file or directory".
+/// exist when bundling validates the sync sources, before the build. Validation
+/// must resolve sync paths lexically (no canonicalization) so a not-yet-built
+/// directory is accepted; the build then creates it before it is archived.
 #[test]
-fn bundle_builds_synced_dir_before_validating() {
+fn bundle_accepts_synced_dir_created_by_build_step() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");

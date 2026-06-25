@@ -238,11 +238,10 @@ pub(crate) async fn create_bundle(
 ) -> Result<(), BundleError> {
     validate_canisters(&canisters)?;
     let canonical_project_dir = canonicalize(project_dir)?;
+    let canonical_sync_dirs =
+        validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
+    validate_output_path(output, &canonical_sync_dirs)?;
 
-    // Build before validating source paths: a canister's synced directories
-    // (e.g. a frontend `dist`) are commonly produced by its own build step, so
-    // they may not exist on disk until the build has run. Canonicalizing them
-    // first would fail with "No such file or directory" for those build outputs.
     build_many_with_progress_bar(
         canisters.clone(),
         builder,
@@ -251,9 +250,6 @@ pub(crate) async fn create_bundle(
         debug,
     )
     .await?;
-
-    let canonical_sync_dirs = validate_source_paths(&canisters, &canonical_project_dir)?;
-    validate_output_path(output, &canonical_sync_dirs)?;
 
     // Re-read the raw manifest to preserve networks and environments verbatim.
     let raw_manifest: ProjectManifest =
@@ -778,6 +774,7 @@ fn validate_canisters(canisters: &[(PathBuf, Canister)]) -> Result<(), BundleErr
 /// project directory. Returns the canonical sync-directory paths for use in output-overlap
 /// detection.
 fn validate_source_paths(
+    project_dir: &Path,
     canisters: &[(PathBuf, Canister)],
     canonical_project_dir: &Path,
 ) -> Result<Vec<PathBuf>, BundleError> {
@@ -790,19 +787,21 @@ fn validate_source_paths(
                     if let Some(dirs) = &adapter.dirs {
                         for d in dirs {
                             let src = canister_path.join(d);
-                            let canon = canonicalize_within_project(
+                            let resolved = resolve_within_project(
                                 &src,
+                                project_dir,
                                 canonical_project_dir,
                                 &canister.name,
                             )?;
-                            canonical_sync_dirs.push(canon);
+                            canonical_sync_dirs.push(resolved);
                         }
                     }
                     if let Some(files) = &adapter.files {
                         for f in files {
                             let src = canister_path.join(f);
-                            canonicalize_within_project(
+                            resolve_within_project(
                                 &src,
+                                project_dir,
                                 canonical_project_dir,
                                 &canister.name,
                             )?;
@@ -813,6 +812,58 @@ fn validate_source_paths(
         }
     }
     Ok(canonical_sync_dirs)
+}
+
+/// Resolves a sync source path to its absolute location under the canonical
+/// project directory, rejecting paths that escape the project — without touching
+/// the filesystem.
+///
+/// Unlike [`canonicalize_within_project`], this performs no syscalls and does not
+/// require the path to exist. Sync directories are frequently produced by a
+/// canister's own build step (e.g. a frontend `dist` from `npm run build`), so
+/// they do not exist yet when this validation runs, before the build. Validating
+/// lexically keeps that feedback early instead of deferring it until after a
+/// potentially slow build.
+///
+/// Every canister path is rooted at `project_dir`, so the path's project-relative
+/// portion is recovered with `strip_prefix` and its `.`/`..` components resolved
+/// textually; a `..` that rises above the root — or an absolute/sibling path that
+/// `strip_prefix` rejects — is an escape. Symlinks are deliberately not resolved:
+/// the archive step records them verbatim (`follow_symlinks(false)`), and a
+/// not-yet-built directory cannot be a symlink anyway.
+fn resolve_within_project(
+    src: &Path,
+    project_dir: &Path,
+    canonical_project_dir: &Path,
+    canister: &str,
+) -> Result<PathBuf, BundleError> {
+    let escapes = || {
+        SourceEscapesProjectSnafu {
+            canister: canister.to_owned(),
+            path: src.to_path_buf(),
+            root: canonical_project_dir.to_path_buf(),
+        }
+        .build()
+    };
+
+    let rel = src.strip_prefix(project_dir).map_err(|_| escapes())?;
+
+    let mut components: Vec<&str> = Vec::new();
+    for component in rel.components() {
+        match component {
+            Utf8Component::Normal(c) => components.push(c),
+            Utf8Component::CurDir => {}
+            // A `..` with nothing left to pop rises above the project root.
+            Utf8Component::ParentDir => {
+                components.pop().ok_or_else(escapes)?;
+            }
+            Utf8Component::RootDir | Utf8Component::Prefix(_) => return Err(escapes()),
+        }
+    }
+
+    let mut resolved = canonical_project_dir.to_path_buf();
+    resolved.extend(components);
+    Ok(resolved)
 }
 
 /// Refuse to write the bundle output into a directory we are about to recursively archive —

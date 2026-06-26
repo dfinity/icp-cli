@@ -2,18 +2,18 @@
 Convention: changes to experimental features live in a dedicated
 `## Experimental` subsection under each version. Experimental features
 may receive breaking changes between releases without a major version
-bump. Currently experimental: sync plugins.
+bump. Currently experimental: project bundling
 -->
 
 # Unreleased
 
 # v1.0.2
 
-* fixe(bundle): path validation use parent-dir analysis without canonicalize.
+* feat(sync-plugin): `plugin` sync steps now reject any `dirs`/`files` entry that is, or traverses, a symlink. Together with the existing relative-path and `..` checks, this keeps a declared path from resolving to a target outside the canister directory. The restriction may be relaxed in a future release if a safe use case emerges.
 
 ## Experimental
 
-* feat(sync-plugin): `plugin` sync steps now reject any `dirs`/`files` entry that is, or traverses, a symlink. Together with the existing relative-path and `..` checks, this keeps a declared path from resolving to a target outside the canister directory. The restriction may be relaxed in a future release if a safe use case emerges.
+* fix(bundle): path validation use parent-dir analysis without canonicalize.
 
 # v1.0.1
 

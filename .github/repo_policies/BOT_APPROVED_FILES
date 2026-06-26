@@ -6,3 +6,8 @@ network-launcher-version
 
 # update-rust-toolchain.yml
 rust-toolchain.toml
+
+# release-pr.yml
+CHANGELOG.md
+Cargo.toml
+Cargo.lock

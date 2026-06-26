@@ -195,7 +195,8 @@
 <ul>
 <li>Each directory in <code>dirs:</code> is preopened <strong>read-only</strong>. The plugin sees it at the same relative path it used in the manifest (e.g. <code>dirs: ["assets"]</code> is visible as <code>assets/</code> inside the guest) and traverses it with standard filesystem APIs (<code>std::fs</code> in Rust).</li>
 <li>Files in <code>files:</code> are read by the host up front and passed inline in <code>sync-exec-input.files</code>. The plugin reads their content from the input struct, not from disk.</li>
-<li>Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected. Paths in <code>dirs:</code>/<code>files:</code> must be relative and may not contain <code>..</code>.</li>
+<li>Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.</li>
+<li>Paths in <code>dirs:</code>/<code>files:</code> must be relative and may not contain <code>..</code>. They also may not be — or traverse — a symlink: each declared entry is rejected if it or any of its parent components is a symlink, so a declared path cannot resolve to a target outside the canister directory. (This restriction may be relaxed later if a safe use case emerges.)</li>
 </ul>
 <h3 id="capabilities">Capabilities</h3>
 

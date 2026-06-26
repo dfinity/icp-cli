@@ -7,6 +7,8 @@ bump. Currently experimental: sync plugins.
 
 # Unreleased
 
+# v1.0.2
+
 # v1.0.1
 
 * feat: `icp identity import` can now be used with a `--delegation` flag to import a delegated identity. This is most useful for containers or other internal-only delegations; for anything involving a network, `icp identity delegation request` remains the recommended way to work with delegations.

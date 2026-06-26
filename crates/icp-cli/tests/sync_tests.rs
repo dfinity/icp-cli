@@ -465,6 +465,110 @@ async fn sync_plugin_registers_seed_data() {
         );
 }
 
+/// A `dirs:` entry that is a symlink (here pointing outside the project) is
+/// rejected before the plugin runs, so a preopen cannot escape the canister
+/// directory. Symlinks are forbidden outright for now — see
+/// `crates/icp-sync-plugin/DESIGN.md`.
+#[cfg(unix)]
+#[tokio::test]
+async fn sync_plugin_rejects_symlinked_dir() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // A real directory *outside* the project, and a symlink to it inside the
+    // project that the manifest declares as a `dirs:` entry.
+    let outside = ctx.home_path().join("outside-seed-data");
+    create_dir_all(&outside).expect("failed to create outside dir");
+    write_string(&outside.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    std::os::unix::fs::symlink(&outside, project_dir.join("seed-data"))
+        .expect("failed to create symlink");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("symlink").and(contains("seed-data")));
+}
+
+/// A `files:` entry that is a symlink (here pointing outside the project) is
+/// rejected before the host reads it, so a read cannot escape the canister
+/// directory.
+#[cfg(unix)]
+#[tokio::test]
+async fn sync_plugin_rejects_symlinked_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // A real file *outside* the project, and a symlink to it inside the project
+    // that the manifest declares as a `files:` entry.
+    let outside = ctx.home_path().join("outside-secret.txt");
+    write_string(&outside, "secret").expect("failed to write outside file");
+    std::os::unix::fs::symlink(&outside, project_dir.join("config.txt"))
+        .expect("failed to create symlink");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  files:
+                    - config.txt
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("symlink").and(contains("config.txt")));
+}
+
 #[tokio::test]
 async fn sync_script_icp_env_vars() {
     let ctx = TestContext::new();

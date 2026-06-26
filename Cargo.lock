@@ -3822,6 +3822,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "camino",
+ "camino-tempfile",
  "candid",
  "console 0.16.3",
  "hex",

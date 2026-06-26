@@ -5,25 +5,12 @@ use icp_sync_plugin::{RunPluginError, run_plugin};
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{
-    canister::wasm, fs::read_to_string, manifest::adapter::plugin::Adapter, package::PackageCache,
-};
+use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
 
 use super::Params;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
-    #[snafu(display(
-        "plugin file path '{name}' is not a safe relative path (no absolute paths or '..' allowed)"
-    ))]
-    UnsafeFilePath { name: String },
-
-    #[snafu(display("failed to read plugin input file at '{path}'"))]
-    ReadFile {
-        source: crate::fs::IoError,
-        path: Utf8PathBuf,
-    },
-
     #[snafu(transparent)]
     Wasm { source: wasm::WasmError },
 
@@ -56,25 +43,13 @@ pub(super) async fn sync(
     )
     .await?;
 
-    // 2. Collect inputs: `dirs` stays as manifest strings (runtime preopens them),
-    //    `files` are read on the host and passed inline.
+    // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
+    //    and reads the `files` itself — both anchored at `base_dir`, and both
+    //    subject to the runtime's path-safety checks (no escaping or symlinked
+    //    paths).
     let base_dir = Utf8PathBuf::from(params.path.as_str());
     let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
-
-    let mut files: Vec<(String, String)> = Vec::new();
-    for name in adapter.files.as_deref().unwrap_or(&[]) {
-        let p = Utf8PathBuf::from(name);
-        ensure!(
-            !p.is_absolute()
-                && !p
-                    .components()
-                    .any(|c| c == camino::Utf8Component::ParentDir),
-            UnsafeFilePathSnafu { name }
-        );
-        let abs = params.path.join(name);
-        let content = read_to_string(abs.as_ref()).context(ReadFileSnafu { path: abs })?;
-        files.push((name.clone(), content));
-    }
+    let files: Vec<String> = adapter.files.clone().unwrap_or_default();
 
     // 3. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent

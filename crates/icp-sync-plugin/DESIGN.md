@@ -63,7 +63,7 @@ pub fn run_plugin(
     wasm_path: Utf8PathBuf,
     base_dir: Utf8PathBuf,
     dirs: Vec<String>,
-    files: Vec<(String, String)>,
+    files: Vec<String>,
     target_canister_id: Principal,
     agent: Agent,
     proxy: Option<Principal>,
@@ -73,11 +73,32 @@ pub fn run_plugin(
 ) -> Result<Vec<String>, RunPluginError>
 ```
 
-`dirs` and `files` come directly from the manifest adapter. The runtime preopens
-each `dir` from `base_dir.join(dir)` and passes `files` inline in
-`SyncExecInput`. The returned `Vec<String>` is the plugin's persistent stderr
-lines (see stdio capture below); `stdio`, when set, receives the rolling
-progress lines live.
+`dirs` and `files` are the manifest-relative path strings, straight from the
+adapter. The runtime owns *all* filesystem access anchored at `base_dir`: it
+preopens each `dir` from `base_dir.join(dir)` and reads each `file` from
+`base_dir.join(file)`, passing the contents inline in `SyncExecInput`. Keeping
+both inside the runtime means the path-safety logic (below) lives in one place
+and stays private to this crate — the CLI just forwards strings. The returned
+`Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
+`stdio`, when set, receives the rolling progress lines live.
+
+### Declared-path safety (no symlinks)
+
+Declared `dirs`/`files` entries are resolved on the host *before* the WASI
+sandbox boundary, so a lexical "relative, no `..`" check is not enough on two
+counts. First, a Windows drive-relative path such as `C:foo` carries a `Prefix`
+component yet is not "absolute", so joining it would discard `base_dir`;
+`escapes_base` (in `path.rs`) rejects `..`, root, and drive-prefix components,
+mirroring the bundler's checks. Second, a declared entry that *is* a symlink —
+or that traverses a symlinked parent component — would let a preopen or a read
+resolve outside the canister directory; `first_symlink_component` walks each
+component of the declared path under `base_dir` and rejects the entry if any
+prefix is a symlink (returning the offending sub-path relative to `base_dir`, so
+errors don't leak absolute on-disk paths). Both helpers are crate-private and
+applied uniformly to `dirs` and `files`. Symlinks are forbidden outright for
+now; the restriction can be relaxed later if a safe use case emerges. (Symlinks
+*inside* a preopen that escape it are a separate concern, already rejected by
+the WASI sandbox — cap-std — at runtime.)
 
 ### `HostState` and bindgen
 
@@ -145,5 +166,7 @@ pub struct Adapter {
 ### `crates/icp/src/canister/sync/plugin.rs`
 
 Resolves the wasm (local read or remote HTTP fetch into the package cache),
-verifies sha256, reads the inline `files` (rejecting absolute or `..` paths),
-then calls `icp_sync_plugin::run_plugin(...)`.
+verifies sha256, then calls `icp_sync_plugin::run_plugin(...)`, forwarding the
+manifest's `dirs`/`files` strings unchanged. The runtime — not the CLI — opens
+those paths and enforces the path-safety checks, so the CLI no longer touches
+the plugin's input files itself.

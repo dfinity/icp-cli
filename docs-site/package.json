@@ -11,10 +11,10 @@
     "test:versions": "./test-version-switcher.sh"
   },
   "dependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@astrojs/starlight": "^0.38.3",
-    "astro": "^6.4.7",
-    "astro-mermaid": "^2.0.1",
+    "@astrojs/check": "^0.9.9",
+    "@astrojs/starlight": "^0.41.1",
+    "astro": "^7.0.3",
+    "astro-mermaid": "^2.1.0",
     "gray-matter": "^4.0.3",
     "sharp": "^0.33.5"
   },

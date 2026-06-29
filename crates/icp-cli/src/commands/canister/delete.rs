@@ -9,7 +9,10 @@ use crate::{
     operations::{proxy_management, recover_cycles},
 };
 
-/// Delete a canister from a network
+/// Delete a canister from a network.
+///
+/// Cycles will be sent to the caller via the cycles ledger.
+/// This is done by installing a temporary shim canister.
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     #[command(flatten)]

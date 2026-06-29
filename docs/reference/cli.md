@@ -262,7 +262,9 @@ Examples:
 
 ## `icp canister delete`
 
-Delete a canister from a network
+Delete a canister from a network.
+
+Cycles will be sent to the caller via the cycles ledger. This is done by installing a temporary shim canister.
 
 **Usage:** `icp canister delete [OPTIONS] <CANISTER>`
 

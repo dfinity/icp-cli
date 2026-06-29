@@ -13,17 +13,14 @@ const currentVersion = versionMatch ? versionMatch[1] : 'unknown';
 
 <div class="version-switcher" data-base-prefix={basePrefix}>
   {isDev ? (
-    <!-- Development: Show dev badge -->
     <div class="version-badge">
       <span class="version-current">dev</span>
     </div>
   ) : isMainBranch ? (
-    <!-- Main branch: Show main badge -->
     <div class="version-badge">
       <span class="version-current">main</span>
     </div>
   ) : (
-    <!-- Production: Show interactive dropdown -->
     <>
       <button class="version-button" id="version-button" aria-label="Switch documentation version">
         <span class="version-current">v{currentVersion}</span>

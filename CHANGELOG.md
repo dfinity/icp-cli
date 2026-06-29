@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling
 
 # Unreleased
 
+* feat: `icp canister delete` will now send the canister's remaining cycles to the caller
+
 # v1.0.2
 
 * feat(sync-plugin): `plugin` sync steps now reject any `dirs`/`files` entry that is, or traverses, a symlink. Together with the existing relative-path and `..` checks, this keeps a declared path from resolving to a target outside the canister directory. The restriction may be relaxed in a future release if a safe use case emerges.

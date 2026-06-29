@@ -202,3 +202,117 @@ async fn canister_delete_through_proxy() {
         "ID mapping should NOT contain my-canister after deletion"
     );
 }
+
+/// By default, `canister delete` recovers the canister's liquid cycles to the
+/// caller's cycles-ledger account before destroying it.
+#[tokio::test]
+async fn canister_delete_recovers_cycles() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Balance right before deletion; recovery should add to this.
+    let caller = icp_client.active_principal();
+    let balance_before = clients::cycles_ledger(&ctx).balance_of(caller, None).await;
+
+    // Delete without pre-stopping: recovery installs, starts, recovers, then
+    // delete auto-stops and destroys the canister.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "delete",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    let balance_after = clients::cycles_ledger(&ctx).balance_of(caller, None).await;
+    assert!(
+        balance_after > balance_before,
+        "expected cycles-ledger balance to increase after recovery: before={balance_before}, after={balance_after}"
+    );
+}
+
+/// `--no-recover-cycles` deletes immediately without recovering cycles, leaving
+/// the caller's cycles-ledger balance unchanged.
+#[tokio::test]
+async fn canister_delete_no_recover_cycles() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    let caller = icp_client.active_principal();
+    let balance_before = clients::cycles_ledger(&ctx).balance_of(caller, None).await;
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "delete",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--no-recover-cycles",
+        ])
+        .assert()
+        .success();
+
+    let balance_after = clients::cycles_ledger(&ctx).balance_of(caller, None).await;
+    assert_eq!(
+        balance_after, balance_before,
+        "balance must be unchanged when recovery is skipped"
+    );
+}

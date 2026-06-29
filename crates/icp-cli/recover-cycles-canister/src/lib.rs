@@ -23,7 +23,7 @@ const CYCLES_LEDGER: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 16, 0, 2
 /// cost. `ic-cdk` pre-checks `attached + cost_call(..) <= liquid_balance` before
 /// sending, so the only requirement is that this margin exceeds the true
 /// `cost_call`; any excess simply burns at delete time, as it would have anyway.
-const RESERVE_MARGIN: u128 = 1_000_000_000;
+const RESERVE_MARGIN: u128 = 10_000_000_000;
 
 #[derive(CandidType, Deserialize)]
 struct Account {

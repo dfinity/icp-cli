@@ -26,7 +26,7 @@ use crate::{artifacts, operations::proxy_management};
 /// skipped as not worth the reinstall. Kept in line with the recovery
 /// canister's own reserve margin: a canister holding less than this cannot
 /// yield a meaningful deposit once the call cost is subtracted.
-const RECOVERY_THRESHOLD: u128 = 1_000_000_000;
+const RECOVERY_THRESHOLD: u128 = 10_000_000_000;
 
 #[derive(Debug, Snafu)]
 pub(crate) enum RecoverCyclesError {

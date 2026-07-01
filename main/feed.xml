@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Mon, 29 Jun 2026 08:29:09 GMT</lastBuildDate>
-    <pubDate>Fri, 26 Jun 2026 15:03:30 GMT</pubDate>
+    <lastBuildDate>Wed, 01 Jul 2026 14:55:24 GMT</lastBuildDate>
+    <pubDate>Wed, 01 Jul 2026 14:54:18 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Wed, 01 Jul 2026 14:54:18 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
@@ -23,14 +31,6 @@
       <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
       <pubDate>Fri, 26 Jun 2026 15:03:30 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Tue, 23 Jun 2026 18:16:45 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

@@ -361,7 +361,8 @@ or a “detached” canister on a network.</p>
 </li>
 </ul>
 <h2 id="icp-canister-delete"><code>icp canister delete</code></h2>
-<p>Delete a canister from a network</p>
+<p>Delete a canister from a network.</p>
+<p>Cycles will be sent to the caller via the cycles ledger. This is done by installing a temporary shim canister.</p>
 <p><strong>Usage:</strong> <code>icp canister delete [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-3"><strong>Arguments:</strong></h6>
 <ul>
@@ -374,6 +375,7 @@ or a “detached” canister on a network.</p>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the management canister call through</li>
+<li><code>--no-recover-cycles</code> — Skip recovering the canister’s liquid cycles to your cycles-ledger account before deletion (they are burned instead)</li>
 </ul>
 <h2 id="icp-canister-install"><code>icp canister install</code></h2>
 <p>Install a built WASM to a canister on a network</p>

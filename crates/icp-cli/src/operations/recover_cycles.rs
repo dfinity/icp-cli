@@ -10,7 +10,7 @@
 //! failure to move a *meaningful* balance is a hard error so the user can
 //! retry rather than silently lose cycles.
 
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, InstallCodeArgs,

@@ -750,10 +750,6 @@ async fn canister_settings_update_miscellaneous() {
         );
 
     // Update miscellaneous settings.
-    // NOTE: `log_memory_limit` is included below, but PocketIC does not yet
-    // support it — setting it via `update_settings` has no effect, and querying
-    // the canister settings always returns 0 regardless of the value set.
-    // When PocketIC gains support, the assertion should change from 0 to 1_048_576.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -801,9 +797,7 @@ async fn canister_settings_update_miscellaneous() {
                 .and(contains("Reserved cycles limit: 6_000_000_000_000"))
                 .and(contains("Wasm memory limit: 4_294_967_296"))
                 .and(contains("Wasm memory threshold: 4_294_967_296"))
-                // PocketIC does not support log_memory_limit yet — always returns 0.
-                // Update to 1_048_576 once PocketIC support lands.
-                .and(contains("Log memory limit: 0")),
+                .and(contains("Log memory limit: 1_048_576")),
         );
 }
 

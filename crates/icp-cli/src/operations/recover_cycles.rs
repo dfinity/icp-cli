@@ -133,7 +133,9 @@ pub(crate) async fn recover_cycles_before_delete(
         UpdateSettingsArgs {
             canister_id: CanisterId::from(canister_id),
             settings: CanisterSettings {
+                // Lower the freezing threshold to ensure cycles are liquid
                 freezing_threshold: Some(600_u128.into()),
+                // Reset several settings to default that affect costs
                 compute_allocation: Some(0_u128.into()),
                 memory_allocation: Some(0_u128.into()),
                 wasm_memory_limit: Some(3_221_225_472_u128.into()),

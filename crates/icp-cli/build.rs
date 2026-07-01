@@ -1,3 +1,7 @@
+// It's okay to use std::path::{Path, PathBuf} in build scripts.
+#![allow(clippy::disallowed_types)]
+
+use std::path::PathBuf;
 use std::process::Command;
 
 mod artifacts;
@@ -58,6 +62,46 @@ pub(crate) const NETWORK_DOCKER_ENGINE: &str = "networks:
     std::fs::write(format!("{out_dir}/network_constants.rs"), constants).unwrap();
 }
 
+/// Builds the `recover-cycles-canister` crate to wasm and embeds it via the
+/// `RECOVER_CYCLES_WASM` env var. Unlike the downloaded artifacts in
+/// `source.json`, this canister lives in-tree and is compiled here on every
+/// build. It is required for cycle recovery during `icp canister delete`, so a
+/// missing `wasm32-unknown-unknown` target is a hard failure.
+fn build_recover_cycles_canister() {
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let crate_manifest = manifest_dir.join("recover-cycles-canister/Cargo.toml");
+    let target_dir = out_dir.join("recover-cycles-target");
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    println!("cargo:rerun-if-changed=recover-cycles-canister/src/lib.rs");
+    println!("cargo:rerun-if-changed=recover-cycles-canister/Cargo.toml");
+    println!("cargo:rerun-if-changed=recover-cycles-canister/Cargo.lock");
+
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+            "--locked",
+            "--manifest-path",
+            crate_manifest.to_str().unwrap(),
+            "--target-dir",
+            target_dir.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to spawn cargo build for recover-cycles-canister");
+    assert!(
+        status.success(),
+        "cargo build --target wasm32-unknown-unknown failed for recover-cycles-canister \
+         (run `rustup target add wasm32-unknown-unknown`)"
+    );
+
+    let wasm = target_dir.join("wasm32-unknown-unknown/release/recover_cycles_canister.wasm");
+    println!("cargo:rustc-env=RECOVER_CYCLES_WASM={}", wasm.display());
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=artifacts/mod.rs");
@@ -68,4 +112,5 @@ fn main() {
     }
     define_test_network_launcher_version();
     artifacts::bundle_artifacts();
+    build_recover_cycles_canister();
 }

@@ -262,7 +262,9 @@ Examples:
 
 ## `icp canister delete`
 
-Delete a canister from a network
+Delete a canister from a network.
+
+Cycles will be sent to the caller via the cycles ledger. This is done by installing a temporary shim canister.
 
 **Usage:** `icp canister delete [OPTIONS] <CANISTER>`
 
@@ -277,6 +279,7 @@ Delete a canister from a network
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
+* `--no-recover-cycles` — Skip recovering the canister's liquid cycles to your cycles-ledger account before deletion (they are burned instead)
 
 
 

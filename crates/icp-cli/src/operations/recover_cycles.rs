@@ -10,10 +10,11 @@
 //! failure to move a *meaningful* balance is a hard error so the user can
 //! retry rather than silently lose cycles.
 
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::Agent;
 use ic_management_canister_types::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, InstallCodeArgs,
+    UpdateSettingsArgs,
 };
 use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
@@ -23,15 +24,23 @@ use super::proxy::UpdateOrProxyError;
 use crate::{artifacts, operations::proxy_management};
 
 /// Total cycle balance (from `canister_status`) at or below which recovery is
-/// skipped as not worth the reinstall. Kept in line with the recovery
-/// canister's own reserve margin: a canister holding less than this cannot
-/// yield a meaningful deposit once the call cost is subtracted.
-const RECOVERY_THRESHOLD: u128 = 200_000_000_000;
+/// skipped as not worth the reinstall. Kept equal to RESERVE_MARGIN: a canister
+/// at this balance would have roughly nothing liquid to deposit once call
+/// overhead is subtracted.
+const RECOVERY_THRESHOLD: u128 = 50_000_000_000;
 
 #[derive(Debug, Snafu)]
 pub(crate) enum RecoverCyclesError {
     #[snafu(display("failed to query status of canister {canister_id} before cycle recovery"))]
     QueryStatus {
+        canister_id: Principal,
+        source: UpdateOrProxyError,
+    },
+
+    #[snafu(display(
+        "failed to lower freezing threshold on canister {canister_id} before cycle recovery"
+    ))]
+    UpdateSettings {
         canister_id: Principal,
         source: UpdateOrProxyError,
     },
@@ -115,6 +124,29 @@ pub(crate) async fn recover_cycles_before_delete(
     }
 
     // From here the balance is meaningful, so any failure is fatal to the delete.
+
+    // Lower the freezing threshold so the recovery canister sees a larger liquid
+    // balance and can deposit close to the full total.
+    proxy_management::update_settings(
+        agent,
+        proxy,
+        UpdateSettingsArgs {
+            canister_id: CanisterId::from(canister_id),
+            settings: CanisterSettings {
+                freezing_threshold: Some(600_u128.into()),
+                compute_allocation: Some(0_u128.into()),
+                memory_allocation: Some(0_u128.into()),
+                wasm_memory_limit: Some(3_221_225_472_u128.into()),
+                wasm_memory_threshold: Some(0_u128.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                ..Default::default()
+            },
+            sender_canister_version: None,
+        },
+    )
+    .await
+    .context(UpdateSettingsSnafu { canister_id })?;
+
     let arg = Encode!(&destination).context(EncodeDestinationSnafu)?;
     proxy_management::install_code(
         agent,

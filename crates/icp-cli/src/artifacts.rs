@@ -14,6 +14,13 @@ pub fn get_proxy_wasm() -> &'static [u8] {
     embed::proxy()
 }
 
+/// Returns the recover-cycles canister wasm, built at compile time for
+/// wasm32-unknown-unknown by `build.rs`. Force-installed onto a canister during
+/// `icp canister delete` to deposit its liquid cycles back to the caller.
+pub fn get_recover_cycles_wasm() -> &'static [u8] {
+    include_bytes!(env!("RECOVER_CYCLES_WASM"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

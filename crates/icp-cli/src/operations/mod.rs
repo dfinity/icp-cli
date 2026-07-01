@@ -7,6 +7,7 @@ pub(crate) mod create;
 pub(crate) mod install;
 pub(crate) mod proxy;
 pub(crate) mod proxy_management;
+pub(crate) mod recover_cycles;
 pub(crate) mod settings;
 pub(crate) mod snapshot_transfer;
 pub(crate) mod sync;

@@ -1,0 +1,23 @@
+# Empty [workspace] table detaches this crate from the parent icp-cli workspace:
+# it is built on its own for wasm32-unknown-unknown by crates/icp-cli/build.rs and
+# embedded into the CLI binary, so it must not inherit the parent's members/resolver.
+[workspace]
+
+[package]
+name = "recover-cycles-canister"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = "0.10"
+ic-cdk = "0.20"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

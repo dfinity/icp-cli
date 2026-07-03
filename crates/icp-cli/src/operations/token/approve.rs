@@ -66,6 +66,7 @@ pub struct ApproveInfo {
 /// * `amount` - The decimal allowance amount to grant
 /// * `from_subaccount` - The caller's subaccount to grant the allowance from
 /// * `spender` - The account being granted the allowance
+/// * `expires_at` - Optional absolute expiry, in nanoseconds since the Unix epoch
 ///
 /// # Returns
 ///
@@ -76,6 +77,7 @@ pub async fn approve(
     amount: &BigDecimal,
     from_subaccount: Option<[u8; 32]>,
     spender: Account,
+    expires_at: Option<u64>,
 ) -> Result<ApproveInfo, TokenApproveError> {
     // Obtain token info
     let canister_id = match TOKEN_LEDGER_CIDS.get(token) {
@@ -143,7 +145,7 @@ pub async fn approve(
         spender,
         amount: ledger_amount.clone(),
         expected_allowance: None,
-        expires_at: None,
+        expires_at,
         fee: None,
         memo: None,
         created_at_time: None,

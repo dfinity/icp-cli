@@ -435,6 +435,123 @@ async fn token_approve_with_subaccounts() {
 }
 
 #[tokio::test]
+async fn token_approve_with_expiry() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    // Fund alice so she can pay the approval fee
+    let icp_ledger = clients::ledger(&ctx);
+    icp_ledger
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
+        .await; // 10 ICP
+
+    // Approve bob for 5 ICP, expiring 24h from now
+    let before_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    icp_client.use_identity("alice");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "5",
+            &bob_principal.to_string(),
+            "--expires-in",
+            "24h",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        // Human output surfaces the resolved (RFC 3339) expiry
+        .stdout(contains("Expires at:"))
+        .success();
+
+    let after_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    // The ledger records an expiry ~24h ahead (bounded by the wall-clock window
+    // around the CLI call)
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.allowance, 500_000_000_u128);
+    let day_nanos: u128 = 24 * 60 * 60 * 1_000_000_000;
+    let expires_at = u128::from(
+        allowance
+            .expires_at
+            .expect("expiry should be set on the allowance"),
+    );
+    assert!(
+        expires_at >= before_nanos + day_nanos && expires_at <= after_nanos + day_nanos,
+        "expiry {expires_at} not within [{}, {}]",
+        before_nanos + day_nanos,
+        after_nanos + day_nanos,
+    );
+
+    // --json exposes the raw expiry timestamp
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains(format!(
+            "\"expires_at\":{}",
+            allowance.expires_at.unwrap()
+        )))
+        .success();
+
+    // An allowance granted without an expiry reports none
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "1",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.expires_at, None);
+}
+
+#[tokio::test]
 async fn token_balance_with_subaccount() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");

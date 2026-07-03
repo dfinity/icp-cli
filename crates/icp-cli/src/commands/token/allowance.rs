@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
+use crate::commands::token::format_expiry;
 use crate::operations::token::allowance::get_allowance;
 
 /// Display the allowance granted to a spender (ICRC-2) (default token: icp)
@@ -95,7 +96,7 @@ pub(crate) async fn exec(
     } else {
         println!("Allowance: {}", info.allowance);
         if let Some(expires_at) = info.expires_at {
-            println!("Expires at: {expires_at} (nanoseconds since epoch)");
+            println!("Expires at: {}", format_expiry(expires_at));
         }
     }
 

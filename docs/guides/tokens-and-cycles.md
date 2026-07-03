@@ -169,6 +169,84 @@ This works with any ICRC-1 compatible token ledger on the Internet Computer.
 
 **Finding Token Ledger IDs:** You can find ledger canister IDs for various tokens on the [ICP Dashboard](https://dashboard.internetcomputer.org/tokens).
 
+## Approving Token Spending (Allowances)
+
+Beyond direct transfers, ICP and ICRC-2 compatible tokens support *allowances*: you authorize another principal — the **spender**, typically a canister — to transfer a limited amount of tokens from your account on your behalf. This is the foundation for many DeFi and payment flows, where a canister pulls funds only when needed (for example, a DEX executing a swap or a service charging per use) rather than requiring you to send tokens up front.
+
+Allowances follow the [ICRC-2 standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md) and work with any ICRC-2 compatible ledger, including the ICP ledger.
+
+### Granting an Allowance
+
+Use `icp token approve` to authorize a spender:
+
+```bash
+# Approve a canister to spend up to 5 ICP on your behalf
+icp token approve 5 <SPENDER> -n ic
+
+# Approve 0.01 ckBTC (any ICRC-2 ledger, by canister id)
+icp token mxzaz-hqaaa-aaaar-qaada-cai approve 0.01 <SPENDER> -n ic
+```
+
+`<SPENDER>` is the principal you are authorizing (usually a canister ID). The amount is in whole tokens and supports the same [human-readable suffixes](#amount-format) as transfers.
+
+**Approvals overwrite, they do not add.** Each `approve` call *sets* the allowance to the amount you specify, replacing any previous value. Approving `5` and then `2` leaves an allowance of `2`, not `7`. To revoke an allowance, approve `0`:
+
+```bash
+icp token approve 0 <SPENDER> -n ic
+```
+
+The allowance is granted from your account, which pays the standard ledger fee (0.0001 ICP for the ICP ledger).
+
+### Setting an Expiry
+
+For safety, you can make an allowance expire automatically with `--expires-in`. It accepts a relative duration (suffixes `s`, `m`, `h`, `d`, `w`; a bare number is seconds), the same format used elsewhere in the CLI:
+
+```bash
+# Allow spending for the next 24 hours only
+icp token approve 5 <SPENDER> --expires-in 24h -n ic
+
+# Expire in 30 days
+icp token approve 5 <SPENDER> --expires-in 30d -n ic
+```
+
+A short expiry limits your exposure if the spender is ever compromised. Without `--expires-in`, the allowance stays in effect until you change or revoke it.
+
+### Checking an Allowance
+
+Use `icp token allowance` to see how much a spender is currently authorized to transfer:
+
+```bash
+# Allowance you granted to a spender
+icp token allowance <SPENDER> -n ic
+```
+
+This is a read-only query, so you can inspect any allowance — not just your own. Use `--of-principal` to look up the allowance another account granted:
+
+```bash
+# Allowance that <OWNER> granted to <SPENDER>
+icp token allowance <SPENDER> --of-principal <OWNER> -n ic
+```
+
+The output includes the expiry, if one was set.
+
+### Allowances with Subaccounts
+
+Both commands accept [subaccount](#subaccounts) flags, specified as hex strings just like `balance` and `transfer`:
+
+| Flag | Command | Meaning |
+|------|---------|---------|
+| `--from-subaccount <hex>` | `approve` | Your subaccount the allowance is granted from (the account debited) |
+| `--subaccount <hex>` | `allowance` | The owner subaccount that granted the allowance |
+| `--spender-subaccount <hex>` | both | The spender's subaccount |
+
+```bash
+# Approve from your subaccount 1, to the spender's subaccount 2
+icp token approve 5 <SPENDER> --from-subaccount 1 --spender-subaccount 2 -n ic
+
+# Check that same allowance
+icp token allowance <SPENDER> --subaccount 1 --spender-subaccount 2 -n ic
+```
+
 ## Transferring Cycles
 
 Transfer cycles directly to another principal via the cycles ledger:

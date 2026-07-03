@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+pub(crate) mod allowance;
+pub(crate) mod approve;
 pub(crate) mod balance;
 pub(crate) mod transfer;
 
@@ -18,4 +20,6 @@ pub(crate) struct Command {
 pub(crate) enum Commands {
     Balance(balance::BalanceArgs),
     Transfer(transfer::TransferArgs),
+    Approve(approve::ApproveArgs),
+    Allowance(allowance::AllowanceArgs),
 }

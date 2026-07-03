@@ -173,7 +173,7 @@ This works with any ICRC-1 compatible token ledger on the Internet Computer.
 
 Beyond direct transfers, ICP and ICRC-2 compatible tokens support *allowances*: you authorize another principal — the **spender**, typically a canister — to transfer a limited amount of tokens from your account on your behalf. This is the foundation for many payment and recurring-billing flows, where a canister pulls funds only when needed (for example, an exchange platform settling a trade or a service charging per use) rather than requiring you to send tokens up front.
 
-Allowances follow the [ICRC-2 standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md) and work with any ICRC-2 compatible ledger, including the ICP ledger.
+Allowances follow the [ICRC-2 standard](https://docs.internetcomputer.org/references/digital-asset-standards/#icrc-2-approve-and-transfer-from) and work with any ICRC-2 compatible ledger, including the ICP ledger.
 
 ### Granting an Allowance
 

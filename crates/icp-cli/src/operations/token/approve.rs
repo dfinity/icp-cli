@@ -1,6 +1,7 @@
-use bigdecimal::{BigDecimal, num_bigint::ToBigInt};
+use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{Agent, AgentError};
+use icp::parsers::to_token_unit_amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError as Icrc2ApproveError};
 use snafu::{ResultExt, Snafu};
@@ -9,7 +10,7 @@ use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum TokenApproveError {
-    #[snafu(display("failed to parse canister id '{canister_id}'"))]
+    #[snafu(display("failed to parse canister id '{canister_id}': {source}"))]
     ParseCanisterId {
         canister_id: String,
         source: candid::types::principal::PrincipalError,
@@ -27,8 +28,8 @@ pub enum TokenApproveError {
     #[snafu(display("failed to decode symbol response"))]
     DecodeSymbol { source: candid::Error },
 
-    #[snafu(display("invalid amount: unable to convert to ledger units"))]
-    InvalidAmount,
+    #[snafu(display("invalid amount: {message}"))]
+    InvalidAmount { message: String },
 
     #[snafu(display("failed to encode approve argument"))]
     EncodeApproveArg { source: candid::Error },
@@ -125,17 +126,14 @@ pub async fn approve(
     );
 
     // Check for errors
-    let (decimals, symbol) = (decimals? as u32, symbol?);
+    let (decimals, symbol) = (decimals?, symbol?);
 
-    // Calculate units of token to approve
-    // Ledgers do not work in decimals and instead use the smallest non-divisible unit of the token
-    let ledger_amount_decimal = amount.clone() * 10u128.pow(decimals);
-    let ledger_amount = ledger_amount_decimal
-        .to_bigint()
-        .ok_or(TokenApproveError::InvalidAmount)?
-        .to_biguint()
-        .ok_or(TokenApproveError::InvalidAmount)
-        .map(Nat::from)?;
+    // Convert the decimal amount to the ledger's smallest unit. This validates that
+    // the amount is exactly representable at the token's precision (rather than
+    // silently truncating) and uses arbitrary-precision math to avoid overflow.
+    let ledger_amount = to_token_unit_amount(amount.clone(), decimals)
+        .map(Nat::from)
+        .map_err(|message| TokenApproveError::InvalidAmount { message })?;
 
     // Capture the spender display before the value is moved into the argument
     let spender_display = spender.to_string();

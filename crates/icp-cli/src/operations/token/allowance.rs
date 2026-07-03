@@ -9,7 +9,7 @@ use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 
 #[derive(Debug, Snafu)]
 pub enum GetAllowanceError {
-    #[snafu(display("failed to parse canister id '{canister_id}'"))]
+    #[snafu(display("failed to parse canister id '{canister_id}': {source}"))]
     ParseCanisterId {
         canister_id: String,
         source: candid::types::principal::PrincipalError,

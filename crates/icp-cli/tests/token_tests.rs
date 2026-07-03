@@ -309,6 +309,22 @@ async fn token_approve_and_allowance() {
         .stdout(contains("\"allowance\":\"5.00000000 ICP\""))
         .success();
 
+    // An amount too precise for the token's decimals (ICP has 8) is rejected up
+    // front rather than silently truncated
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "0.000000001", // 9 decimal places
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stderr(contains("cannot be represented"))
+        .failure();
+
     // Re-approving overwrites (not adds to) the existing allowance, and --quiet
     // prints only the block index
     icp_client.use_identity("alice");

@@ -8,6 +8,7 @@ bump. Currently experimental: project bundling
 # Unreleased
 
 * feat: `icp canister delete` will now send the canister's remaining cycles to the caller
+* feat: The root key of a `connected` network is now optional. When you connect to a local (loopback) network by URL, the root key is fetched from the network automatically, so `--network <URL>` no longer requires `--root-key`. A remote network must still provide its root key (via the manifest `root-key` or `--root-key`); previously an omitted key silently defaulted to the mainnet key, which now surfaces a clear error instead. The built-in `ic` network is unchanged.
 
 # v1.0.2
 

@@ -99,8 +99,9 @@ pub(crate) struct NetworkOptInner {
     #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target)]
     network: Option<NetworkTarget>,
 
-    /// The root key to use if connecting to a network by URL.
-    /// Required when using `--network <URL>`.
+    /// The root key to use when connecting to a network by URL.
+    /// Optional: for a local (loopback) URL it is fetched from the network;
+    /// for a remote URL it is required.
     #[arg(long, short = 'k', requires = "network", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
     root_key: Option<RootKey>,
 }
@@ -109,7 +110,7 @@ pub(crate) struct NetworkOptInner {
 // validation to only allow --root-key when the network is a url.
 #[derive(Clone, Debug, Default)]
 pub(crate) enum NetworkOpt {
-    Url(Url, RootKey),
+    Url(Url, Option<RootKey>),
 
     Name(String),
 
@@ -122,14 +123,10 @@ impl FromArgMatches for NetworkOpt {
         let inner = NetworkOptInner::from_arg_matches(matches)?;
 
         match (inner.network, inner.root_key) {
-            // Case: We have a URL, so we REQUIRE the root key
-            (Some(NetworkTarget::Url(url)), Some(key)) => Ok(NetworkOpt::Url(url, key)),
-
-            // ERROR Case: URL provided but missing root key
-            (Some(NetworkTarget::Url(_)), None) => Err(clap::Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "`--root-key` is required when `--network` is a URL.\n",
-            )),
+            // Case: URL, with or without a root key. A missing key is resolved
+            // when the network is accessed (fetched for a local network, error
+            // for remote).
+            (Some(NetworkTarget::Url(url)), key) => Ok(NetworkOpt::Url(url, key)),
 
             // Case: Named network (root key should be empty)
             (Some(NetworkTarget::Named(name)), None) => Ok(NetworkOpt::Name(name)),
@@ -169,7 +166,7 @@ impl Args for NetworkOpt {
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
         match v {
-            NetworkOpt::Url(url, RootKey(key)) => NetworkSelection::Url(url, key),
+            NetworkOpt::Url(url, key) => NetworkSelection::Url(url, key.map(|RootKey(k)| k)),
             NetworkOpt::Name(name) => NetworkSelection::Named(name),
             NetworkOpt::None => NetworkSelection::Default,
         }

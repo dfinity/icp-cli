@@ -163,7 +163,7 @@ Make a canister call
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--args-file <ARGS_FILE>` — Path to a file containing call arguments
@@ -239,7 +239,7 @@ Examples:
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
@@ -275,7 +275,7 @@ Cycles will be sent to the caller via the cycles ledger. This is done by install
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -332,7 +332,7 @@ Install a built WASM to a canister on a network
 
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for `--wasm-memory-persistence replace`
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -367,7 +367,7 @@ Fetch and display canister logs
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
@@ -396,7 +396,7 @@ Read a metadata section from a canister
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -416,7 +416,7 @@ Migrate a canister ID from one subnet to another
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — The canister to replace with the source canister's ID
@@ -456,7 +456,7 @@ Queries the canister_status endpoint of the management canister and displays onl
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Format output as JSON
@@ -477,7 +477,7 @@ Change a canister's settings to specified values
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--force` — Force the operation without confirmation prompts
@@ -518,7 +518,7 @@ Synchronize a canister's settings with those defined in the project
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
@@ -555,7 +555,7 @@ Create a snapshot of a canister's state
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
@@ -579,7 +579,7 @@ Delete a canister snapshot
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -600,7 +600,7 @@ Download a snapshot to local disk
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
@@ -622,7 +622,7 @@ List all snapshots for a canister
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -645,7 +645,7 @@ Restore a canister from a snapshot
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
@@ -665,7 +665,7 @@ Upload a snapshot from local disk
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
@@ -690,7 +690,7 @@ Start a canister on a network
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -727,7 +727,7 @@ Examples:
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -750,7 +750,7 @@ Stop a canister on a network
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -771,7 +771,7 @@ Top up a canister with cycles
 
 * `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -800,7 +800,7 @@ Display the cycles balance
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -825,7 +825,7 @@ Exactly one of --icp or --cycles must be provided.
 * `--from-subaccount <FROM_SUBACCOUNT>` — Subaccount to withdraw the ICP from
 * `--to-subaccount <TO_SUBACCOUNT>` — Subaccount to deposit the cycles to
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -848,7 +848,7 @@ Transfer cycles to another principal
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer cycles from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -1668,7 +1668,7 @@ Display the token balance on the ledger (default token: icp)
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -1694,7 +1694,7 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use when connecting to a network by URL. Optional: for a local (loopback) URL it is fetched from the network; for a remote URL it is required
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON

@@ -44,6 +44,25 @@ pub enum GetNetworkAccessError {
 
     #[snafu(display("failed to load network descriptor"))]
     LoadNetworkDescriptor { source: LoadNetworkFileError },
+
+    #[snafu(display(
+        "a root key is required to connect to remote network `{url}`; pass `--root-key` (or the manifest `root-key`), or use `--network ic` for mainnet"
+    ))]
+    RootKeyRequiredForRemote { url: Url },
+
+    #[snafu(display("failed to build agent to fetch the root key from local network `{url}`"))]
+    BuildRootKeyAgent {
+        url: Url,
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
+    },
+
+    #[snafu(display("failed to fetch the root key from local network `{url}`"))]
+    FetchRootKey {
+        url: Url,
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
+    },
 }
 
 pub async fn get_managed_network_access(
@@ -90,7 +109,10 @@ pub async fn get_managed_network_access(
 pub async fn get_connected_network_access(
     connected: &Connected,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
-    let root_key = connected.root_key.clone();
+    let root_key = match &connected.root_key {
+        Some(rk) => rk.clone(),
+        None => resolve_root_key(&connected.api_url).await?,
+    };
 
     Ok(NetworkAccess {
         root_key,
@@ -98,4 +120,42 @@ pub async fn get_connected_network_access(
         http_gateway_url: connected.http_gateway_url.clone(),
         use_friendly_domains: false,
     })
+}
+
+/// Whether `url`'s host is a loopback address (or `localhost`).
+fn is_loopback(url: &Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(d)) => d.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    }
+}
+
+/// Resolve the root key for a connected network whose key was omitted.
+///
+/// For a local (loopback) network the key is fetched from the network's status
+/// endpoint — safe because there is no meaningful man-in-the-middle surface on
+/// loopback. For a remote network we refuse rather than silently defaulting to
+/// the mainnet key: a genuine remote network never shares mainnet's key, so
+/// defaulting would only defer the failure to the first certified call with a
+/// cryptic verification error.
+async fn resolve_root_key(api_url: &Url) -> Result<Vec<u8>, GetNetworkAccessError> {
+    if !is_loopback(api_url) {
+        return RootKeyRequiredForRemoteSnafu {
+            url: api_url.clone(),
+        }
+        .fail();
+    }
+
+    let agent = ic_agent::Agent::builder()
+        .with_url(api_url.as_str())
+        .build()
+        .context(BuildRootKeyAgentSnafu {
+            url: api_url.clone(),
+        })?;
+    agent.fetch_root_key().await.context(FetchRootKeySnafu {
+        url: api_url.clone(),
+    })?;
+    Ok(agent.read_root_key())
 }

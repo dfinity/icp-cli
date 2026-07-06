@@ -29,8 +29,9 @@ pub enum NetworkSelection {
     Default,
     /// Use a named network
     Named(String),
-    /// Use a network by URL
-    Url(Url, Vec<u8>),
+    /// Use a network by URL. The root key is optional: `None` is resolved when
+    /// the network is accessed (fetched for a local network, error for remote).
+    Url(Url, Option<Vec<u8>>),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -180,7 +181,7 @@ impl Context {
                                 http_gateway_url: Some(
                                     IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
                                 ),
-                                root_key: IC_ROOT_KEY.to_vec(),
+                                root_key: Some(IC_ROOT_KEY.to_vec()),
                             },
                         },
                     }
@@ -197,7 +198,7 @@ impl Context {
                     connected: crate::network::Connected {
                         api_url: url.clone(),
                         http_gateway_url: Some(url.clone()),
-                        root_key: root_key.to_vec(),
+                        root_key: root_key.clone(),
                     },
                 },
             },

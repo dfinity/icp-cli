@@ -163,6 +163,25 @@ pub struct ManagedImageConfig {
     pub extra_hosts: Vec<String>,
 }
 
+/// Serde helper for an optional hex-encoded byte string (`hex::serde` does not
+/// cover `Option`).
+mod hex_opt {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            Some(bytes) => s.serialize_some(&hex::encode(bytes)),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
+        Option::<String>::deserialize(d)?
+            .map(|s| hex::decode(s).map_err(serde::de::Error::custom))
+            .transpose()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Connected {
@@ -172,10 +191,12 @@ pub struct Connected {
     /// The URL this network's HTTP gateway can be reached at.
     pub http_gateway_url: Option<Url>,
 
-    /// The root key of this network
-    #[serde(with = "hex::serde")]
-    #[schemars(with = "String")]
-    pub root_key: Vec<u8>,
+    /// The root key of this network. `None` means the key is resolved when the
+    /// network is accessed: fetched from a local (loopback) network, or an
+    /// error for a remote network.
+    #[serde(with = "hex_opt", default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
+    pub root_key: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -232,9 +253,9 @@ impl From<ManifestGateway> for Gateway {
 
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
-        let root_key = value
-            .root_key
-            .map_or_else(|| crate::context::IC_ROOT_KEY.to_vec(), |rk| rk.0);
+        // Absent keys are resolved at access time; we do not default to the
+        // mainnet key here.
+        let root_key = value.root_key.map(|rk| rk.0);
         match value.endpoints {
             Endpoints::Implicit { url } => Connected {
                 api_url: url.clone(),

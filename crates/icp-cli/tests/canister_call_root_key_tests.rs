@@ -120,6 +120,22 @@ async fn canister_call_with_url_and_root_key() {
         .success()
         .stdout(eq("(\"Hello, world!\")").trim());
 
+    // Test calling with url from external directory WITHOUT a root key: the
+    // network is local (loopback), so the root key is fetched automatically.
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            gateway_url,
+            canister_id,
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
     // Test calling with with url from external directory with bad root key
     ctx.icp()
         .args([
@@ -136,4 +152,29 @@ async fn canister_call_with_url_and_root_key() {
         .assert()
         .failure()
         .stderr(contains("invalid value 'badbadbad' for '--root-key"));
+}
+
+/// Connecting to a *remote* URL without a root key must fail fast with a clear
+/// message, rather than silently defaulting to the mainnet key and failing
+/// later with a cryptic certificate-verification error. The loopback check
+/// short-circuits before any network request, so this needs no live server.
+#[tokio::test]
+async fn canister_call_remote_url_without_root_key_errors() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            "https://example.com",
+            "aaaaa-aa",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "a root key is required to connect to remote network",
+        ));
 }

@@ -127,7 +127,36 @@ fn status_connected_network() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
-    // Project manifest with connected network
+    // Project manifest with a connected network. A remote network must specify
+    // its root key explicitly (only a local/loopback network has its key
+    // fetched automatically).
+    write_string(
+        &project_dir.join("icp.yaml"),
+        r#"
+networks:
+  - name: connected-network
+    mode: connected
+    url: https://ic0.app
+    root-key: 308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100814c0e6ec71fab583b08bd81373c255c3c371b2e84863c98a4f1e08b74235d14fb5d9c0cd546d9685f913a0c0b2cc5341583bf4b4392e467db96d65b9bb4cb717112f8472e0d5a4d14505ffd7484b01291091c5f87b98883463f98091a0baaae
+"#,
+    )
+    .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "status", "connected-network"])
+        .assert()
+        .success()
+        .stdout(contains("Url: https://ic0.app"));
+}
+
+/// A connected network at a remote URL must specify its root key; accessing one
+/// without a key fails fast rather than silently assuming the mainnet key.
+#[test]
+fn status_connected_network_remote_without_root_key_errors() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
     write_string(
         &project_dir.join("icp.yaml"),
         r#"
@@ -143,8 +172,10 @@ networks:
         .current_dir(&project_dir)
         .args(["network", "status", "connected-network"])
         .assert()
-        .success()
-        .stdout(contains("Url: https://ic0.app"));
+        .failure()
+        .stderr(contains(
+            "a root key is required to connect to remote network",
+        ));
 }
 
 #[test]

@@ -208,6 +208,9 @@ mod tests {
     #[test]
     fn encoding_is_injective() {
         // `%` is itself encoded, so a literal "%2F" never collides with "/".
-        assert_ne!(sanitize_artifact_name("a%2Fb"), sanitize_artifact_name("a/b"));
+        assert_ne!(
+            sanitize_artifact_name("a%2Fb"),
+            sanitize_artifact_name("a/b")
+        );
     }
 }

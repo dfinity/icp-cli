@@ -141,37 +141,6 @@ impl Access for ArtifactStore {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::sanitize_artifact_name;
-
-    #[test]
-    fn plain_names_unchanged() {
-        assert_eq!(sanitize_artifact_name("backend"), "backend");
-        assert_eq!(
-            sanitize_artifact_name("my-canister_1.wasm"),
-            "my-canister_1.wasm"
-        );
-    }
-
-    #[test]
-    fn namespaced_names_are_filename_safe() {
-        let s = sanitize_artifact_name("vendor/openemail:backend");
-        assert_eq!(s, "vendor%2Fopenemail%3Abackend");
-        assert!(!s.contains('/'));
-        assert!(!s.contains(':'));
-    }
-
-    #[test]
-    fn encoding_is_injective() {
-        // `%` is itself encoded, so a literal "%2F" never collides with "/".
-        assert_ne!(
-            sanitize_artifact_name("a%2Fb"),
-            sanitize_artifact_name("a/b")
-        );
-    }
-}
-
-#[cfg(test)]
 /// In-memory mock implementation of `Access`.
 pub(crate) struct MockInMemoryArtifactStore {
     store: Mutex<HashMap<String, Vec<u8>>>,
@@ -212,5 +181,33 @@ impl Access for MockInMemoryArtifactStore {
                 name: name.to_owned(),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_artifact_name;
+
+    #[test]
+    fn plain_names_unchanged() {
+        assert_eq!(sanitize_artifact_name("backend"), "backend");
+        assert_eq!(
+            sanitize_artifact_name("my-canister_1.wasm"),
+            "my-canister_1.wasm"
+        );
+    }
+
+    #[test]
+    fn namespaced_names_are_filename_safe() {
+        let s = sanitize_artifact_name("vendor/openemail:backend");
+        assert_eq!(s, "vendor%2Fopenemail%3Abackend");
+        assert!(!s.contains('/'));
+        assert!(!s.contains(':'));
+    }
+
+    #[test]
+    fn encoding_is_injective() {
+        // `%` is itself encoded, so a literal "%2F" never collides with "/".
+        assert_ne!(sanitize_artifact_name("a%2Fb"), sanitize_artifact_name("a/b"));
     }
 }

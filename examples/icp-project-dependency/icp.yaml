@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+#
+# This example shows how one icp project can depend on another icp project that
+# is vendored into it (typically as a git submodule). See ./vendor/openemail for
+# the self-contained dependency project.
+#
+# `icp deploy` here deploys this project's canisters AND all of openemail's
+# canisters into the same environment, and injects the selected openemail
+# canister IDs into this project's canisters as environment variables named
+# `PUBLIC_CANISTER_ID:openemail:<canister>`.
+
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: ../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+dependencies:
+  # Declare a dependency on the vendored `openemail` project.
+  #   name:      local alias — namespaces its canister IDs (PUBLIC_CANISTER_ID:openemail:<canister>)
+  #   path:      directory containing openemail's icp.yaml
+  #   canisters: which of openemail's canisters to expose to this project's canisters
+  #              (omit to expose all). The whole dependency is always deployed regardless.
+  - name: openemail
+    path: ./vendor/openemail
+    canisters: [backend]

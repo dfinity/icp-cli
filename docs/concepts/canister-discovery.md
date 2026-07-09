@@ -133,6 +133,34 @@ If you prefer not to use canister environment variables:
 1. **Init arguments** — Pass canister IDs as initialization parameters
 2. **Configuration** — Store IDs in canister state during setup
 
+## Dependency Projects
+
+A project can depend on another `icp` project vendored into it (for example as a git submodule) by declaring it under a top-level `dependencies:` block:
+
+```yaml
+dependencies:
+  - name: openemail          # local alias
+    path: ./vendor/openemail # directory containing the dependency's icp.yaml
+    canisters: [backend]     # which of its canisters to expose (omit for all)
+```
+
+Running `icp deploy` deploys **all** of the dependency's canisters into the same environment (a dependency's canisters may call each other, so the whole dependency is always deployed) and injects the **selected** dependency canister IDs into your canisters under the alias:
+
+```
+PUBLIC_CANISTER_ID:openemail:backend → <principal>
+```
+
+Canister IDs are injected per project scope, so vendored code behaves the same whether deployed on its own or as a dependency:
+
+- Your project's canisters see their own canisters by name (`PUBLIC_CANISTER_ID:backend`) plus the exposed dependency canisters under the alias (`PUBLIC_CANISTER_ID:openemail:backend`).
+- The dependency's canisters see only their own canisters, exactly as they would when deployed standalone (`PUBLIC_CANISTER_ID:backend`, `PUBLIC_CANISTER_ID:frontend`).
+
+Because two projects may each declare a canister with the same name, imported dependency canisters are keyed by their path relative to the project root (for example `vendor/openemail:backend`). Use that name to address a dependency canister directly, e.g. `icp canister status "vendor/openemail:backend"`. A dependency reached by the same directory through multiple paths (a shared dependency) is deployed once.
+
+> **Note:** `:` is reserved in canister names as the dependency namespace separator.
+
+See the [project-dependency example](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency) for a complete setup.
+
 ## Custom Canister Environment Variables
 
 Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom canister environment variables in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.

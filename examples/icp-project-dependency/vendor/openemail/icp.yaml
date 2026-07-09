@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+#
+# `openemail` is a self-contained icp project. It can be developed and deployed
+# on its own (`icp deploy` from this directory), and it is also consumed as a
+# dependency by the parent project one level up (../../icp.yaml).
+#
+# In the real workflow this directory would be a git submodule so its source can
+# be iterated in place while the parent app is developed.
+
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: ../../../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: ../../../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a

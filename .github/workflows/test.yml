@@ -124,11 +124,6 @@ jobs:
         with:
           cache-shared-key: ${{ runner.os }}-test
           cache-bin: false
-          # Write the dependency cache only from main; PRs restore it read-only
-          # (GitHub lets branches read the default branch's caches). This keeps
-          # the count of ~GB caches small so the repo stays under GitHub's 10 GB
-          # cache budget and its LRU eviction doesn't purge warm caches.
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install nextest
         uses: taiki-e/install-action@e9e8e031bcd90cdbe8ac6bb1d376f8596e587fbf # v2.70.2

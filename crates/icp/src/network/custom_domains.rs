@@ -81,11 +81,16 @@ pub fn canister_gateway_url(
     let domain = gateway_domain(http_gateway_url);
     let mut url = http_gateway_url.clone();
     match (friendly, domain) {
-        (Some((canister_name, env_name)), Some(domain)) => {
+        // A namespaced dependency canister (e.g. `dep:backend` or `vendor/dep:backend`)
+        // is not a valid DNS label, so it can't get a friendly subdomain; those fall
+        // through to the principal host below.
+        (Some((canister_name, env_name)), Some(domain))
+            if !canister_name.contains([':', '/', '\\']) =>
+        {
             url.set_host(Some(&format!("{canister_name}.{env_name}.{domain}")))
                 .expect("friendly domain should be a valid host");
         }
-        (None, Some(domain)) => {
+        (_, Some(domain)) => {
             url.set_host(Some(&format!("{canister_id}.{domain}")))
                 .expect("principal domain should be a valid host");
         }
@@ -179,6 +184,19 @@ mod tests {
         let cid = Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap();
         let url = canister_gateway_url(&base, cid, Some(("backend", "local")));
         assert_eq!(url.as_str(), "http://backend.local.localhost:8000/");
+    }
+
+    #[test]
+    fn canister_gateway_url_namespaced_name_falls_back_to_principal() {
+        let base: Url = "http://localhost:8000".parse().unwrap();
+        let cid = Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap();
+        // A namespaced dependency canister (e.g. `dep:backend`) is not a valid DNS
+        // label, so the friendly host is rejected and we fall back to the principal.
+        let url = canister_gateway_url(&base, cid, Some(("dep:backend", "local")));
+        assert_eq!(
+            url.as_str(),
+            "http://bkyz2-fmaaa-aaaaa-qaaaq-cai.localhost:8000/"
+        );
     }
 
     #[test]

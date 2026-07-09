@@ -155,8 +155,14 @@ jobs:
       # an archived run on another machine can't find it. Running here reuses
       # this job's fresh build (fixtures on disk) and avoids compiling the
       # workspace a second time in a separate job.
+      #
+      # --workspace is required: without it cargo defaults to default-members
+      # (icp-cli only), which both skips the other crates' unit tests AND
+      # re-resolves features differently from the `nextest archive --workspace`
+      # build above, forcing a full recompile. Matching --workspace reuses the
+      # just-built artifacts (no recompile) and runs every crate's unit tests.
       - name: Run unit tests
-        run: cargo nextest run -E 'kind(lib) | kind(bin)'
+        run: cargo nextest run --workspace -E 'kind(lib) | kind(bin)'
 
   test:
     name: ${{ matrix.test }} on ${{ matrix.os }}

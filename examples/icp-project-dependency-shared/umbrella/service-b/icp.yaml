@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+#
+# A second self-contained service that also depends on the sibling `openemail`
+# project. When both services are deployed together (via the parent app), they
+# share a single openemail instance.
+
+canisters:
+  - name: service
+    build:
+      steps:
+        - type: pre-built
+          path: ../../../icp-pre-built/dist/hello_world.wasm
+          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+dependencies:
+  - name: openemail
+    path: ../openemail
+    canisters: [backend]

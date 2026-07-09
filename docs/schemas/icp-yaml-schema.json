@@ -300,6 +300,34 @@
       ],
       "description": "An amount of cycles.\n\nDeserializes from a number or a string with suffixes (k, m, b, t) and optional underscore separators."
     },
+    "DependencyManifest": {
+      "description": "Declares a dependency on another `icp` project vendored into this one\n(typically as a git submodule).\n\nRunning `icp deploy` deploys the dependency's canisters into the parent's\nenvironment and injects the *selected* dependency canisters' IDs into the\nparent's canisters as `PUBLIC_CANISTER_ID:<name>:<canister>` environment\nvariables.",
+      "properties": {
+        "canisters": {
+          "description": "Which of the dependency's canisters to **expose** to the parent as\n`PUBLIC_CANISTER_ID` environment variables. Defaults to all. This is an\nexposure filter only: the whole dependency is always deployed, because a\ndependency's canisters may call each other.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Local alias for the dependency project. Namespaces the dependency's\ncanister IDs when they are exposed to the parent's canisters as\n`PUBLIC_CANISTER_ID:<name>:<canister>` environment variables. Must be\nunique among dependencies, must not collide with a local canister name,\nand must not contain `:`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path to the directory containing the dependency's `icp.yaml`, resolved\nrelative to this manifest's project directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path"
+      ],
+      "type": "object"
+    },
     "DurationAmount": {
       "anyOf": [
         {
@@ -412,12 +440,24 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/NetworkManifest",
+          "$ref": "#/$defs/DependencyManifest",
           "description": "The manifest"
         }
       ]
     },
     "Item3": {
+      "anyOf": [
+        {
+          "description": "Path to a manifest",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/NetworkManifest",
+          "description": "The manifest"
+        }
+      ]
+    },
+    "Item4": {
       "anyOf": [
         {
           "description": "Path to a manifest",
@@ -984,17 +1024,25 @@
       },
       "type": "array"
     },
+    "dependencies": {
+      "default": [],
+      "description": "Other `icp` projects this project depends on. Their canisters are\ndeployed into this project's environment and their IDs are injected into\nthis project's canisters as `PUBLIC_CANISTER_ID:<name>:<canister>`\nenvironment variables.",
+      "items": {
+        "$ref": "#/$defs/Item2"
+      },
+      "type": "array"
+    },
     "environments": {
       "default": [],
       "items": {
-        "$ref": "#/$defs/Item3"
+        "$ref": "#/$defs/Item4"
       },
       "type": "array"
     },
     "networks": {
       "default": [],
       "items": {
-        "$ref": "#/$defs/Item2"
+        "$ref": "#/$defs/Item3"
       },
       "type": "array"
     }

@@ -2,7 +2,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::manifest::{
-    Item, canister::CanisterManifest, environment::EnvironmentManifest, network::NetworkManifest,
+    Item, canister::CanisterManifest, dependency::DependencyManifest,
+    environment::EnvironmentManifest, network::NetworkManifest,
 };
 
 #[derive(Debug, PartialEq, JsonSchema, Deserialize, Serialize)]
@@ -10,6 +11,13 @@ use crate::manifest::{
 pub struct ProjectManifest {
     #[serde(default)]
     pub canisters: Vec<Item<CanisterManifest>>,
+
+    /// Other `icp` projects this project depends on. Their canisters are
+    /// deployed into this project's environment and their IDs are injected into
+    /// this project's canisters as `PUBLIC_CANISTER_ID:<name>:<canister>`
+    /// environment variables.
+    #[serde(default)]
+    pub dependencies: Vec<Item<DependencyManifest>>,
 
     #[serde(default)]
     pub networks: Vec<Item<NetworkManifest>>,
@@ -111,6 +119,7 @@ mod tests {
         assert_eq!(
             serde_yaml::from_str::<ProjectManifest>(r#""#).unwrap(),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![],
@@ -130,6 +139,7 @@ mod tests {
                               command: dosomething.sh
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
@@ -211,6 +221,7 @@ mod tests {
                               command: dosomething.sh
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![Item::Manifest(CanisterManifest {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
@@ -245,6 +256,7 @@ mod tests {
                       - canisters/*
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![
                     Item::Manifest(CanisterManifest {
                         name: "my-canister".to_string(),
@@ -278,6 +290,7 @@ mod tests {
                         mode: managed
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![Item::Manifest(NetworkManifest {
                     name: "my-network".to_string(),
@@ -309,6 +322,7 @@ mod tests {
                         canisters: [my-canister]
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![Item::Manifest(EnvironmentManifest {
@@ -332,6 +346,7 @@ mod tests {
                         canisters: [my-canister]
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![Item::Manifest(EnvironmentManifest {
@@ -357,6 +372,7 @@ mod tests {
                       - name: environment-3
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![
@@ -399,6 +415,7 @@ mod tests {
                             compute_allocation: 2
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![Item::Manifest(EnvironmentManifest {
@@ -440,6 +457,7 @@ mod tests {
                             format: hex
                 "#}),
             ProjectManifest {
+                dependencies: vec![],
                 canisters: vec![],
                 networks: vec![],
                 environments: vec![Item::Manifest(EnvironmentManifest {

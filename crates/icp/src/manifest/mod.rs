@@ -9,6 +9,7 @@ use crate::prelude::*;
 
 pub(crate) mod adapter;
 pub(crate) mod canister;
+pub(crate) mod dependency;
 pub(crate) mod environment;
 pub(crate) mod network;
 pub(crate) mod project;
@@ -22,6 +23,7 @@ pub use {
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestInitArgs,
         SyncStep, SyncSteps,
     },
+    dependency::DependencyManifest,
     environment::EnvironmentManifest,
     network::{ManagedMode, Mode, NetworkManifest},
     project::ProjectManifest,

@@ -271,6 +271,10 @@ pub(crate) async fn create_bundle(
 
     let bundle_manifest = ProjectManifest {
         canisters: canister_items,
+        // A bundle flattens every consolidated canister (including any pulled in
+        // from dependencies) into `canisters` as pre-built entries, so no external
+        // dependency references remain.
+        dependencies: vec![],
         networks,
         environments,
     };

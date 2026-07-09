@@ -17,7 +17,7 @@ pub struct ProjectManifest {
     /// this project's canisters as `PUBLIC_CANISTER_ID:<name>:<canister>`
     /// environment variables.
     #[serde(default)]
-    pub dependencies: Vec<Item<DependencyManifest>>,
+    pub dependencies: Vec<DependencyManifest>,
 
     #[serde(default)]
     pub networks: Vec<Item<NetworkManifest>>,

@@ -48,6 +48,7 @@ num-bigint = { workspace = true }
 num-integer = { workspace = true }
 num-traits = { workspace = true }
 p256 = { workspace = true }
+pathdiff = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }
 rand = { workspace = true }

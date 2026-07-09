@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -105,6 +108,17 @@ pub struct Canister {
     /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
     /// `None` when the canister uses explicit build/sync instructions.
     pub registry_recipe: Option<String>,
+
+    /// Canister-discovery wiring. Maps the name this canister reads in a
+    /// `PUBLIC_CANISTER_ID:<name>` environment variable to the store key of the
+    /// referenced canister. Computed during consolidation so each canister sees
+    /// the view its owning project expects: its own project's canisters under
+    /// their local names, plus any declared dependencies under their aliases
+    /// (`<alias>:<canister>`). For a project with no dependencies this maps every
+    /// canister's local name to itself, reproducing the flat "every canister sees
+    /// every sibling" behavior.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bindings: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -292,6 +306,7 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
         };
 
         let local_network = Network {
@@ -375,6 +390,7 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
         };
 
         let frontend_canister = Canister {
@@ -391,6 +407,7 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
         };
 
         let database_canister = Canister {
@@ -407,6 +424,7 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
         };
 
         // Create networks

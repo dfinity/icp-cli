@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 
 use indexmap::{IndexMap, map::Entry as IndexEntry};
 
@@ -6,13 +6,13 @@ use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, InitArgs, Network, Project,
-    canister::recipe,
+    canister::{ControllerRef, recipe},
     context::IC_ROOT_KEY,
     fs,
     manifest::{
-        ArgsFormat, CANISTER_MANIFEST, CanisterManifest, EnvironmentManifest, Item,
-        LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, ProjectManifest,
-        ProjectRootLocateError,
+        ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
+        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
+        ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
@@ -105,6 +105,44 @@ pub enum ConsolidateManifestError {
         controller: String,
     },
 
+    #[snafu(display(
+        "canister name '{name}' is invalid: ':' is reserved as the dependency namespace separator"
+    ))]
+    InvalidCanisterName { name: String },
+
+    #[snafu(display(
+        "dependency alias '{alias}' is invalid: ':' is reserved as the dependency namespace separator"
+    ))]
+    InvalidDependencyAlias { alias: String },
+
+    #[snafu(display("project declares two dependencies with the same alias '{alias}'"))]
+    DuplicateDependencyAlias { alias: String },
+
+    #[snafu(display(
+        "dependency alias '{alias}' collides with a canister of the same name in the same project"
+    ))]
+    DependencyAliasCollision { alias: String },
+
+    #[snafu(display("could not find a project manifest for dependency '{alias}' at: '{path}'"))]
+    DependencyNotFound { alias: String, path: String },
+
+    #[snafu(display("failed to canonicalize path for dependency '{alias}' at: '{path}'"))]
+    DependencyCanonicalize { alias: String, path: String },
+
+    #[snafu(display("failed to load project manifest for dependency '{alias}'"))]
+    LoadDependencyManifest {
+        source: LoadManifestFromPathError,
+        alias: String,
+    },
+
+    #[snafu(display(
+        "dependency '{alias}' selects canister '{canister}', which the dependency does not declare"
+    ))]
+    UnknownDependencyCanister { alias: String, canister: String },
+
+    #[snafu(display("dependency cycle detected: {chain}"))]
+    CircularDependency { chain: String },
+
     #[snafu(transparent)]
     Environment { source: EnvironmentError },
 }
@@ -152,24 +190,19 @@ fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
-/// Turns the ProjectManifest into a Project struct
-/// - Adds the default Networks
-/// - Adds the default Environment
-/// - Validates the manifest to make sure that:
-///     - There are no duplicates
-///     - All the environments have networks
-///     - All the referenced canisters exist
-///     - All the recipes have been resolved
-pub async fn consolidate_manifest(
+/// Builds the canonical canisters declared directly in one project manifest,
+/// resolving glob/path/inline entries, recipes, and init-args relative to
+/// `pdir`. Returns `(local name, canister dir, canister)` with empty bindings;
+/// callers assign store keys and bindings. Does not check for duplicate names
+/// across projects — that is the caller's responsibility (via the global map).
+async fn build_manifest_canisters(
     pdir: &Path,
+    manifest_canisters: &[Item<CanisterManifest>],
     recipe_resolver: &dyn recipe::Resolve,
-    m: &ProjectManifest,
-) -> Result<Project, ConsolidateManifestError> {
-    // Canisters. IndexMap (not HashMap) so the order from the project manifest is preserved
-    // through to consumers like `icp project bundle`, which needs reproducible output.
-    let mut canisters: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
+) -> Result<Vec<(String, PathBuf, Canister)>, ConsolidateManifestError> {
+    let mut result: Vec<(String, PathBuf, Canister)> = Vec::new();
 
-    for i in &m.canisters {
+    for i in manifest_canisters {
         let ms = match i {
             Item::Path(pattern) => {
                 let is_glob_pattern = is_glob(pattern);
@@ -179,7 +212,6 @@ pub async fn consolidate_manifest(
 
                     // Glob pattern
                     true => {
-                        // Resolve glob
                         let paths =
                             glob::glob(pdir.join(pattern).as_str()).context(GlobParseSnafu)?;
 
@@ -217,40 +249,34 @@ pub async fn consolidate_manifest(
                 };
 
                 let mut ms = vec![];
-
                 for p in paths {
                     ms.push((
-                        //
-                        // Canister root
                         p.to_owned(),
-                        //
-                        // Canister manifest
                         load_manifest_from_path::<CanisterManifest>(&p.join(CANISTER_MANIFEST))
                             .await
                             .context(LoadCanisterSnafu)?,
                     ));
                 }
-
                 ms
             }
 
-            Item::Manifest(m) => vec![(
-                //
-                // Canister root
-                pdir.to_owned(),
-                //
-                // Canister manifest
-                m.to_owned(),
-            )],
+            Item::Manifest(m) => vec![(pdir.to_owned(), m.to_owned())],
         };
 
         for (cdir, m) in ms {
+            // `:` is reserved as the dependency namespace separator in store keys
+            // and `PUBLIC_CANISTER_ID:<name>` env vars.
+            if m.name.contains(':') {
+                return InvalidCanisterNameSnafu {
+                    name: m.name.clone(),
+                }
+                .fail();
+            }
+
             let registry_recipe = match &m.instructions {
                 Instructions::BuildSync { .. } => None,
                 Instructions::Recipe { recipe } => match &recipe.recipe_type {
-                    crate::manifest::recipe::RecipeType::Registry { .. } => {
-                        Some(recipe.recipe_type.to_string())
-                    }
+                    RecipeType::Registry { .. } => Some(recipe.recipe_type.to_string()),
                     _ => None,
                 },
             };
@@ -279,42 +305,343 @@ pub async fn consolidate_manifest(
                 }
             };
 
-            // Check for duplicates
-            match canisters.entry(m.name.to_owned()) {
-                // Duplicate
-                IndexEntry::Occupied(e) => {
-                    return DuplicateSnafu {
-                        kind: "canister".to_string(),
-                        name: e.key().to_owned(),
+            let init_args = m
+                .init_args
+                .as_ref()
+                .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                .transpose()?;
+
+            result.push((
+                m.name.clone(),
+                cdir,
+                Canister {
+                    name: m.name.clone(),
+                    settings: m.settings.clone(),
+                    build,
+                    sync,
+                    init_args,
+                    registry_recipe,
+                    bindings: BTreeMap::new(),
+                },
+            ));
+        }
+    }
+
+    Ok(result)
+}
+
+/// A dependency instance's own canisters, as `(local name, full store key)`.
+/// Returned by [`import_dependency`] and cached per canonical path so diamond
+/// dependencies reuse the same instance.
+type ImportedInstance = Vec<(String, String)>;
+
+/// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
+/// de-dup / cycle-detection identity.
+fn canonicalize_dep(alias: &str, dep_root: &Path) -> Result<PathBuf, ConsolidateManifestError> {
+    let build_err = || {
+        DependencyCanonicalizeSnafu {
+            alias: alias.to_owned(),
+            path: dep_root.to_string(),
+        }
+        .build()
+    };
+    let canon = dunce::canonicalize(dep_root.as_std_path()).map_err(|_| build_err())?;
+    PathBuf::try_from(canon).map_err(|_| build_err())
+}
+
+/// Store-key prefix for a dependency instance: its canonical directory relative
+/// to the canonical app root, forward-slash separated so keys are stable across
+/// platforms and independent of how each edge spells the path.
+fn relative_prefix(app_root_canonical: &Path, dep_canonical: &Path) -> String {
+    let rel = pathdiff::diff_utf8_paths(dep_canonical, app_root_canonical)
+        .unwrap_or_else(|| dep_canonical.to_owned());
+    rel.as_str().replace('\\', "/")
+}
+
+/// Rewrite `CanisterName` controller references from a dependency's local
+/// canister names to their store keys, so global controller validation and
+/// deploy-time id lookup operate uniformly on store keys.
+fn translate_controllers(canister: &mut Canister, local_to_key: &BTreeMap<String, String>) {
+    if let Some(controllers) = &mut canister.settings.controllers {
+        for cref in controllers.iter_mut() {
+            if let ControllerRef::CanisterName(name) = cref
+                && let Some(key) = local_to_key.get(name)
+            {
+                *name = key.clone();
+            }
+        }
+    }
+}
+
+/// Compute the `PUBLIC_CANISTER_ID` env-var wiring for canisters in one project
+/// scope: its own canisters by local name, plus each dependency's exposed
+/// canisters under `<alias>:<canister>`.
+fn compute_bindings(
+    own: &[(String, String)],
+    edges: &[(String, Vec<(String, String)>)],
+) -> BTreeMap<String, String> {
+    let mut bindings = BTreeMap::new();
+    for (local, key) in own {
+        bindings.insert(local.clone(), key.clone());
+    }
+    for (alias, exposed) in edges {
+        for (dep_local, key) in exposed {
+            bindings.insert(format!("{alias}:{dep_local}"), key.clone());
+        }
+    }
+    bindings
+}
+
+/// Select which of a dependency instance's own canisters are exposed to the
+/// parent, per the dependency's `canisters` selection.
+fn select_exposed(
+    inst: &ImportedInstance,
+    selection: &CanisterSelection,
+    alias: &str,
+) -> Result<Vec<(String, String)>, ConsolidateManifestError> {
+    match selection {
+        CanisterSelection::Everything => Ok(inst.clone()),
+        CanisterSelection::None => Ok(vec![]),
+        CanisterSelection::Named(names) => {
+            let mut out = Vec::new();
+            for name in names {
+                match inst.iter().find(|(local, _)| local == name) {
+                    Some(pair) => out.push(pair.clone()),
+                    None => {
+                        return UnknownDependencyCanisterSnafu {
+                            alias: alias.to_owned(),
+                            canister: name.clone(),
+                        }
+                        .fail();
                     }
-                    .fail();
-                }
-
-                // Ok
-                IndexEntry::Vacant(e) => {
-                    let init_args = m
-                        .init_args
-                        .as_ref()
-                        .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
-                        .transpose()?;
-
-                    e.insert((
-                        //
-                        // Canister root
-                        cdir,
-                        //
-                        // Canister
-                        Canister {
-                            name: m.name.to_owned(),
-                            settings: m.settings.to_owned(),
-                            build,
-                            sync,
-                            init_args,
-                            registry_recipe,
-                        },
-                    ));
                 }
             }
+            Ok(out)
+        }
+    }
+}
+
+/// Validate the dependency aliases declared in one project scope: no `:`, no
+/// collision with a local canister name, and no duplicate alias.
+fn validate_dependency_aliases(
+    deps: &[DependencyManifest],
+    own_canister_names: &HashSet<String>,
+) -> Result<(), ConsolidateManifestError> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for d in deps {
+        if d.name.contains(':') {
+            return InvalidDependencyAliasSnafu {
+                alias: d.name.clone(),
+            }
+            .fail();
+        }
+        if own_canister_names.contains(&d.name) {
+            return DependencyAliasCollisionSnafu {
+                alias: d.name.clone(),
+            }
+            .fail();
+        }
+        if !seen.insert(&d.name) {
+            return DuplicateDependencyAliasSnafu {
+                alias: d.name.clone(),
+            }
+            .fail();
+        }
+    }
+    Ok(())
+}
+
+/// Recursively import a dependency's canisters into `canisters`, keyed by their
+/// app-root-relative store keys. De-duplicates instances by canonical path
+/// (diamond dependencies deploy once) and detects cycles. Returns the imported
+/// instance's prefix and its own canisters.
+async fn import_dependency(
+    app_root_canonical: &Path,
+    parent_dir: &Path,
+    dep: &DependencyManifest,
+    recipe_resolver: &dyn recipe::Resolve,
+    canisters: &mut IndexMap<String, (PathBuf, Canister)>,
+    registry: &mut HashMap<PathBuf, ImportedInstance>,
+    stack: &mut Vec<PathBuf>,
+) -> Result<ImportedInstance, ConsolidateManifestError> {
+    let dep_root = parent_dir.join(&dep.path);
+    let manifest_path = dep_root.join(PROJECT_MANIFEST);
+    if !manifest_path.is_file() {
+        return DependencyNotFoundSnafu {
+            alias: dep.name.clone(),
+            path: dep_root.to_string(),
+        }
+        .fail();
+    }
+
+    let canonical = canonicalize_dep(&dep.name, &dep_root)?;
+
+    // Cycle detection.
+    if stack.contains(&canonical) {
+        let mut chain: Vec<String> = stack.iter().map(|p| p.to_string()).collect();
+        chain.push(canonical.to_string());
+        return CircularDependencySnafu {
+            chain: chain.join(" -> "),
+        }
+        .fail();
+    }
+
+    // Diamond de-dup: same resolved directory means the same instance.
+    if let Some(inst) = registry.get(&canonical) {
+        return Ok(inst.clone());
+    }
+
+    stack.push(canonical.clone());
+
+    let prefix = relative_prefix(app_root_canonical, &canonical);
+
+    let dep_manifest: ProjectManifest =
+        load_manifest_from_path(&manifest_path)
+            .await
+            .context(LoadDependencyManifestSnafu {
+                alias: dep.name.clone(),
+            })?;
+
+    // Build the dependency's own canisters and key them under the prefix. All of
+    // them are imported (deploy-all); the `canisters` exposure subset is applied
+    // by the caller when wiring env vars.
+    let built =
+        build_manifest_canisters(&dep_root, &dep_manifest.canisters, recipe_resolver).await?;
+
+    let mut own: Vec<(String, String)> = Vec::new();
+    let mut local_to_key: BTreeMap<String, String> = BTreeMap::new();
+    for (local, cdir, mut canister) in built {
+        let store_key = format!("{prefix}:{local}");
+        canister.name = store_key.clone();
+        own.push((local.clone(), store_key.clone()));
+        local_to_key.insert(local.clone(), store_key.clone());
+        match canisters.entry(store_key.clone()) {
+            IndexEntry::Occupied(_) => {
+                return DuplicateSnafu {
+                    kind: "canister".to_string(),
+                    name: store_key,
+                }
+                .fail();
+            }
+            IndexEntry::Vacant(e) => {
+                e.insert((cdir, canister));
+            }
+        }
+    }
+
+    // Now that every sibling's store key is known, translate the dependency's
+    // controller references (local sibling name -> store key).
+    for (_, key) in &own {
+        if let Some((_, canister)) = canisters.get_mut(key) {
+            translate_controllers(canister, &local_to_key);
+        }
+    }
+
+    // Recurse into the dependency's own dependencies.
+    let own_names: HashSet<String> = own.iter().map(|(l, _)| l.clone()).collect();
+    validate_dependency_aliases(&dep_manifest.dependencies, &own_names)?;
+
+    let mut edges: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    for nested in &dep_manifest.dependencies {
+        let inst = Box::pin(import_dependency(
+            app_root_canonical,
+            &dep_root,
+            nested,
+            recipe_resolver,
+            canisters,
+            registry,
+            stack,
+        ))
+        .await?;
+        let exposed = select_exposed(&inst, &nested.canisters, &nested.name)?;
+        edges.push((nested.name.clone(), exposed));
+    }
+
+    // Assign env-var bindings for this instance's own canisters.
+    let bindings = compute_bindings(&own, &edges);
+    for (_, key) in &own {
+        if let Some((_, canister)) = canisters.get_mut(key) {
+            canister.bindings = bindings.clone();
+        }
+    }
+
+    stack.pop();
+    registry.insert(canonical, own.clone());
+    Ok(own)
+}
+
+/// Turns the ProjectManifest into a Project struct
+/// - Adds the default Networks
+/// - Adds the default Environment
+/// - Imports any dependency projects' canisters
+/// - Validates the manifest to make sure that:
+///     - There are no duplicates
+///     - All the environments have networks
+///     - All the referenced canisters exist
+///     - All the recipes have been resolved
+pub async fn consolidate_manifest(
+    pdir: &Path,
+    recipe_resolver: &dyn recipe::Resolve,
+    m: &ProjectManifest,
+) -> Result<Project, ConsolidateManifestError> {
+    // Canisters. IndexMap (not HashMap) so the order from the project manifest is preserved
+    // through to consumers like `icp project bundle`, which needs reproducible output.
+    let mut canisters: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
+
+    // Canonical app root, used to derive stable, order-independent store-key
+    // prefixes for imported dependency canisters.
+    let app_root_canonical =
+        canonicalize_dep("<project>", pdir).unwrap_or_else(|_| pdir.to_owned());
+
+    // This project's own canisters, keyed by their bare local names.
+    let app_built = build_manifest_canisters(pdir, &m.canisters, recipe_resolver).await?;
+    let mut app_own: Vec<(String, String)> = Vec::new();
+    for (local, cdir, canister) in app_built {
+        app_own.push((local.clone(), local.clone()));
+        match canisters.entry(local.clone()) {
+            IndexEntry::Occupied(e) => {
+                return DuplicateSnafu {
+                    kind: "canister".to_string(),
+                    name: e.key().to_owned(),
+                }
+                .fail();
+            }
+            IndexEntry::Vacant(e) => {
+                e.insert((cdir, canister));
+            }
+        }
+    }
+
+    // Import dependency projects. Each dependency is deployed in full and keyed
+    // under its app-root-relative path; diamonds (the same directory reached via
+    // multiple edges) resolve to a single instance.
+    let mut registry: HashMap<PathBuf, ImportedInstance> = HashMap::new();
+    let mut stack: Vec<PathBuf> = Vec::new();
+    let app_own_names: HashSet<String> = app_own.iter().map(|(l, _)| l.clone()).collect();
+    validate_dependency_aliases(&m.dependencies, &app_own_names)?;
+
+    let mut app_edges: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    for dep in &m.dependencies {
+        let inst = import_dependency(
+            &app_root_canonical,
+            pdir,
+            dep,
+            recipe_resolver,
+            &mut canisters,
+            &mut registry,
+            &mut stack,
+        )
+        .await?;
+        let exposed = select_exposed(&inst, &dep.canisters, &dep.name)?;
+        app_edges.push((dep.name.clone(), exposed));
+    }
+
+    // Assign env-var bindings for this project's own canisters (own canisters by
+    // local name plus each dependency's exposed canisters under `<alias>:<name>`).
+    let app_bindings = compute_bindings(&app_own, &app_edges);
+    for (_, key) in &app_own {
+        if let Some((_, canister)) = canisters.get_mut(key) {
+            canister.bindings = app_bindings.clone();
         }
     }
 
@@ -584,4 +911,358 @@ pub async fn consolidate_manifest(
         networks,
         environments,
     })
+}
+
+#[cfg(test)]
+mod dependency_tests {
+    use super::*;
+    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
+    use crate::manifest::canister::{BuildSteps, SyncSteps};
+    use crate::manifest::recipe::Recipe;
+    use camino_tempfile::Utf8TempDir;
+
+    /// Recipes are never used in these tests; every canister is pre-built.
+    struct PanicResolver;
+
+    #[async_trait::async_trait]
+    impl Resolve for PanicResolver {
+        async fn resolve(
+            &self,
+            _recipe: &Recipe,
+            _context: &RecipeContext,
+        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+            panic!("recipe resolver should not be called in dependency tests");
+        }
+    }
+
+    fn write(dir: &Path, rel: &str, contents: &str) {
+        let p = dir.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, contents).unwrap();
+    }
+
+    /// A minimal `icp.yaml` body declaring the given pre-built canisters,
+    /// followed by a raw `dependencies:` block (may be empty).
+    fn manifest(canisters: &[&str], deps: &str) -> String {
+        let mut s = String::new();
+        if canisters.is_empty() {
+            s.push_str("canisters: []\n");
+        } else {
+            s.push_str("canisters:\n");
+            for c in canisters {
+                s.push_str(&format!(
+                    "  - name: {c}\n    build:\n      steps:\n        - type: pre-built\n          path: {c}.wasm\n"
+                ));
+            }
+        }
+        s.push_str(deps);
+        s
+    }
+
+    async fn consolidate(pdir: &Path) -> Result<Project, ConsolidateManifestError> {
+        let m: ProjectManifest = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
+            .await
+            .expect("failed to parse project manifest");
+        consolidate_manifest(pdir, &PanicResolver, &m).await
+    }
+
+    fn bindings_of<'a>(p: &'a Project, key: &str) -> &'a BTreeMap<String, String> {
+        &p.canisters
+            .get(key)
+            .unwrap_or_else(|| {
+                panic!(
+                    "canister '{key}' not found; have {:?}",
+                    p.canisters.keys().collect::<Vec<_>>()
+                )
+            })
+            .1
+            .bindings
+    }
+
+    #[tokio::test]
+    async fn single_project_bindings_are_self_and_siblings() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(&["backend", "frontend"], ""),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // Flat behavior preserved: every canister maps every sibling (incl. self)
+        // to itself.
+        let expected = BTreeMap::from([
+            ("backend".to_string(), "backend".to_string()),
+            ("frontend".to_string(), "frontend".to_string()),
+        ]);
+        assert_eq!(bindings_of(&p, "backend"), &expected);
+        assert_eq!(bindings_of(&p, "frontend"), &expected);
+    }
+
+    #[tokio::test]
+    async fn dependency_import_and_exposure_subset() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // Dependency nested inside the app (mirrors a submodule under the app).
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["backend", "frontend"], ""),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n    canisters: [backend]\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // The whole dependency is deployed (both canisters imported), keyed by path.
+        assert!(p.canisters.contains_key("backend"));
+        assert!(p.canisters.contains_key("openemail:backend"));
+        assert!(p.canisters.contains_key("openemail:frontend"));
+
+        // App's own canister sees itself and only the *exposed* dependency canister.
+        assert_eq!(
+            bindings_of(&p, "backend"),
+            &BTreeMap::from([
+                ("backend".to_string(), "backend".to_string()),
+                (
+                    "openemail:backend".to_string(),
+                    "openemail:backend".to_string()
+                ),
+            ])
+        );
+
+        // The dependency's own canisters keep their standalone view (bare names).
+        assert_eq!(
+            bindings_of(&p, "openemail:backend"),
+            &BTreeMap::from([
+                ("backend".to_string(), "openemail:backend".to_string()),
+                ("frontend".to_string(), "openemail:frontend".to_string()),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn diamond_dedups_to_single_instance() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // umbrella layout: service-a and service-b both depend on ../openemail.
+        write(
+            tmp.path(),
+            "umbrella/openemail/icp.yaml",
+            &manifest(&["backend"], ""),
+        );
+        write(
+            tmp.path(),
+            "umbrella/service-a/icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: openemail\n    path: ../openemail\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "umbrella/service-b/icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: openemail\n    path: ../openemail\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &[],
+                "dependencies:\n  - name: service-a\n    path: ./umbrella/service-a\n  - name: service-b\n    path: ./umbrella/service-b\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // openemail is imported exactly once despite two edges reaching it.
+        let openemail_keys: Vec<_> = p
+            .canisters
+            .keys()
+            .filter(|k| k.contains("openemail"))
+            .collect();
+        assert_eq!(
+            openemail_keys,
+            vec![&"umbrella/openemail:backend".to_string()],
+            "expected a single shared openemail instance"
+        );
+
+        // Both services' code reads `openemail:backend`, resolving to the one instance.
+        assert_eq!(
+            bindings_of(&p, "umbrella/service-a:backend").get("openemail:backend"),
+            Some(&"umbrella/openemail:backend".to_string())
+        );
+        assert_eq!(
+            bindings_of(&p, "umbrella/service-b:backend").get("openemail:backend"),
+            Some(&"umbrella/openemail:backend".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn cycle_is_detected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(&[], "dependencies:\n  - name: a\n    path: ./a\n"),
+        );
+        write(
+            tmp.path(),
+            "a/icp.yaml",
+            &manifest(&["x"], "dependencies:\n  - name: b\n    path: ../b\n"),
+        );
+        write(
+            tmp.path(),
+            "b/icp.yaml",
+            &manifest(&["y"], "dependencies:\n  - name: a\n    path: ../a\n"),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(err, ConsolidateManifestError::CircularDependency { .. }),
+            "expected CircularDependency, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn alias_colliding_with_canister_name_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["backend"], ""),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["openemail"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ConsolidateManifestError::DependencyAliasCollision { .. }
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn duplicate_alias_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(tmp.path(), "one/icp.yaml", &manifest(&["backend"], ""));
+        write(tmp.path(), "two/icp.yaml", &manifest(&["backend"], ""));
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &[],
+                "dependencies:\n  - name: dup\n    path: ./one\n  - name: dup\n    path: ./two\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ConsolidateManifestError::DuplicateDependencyAlias { .. }
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn colon_in_canister_name_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(tmp.path(), "icp.yaml", &manifest(&["foo:bar"], ""));
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(err, ConsolidateManifestError::InvalidCanisterName { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_exposed_canister_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["backend"], ""),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &[],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n    canisters: [nope]\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ConsolidateManifestError::UnknownDependencyCanister { .. }
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_dependency_path_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &[],
+                "dependencies:\n  - name: openemail\n    path: ./does-not-exist\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(err, ConsolidateManifestError::DependencyNotFound { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn imported_canisters_appear_in_implicit_environments() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["backend"], ""),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // Deploy-all: the implicit `local` environment includes the dependency.
+        let local = p.environments.get("local").unwrap();
+        assert!(local.canisters.contains_key("backend"));
+        assert!(local.canisters.contains_key("openemail:backend"));
+    }
 }

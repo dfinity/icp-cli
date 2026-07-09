@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use assert_cmd::{Command, cargo::cargo_bin_cmd};
+use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use ic_agent::Agent;
 use icp::prelude::*;
@@ -16,6 +16,19 @@ use time::UtcDateTime;
 use url::Url;
 
 use crate::common::{ChildGuard, PATH_SEPARATOR, TestNetwork, softhsm::SoftHsmContext};
+
+/// Path to the `icp` binary under test.
+///
+/// Under `cargo nextest run --archive-file`, the binary lives in nextest's extracted
+/// archive directory rather than the workspace `target/`, and its location is exposed at
+/// runtime via `NEXTEST_BIN_EXE_icp`. Fall back to the compile-time `CARGO_BIN_EXE_icp`
+/// path for a plain `cargo test` run (where the value is baked in and valid).
+fn icp_bin_path() -> PathBuf {
+    match env::var("NEXTEST_BIN_EXE_icp") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => PathBuf::from(env!("CARGO_BIN_EXE_icp")),
+    }
+}
 
 pub(crate) struct TestContext {
     home_dir: TempDir,
@@ -86,8 +99,7 @@ impl TestContext {
     }
 
     pub(crate) fn icp(&self) -> Command {
-        #[allow(clippy::disallowed_types)]
-        let mut cmd = cargo_bin_cmd!("icp");
+        let mut cmd = Command::new(icp_bin_path());
 
         // Isolate the command
         cmd.current_dir(self.home_path());
@@ -183,7 +195,7 @@ impl TestContext {
     /// Calling this method more than once will panic.
     /// Calling this method after calling [TestContext::start_network_with_config] will panic.
     pub(crate) async fn start_network_in(&self, project_dir: &Path, name: &str) -> ChildGuard {
-        let icp_path = env!("CARGO_BIN_EXE_icp");
+        let icp_path = icp_bin_path();
         let mut cmd = std::process::Command::new(icp_path);
         cmd.current_dir(project_dir);
         // isolate the whole user directory in Unix, test in normal mode

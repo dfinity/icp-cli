@@ -64,16 +64,21 @@ jobs:
       - id: set-matrix
         run: echo "matrix=$(python3 .github/scripts/test-matrix.py)" >> $GITHUB_OUTPUT
 
-  unit-tests:
-    name: Unit tests on ${{ matrix.os }}
+  # Compile every test binary (unit + integration) plus the `icp` bin ONCE per
+  # OS and publish them as a nextest archive. The downstream unit-tests and test
+  # jobs run these prebuilt binaries with zero recompilation and no cache
+  # restore, replacing the old model where each of the ~30 integration-test jobs
+  # rebuilt the whole workspace from a deps-only cache.
+  build:
+    name: Build test archive on ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        # Make the os matrix match .github/scripts/test-matrix.py so that
-        # we optimize caching
+        # Keep this os matrix in sync with .github/scripts/test-matrix.py so
+        # every OS the test jobs run on has a matching archive.
         os: [ubuntu-22.04, macos-15, windows-2025]
 
     steps:
@@ -115,21 +120,97 @@ jobs:
       - name: Remove the runner's bundled Rust toolchain
         run: rustup toolchain remove stable 2>/dev/null || true
 
-      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache-shared-key: ${{ runner.os }}-test
           cache-bin: false
+          # Write the dependency cache only from main; PRs restore it read-only
+          # (GitHub lets branches read the default branch's caches). This keeps
+          # the count of ~GB caches small so the repo stays under GitHub's 10 GB
+          # cache budget and its LRU eviction doesn't purge warm caches.
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install nextest
+        uses: taiki-e/install-action@e9e8e031bcd90cdbe8ac6bb1d376f8596e587fbf # v2.70.2
+        with:
+          tool: nextest
+
+      # Build all test binaries + the `icp` bin into a single self-contained
+      # archive. This is the only place the workspace is compiled for tests.
+      - name: Build nextest archive
+        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
+
+      - name: Upload nextest archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nextest-archive-${{ runner.os }}
+          path: nextest-archive.tar.zst
+          # Only needed by same-run downstream jobs; don't retain it.
+          retention-days: 1
+
+  unit-tests:
+    name: Unit tests on ${{ matrix.os }}
+    # Run the workspace unit tests from the prebuilt archive (no recompilation).
+    needs: build
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-2025]
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Defender scans the files nextest extracts from the archive; excluding the
+      # workspace/cargo dirs keeps that cheap on Windows.
+      - name: Exclude build dirs from Windows Defender
+        if: ${{ contains(matrix.os, 'windows') }}
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath `
+            "$env:GITHUB_WORKSPACE", `
+            "$env:USERPROFILE\.cargo", `
+            "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
+
+      # Provides the dbus runtime library the keyring-touching unit tests link
+      # against (see the unlock-keyring step below).
+      - name: Setup image (Linux)
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: ./.github/scripts/provision-linux-build.sh
+
+      - name: Untap unused Homebrew taps (macOS)
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: |
+          brew uninstall bicep || true
+          brew untap aws/tap || true
+          brew untap azure/bicep || true
+
+      # Toolchain to invoke `cargo nextest`; cache: false skips the (large) deps
+      # cache restore since this job never compiles.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+
+      - name: Install nextest
+        uses: taiki-e/install-action@e9e8e031bcd90cdbe8ac6bb1d376f8596e587fbf # v2.70.2
+        with:
+          tool: nextest
 
       - uses: t1m0thyj/unlock-keyring@cbcf205c879ebd86add70bab3a6abfcce59a5cae # 1.2.0
         if: ${{ contains(matrix.os, 'ubuntu') }}
 
+      - name: Download nextest archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nextest-archive-${{ runner.os }}
+
       - name: Run unit tests
-        run: cargo test --workspace --lib --bins
+        run: cargo nextest run --archive-file nextest-archive.tar.zst -E 'kind(lib) | kind(bin)'
 
   test:
     name: ${{ matrix.test }} on ${{ matrix.os }}
-    # Wait until unit tests have run so we can reuse the cache
-    needs: [discover, unit-tests]
+    # Reuse the prebuilt archive from the build job.
+    needs: [discover, build]
     # Check discover's result (not changes.outputs.src) because this job
     # needs discover's matrix output, which is only available when it ran.
     if: needs.discover.result == 'success'
@@ -141,8 +222,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Defender real-time scanning of every object/rlib it writes slows
-      # file-heavy Rust builds and cache extraction considerably on Windows.
+      # Defender scans the files nextest extracts from the archive; excluding the
+      # workspace/cargo dirs keeps that cheap on Windows.
       - name: Exclude build dirs from Windows Defender
         if: ${{ contains(matrix.os, 'windows') }}
         shell: pwsh
@@ -153,13 +234,13 @@ jobs:
             "$env:USERPROFILE\.rustup" -ErrorAction SilentlyContinue
 
       # The macOS runner image pre-taps aws/tap and azure/bicep, which Homebrew
-      # now flags as untrusted on every `brew install` (including the one inside
-      # setup-rust-toolchain below and our provision-macos-test.sh). We use
-      # neither. bicep (from azure/bicep) is the only formula installed from
-      # them, so uninstall it first; then both taps untap cleanly without --force
-      # (which would untap but warn about the installed formula). || true keeps
-      # the step green if a future image no longer ships these. Must run before
-      # any brew install to suppress the warning.
+      # now flags as untrusted on every `brew install` (including our
+      # provision-macos-test.sh). We use neither. bicep (from azure/bicep) is
+      # the only formula installed from them, so uninstall it first; then both
+      # taps untap cleanly without --force (which would untap but warn about the
+      # installed formula). || true keeps the step green if a future image no
+      # longer ships these. Must run before any brew install to suppress the
+      # warning.
       - name: Untap unused Homebrew taps (macOS)
         if: ${{ contains(matrix.os, 'macos') }}
         run: |
@@ -167,16 +248,11 @@ jobs:
           brew untap aws/tap || true
           brew untap azure/bicep || true
 
-      # rust-cache hashes all installed toolchains; the runner image's `stable`
-      # drifts as the image updates, which moves the cache key and causes misses.
-      # Remove it so only the rust-toolchain.toml-pinned version remains.
-      - name: Remove the runner's bundled Rust toolchain
-        run: rustup toolchain remove stable 2>/dev/null || true
-
-      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+      # Toolchain to invoke `cargo nextest`; cache: false skips the (large) deps
+      # cache restore since this job never compiles.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
-          cache-shared-key: ${{ runner.os }}-test
-          cache-bin: false
+          cache: false
 
       - name: Setup image (Linux)
         if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -222,10 +298,10 @@ jobs:
           which ic-wasm
           ic-wasm --version
 
-      - name: Install wasm-tools
+      - name: Install wasm-tools and nextest
         uses: taiki-e/install-action@e9e8e031bcd90cdbe8ac6bb1d376f8596e587fbf # v2.70.2
         with:
-          tool: wasm-tools
+          tool: nextest, wasm-tools
 
       - name: Verify wasm-tools installation
         run: |
@@ -236,9 +312,18 @@ jobs:
         if: ${{ !contains(matrix.os, 'windows') }}
         run: ./scripts/download_test_network_launcher.sh
 
+      - name: Download nextest archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nextest-archive-${{ runner.os }}
+
       - name: Run ${{ matrix.test }}
-        # the macos runners do not support Docker
-        run: cargo test --test ${{ matrix.test }} -- ${{ contains(matrix.os, 'macos') && '--skip :docker:' || '' }}
+        # Run just this file's test binary from the archive. binary(=...) is an
+        # exact match so e.g. canister_call_tests does not also pull in
+        # canister_call_root_key_tests. The macOS runners do not support Docker,
+        # so drop the docker-tagged tests there (test-tag bakes ":docker:" into
+        # their names).
+        run: cargo nextest run --archive-file nextest-archive.tar.zst -E "binary(=${{ matrix.test }})${{ contains(matrix.os, 'macos') && ' & not test(~:docker:)' || '' }}"
         env:
           ICP_CLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -246,8 +331,11 @@ jobs:
     name: test:required
     if: always() && needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
-    needs: [changes, unit-tests, test]
+    needs: [changes, build, unit-tests, test]
     steps:
+      - name: check build result
+        if: ${{ needs.build.result != 'success' }}
+        run: exit 1
       - name: check unit-tests result
         if: ${{ needs.unit-tests.result != 'success' }}
         run: exit 1

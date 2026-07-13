@@ -5,6 +5,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use snafu::prelude::*;
 
+pub use crate::manifest::network::RootKeySpec;
+pub use access::RootKeySource;
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
@@ -172,10 +174,8 @@ pub struct Connected {
     /// The URL this network's HTTP gateway can be reached at.
     pub http_gateway_url: Option<Url>,
 
-    /// The root key of this network
-    #[serde(with = "hex::serde")]
-    #[schemars(with = "String")]
-    pub root_key: Vec<u8>,
+    /// How to obtain the root key used to verify responses from this network.
+    pub root_key: RootKeySpec,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -232,9 +232,7 @@ impl From<ManifestGateway> for Gateway {
 
 impl From<ManifestConnected> for Connected {
     fn from(value: ManifestConnected) -> Self {
-        let root_key = value
-            .root_key
-            .map_or_else(|| crate::context::IC_ROOT_KEY.to_vec(), |rk| rk.0);
+        let root_key = value.root_key;
         match value.endpoints {
             Endpoints::Implicit { url } => Connected {
                 api_url: url.clone(),
@@ -358,6 +356,9 @@ pub struct Accessor {
 
     // Port descriptors dir
     pub descriptors: PathBuf,
+
+    // Used to build a bootstrap agent when a connected network fetches its root key
+    pub agent: Arc<dyn crate::agent::Create>,
 }
 
 #[async_trait]
@@ -384,7 +385,7 @@ impl Access for Accessor {
                 Ok(get_managed_network_access(nd).await?)
             }
             Configuration::Connected { connected: cfg } => {
-                Ok(get_connected_network_access(cfg).await?)
+                Ok(get_connected_network_access(cfg, &self.agent).await?)
             }
         }
     }

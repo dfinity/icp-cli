@@ -349,10 +349,10 @@ impl MockProjectLoader {
     ///   - "prod" (ic network, backend and frontend only)
     pub fn complex() -> Self {
         use crate::{
-            context::IC_ROOT_KEY,
             manifest::{
                 adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource, SourceField},
                 canister::{BuildStep, BuildSteps, SyncSteps},
+                network::RootKeySpec,
             },
             network::{
                 Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode,
@@ -460,7 +460,7 @@ impl MockProjectLoader {
                 connected: Connected {
                     api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
                     http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
-                    root_key: IC_ROOT_KEY.to_vec(),
+                    root_key: RootKeySpec::Mainnet,
                 },
             },
         };
@@ -711,6 +711,7 @@ mod tests {
               - name: test-network
                 mode: connected
                 url: https://somenetwork.icp
+                root-key: mainnet
             environments:
               - name: local
                 network: test-network

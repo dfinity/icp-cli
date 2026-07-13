@@ -350,6 +350,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     "local",
                     NetworkAccess {
                         root_key: local_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse("http://localhost:8000").unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -359,6 +360,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                     "staging",
                     NetworkAccess {
                         root_key: staging_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse("http://staging:9000").unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -433,6 +435,7 @@ async fn test_get_agent_for_network_success() {
             "local",
             NetworkAccess {
                 root_key: root_key.clone(),
+                root_key_source: crate::network::RootKeySource::Configured,
                 api_url: Url::parse("http://localhost:8000").unwrap(),
                 http_gateway_url: None,
                 use_friendly_domains: false,
@@ -647,6 +650,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
             LOCAL,
             NetworkAccess {
                 root_key: local_root_key.clone(),
+                root_key_source: crate::network::RootKeySource::Configured,
                 api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                 http_gateway_url: None,
                 use_friendly_domains: false,
@@ -720,6 +724,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
             LOCAL,
             NetworkAccess {
                 root_key: custom_root_key.clone(),
+                root_key_source: crate::network::RootKeySource::Configured,
                 api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
                 http_gateway_url: None,
                 use_friendly_domains: false,
@@ -820,6 +825,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     LOCAL,
                     NetworkAccess {
                         root_key: local_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -829,6 +835,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                     "custom",
                     NetworkAccess {
                         root_key: custom_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse("http://localhost:7000").unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -864,6 +871,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                     LOCAL,
                     NetworkAccess {
                         root_key: local_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -873,6 +881,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                     "staging",
                     NetworkAccess {
                         root_key: staging_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse("http://localhost:8001").unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -909,6 +918,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                     LOCAL,
                     NetworkAccess {
                         root_key: local_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,
@@ -918,6 +928,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                     "staging",
                     NetworkAccess {
                         root_key: staging_root_key.clone(),
+                        root_key_source: crate::network::RootKeySource::Configured,
                         api_url: Url::parse("http://localhost:8001").unwrap(),
                         http_gateway_url: None,
                         use_friendly_domains: false,

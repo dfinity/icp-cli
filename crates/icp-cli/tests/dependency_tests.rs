@@ -32,6 +32,11 @@ async fn deploy_with_dependency_injects_namespaced_ids() {
               steps:
                 - type: script
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        # A member must declare every environment the workspace targets (§16.7);
+        # the network binding is ignored (the root supplies it).
+        environments:
+          - name: random-environment
     "#};
     write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
         .expect("failed to write dependency manifest");
@@ -131,6 +136,11 @@ async fn deploy_from_member_scopes_to_member_and_uses_root_store() {
               steps:
                 - type: script
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        # A member must declare every environment the workspace targets (§16.7);
+        # the network binding is ignored (the root supplies it).
+        environments:
+          - name: random-environment
     "#};
     write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
         .expect("failed to write dependency manifest");
@@ -201,6 +211,55 @@ async fn deploy_from_member_scopes_to_member_and_uses_root_store() {
         .failure();
 }
 
+/// Deploying to an environment a vendored member does not declare fails fast
+/// with a clear error (strict rule, §16.7) — before any network is contacted.
+#[tokio::test]
+async fn deploy_to_env_missing_from_member_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // The dependency does NOT declare `random-environment`.
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    let dep_manifest = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
+        .expect("failed to write dependency manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // No network started: the strict check rejects the deploy before any network
+    // interaction.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("random-environment").and(contains("vendor/openemail")));
+}
+
 /// The "umbrella" layout: two independent sub-projects (`service-a`, `service-b`)
 /// each depend on the same sibling `openemail` via `../openemail`, and the app
 /// depends on both services. Because both edges resolve to the same directory,
@@ -222,11 +281,17 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
         "#}
     };
 
+    // Every member must declare the environment the workspace targets (§16.7).
+    let random_env = "\nenvironments:\n  - name: random-environment\n";
+
     // umbrella/openemail — the shared service.
     let openemail = app.join("umbrella/openemail");
     std::fs::create_dir_all(&openemail).expect("failed to create openemail dir");
-    write_string(&openemail.join("icp.yaml"), &canister("backend"))
-        .expect("failed to write openemail manifest");
+    write_string(
+        &openemail.join("icp.yaml"),
+        &format!("{}{random_env}", canister("backend")),
+    )
+    .expect("failed to write openemail manifest");
 
     // umbrella/service-a and umbrella/service-b each depend on ../openemail.
     for svc in ["service-a", "service-b"] {
@@ -238,6 +303,7 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
               - name: openemail
                 path: ../openemail
                 canisters: [backend]
+            {random_env}
         "#, service = canister("service")};
         write_string(&dir.join("icp.yaml"), &manifest).expect("failed to write service manifest");
     }

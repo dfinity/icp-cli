@@ -6,7 +6,7 @@ use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, InitArgs, Network, Project,
-    canister::{ControllerRef, recipe},
+    canister::{ControllerRef, Settings, recipe},
     context::IC_ROOT_KEY,
     fs,
     manifest::{
@@ -335,6 +335,25 @@ async fn build_manifest_canisters(
 /// dependencies reuse the same instance.
 type ImportedInstance = Vec<(String, String)>;
 
+/// A member environment's per-canister config, to be folded into the root's
+/// same-named environment beneath any root overrides (§16.7).
+#[derive(Default, Clone)]
+struct MemberCanisterOverride {
+    settings: Option<Settings>,
+    init_args: Option<ManifestInitArgs>,
+}
+
+/// Per-environment member overrides: env name → store key → override.
+type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride>>;
+
+/// A member's identity (store-key prefix) and the environment names it defines,
+/// used to enforce that a member declares every environment the root targets
+/// (strict rule, §16.7).
+struct MemberEnvInfo {
+    prefix: String,
+    defined: HashSet<String>,
+}
+
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
 /// de-dup / cycle-detection identity.
 fn canonicalize_dep(alias: &str, dep_root: &Path) -> Result<PathBuf, ConsolidateManifestError> {
@@ -455,6 +474,7 @@ fn validate_dependency_aliases(
 /// app-root-relative store keys. De-duplicates instances by canonical path
 /// (diamond dependencies deploy once) and detects cycles. Returns the imported
 /// instance's prefix and its own canisters.
+#[allow(clippy::too_many_arguments)]
 async fn import_dependency(
     app_root_canonical: &Path,
     parent_dir: &Path,
@@ -463,6 +483,8 @@ async fn import_dependency(
     canisters: &mut IndexMap<String, (PathBuf, Canister)>,
     registry: &mut HashMap<PathBuf, ImportedInstance>,
     stack: &mut Vec<PathBuf>,
+    member_env_overrides: &mut MemberEnvOverrides,
+    members: &mut Vec<MemberEnvInfo>,
 ) -> Result<ImportedInstance, ConsolidateManifestError> {
     let dep_root = parent_dir.join(&dep.path);
     let manifest_path = dep_root.join(PROJECT_MANIFEST);
@@ -537,6 +559,60 @@ async fn import_dependency(
         }
     }
 
+    // Capture the member's own environments so the parent can honor its
+    // per-canister settings/init_args for the same-named environment
+    // (standalone-equivalence, §16.7). The network binding and canister
+    // selection are ignored; only overrides on the member's *own* canisters are
+    // folded in — keys naming its dependencies are left to those dependencies.
+    let mut defined_envs: HashSet<String> = HashSet::new();
+    for env_item in &dep_manifest.environments {
+        let em: EnvironmentManifest = match env_item {
+            Item::Manifest(m) => m.clone(),
+            Item::Path(path) => {
+                let p = dep_root.join(path);
+                if !p.is_file() {
+                    return NotFoundSnafu {
+                        kind: "environment".to_string(),
+                        path: p.to_string(),
+                    }
+                    .fail();
+                }
+                load_manifest_from_path::<EnvironmentManifest>(&p)
+                    .await
+                    .context(LoadEnvironmentSnafu)?
+            }
+        };
+        defined_envs.insert(em.name.clone());
+        if let Some(settings) = &em.settings {
+            for (local, s) in settings {
+                if let Some(key) = local_to_key.get(local) {
+                    member_env_overrides
+                        .entry(em.name.clone())
+                        .or_default()
+                        .entry(key.clone())
+                        .or_default()
+                        .settings = Some(s.clone());
+                }
+            }
+        }
+        if let Some(init_args) = &em.init_args {
+            for (local, ia) in init_args {
+                if let Some(key) = local_to_key.get(local) {
+                    member_env_overrides
+                        .entry(em.name.clone())
+                        .or_default()
+                        .entry(key.clone())
+                        .or_default()
+                        .init_args = Some(ia.clone());
+                }
+            }
+        }
+    }
+    members.push(MemberEnvInfo {
+        prefix: prefix.clone(),
+        defined: defined_envs,
+    });
+
     // Recurse into the dependency's own dependencies.
     let own_names: HashSet<String> = own.iter().map(|(l, _)| l.clone()).collect();
     validate_dependency_aliases(&dep_manifest.dependencies, &own_names)?;
@@ -551,6 +627,8 @@ async fn import_dependency(
             canisters,
             registry,
             stack,
+            member_env_overrides,
+            members,
         ))
         .await?;
         let exposed = select_exposed(&inst, &nested.canisters, &nested.name)?;
@@ -612,6 +690,70 @@ pub fn member_scoped_canisters(
     Some(names)
 }
 
+/// Build one environment's canister map: select from `canisters`, then apply the
+/// member overrides for this environment (standalone-equivalence, §16.7), then
+/// the root's own overrides (highest precedence). Precedence is therefore
+/// root-explicit > member-env > canister-base.
+fn build_environment_canisters(
+    canisters: &IndexMap<String, (PathBuf, Canister)>,
+    env_name: &str,
+    selection: &CanisterSelection,
+    member_overrides: Option<&HashMap<String, MemberCanisterOverride>>,
+    root_settings: Option<&HashMap<String, Settings>>,
+    root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
+) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
+    let mut cs = match selection {
+        CanisterSelection::None => IndexMap::new(),
+        CanisterSelection::Everything => canisters.clone(),
+        CanisterSelection::Named(names) => {
+            let mut cs: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
+            for name in names {
+                let v = canisters.get(name).ok_or(
+                    InvalidCanisterSnafu {
+                        environment: env_name.to_owned(),
+                        canister: name.to_owned(),
+                    }
+                    .build(),
+                )?;
+                cs.insert(name.to_owned(), v.to_owned());
+            }
+            cs
+        }
+    };
+
+    // Member overrides first (lower precedence than the root's own overrides).
+    if let Some(overrides) = member_overrides {
+        for (key, ov) in overrides {
+            if let Some((cpath, canister)) = cs.get_mut(key) {
+                if let Some(s) = &ov.settings {
+                    canister.settings = s.clone();
+                }
+                if let Some(ia) = &ov.init_args {
+                    canister.init_args = Some(resolve_manifest_init_args(ia, cpath, key)?);
+                }
+            }
+        }
+    }
+
+    // Root overrides last (highest precedence).
+    if let Some(settings) = root_settings {
+        for (name, s) in settings {
+            if let Some((_p, canister)) = cs.get_mut(name) {
+                canister.settings = s.clone();
+            }
+        }
+    }
+    if let Some(init_args) = root_init_args {
+        for (name, ia) in init_args {
+            if let Some((cpath, canister)) = cs.get_mut(name) {
+                canister.init_args = Some(resolve_manifest_init_args(ia, cpath, name)?);
+            }
+        }
+    }
+
+    Ok(cs)
+}
+
 /// Turns the ProjectManifest into a Project struct
 /// - Adds the default Networks
 /// - Adds the default Environment
@@ -659,6 +801,10 @@ pub async fn consolidate_manifest(
     // multiple edges) resolve to a single instance.
     let mut registry: HashMap<PathBuf, ImportedInstance> = HashMap::new();
     let mut stack: Vec<PathBuf> = Vec::new();
+    // Member environment config folded into the root's same-named environments,
+    // and the per-member set of declared environment names for the strict rule.
+    let mut member_env_overrides: MemberEnvOverrides = HashMap::new();
+    let mut members: Vec<MemberEnvInfo> = Vec::new();
     let app_own_names: HashSet<String> = app_own.iter().map(|(l, _)| l.clone()).collect();
     validate_dependency_aliases(&m.dependencies, &app_own_names)?;
 
@@ -672,6 +818,8 @@ pub async fn consolidate_manifest(
             &mut canisters,
             &mut registry,
             &mut stack,
+            &mut member_env_overrides,
+            &mut members,
         )
         .await?;
         let exposed = select_exposed(&inst, &dep.canisters, &dep.name)?;
@@ -854,59 +1002,16 @@ pub async fn consolidate_manifest(
                         v.to_owned()
                     },
 
-                    // Embed canisters in environment
-                    canisters: {
-                        let mut cs = match &m.canisters {
-                            // None
-                            CanisterSelection::None => IndexMap::new(),
-
-                            // Everything
-                            CanisterSelection::Everything => canisters.clone(),
-
-                            // Named
-                            CanisterSelection::Named(names) => {
-                                let mut cs: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
-
-                                for name in names {
-                                    let v = canisters.get(name).ok_or(
-                                        InvalidCanisterSnafu {
-                                            environment: m.name.to_owned(),
-                                            canister: name.to_owned(),
-                                        }
-                                        .build(),
-                                    )?;
-
-                                    cs.insert(name.to_owned(), v.to_owned());
-                                }
-
-                                cs
-                            }
-                        };
-
-                        // Apply settings overrides if specified
-                        if let Some(ref settings_overrides) = m.settings {
-                            for (canister_name, settings) in settings_overrides {
-                                if let Some((_path, canister)) = cs.get_mut(canister_name) {
-                                    canister.settings = settings.clone();
-                                }
-                            }
-                        }
-
-                        // Apply init_args overrides if specified
-                        if let Some(ref init_args_overrides) = m.init_args {
-                            for (canister_name, manifest_init_args) in init_args_overrides {
-                                if let Some((canister_path, canister)) = cs.get_mut(canister_name) {
-                                    canister.init_args = Some(resolve_manifest_init_args(
-                                        manifest_init_args,
-                                        canister_path,
-                                        canister_name,
-                                    )?);
-                                }
-                            }
-                        }
-
-                        cs
-                    },
+                    // Embed canisters in environment, folding member overrides
+                    // (§16.7) beneath the root's own settings/init_args overrides.
+                    canisters: build_environment_canisters(
+                        &canisters,
+                        &m.name,
+                        &m.canisters,
+                        member_env_overrides.get(&m.name),
+                        m.settings.as_ref(),
+                        m.init_args.as_ref(),
+                    )?,
                 });
             }
         }
@@ -915,36 +1020,72 @@ pub async fn consolidate_manifest(
     // We're done adding all the user environments
     // Now we add the implicit `local` and `ic` environment if the user hasn't overriden it
     if let Entry::Vacant(vacant_entry) = environments.entry(LOCAL.to_string()) {
+        let network = networks
+            .get(LOCAL)
+            .ok_or(
+                InvalidNetworkSnafu {
+                    environment: LOCAL.to_owned(),
+                    network: LOCAL.to_owned(),
+                }
+                .build(),
+            )?
+            .to_owned();
         vacant_entry.insert(Environment {
             name: LOCAL.to_string(),
-            network: networks
-                .get(LOCAL)
-                .ok_or(
-                    InvalidNetworkSnafu {
-                        environment: LOCAL.to_owned(),
-                        network: LOCAL.to_owned(),
-                    }
-                    .build(),
-                )?
-                .to_owned(),
-            canisters: canisters.clone(),
+            network,
+            canisters: build_environment_canisters(
+                &canisters,
+                LOCAL,
+                &CanisterSelection::Everything,
+                member_env_overrides.get(LOCAL),
+                None,
+                None,
+            )?,
         });
     }
     if let Entry::Vacant(vacant_entry) = environments.entry(IC.to_string()) {
+        let network = networks
+            .get(IC)
+            .ok_or(
+                InvalidNetworkSnafu {
+                    environment: IC.to_owned(),
+                    network: IC.to_owned(),
+                }
+                .build(),
+            )?
+            .to_owned();
         vacant_entry.insert(Environment {
             name: IC.to_string(),
-            network: networks
-                .get(IC)
-                .ok_or(
-                    InvalidNetworkSnafu {
-                        environment: IC.to_owned(),
-                        network: IC.to_owned(),
-                    }
-                    .build(),
-                )?
-                .to_owned(),
-            canisters: canisters.clone(),
+            network,
+            canisters: build_environment_canisters(
+                &canisters,
+                IC,
+                &CanisterSelection::Everything,
+                member_env_overrides.get(IC),
+                None,
+                None,
+            )?,
         });
+    }
+
+    // Strict rule (§16.7): every member must declare each environment the root
+    // targets. `local`/`ic` are implicit for every project, so they never count
+    // as missing; other environments must be declared explicitly by the member.
+    // Recorded per-environment and enforced lazily when that environment is
+    // selected (so a missing `staging` never blocks `deploy -e local`).
+    let mut member_missing_envs: HashMap<String, Vec<String>> = HashMap::new();
+    for env_name in environments.keys() {
+        if env_name == LOCAL || env_name == IC {
+            continue;
+        }
+        for member in &members {
+            if !member.defined.contains(env_name) {
+                member_missing_envs
+                    .entry(env_name.clone())
+                    .or_default()
+                    .push(member.prefix.clone());
+            }
+        }
     }
 
     Ok(Project {
@@ -952,6 +1093,7 @@ pub async fn consolidate_manifest(
         canisters,
         networks,
         environments,
+        member_missing_envs,
     })
 }
 
@@ -1127,6 +1269,124 @@ mod dependency_tests {
                 "openemail:frontend".to_string(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn member_env_config_folds_in_with_root_override_winning() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail defines `staging` with per-canister settings for its own
+        // canisters.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+environments:
+  - name: staging
+    settings:
+      backend:
+        compute_allocation: 5
+      frontend:
+        compute_allocation: 7
+"#,
+        );
+        // The app declares openemail and also defines `staging`, overriding the
+        // imported backend's settings (the root override must win).
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: app
+    build:
+      steps:
+        - type: pre-built
+          path: app.wasm
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    settings:
+      "openemail:backend":
+        compute_allocation: 99
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        // Root override wins over the member's config.
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:backend")
+                .unwrap()
+                .1
+                .settings
+                .compute_allocation,
+            Some(99),
+        );
+        // No root override → the member's own config applies (standalone-equivalence).
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:frontend")
+                .unwrap()
+                .1
+                .settings
+                .compute_allocation,
+            Some(7),
+        );
+        // Both projects declared staging, so nothing is recorded as missing.
+        assert!(p.member_missing_envs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn missing_member_environment_is_recorded() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["backend"], ""),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: app
+    build:
+      steps:
+        - type: pre-built
+          path: app.wasm
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        // openemail does not declare `staging`, so it is recorded as missing.
+        assert_eq!(
+            p.member_missing_envs.get("staging"),
+            Some(&vec!["openemail".to_string()]),
+        );
+        // Implicit environments are never recorded as missing.
+        assert!(!p.member_missing_envs.contains_key("local"));
+        assert!(!p.member_missing_envs.contains_key("ic"));
     }
 
     #[tokio::test]

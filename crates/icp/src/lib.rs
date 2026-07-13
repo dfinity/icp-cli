@@ -163,6 +163,13 @@ pub struct Project {
     pub canisters: IndexMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+
+    /// Environments the workspace defines that some vendored member does *not*
+    /// declare, keyed by environment name → the missing members' store-key
+    /// prefixes. Enforced when the environment is selected (strict rule, §16.7).
+    /// Empty for standalone projects and workspaces whose members are complete.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub member_missing_envs: HashMap<String, Vec<String>>,
 }
 
 impl Project {
@@ -358,6 +365,7 @@ impl MockProjectLoader {
             canisters,
             networks,
             environments,
+            member_missing_envs: HashMap::new(),
         };
 
         Self::new(project)
@@ -586,6 +594,7 @@ impl MockProjectLoader {
             canisters,
             networks,
             environments,
+            member_missing_envs: HashMap::new(),
         };
 
         Self::new(project)

@@ -144,6 +144,19 @@ impl Context {
                 name: environment.name().to_owned(),
             })?;
 
+        // Strict rule (§16.7): every vendored member must declare the selected
+        // environment. Enforced here (not at load time) so a member missing some
+        // other environment never blocks deploys to the ones it does declare.
+        if let Some(missing) = p.member_missing_envs.get(environment.name())
+            && let Some(member) = missing.first()
+        {
+            return MissingDependencyEnvironmentSnafu {
+                environment: environment.name().to_owned(),
+                member: member.clone(),
+            }
+            .fail();
+        }
+
         let network_type = match &env.network.configuration {
             NetworkConfiguration::Managed { .. } => NetworkType::Managed,
             NetworkConfiguration::Connected { .. } => NetworkType::Connected,
@@ -605,6 +618,12 @@ pub enum GetEnvironmentError {
 
     #[snafu(display("project does not contain an environment named '{}'", name))]
     EnvironmentNotFound { name: String },
+
+    #[snafu(display(
+        "environment '{environment}' is not defined by dependency '{member}'; \
+         a dependency must declare every environment the workspace targets"
+    ))]
+    MissingDependencyEnvironment { environment: String, member: String },
 }
 
 #[derive(Debug, Snafu)]

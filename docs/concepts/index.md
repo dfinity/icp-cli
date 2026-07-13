@@ -13,6 +13,7 @@ Understanding how icp-cli organizes and manages your project.
 - [Recipes](recipes.md) — Templated, reusable build configurations
 - [Sync Plugins](sync-plugins.md) — Sandboxed WebAssembly components that run during the sync phase
 - [Canister Discovery](canister-discovery.md) — How canisters discover each other
+- [Project Dependencies](project-dependencies.md) — Depending on other vendored icp projects and deploying them as a workspace
 - [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
 ## Quick Reference

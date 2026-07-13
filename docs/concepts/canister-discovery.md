@@ -135,31 +135,9 @@ If you prefer not to use canister environment variables:
 
 ## Dependency Projects
 
-A project can depend on another `icp` project vendored into it (for example as a git submodule) by declaring it under a top-level `dependencies:` block:
+A project can vendor another `icp` project as a dependency. IDs are injected per project scope: your canisters see the exposed dependency canisters under an alias (`PUBLIC_CANISTER_ID:openemail:backend`), while the dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …). This per-project scoping means vendored code behaves the same whether deployed on its own or as a dependency.
 
-```yaml
-dependencies:
-  - name: openemail          # local alias
-    path: ./vendor/openemail # directory containing the dependency's icp.yaml
-    canisters: [backend]     # which of its canisters to expose (omit for all)
-```
-
-Running `icp deploy` deploys **all** of the dependency's canisters into the same environment (a dependency's canisters may call each other, so the whole dependency is always deployed) and injects the **selected** dependency canister IDs into your canisters under the alias:
-
-```
-PUBLIC_CANISTER_ID:openemail:backend → <principal>
-```
-
-Canister IDs are injected per project scope, so vendored code behaves the same whether deployed on its own or as a dependency:
-
-- Your project's canisters see their own canisters by name (`PUBLIC_CANISTER_ID:backend`) plus the exposed dependency canisters under the alias (`PUBLIC_CANISTER_ID:openemail:backend`).
-- The dependency's canisters see only their own canisters, exactly as they would when deployed standalone (`PUBLIC_CANISTER_ID:backend`, `PUBLIC_CANISTER_ID:frontend`).
-
-Because two projects may each declare a canister with the same name, imported dependency canisters are keyed by their path relative to the project root (for example `vendor/openemail:backend`). Use that name to address a dependency canister directly, e.g. `icp canister status "vendor/openemail:backend"`. A dependency reached by the same directory through multiple paths (a shared dependency) is deployed once.
-
-> **Note:** `:` is reserved in canister names as the dependency namespace separator.
-
-See the [project-dependency example](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency) for a complete setup.
+See [Project Dependencies](project-dependencies.md) for how to declare a dependency, deploy it as part of a workspace, and share a single set of canister IDs.
 
 ## Custom Canister Environment Variables
 

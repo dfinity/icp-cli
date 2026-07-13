@@ -99,7 +99,7 @@ This document contains the help content for the `icp` command-line program.
 
 ###### **Options:**
 
-* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found
+* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up to the workspace root (the top-most project that declares the one you are in as a dependency)
 * `--debug` — Enable debug logging
 
   Default value: `false`

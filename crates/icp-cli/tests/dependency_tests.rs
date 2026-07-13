@@ -33,7 +33,7 @@ async fn deploy_with_dependency_injects_namespaced_ids() {
                 - type: script
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
-        # A member must declare every environment the workspace targets (§16.7);
+        # A member must declare every environment the workspace targets;
         # the network binding is ignored (the root supplies it).
         environments:
           - name: random-environment
@@ -137,7 +137,7 @@ async fn deploy_from_member_scopes_to_member_and_uses_root_store() {
                 - type: script
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
-        # A member must declare every environment the workspace targets (§16.7);
+        # A member must declare every environment the workspace targets;
         # the network binding is ignored (the root supplies it).
         environments:
           - name: random-environment
@@ -212,7 +212,7 @@ async fn deploy_from_member_scopes_to_member_and_uses_root_store() {
 }
 
 /// Deploying to an environment a vendored member does not declare fails fast
-/// with a clear error (strict rule, §16.7) — before any network is contacted.
+/// with a clear error (strict rule) — before any network is contacted.
 #[tokio::test]
 async fn deploy_to_env_missing_from_member_fails() {
     let ctx = TestContext::new();
@@ -281,7 +281,7 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
         "#}
     };
 
-    // Every member must declare the environment the workspace targets (§16.7).
+    // Every member must declare the environment the workspace targets.
     let random_env = "\nenvironments:\n  - name: random-environment\n";
 
     // umbrella/openemail — the shared service.

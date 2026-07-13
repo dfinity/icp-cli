@@ -236,7 +236,7 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
         // Climb to the workspace root: adopt an ancestor only if its transitive
         // dependency closure declares `start`. Early-stop at the first ancestor
         // that does not — this never crosses a "gap" and never adopts an
-        // unrelated ancestor (see DESIGN §16). With no declaring ancestor this
+        // unrelated ancestor. With no declaring ancestor this
         // degenerates to returning `start`, i.e. today's behavior.
         let start_canonical = canonicalize_dir(&start).unwrap_or_else(|| start.clone());
         let mut root = start.clone();

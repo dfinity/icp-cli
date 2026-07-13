@@ -166,7 +166,7 @@ pub struct Project {
 
     /// Environments the workspace defines that some vendored member does *not*
     /// declare, keyed by environment name → the missing members' store-key
-    /// prefixes. Enforced when the environment is selected (strict rule, §16.7).
+    /// prefixes. Enforced when the environment is selected (strict rule).
     /// Empty for standalone projects and workspaces whose members are complete.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub member_missing_envs: HashMap<String, Vec<String>>,

@@ -101,7 +101,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let cnames: Vec<String> = if args.names.is_empty() {
         // No canisters specified: default to the whole environment, unless the
         // command is run inside a vendored member — then scope to that member's
-        // canisters (DESIGN §16.6) and announce the resolved workspace root.
+        // canisters and announce the resolved workspace root.
         let project = ctx.project.load().await?;
         let member_dir = ctx.project.member_dir();
         match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {

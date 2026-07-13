@@ -336,7 +336,7 @@ async fn build_manifest_canisters(
 type ImportedInstance = Vec<(String, String)>;
 
 /// A member environment's per-canister config, to be folded into the root's
-/// same-named environment beneath any root overrides (§16.7).
+/// same-named environment beneath any root overrides.
 #[derive(Default, Clone)]
 struct MemberCanisterOverride {
     settings: Option<Settings>,
@@ -348,7 +348,7 @@ type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride
 
 /// A member's identity (store-key prefix) and the environment names it defines,
 /// used to enforce that a member declares every environment the root targets
-/// (strict rule, §16.7).
+/// (strict rule).
 struct MemberEnvInfo {
     prefix: String,
     defined: HashSet<String>,
@@ -561,8 +561,8 @@ async fn import_dependency(
 
     // Capture the member's own environments so the parent can honor its
     // per-canister settings/init_args for the same-named environment
-    // (standalone-equivalence, §16.7). The network binding and canister
-    // selection are ignored; only overrides on the member's *own* canisters are
+    // (standalone-equivalence). The network binding and canister selection are
+    // ignored; only overrides on the member's *own* canisters are
     // folded in — keys naming its dependencies are left to those dependencies.
     let mut defined_envs: HashSet<String> = HashSet::new();
     for env_item in &dep_manifest.environments {
@@ -655,7 +655,7 @@ fn canonicalize_or(dir: &Path) -> Option<PathBuf> {
 }
 
 /// The default set of target canisters when the user names none, honoring
-/// member-scoping (DESIGN §16.6).
+/// member-scoping.
 ///
 /// When the command is run inside a vendored member — `member_dir` is a distinct
 /// directory below the workspace `root_dir` — only that member's canisters are
@@ -691,7 +691,7 @@ pub fn member_scoped_canisters(
 }
 
 /// Build one environment's canister map: select from `canisters`, then apply the
-/// member overrides for this environment (standalone-equivalence, §16.7), then
+/// member overrides for this environment (standalone-equivalence), then
 /// the root's own overrides (highest precedence). Precedence is therefore
 /// root-explicit > member-env > canister-base.
 fn build_environment_canisters(
@@ -1003,7 +1003,7 @@ pub async fn consolidate_manifest(
                     },
 
                     // Embed canisters in environment, folding member overrides
-                    // (§16.7) beneath the root's own settings/init_args overrides.
+                    // beneath the root's own settings/init_args overrides.
                     canisters: build_environment_canisters(
                         &canisters,
                         &m.name,
@@ -1068,8 +1068,8 @@ pub async fn consolidate_manifest(
         });
     }
 
-    // Strict rule (§16.7): every member must declare each environment the root
-    // targets. `local`/`ic` are implicit for every project, so they never count
+    // Strict rule: every member must declare each environment the root targets.
+    // `local`/`ic` are implicit for every project, so they never count
     // as missing; other environments must be declared explicitly by the member.
     // Recorded per-environment and enforced lazily when that environment is
     // selected (so a missing `staging` never blocks `deploy -e local`).

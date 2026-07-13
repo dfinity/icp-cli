@@ -144,7 +144,7 @@ impl Context {
                 name: environment.name().to_owned(),
             })?;
 
-        // Strict rule (§16.7): every vendored member must declare the selected
+        // Strict rule: every vendored member must declare the selected
         // environment. Enforced here (not at load time) so a member missing some
         // other environment never blocks deploys to the ones it does declare.
         if let Some(missing) = p.member_missing_envs.get(environment.name())

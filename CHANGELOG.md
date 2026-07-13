@@ -7,7 +7,11 @@ bump. Currently experimental: project bundling
 
 # Unreleased
 
-* feat: Projects can now depend on other `icp` projects vendored into them (e.g. as git submodules) via a top-level `dependencies:` block in `icp.yaml`. Each entry gives a local alias (`name`), a `path` to the dependency's project directory, and an optional `canisters` list selecting which of its canisters to expose. `icp deploy` deploys the whole dependency into the same environment and injects the selected dependency canister IDs into your canisters as `PUBLIC_CANISTER_ID:<name>:<canister>` environment variables. A dependency reached by the same directory through multiple paths is deployed once. Note: `:` is now reserved in canister names as the dependency namespace separator.
+* feat: Projects can now depend on other `icp` projects vendored into them (e.g. as git submodules) via a top-level `dependencies:` block in `icp.yaml`.
+  * `icp deploy` deploys the dependency alongside your project and injects its canister IDs.
+  * Running `icp` from inside a vendored sub-project resolves up to the workspace root, so the whole workspace shares one network and one set of canister IDs.
+  * `:` is now reserved in canister names as the dependency namespace separator.
+  * See the [Project Dependencies](docs/concepts/project-dependencies.md) concept guide for details.
 * feat: `icp canister delete` will now send the canister's remaining cycles to the caller
 
 # v1.0.2

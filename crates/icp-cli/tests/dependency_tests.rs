@@ -106,6 +106,101 @@ async fn deploy_with_dependency_injects_namespaced_ids() {
         );
 }
 
+/// Running `icp deploy` from *inside* a vendored member resolves up to the
+/// workspace root and deploys only that member's canisters, into the root's
+/// environment and store (single source-of-truth ids). The app's own canister
+/// is not touched.
+#[tokio::test]
+async fn deploy_from_member_scopes_to_member_and_uses_root_store() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // A self-contained vendored dependency with two canisters.
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    let dep_manifest = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+          - name: frontend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
+        .expect("failed to write dependency manifest");
+
+    // The app: its own canister plus the dependency. The network/environment
+    // live only in the app (the workspace root).
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    // Deploy from INSIDE the member. Resolution climbs to the app root; only the
+    // member's canisters are deployed, and the run announces the resolved root.
+    ctx.icp()
+        .current_dir(&dep_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stdout(contains("vendor/openemail:backend").and(contains("vendor/openemail:frontend")))
+        .stderr(contains("resolved workspace root"));
+
+    // The member's ids were written to the *root* store: they are queryable from
+    // the app root.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "--environment",
+            "random-environment",
+            "vendor/openemail:backend",
+            "--id-only",
+        ])
+        .assert()
+        .success();
+
+    // The app's own canister was NOT deployed by the member-scoped run (no id in
+    // the store yet).
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "--environment",
+            "random-environment",
+            "backend",
+            "--id-only",
+        ])
+        .assert()
+        .failure();
+}
+
 /// The "umbrella" layout: two independent sub-projects (`service-a`, `service-b`)
 /// each depend on the same sibling `openemail` via `../openemail`, and the app
 /// depends on both services. Because both edges resolve to the same directory,

@@ -14,7 +14,7 @@ use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     commands::{args::ArgsOpt, canister::create},
@@ -98,12 +98,29 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     let env = ctx.get_environment(&environment_selection).await?;
 
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
-        false => args.names.clone(),
+    let cnames: Vec<String> = if args.names.is_empty() {
+        // No canisters specified: default to the whole environment, unless the
+        // command is run inside a vendored member — then scope to that member's
+        // canisters (DESIGN §16.6) and announce the resolved workspace root.
+        let project = ctx.project.load().await?;
+        let member_dir = ctx.project.member_dir();
+        match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
+            Some(scoped) => {
+                if let Some(member) = &member_dir {
+                    warn!(
+                        "Running inside sub-project '{member}'; resolved workspace root '{}'. \
+                         Deploying only this member's canisters into environment '{}'.",
+                        project.dir,
+                        environment_selection.name(),
+                    );
+                }
+                scoped
+            }
+            None => env.canisters.keys().cloned().collect(),
+        }
+    } else {
+        // Individual canisters specified.
+        args.names.clone()
     };
 
     // Skip doing any work if no canisters are targeted

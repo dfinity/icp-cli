@@ -189,6 +189,14 @@ pub enum ProjectLoadError {
 pub trait ProjectLoad: Sync + Send {
     async fn load(&self) -> Result<Project, ProjectLoadError>;
     async fn exists(&self) -> Result<bool, ProjectLoadError>;
+
+    /// The directory of the member (sub-project) the command is standing in,
+    /// i.e. the nearest `icp.yaml` at or above cwd. Equals the workspace root
+    /// (`Project::dir`) at the root or in a standalone project. `None` when the
+    /// member directory cannot be determined; callers then skip member-scoping.
+    fn member_dir(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 pub struct ProjectLoadImpl {
@@ -228,6 +236,10 @@ impl ProjectLoad for ProjectLoadImpl {
             Err(ProjectRootLocateError::NotFound { .. }) => Ok(false),
         }
     }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.project_root_locate.locate_member().ok()
+    }
 }
 
 pub struct Lazy<T, V>(T, Arc<Mutex<Option<V>>>);
@@ -262,6 +274,10 @@ impl<T: ProjectLoad> ProjectLoad for Lazy<T, Project> {
 
         let v = self.0.exists().await?;
         Ok(v)
+    }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.0.member_dir()
     }
 }
 
@@ -633,6 +649,10 @@ mod tests {
 
     impl ProjectRootLocate for MockProjectRootLocate {
         fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.path.clone())
+        }
+
+        fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError> {
             Ok(self.path.clone())
         }
     }

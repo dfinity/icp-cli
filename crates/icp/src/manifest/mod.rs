@@ -116,8 +116,14 @@ pub enum ProjectRootLocateError {
 
 /// Trait for locating the project root directory containing the project manifest file (`icp.yaml`).
 pub trait ProjectRootLocate: Sync + Send {
-    /// Locate the project root directory.
+    /// Locate the workspace root directory: the top-most project that
+    /// transitively declares the project the command is standing in.
     fn locate(&self) -> Result<PathBuf, ProjectRootLocateError>;
+
+    /// Locate the *member* directory the command is standing in: the nearest
+    /// project manifest at or above cwd, without climbing to the workspace root.
+    /// Equals [`locate`](Self::locate) at the root or in a standalone project.
+    fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError>;
 }
 
 /// Implementation of [`ProjectRootLocate`].
@@ -220,28 +226,12 @@ fn transitive_dep_dirs(manifest_dir: &Path) -> HashSet<PathBuf> {
 
 impl ProjectRootLocate for ProjectRootLocateImpl {
     fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
-        // An explicit override (`--project-root-override` / `ICP_PROJECT_ROOT`)
-        // forces the root and skips the upward climb — the escape hatch for
-        // "operate on exactly this project" (e.g. deploy a vendored member as a
-        // standalone project).
-        if let Some(dir) = &self.dir {
-            if !dir.join(PROJECT_MANIFEST).exists() {
-                return NotFoundSnafu {
-                    path: dir.to_owned(),
-                }
-                .fail();
-            }
-
-            return Ok(dir.to_owned());
+        // Start from the project the command is standing in. An explicit
+        // override forces member == root (no climb) — see `locate_member`.
+        let start = self.locate_member()?;
+        if self.dir.is_some() {
+            return Ok(start);
         }
-
-        // The project the command is standing in: nearest manifest at/above cwd.
-        let start = nearest_manifest_dir(&self.cwd).ok_or_else(|| {
-            NotFoundSnafu {
-                path: self.cwd.to_owned(),
-            }
-            .build()
-        })?;
 
         // Climb to the workspace root: adopt an ancestor only if its transitive
         // dependency closure declares `start`. Early-stop at the first ancestor
@@ -260,6 +250,31 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
             }
         }
         Ok(root)
+    }
+
+    fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError> {
+        // An explicit override (`--project-root-override` / `ICP_PROJECT_ROOT`)
+        // forces the project directory and skips the upward climb — the escape
+        // hatch for "operate on exactly this project" (e.g. deploy a vendored
+        // member as a standalone project). Member and root are then identical.
+        if let Some(dir) = &self.dir {
+            if !dir.join(PROJECT_MANIFEST).exists() {
+                return NotFoundSnafu {
+                    path: dir.to_owned(),
+                }
+                .fail();
+            }
+
+            return Ok(dir.to_owned());
+        }
+
+        // The project the command is standing in: nearest manifest at/above cwd.
+        nearest_manifest_dir(&self.cwd).ok_or_else(|| {
+            NotFoundSnafu {
+                path: self.cwd.to_owned(),
+            }
+            .build()
+        })
     }
 }
 

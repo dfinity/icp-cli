@@ -192,6 +192,382 @@ async fn token_transfer_to_account_identifier() {
 }
 
 #[tokio::test]
+async fn token_approve_and_allowance() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    // Fund alice so she can pay the approval fee
+    let icp_ledger = clients::ledger(&ctx);
+    icp_ledger
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
+        .await; // 10 ICP
+
+    // No allowance granted yet
+    icp_client.use_identity("alice");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Allowance: 0 ICP"))
+        .success();
+
+    // Alice approves bob to spend 5 ICP
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "5",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains(format!(
+            "Approved {bob_principal} to spend up to 5.00000000 ICP"
+        )))
+        .success();
+
+    // The ledger records the allowance
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.allowance, 500_000_000_u128);
+
+    // And the CLI reports it back
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Allowance: 5.00000000 ICP"))
+        .success();
+
+    // A third party (bob) can read the allowance alice granted, via --of-principal
+    icp_client.use_identity("bob");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--of-principal",
+            &alice_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Allowance: 5.00000000 ICP"))
+        .success();
+
+    // --json emits the machine-readable allowance
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--of-principal",
+            &alice_principal.to_string(),
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("\"allowance\":\"5.00000000 ICP\""))
+        .success();
+
+    // An amount too precise for the token's decimals (ICP has 8) is rejected up
+    // front rather than silently truncated
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "0.000000001", // 9 decimal places
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stderr(contains("cannot be represented"))
+        .failure();
+
+    // Re-approving overwrites (not adds to) the existing allowance, and --quiet
+    // prints only the block index
+    icp_client.use_identity("alice");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "2",
+            &bob_principal.to_string(),
+            "--quiet",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        // A bare block index, none of the human-readable prose
+        .stdout(predicates::str::is_match(r"^\d+\n$").unwrap())
+        .success();
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.allowance, 200_000_000_u128);
+}
+
+#[tokio::test]
+async fn token_approve_with_subaccounts() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    // Subaccount 1 (owner) and subaccount 2 (spender)
+    let from_subaccount: [u8; 32] = {
+        let mut s = [0u8; 32];
+        s[31] = 1;
+        s
+    };
+    let spender_subaccount: [u8; 32] = {
+        let mut s = [0u8; 32];
+        s[31] = 2;
+        s
+    };
+    let from_subaccount_hex = hex::encode(from_subaccount);
+    let spender_subaccount_hex = hex::encode(spender_subaccount);
+
+    // Fund alice's subaccount 1 so it can pay the approval fee
+    let icp_ledger = clients::ledger(&ctx);
+    icp_ledger
+        .acquire_icp(alice_principal, Some(from_subaccount), 1_000_000_000_u128)
+        .await; // 10 ICP
+
+    // Approve bob's subaccount 2 to spend 3 ICP from alice's subaccount 1
+    icp_client.use_identity("alice");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "3",
+            &bob_principal.to_string(),
+            "--spender-subaccount",
+            &spender_subaccount_hex,
+            "--from-subaccount",
+            &from_subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The allowance is recorded against the specific (sub)accounts
+    let allowance = icp_ledger
+        .allowance_of(
+            alice_principal,
+            Some(from_subaccount),
+            bob_principal,
+            Some(spender_subaccount),
+        )
+        .await;
+    assert_eq!(allowance.allowance, 300_000_000_u128);
+
+    // The default accounts have no allowance
+    let default_allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(default_allowance.allowance, 0_u128);
+
+    // The CLI reports the allowance when the matching subaccounts are provided
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--spender-subaccount",
+            &spender_subaccount_hex,
+            "--subaccount",
+            &from_subaccount_hex,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains("Allowance: 3.00000000 ICP"))
+        .success();
+}
+
+#[tokio::test]
+async fn token_approve_with_expiry() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    icp_client.create_identity("alice");
+    icp_client.use_identity("alice");
+    let alice_principal = icp_client.active_principal();
+    icp_client.create_identity("bob");
+    icp_client.use_identity("bob");
+    let bob_principal = icp_client.active_principal();
+
+    // Fund alice so she can pay the approval fee
+    let icp_ledger = clients::ledger(&ctx);
+    icp_ledger
+        .acquire_icp(alice_principal, None, 1_000_000_000_u128)
+        .await; // 10 ICP
+
+    // Approve bob for 5 ICP, expiring 24h from now
+    let before_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    icp_client.use_identity("alice");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "5",
+            &bob_principal.to_string(),
+            "--expires-in",
+            "24h",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        // Human output surfaces the resolved (RFC 3339) expiry
+        .stdout(contains("Expires at:"))
+        .success();
+
+    let after_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    // The ledger records an expiry ~24h ahead (bounded by the wall-clock window
+    // around the CLI call)
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.allowance, 500_000_000_u128);
+    let day_nanos: u128 = 24 * 60 * 60 * 1_000_000_000;
+    let expires_at = u128::from(
+        allowance
+            .expires_at
+            .expect("expiry should be set on the allowance"),
+    );
+    assert!(
+        expires_at >= before_nanos + day_nanos && expires_at <= after_nanos + day_nanos,
+        "expiry {expires_at} not within [{}, {}]",
+        before_nanos + day_nanos,
+        after_nanos + day_nanos,
+    );
+
+    // --json exposes the raw expiry timestamp
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "allowance",
+            &bob_principal.to_string(),
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stdout(contains(format!(
+            "\"expires_at\":{}",
+            allowance.expires_at.unwrap()
+        )))
+        .success();
+
+    // An allowance granted without an expiry reports none
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "token",
+            "approve",
+            "1",
+            &bob_principal.to_string(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+    let allowance = icp_ledger
+        .allowance_of(alice_principal, None, bob_principal, None)
+        .await;
+    assert_eq!(allowance.expires_at, None);
+}
+
+#[tokio::test]
 async fn token_balance_with_subaccount() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");

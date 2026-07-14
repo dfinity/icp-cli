@@ -445,6 +445,14 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
             commands::token::Commands::Transfer(args) => {
                 commands::token::transfer::exec(ctx, &cmd.token_name_or_ledger_id, &args).await?
             }
+
+            commands::token::Commands::Approve(args) => {
+                commands::token::approve::exec(ctx, &cmd.token_name_or_ledger_id, &args).await?
+            }
+
+            commands::token::Commands::Allowance(args) => {
+                commands::token::allowance::exec(ctx, &cmd.token_name_or_ledger_id, &args).await?
+            }
         },
     }
 

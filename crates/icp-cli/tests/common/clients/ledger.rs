@@ -5,6 +5,7 @@ use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::TransferArg,
 };
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 
 use crate::common::TestContext;
 
@@ -27,6 +28,33 @@ impl Client {
             .await
             .unwrap();
         Decode!(result, Nat).unwrap()
+    }
+
+    pub(crate) async fn allowance_of(
+        &self,
+        owner: Principal,
+        owner_subaccount: Option<Subaccount>,
+        spender: Principal,
+        spender_subaccount: Option<Subaccount>,
+    ) -> Allowance {
+        let arg = AllowanceArgs {
+            account: Account {
+                owner,
+                subaccount: owner_subaccount,
+            },
+            spender: Account {
+                owner: spender,
+                subaccount: spender_subaccount,
+            },
+        };
+        let bytes = Encode!(&arg).unwrap();
+        let result = &self
+            .agent
+            .query(&ICP_LEDGER_PRINCIPAL, "icrc2_allowance")
+            .with_arg(bytes)
+            .await
+            .unwrap();
+        Decode!(result, Allowance).unwrap()
     }
 
     pub(crate) async fn acquire_icp(

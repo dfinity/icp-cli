@@ -331,6 +331,77 @@ async fn deploy_to_env_missing_from_member_fails() {
         .stderr(contains("random-environment").and(contains("vendor/openemail")));
 }
 
+/// A member-scoped deploy that would leave a dependency canister unwired (its id
+/// is not yet in the workspace store) fails fast with a clear error, rather than
+/// silently deploying a misconfigured canister.
+#[tokio::test]
+async fn deploy_from_member_with_undeployed_dependency_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // umbrella/openemail — a shared service.
+    let openemail = project_dir.join("umbrella/openemail");
+    std::fs::create_dir_all(&openemail).expect("failed to create openemail dir");
+    write_string(
+        &openemail.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            environments:
+              - name: random-environment
+        "#},
+    )
+    .expect("failed to write openemail manifest");
+
+    // umbrella/service-a depends on ../openemail and is wired to its backend.
+    let service_a = project_dir.join("umbrella/service-a");
+    std::fs::create_dir_all(&service_a).expect("failed to create service-a dir");
+    write_string(
+        &service_a.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: service
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            dependencies:
+              - name: openemail
+                path: ../openemail
+                canisters: [backend]
+            environments:
+              - name: random-environment
+        "#},
+    )
+    .expect("failed to write service-a manifest");
+
+    // The app depends on service-a.
+    let pm = formatdoc! {r#"
+        dependencies:
+          - name: service-a
+            path: ./umbrella/service-a
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Deploy from inside service-a with openemail not yet deployed. Scoping keeps
+    // openemail out, so the deploy would leave service-a unwired — reject it
+    // before any network interaction.
+    ctx.icp()
+        .current_dir(&service_a)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("not yet deployed").and(contains("umbrella/openemail:backend")));
+}
+
 /// The "umbrella" layout: two independent sub-projects (`service-a`, `service-b`)
 /// each depend on the same sibling `openemail` via `../openemail`, and the app
 /// depends on both services. Because both edges resolve to the same directory,

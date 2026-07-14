@@ -88,6 +88,8 @@ Resolution is **bounded**: an ancestor is adopted only if it (transitively) decl
 
 From inside a member, `icp deploy` with no canister names defaults to **that member's own canisters**. Deploy the whole workspace by running from the root, or target canisters explicitly by their namespaced names from anywhere.
 
+Because a member-scoped deploy does not redeploy the member's dependencies, it fails with a clear error if any dependency canister it is wired to has not been deployed in the workspace yet — deploy from the workspace root first so those IDs exist.
+
 ### Setting the root explicitly
 
 Force the workspace root with the `--project-root-override` flag or the `ICP_PROJECT_ROOT` environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.

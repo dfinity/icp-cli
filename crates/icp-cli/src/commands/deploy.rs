@@ -12,9 +12,9 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     commands::{args::ArgsOpt, canister::create},
@@ -98,22 +98,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     let env = ctx.get_environment(&environment_selection).await?;
 
+    let mut member_scoped = false;
     let cnames: Vec<String> = if args.names.is_empty() {
         // No canisters specified: default to the whole environment, unless the
         // command is run inside a vendored member — then scope to that member's
-        // canisters and announce the resolved workspace root.
+        // own canisters. (The resolved-root notice is emitted centrally during
+        // project load.)
         let project = ctx.project.load().await?;
         let member_dir = ctx.project.member_dir();
         match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
             Some(scoped) => {
-                if let Some(member) = &member_dir {
-                    warn!(
-                        "Running inside sub-project '{member}'; resolved workspace root '{}'. \
-                         Deploying only this member's canisters into environment '{}'.",
-                        project.dir,
-                        environment_selection.name(),
-                    );
-                }
+                member_scoped = true;
                 scoped
             }
             None => env.canisters.keys().cloned().collect(),
@@ -130,6 +125,37 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     if args.args_opt.is_some() && cnames.len() != 1 {
         anyhow::bail!("--args and --args-file can only be used when deploying a single canister");
+    }
+
+    // A member-scoped deploy targets only the sub-project's own canisters, but
+    // those canisters are wired to their dependencies' ids — and the dependency
+    // canisters are outside the scope, so they are not (re)deployed here. If any
+    // are missing from the workspace store, fail fast rather than silently
+    // deploying an unwired canister.
+    if member_scoped {
+        let scoped: HashSet<&str> = cnames.iter().map(String::as_str).collect();
+        let deployed: BTreeMap<String, Principal> = ctx
+            .ids_by_environment(&environment_selection)
+            .await?
+            .into_iter()
+            .collect();
+        let mut missing: BTreeSet<String> = BTreeSet::new();
+        for name in &cnames {
+            if let Some((_, canister)) = env.canisters.get(name) {
+                for target in canister.bindings.values() {
+                    if !scoped.contains(target.as_str()) && !deployed.contains_key(target) {
+                        missing.insert(target.clone());
+                    }
+                }
+            }
+        }
+        if !missing.is_empty() {
+            anyhow::bail!(
+                "this sub-project depends on canister(s) not yet deployed in the workspace: {}. \
+                 Run `icp deploy` from the workspace root first (or deploy them explicitly by name).",
+                missing.into_iter().collect::<Vec<_>>().join(", ")
+            );
+        }
     }
 
     let canisters_to_build = try_join_all(

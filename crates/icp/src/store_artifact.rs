@@ -29,6 +29,12 @@ pub enum SaveError {
     #[snafu(display("failed to write artifact file"))]
     SaveWriteFileError { source: crate::fs::IoError },
 
+    #[snafu(display(
+        "canister '{name}' encodes to a {len}-byte artifact filename, exceeding the 255-byte \
+         filesystem limit; shorten the dependency path or canister name"
+    ))]
+    SaveNameTooLong { name: String, len: usize },
+
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },
 }
@@ -40,6 +46,12 @@ pub enum LookupArtifactError {
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
+
+    #[snafu(display(
+        "canister '{name}' encodes to a {len}-byte artifact filename, exceeding the 255-byte \
+         filesystem limit; shorten the dependency path or canister name"
+    ))]
+    LookupNameTooLong { name: String, len: usize },
 
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },
@@ -72,6 +84,17 @@ fn sanitize_artifact_name(name: &str) -> String {
         }
     }
     out
+}
+
+/// Maximum length of a single filename component on common filesystems.
+const NAME_MAX: usize = 255;
+
+/// The encoded filename length if it exceeds `NAME_MAX`, else `None`. A deeply
+/// nested dependency store key can stay within the total path limit yet blow the
+/// per-component limit once its separators are percent-encoded.
+fn artifact_name_overflow(name: &str) -> Option<usize> {
+    let len = sanitize_artifact_name(name).len();
+    (len > NAME_MAX).then_some(len)
 }
 
 impl ArtifactPaths {
@@ -110,6 +133,13 @@ impl ArtifactStore {
 #[async_trait]
 impl Access for ArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        if let Some(len) = artifact_name_overflow(name) {
+            return SaveNameTooLongSnafu {
+                name: name.to_owned(),
+                len,
+            }
+            .fail();
+        }
         self.lock()?
             .with_write(async |store| {
                 // Save artifact
@@ -120,6 +150,13 @@ impl Access for ArtifactStore {
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
+        if let Some(len) = artifact_name_overflow(name) {
+            return LookupNameTooLongSnafu {
+                name: name.to_owned(),
+                len,
+            }
+            .fail();
+        }
         self.lock()?
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
@@ -186,7 +223,7 @@ impl Access for MockInMemoryArtifactStore {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_artifact_name;
+    use super::{artifact_name_overflow, sanitize_artifact_name};
 
     #[test]
     fn plain_names_unchanged() {
@@ -212,5 +249,15 @@ mod tests {
             sanitize_artifact_name("a%2Fb"),
             sanitize_artifact_name("a/b")
         );
+    }
+
+    #[test]
+    fn artifact_name_overflow_flags_only_over_limit_names() {
+        assert!(artifact_name_overflow("backend").is_none());
+        assert!(artifact_name_overflow("vendor/openemail:backend").is_none());
+        // A pathologically deep store key stays within the total path limit but
+        // its single encoded segment exceeds NAME_MAX once separators are encoded.
+        let deep = format!("{}:leaf", vec!["dir"; 80].join("/"));
+        assert!(artifact_name_overflow(&deep).is_some());
     }
 }

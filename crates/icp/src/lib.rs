@@ -221,6 +221,31 @@ pub struct ProjectLoadImpl {
     pub recipe: Arc<dyn Resolve>,
 }
 
+/// Ensures the "operating on a workspace root above your sub-project" notice is
+/// printed at most once per process (one CLI invocation), no matter how many
+/// times the project is loaded.
+static WORKSPACE_ROOT_ANNOUNCED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Warn once when the resolved workspace root differs from the sub-project the
+/// command is run in, so the upward resolution (§workspace model) is visible for
+/// every command, not just deploy.
+fn announce_workspace_root_once(member: &Path, root: &Path) {
+    let differs = match (
+        dunce::canonicalize(member.as_std_path()),
+        dunce::canonicalize(root.as_std_path()),
+    ) {
+        (Ok(m), Ok(r)) => m != r,
+        _ => member != root,
+    };
+    if differs && !WORKSPACE_ROOT_ANNOUNCED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            "Running inside sub-project '{member}'; resolved workspace root '{root}'. \
+             Commands operate on the workspace root's network, environments, and canister IDs."
+        );
+    }
+}
+
 #[async_trait]
 impl ProjectLoad for ProjectLoadImpl {
     async fn load(&self) -> Result<Project, ProjectLoadError> {
@@ -229,6 +254,12 @@ impl ProjectLoad for ProjectLoadImpl {
         let pdir = self.project_root_locate.locate().context(LocateSnafu)?;
 
         debug!("Located icp project in {pdir}");
+
+        // Announce (once) when we resolved up to a workspace root above the
+        // sub-project the command is run in, so this is visible for every command.
+        if let Ok(member) = self.project_root_locate.locate_member() {
+            announce_workspace_root_once(&member, &pdir);
+        }
 
         // Load project manifest
         let m = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))

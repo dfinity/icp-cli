@@ -280,6 +280,7 @@ fn redefine_ic_network_disallowed() {
           - name: ic
             mode: connected
             url: https://fake-ic.io
+            root-key: mainnet
         "#,
     )
     .expect("failed to write project manifest");

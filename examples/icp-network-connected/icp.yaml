@@ -11,3 +11,7 @@ canisters:
 
 networks:
   - networks/staging.yaml
+
+environments:
+  - name: staging
+    network: staging

@@ -294,7 +294,7 @@ networks:
   - name: testnet
     mode: connected
     url: https://testnet.ic0.app
-    root-key: <hex-encoded-key>  # For non-mainnet
+    root-key: fetch  # mainnet | fetch | <hex-encoded-key>
 ```
 
 | Property | Type | Required | Description |
@@ -302,7 +302,15 @@ networks:
 | `name` | string | Yes | Network identifier |
 | `mode` | string | Yes | `connected` |
 | `url` | string | Yes | Network endpoint URL |
-| `root-key` | string | No | Hex-encoded root key (non-mainnet only) |
+| `root-key` | string | Yes | How to obtain the root key: see below |
+
+The `root-key` is the public key used to verify responses from the network, and is required for connected networks. It accepts one of:
+
+- **`mainnet`** — use the canonical IC mainnet root key. Use this to reach mainnet through a non-default boundary node without repeating the key literal; responses are still fully verified against the real mainnet key.
+- **`fetch`** — fetch the root key from the network on each use. This is trust-on-first-use and does **not** verify the key's provenance, so only use it for testnets that you (or someone you trust) operate. `icp` prints a warning whenever it fetches, and `network status` labels such a key as `fetched`.
+- **a 266-character hex-encoded key** — pin a specific root key.
+
+> The built-in `ic` network always uses the mainnet root key and cannot be redefined.
 
 ### Docker Network
 

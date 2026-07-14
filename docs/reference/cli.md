@@ -77,6 +77,8 @@ This document contains the help content for the `icp` command-line program.
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
 * [`icp token transfer`↴](#icp-token-transfer)
+* [`icp token approve`↴](#icp-token-approve)
+* [`icp token allowance`↴](#icp-token-allowance)
 
 ## `icp`
 
@@ -1650,6 +1652,8 @@ Perform token transactions
 
 * `balance` — Display the token balance on the ledger (default token: icp)
 * `transfer` — Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
+* `approve` — Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+* `allowance` — Display the allowance granted to a spender (ICRC-2) (default token: icp)
 
 ###### **Arguments:**
 
@@ -1699,6 +1703,59 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token approve`
+
+Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+
+Sets the spender's allowance to the given amount, overwriting any existing allowance (this is a set, not an increment). The allowance is granted from the calling identity's account, which is charged the ledger's approval fee, and can optionally be given an expiry with `--expires-in`. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] approve [OPTIONS] <AMOUNT> <SPENDER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — The allowance amount, in whole tokens (e.g. `1.5`), the spender may transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `<SPENDER>` — Principal of the spender being granted the allowance
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--from-subaccount <FROM_SUBACCOUNT>` — The caller's subaccount to grant the allowance from (the account debited), as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--expires-in <DURATION>` — Expire the allowance after this duration from now, e.g. `24h`, `30d` (suffixes: s, m, h, d, w; a bare number is seconds). Never expires if omitted
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token allowance`
+
+Display the allowance granted to a spender (ICRC-2) (default token: icp)
+
+This is a read-only query that works for any owner/spender pair, including accounts you do not control (use `--of-principal` to set the owner). The amount is shown in whole tokens, along with an expiry if one was set. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] allowance [OPTIONS] <SPENDER>`
+
+###### **Arguments:**
+
+* `<SPENDER>` — Principal of the spender whose allowance to look up
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--subaccount <SUBACCOUNT>` — The owner's subaccount that granted the allowance, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--of-principal <OF_PRINCIPAL>` — The allowance owner to look up, instead of the current identity. Lets you inspect allowances granted by any principal
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the allowance amount
 
 
 

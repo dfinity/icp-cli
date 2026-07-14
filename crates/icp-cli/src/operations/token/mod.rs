@@ -5,6 +5,8 @@ use num_bigint::ToBigInt;
 use phf::phf_map;
 use std::fmt;
 
+pub(crate) mod allowance;
+pub(crate) mod approve;
 pub(crate) mod balance;
 pub(crate) mod mint;
 pub(crate) mod transfer;

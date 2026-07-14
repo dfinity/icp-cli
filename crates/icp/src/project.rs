@@ -106,12 +106,14 @@ pub enum ConsolidateManifestError {
     },
 
     #[snafu(display(
-        "canister name '{name}' is invalid: ':' is reserved as the dependency namespace separator"
+        "canister name '{name}' is invalid: only ASCII letters, digits, '_' and '-' are allowed \
+         (':' is reserved as the dependency namespace separator)"
     ))]
     InvalidCanisterName { name: String },
 
     #[snafu(display(
-        "dependency alias '{alias}' is invalid: ':' is reserved as the dependency namespace separator"
+        "dependency alias '{alias}' is invalid: only ASCII letters, digits, '_' and '-' are allowed \
+         (':' is reserved as the dependency namespace separator)"
     ))]
     InvalidDependencyAlias { alias: String },
 
@@ -190,6 +192,21 @@ fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
+/// Whether `name` is a valid canister name or dependency alias: non-empty and
+/// containing only ASCII letters, digits, `_`, or `-`.
+///
+/// A single strict rule keeps names safe for every purpose they are reused for —
+/// store-key segments, `PUBLIC_CANISTER_ID:<name>` env vars, DNS subdomains, and
+/// archive paths — so no per-site sanitizing is needed. In particular `:` is the
+/// dependency namespace separator, and `.` / `/` would be ambiguous in
+/// subdomains and paths.
+fn is_valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
 /// Builds the canonical canisters declared directly in one project manifest,
 /// resolving glob/path/inline entries, recipes, and init-args relative to
 /// `pdir`. Returns `(local name, canister dir, canister)` with empty bindings;
@@ -264,9 +281,7 @@ async fn build_manifest_canisters(
         };
 
         for (cdir, m) in ms {
-            // `:` is reserved as the dependency namespace separator in store keys
-            // and `PUBLIC_CANISTER_ID:<name>` env vars.
-            if m.name.contains(':') {
+            if !is_valid_name(&m.name) {
                 return InvalidCanisterNameSnafu {
                     name: m.name.clone(),
                 }
@@ -484,7 +499,7 @@ fn validate_dependency_aliases(
 ) -> Result<(), ConsolidateManifestError> {
     let mut seen: HashSet<&str> = HashSet::new();
     for d in deps {
-        if d.name.contains(':') {
+        if !is_valid_name(&d.name) {
             return InvalidDependencyAliasSnafu {
                 alias: d.name.clone(),
             }
@@ -916,42 +931,9 @@ pub async fn consolidate_manifest(
         }
     }
 
-    // De-collide friendly URLs. A friendly name is a hostname prefix, so two
-    // distinct canisters resolving to the same one would produce an ambiguous
-    // `custom-domains.txt` entry and printed URL. This is normally impossible by
-    // construction (own canisters are shorter than dependency ones), but canister
-    // names may contain '.', so e.g. an own canister literally named
-    // `frontend.openemail` collides with dependency `openemail`'s `frontend`.
-    // Drop any friendly name claimed by more than one canister; those canisters
-    // fall back to a principal-based URL.
-    {
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for (_, canister) in canisters.values() {
-            for fname in &canister.friendly_names {
-                *counts.entry(fname.clone()).or_default() += 1;
-            }
-        }
-        let collisions: HashSet<String> = counts
-            .into_iter()
-            .filter(|(_, n)| *n > 1)
-            .map(|(name, _)| name)
-            .collect();
-        if !collisions.is_empty() {
-            let mut names: Vec<&String> = collisions.iter().collect();
-            names.sort();
-            tracing::warn!(
-                "friendly canister URLs collide and fall back to principal URLs: {}",
-                names
-                    .iter()
-                    .map(|n| n.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            for (_, canister) in canisters.values_mut() {
-                canister.friendly_names.retain(|f| !collisions.contains(f));
-            }
-        }
-    }
+    // Friendly URLs need no de-collision pass: the strict name rule (no '.') makes
+    // own canisters single-label and dependency canisters multi-label (dot-nested
+    // by alias chain), so their hostnames are disjoint by construction (§17.2).
 
     // Validate that every canister-name controller reference points to a declared canister.
     // Catching typos here turns "perpetual warning" into a clear load-time error.
@@ -1657,31 +1639,46 @@ environments:
     }
 
     #[tokio::test]
-    async fn friendly_name_collision_falls_back_to_principal() {
+    async fn dot_in_canister_name_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // '.' is banned: it would be ambiguous in a dot-nested friendly subdomain
+        // (an own canister named `frontend.openemail` could collide with dependency
+        // `openemail`'s `frontend`). The strict name rule rejects it up front.
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(&["frontend.openemail"], ""),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(err, ConsolidateManifestError::InvalidCanisterName { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_dependency_alias_is_rejected() {
         let tmp = Utf8TempDir::new().unwrap();
         write(
             tmp.path(),
             "openemail/icp.yaml",
-            &manifest(&["frontend"], ""),
+            &manifest(&["backend"], ""),
         );
-        // An own canister literally named `frontend.openemail` maps to the same
-        // friendly host as dependency `openemail`'s `frontend` (canister names may
-        // contain '.').
         write(
             tmp.path(),
             "icp.yaml",
             &manifest(
-                &["frontend.openemail"],
-                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+                &["app"],
+                "dependencies:\n  - name: open.email\n    path: ./openemail\n",
             ),
         );
 
-        let p = consolidate(tmp.path()).await.unwrap();
-
-        // Both would produce `frontend.openemail.<env>.localhost`, so both drop the
-        // colliding friendly name and fall back to principal URLs.
-        assert!(friendly_names_of(&p, "frontend.openemail").is_empty());
-        assert!(friendly_names_of(&p, "openemail:frontend").is_empty());
+        let err = consolidate(tmp.path()).await.unwrap_err();
+        assert!(
+            matches!(err, ConsolidateManifestError::InvalidDependencyAlias { .. }),
+            "got {err:?}"
+        );
     }
 
     #[tokio::test]

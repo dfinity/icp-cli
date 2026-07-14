@@ -307,9 +307,10 @@ fn bundle_inlines_external_init_args_file() {
     );
 }
 
-/// Canister names with characters invalid in file paths (spaces, `!`, `/`, etc.)
-/// must be sanitized for archive entry names while the manifest preserves the
-/// original name.
+/// A canister name that is a reserved Windows device name (e.g. `CON`) must be
+/// sanitized for archive entry names (prefixed with `_`) while the manifest
+/// preserves the original name. (Other characters can no longer need sanitizing
+/// since the strict name rule limits names to `[A-Za-z0-9_-]`.)
 #[test]
 fn bundle_sanitizes_canister_name_for_paths() {
     let ctx = TestContext::new();
@@ -318,7 +319,7 @@ fn bundle_sanitizes_canister_name_for_paths() {
 
     let pm = formatdoc! {r#"
         canisters:
-          - name: "my canister!"
+          - name: CON
             build:
               steps:
                 - type: script
@@ -355,23 +356,20 @@ fn bundle_sanitizes_canister_name_for_paths() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "canisters/my_canister_.wasm" => {
+            "canisters/_CON.wasm" => {
                 found_wasm = true;
             }
             _ => {}
         }
     }
 
+    assert!(found_wasm, "canisters/_CON.wasm not found in bundle");
     assert!(
-        found_wasm,
-        "canisters/my_canister_.wasm not found in bundle"
-    );
-    assert!(
-        manifest_yaml.contains("my_canister_.wasm"),
+        manifest_yaml.contains("_CON.wasm"),
         "bundle manifest should reference sanitized wasm filename"
     );
     assert!(
-        manifest_yaml.contains("my canister!"),
+        manifest_yaml.contains("name: CON"),
         "bundle manifest should preserve original canister name"
     );
 }
@@ -970,15 +968,16 @@ fn bundle_rejects_canister_name_collision() {
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
 
-    // `my canister` and `my!canister` both sanitize to `my_canister`.
+    // `CON` is a reserved Windows device name, so it sanitizes to `_CON`, which
+    // then collides with a sibling literally named `_CON`.
     let pm = formatdoc! {r#"
         canisters:
-          - name: "my canister"
+          - name: CON
             build:
               steps:
                 - type: script
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
-          - name: "my!canister"
+          - name: _CON
             build:
               steps:
                 - type: script
@@ -992,7 +991,7 @@ fn bundle_rejects_canister_name_collision() {
         .args(["project", "bundle", "--output", "bundle.tar.gz"])
         .assert()
         .failure()
-        .stderr(contains("sanitize to the same archive segment").and(contains("my_canister")));
+        .stderr(contains("sanitize to the same archive segment").and(contains("_CON")));
 }
 
 /// Bundling a project that pulls in dependency canisters is rejected up front: a

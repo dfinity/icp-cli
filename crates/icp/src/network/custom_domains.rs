@@ -44,14 +44,16 @@ pub fn write_custom_domains(
     Ok(())
 }
 
-/// True if `label` is a valid DNS label: 1–63 characters of ASCII letters,
-/// digits, or `-`, not starting or ending with `-`.
+/// True if `label` is usable as a subdomain label for gateway routing: 1–63
+/// characters of ASCII letters, digits, `-`, or `_`, not starting or ending
+/// with `-`. `_` is not strictly DNS-conformant but is a permitted canister-name
+/// character and routes fine over `*.localhost`, so it is accepted here.
 fn is_dns_label(label: &str) -> bool {
     !label.is_empty()
         && label.len() <= 63
         && label
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         && !label.starts_with('-')
         && !label.ends_with('-')
 }
@@ -236,6 +238,11 @@ mod tests {
         assert_eq!(
             friendly_host("bar.libfoo.openemail", "local", "localhost").as_deref(),
             Some("bar.libfoo.openemail.local.localhost")
+        );
+        // Underscores are permitted in canister names and route fine.
+        assert_eq!(
+            friendly_host("my_canister", "local", "localhost").as_deref(),
+            Some("my_canister.local.localhost")
         );
         // Store-key separators are not valid DNS labels.
         assert_eq!(

@@ -555,7 +555,13 @@ impl Context {
         let Ok(project) = self.project.load().await else {
             return;
         };
-        let mut env_mappings = std::collections::BTreeMap::new();
+        // For each environment sharing this network, turn its stored
+        // `store_key -> principal` mapping into `(friendly_name, principal)`
+        // entries by joining against the consolidated canisters (keyed by the
+        // same store key). A canister contributes one entry per friendly name —
+        // several for a de-duplicated shared dependency canister (§17.3).
+        let mut env_entries: std::collections::BTreeMap<String, Vec<(String, candid::Principal)>> =
+            std::collections::BTreeMap::new();
         for (env_name, env) in &project.environments {
             if env.network.name != desc.network {
                 continue;
@@ -564,10 +570,19 @@ impl Context {
                 env.network.configuration,
                 NetworkConfiguration::Managed { .. }
             );
-            if let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name)
-                && !mapping.is_empty()
-            {
-                env_mappings.insert(env_name.clone(), mapping);
+            let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name) else {
+                continue;
+            };
+            let mut entries = Vec::new();
+            for (store_key, principal) in &mapping {
+                if let Some((_, canister)) = env.canisters.get(store_key) {
+                    for friendly_name in &canister.friendly_names {
+                        entries.push((friendly_name.clone(), *principal));
+                    }
+                }
+            }
+            if !entries.is_empty() {
+                env_entries.insert(env_name.clone(), entries);
             }
         }
         let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(desc.ii, domain)
@@ -576,7 +591,7 @@ impl Context {
         if let Err(e) = crate::network::custom_domains::write_custom_domains(
             status_dir,
             domain,
-            &env_mappings,
+            &env_entries,
             &extra,
         ) {
             tracing::warn!("Failed to update custom domains: {e}");

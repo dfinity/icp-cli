@@ -322,6 +322,10 @@ async fn build_manifest_canisters(
                     init_args,
                     registry_recipe,
                     bindings: BTreeMap::new(),
+                    // Default to the bare local name; overwritten with the
+                    // dot-nested alias form when the canister is imported as a
+                    // dependency (see `import_dependency`).
+                    friendly_names: vec![m.name.clone()],
                 },
             ));
         }
@@ -375,6 +379,18 @@ fn relative_prefix(app_root_canonical: &Path, dep_canonical: &Path) -> String {
     let rel = pathdiff::diff_utf8_paths(dep_canonical, app_root_canonical)
         .unwrap_or_else(|| dep_canonical.to_owned());
     rel.as_str().replace('\\', "/")
+}
+
+/// Build a dependency canister's friendly-URL subdomain prefix: the canister's
+/// local name as the most-specific label, followed by its alias chain reversed
+/// (root-most alias last). E.g. local `backend` reached via `[service-a,
+/// openemail]` → `backend.openemail.service-a`. Dot-nested so it stays a valid,
+/// collision-free multi-label host; see DESIGN §17.2.
+fn friendly_name_for(local: &str, alias_chain: &[String]) -> String {
+    let mut labels = Vec::with_capacity(alias_chain.len() + 1);
+    labels.push(local.to_string());
+    labels.extend(alias_chain.iter().rev().cloned());
+    labels.join(".")
 }
 
 /// Rewrite `CanisterName` controller references from a dependency's local
@@ -485,6 +501,9 @@ async fn import_dependency(
     stack: &mut Vec<PathBuf>,
     member_env_overrides: &mut MemberEnvOverrides,
     members: &mut Vec<MemberEnvInfo>,
+    // Alias chain from the workspace root to and including this dependency,
+    // used to build friendly-URL subdomains (§17.2).
+    alias_chain: &[String],
 ) -> Result<ImportedInstance, ConsolidateManifestError> {
     let dep_root = parent_dir.join(&dep.path);
     let manifest_path = dep_root.join(PROJECT_MANIFEST);
@@ -508,9 +527,21 @@ async fn import_dependency(
         .fail();
     }
 
-    // Diamond de-dup: same resolved directory means the same instance.
+    // Diamond de-dup: same resolved directory means the same instance, deployed
+    // once. It is still reachable via this new alias chain, so register an
+    // additional friendly URL for each of its canisters (§17.3) rather than
+    // picking one.
     if let Some(inst) = registry.get(&canonical) {
-        return Ok(inst.clone());
+        let inst = inst.clone();
+        for (local, key) in &inst {
+            let fname = friendly_name_for(local, alias_chain);
+            if let Some((_, canister)) = canisters.get_mut(key)
+                && !canister.friendly_names.contains(&fname)
+            {
+                canister.friendly_names.push(fname);
+            }
+        }
+        return Ok(inst);
     }
 
     stack.push(canonical.clone());
@@ -535,6 +566,8 @@ async fn import_dependency(
     for (local, cdir, mut canister) in built {
         let store_key = format!("{prefix}:{local}");
         canister.name = store_key.clone();
+        // Friendly URL from the alias chain, not the path-based store key.
+        canister.friendly_names = vec![friendly_name_for(&local, alias_chain)];
         own.push((local.clone(), store_key.clone()));
         local_to_key.insert(local.clone(), store_key.clone());
         match canisters.entry(store_key.clone()) {
@@ -619,6 +652,8 @@ async fn import_dependency(
 
     let mut edges: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for nested in &dep_manifest.dependencies {
+        let mut nested_chain = alias_chain.to_vec();
+        nested_chain.push(nested.name.clone());
         let inst = Box::pin(import_dependency(
             app_root_canonical,
             &dep_root,
@@ -629,6 +664,7 @@ async fn import_dependency(
             stack,
             member_env_overrides,
             members,
+            &nested_chain,
         ))
         .await?;
         let exposed = select_exposed(&inst, &nested.canisters, &nested.name)?;
@@ -820,6 +856,7 @@ pub async fn consolidate_manifest(
             &mut stack,
             &mut member_env_overrides,
             &mut members,
+            std::slice::from_ref(&dep.name),
         )
         .await?;
         let exposed = select_exposed(&inst, &dep.canisters, &dep.name)?;
@@ -1163,6 +1200,19 @@ mod dependency_tests {
             .bindings
     }
 
+    fn friendly_names_of<'a>(p: &'a Project, key: &str) -> &'a [String] {
+        &p.canisters
+            .get(key)
+            .unwrap_or_else(|| {
+                panic!(
+                    "canister '{key}' not found; have {:?}",
+                    p.canisters.keys().collect::<Vec<_>>()
+                )
+            })
+            .1
+            .friendly_names
+    }
+
     #[tokio::test]
     async fn single_project_bindings_are_self_and_siblings() {
         let tmp = Utf8TempDir::new().unwrap();
@@ -1445,6 +1495,68 @@ environments:
         assert_eq!(
             bindings_of(&p, "umbrella/service-b:backend").get("openemail:backend"),
             Some(&"umbrella/openemail:backend".to_string())
+        );
+
+        // The single shared instance is reachable at one friendly URL per alias
+        // chain (§17.3) — the store-key path (`umbrella/`) never appears.
+        assert_eq!(
+            friendly_names_of(&p, "umbrella/openemail:backend"),
+            &["backend.openemail.service-a", "backend.openemail.service-b"]
+        );
+        // Each service's own canister is named by its own alias chain.
+        assert_eq!(
+            friendly_names_of(&p, "umbrella/service-a:backend"),
+            &["backend.service-a"]
+        );
+        assert_eq!(
+            friendly_names_of(&p, "umbrella/service-b:backend"),
+            &["backend.service-b"]
+        );
+    }
+
+    #[tokio::test]
+    async fn friendly_names_are_bare_for_own_and_dotted_for_dependencies() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail (with a transitive dep libfoo) vendored under the app.
+        write(
+            tmp.path(),
+            "openemail/libfoo/icp.yaml",
+            &manifest(&["bar"], ""),
+        );
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "dependencies:\n  - name: libfoo\n    path: ./libfoo\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // Own canister: bare name (unchanged from single-project behavior).
+        assert_eq!(friendly_names_of(&p, "backend"), &["backend"]);
+        // Direct dependency: dot-nested by alias (no `vendor/` path noise).
+        assert_eq!(
+            friendly_names_of(&p, "openemail:backend"),
+            &["backend.openemail"]
+        );
+        assert_eq!(
+            friendly_names_of(&p, "openemail:frontend"),
+            &["frontend.openemail"]
+        );
+        // Transitive dependency: full alias chain, canister-most-specific first.
+        assert_eq!(
+            friendly_names_of(&p, "openemail/libfoo:bar"),
+            &["bar.libfoo.openemail"]
         );
     }
 

@@ -111,6 +111,77 @@ async fn deploy_with_dependency_injects_namespaced_ids() {
         );
 }
 
+/// A dependency canister that serves `http_request` gets a friendly frontend URL
+/// namespaced by the dependency **alias** (`frontend.openemail.<env>.localhost`),
+/// not by its on-disk store-key path. A dependency compute canister (no
+/// `http_request`) still gets a Candid UI URL.
+#[tokio::test]
+async fn deploy_prints_alias_namespaced_url_for_dependency_frontend() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Vendored dependency: `backend` is a compute canister (no http_request);
+    // `frontend` is an asset canister that serves http_request.
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    let dep_manifest = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+          - name: frontend
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+                  sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+        environments:
+          - name: random-environment
+    "#};
+    write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
+        .expect("failed to write dependency manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success()
+        // The dependency frontend's friendly URL is namespaced by the alias, and
+        // carries no `vendor/` path noise.
+        .stdout(contains(
+            "http://frontend.openemail.random-environment.localhost:",
+        ))
+        // The dependency's compute backend falls back to a Candid UI URL.
+        .stdout(contains("vendor/openemail:backend (Candid UI):"));
+}
+
 /// Running `icp deploy` from *inside* a vendored member resolves up to the
 /// workspace root and deploys only that member's canisters, into the root's
 /// environment and store (single source-of-truth ids). The app's own canister

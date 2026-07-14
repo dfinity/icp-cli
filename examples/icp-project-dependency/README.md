@@ -34,6 +34,23 @@ Running `icp deploy` in this directory:
    environment variables. Here the app's `backend` receives
    `PUBLIC_CANISTER_ID:openemail:backend`.
 
+## URLs printed after deploy
+
+`icp deploy` prints a clickable URL per canister. A canister that serves the
+`http_request` endpoint gets a **frontend** URL; anything else gets a **Candid
+UI** URL. For dependency canisters the frontend subdomain is namespaced by the
+dependency **alias** (not the on-disk path), so `openemail`'s asset `frontend`
+is reachable at:
+
+```
+frontend.openemail.local.localhost:<port>
+```
+
+`openemail`'s `backend` and the app's own `backend` are compute canisters (no
+`http_request`), so they print Candid UI URLs. (A canister shared by more than
+one dependency prints one such URL per alias — see the `icp-project-dependency-shared`
+example.)
+
 Canister-ID environment variables are set per project scope:
 
 - The app's canisters see their own canisters by name

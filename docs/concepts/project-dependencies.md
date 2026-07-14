@@ -45,6 +45,26 @@ icp deploy "vendor/openemail:backend"
 
 `:` is reserved in canister names as the namespace separator.
 
+## Deploy URLs
+
+`icp deploy` prints a clickable URL for every canister it deploys, including a dependency's. A canister that serves the `http_request` endpoint gets a **frontend URL**; any other canister gets a **Candid UI URL**.
+
+On a local network, a dependency canister's frontend subdomain is namespaced by the **alias** (not the store-key path), so it stays short and readable:
+
+```
+Deployed canisters:
+  frontend: http://frontend.local.localhost:8000/
+  vendor/openemail:frontend: http://frontend.openemail.local.localhost:8000/
+  vendor/openemail:backend (Candid UI): http://<candid-ui>.localhost:8000/?id=<id>
+```
+
+A transitive dependency uses its full alias chain (`frontend.libfoo.openemail.<env>.localhost`). A [shared dependency](#shared-dependencies) is deployed once but reached through more than one alias chain, so it prints **one URL per chain**, each resolving to the same canister:
+
+```
+  umbrella/openemail:frontend: http://frontend.openemail.service-a.local.localhost:8000/
+  umbrella/openemail:frontend: http://frontend.openemail.service-b.local.localhost:8000/
+```
+
 ## Running commands inside a dependency (the workspace)
 
 Vendored dependencies form a **workspace**. When you run an `icp` command from inside a vendored project, icp-cli walks **up** the directory tree to the outermost project that declares the one you are in as a dependency and treats it as the **workspace root**. The network, environments, and the canister-ID store all come from that root, so there is a single source of truth for canister IDs no matter where you run from.

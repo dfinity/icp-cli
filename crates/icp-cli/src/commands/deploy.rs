@@ -644,22 +644,46 @@ async fn print_canister_urls(
 
         if let Some(http_gateway_url) = &http_gateway_url {
             let has_http = has_http_request(&agent, canister_id).await;
-            let friendly = if has_friendly {
-                Some((name.as_str(), environment_selection.name()))
-            } else {
-                None
-            };
 
             if has_http {
-                let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
-                if json {
-                    json_canisters.push(JsonDeployedCanister {
-                        name: name.clone(),
-                        canister_id,
-                        url: Some(canister_url.to_string()),
-                    });
+                // A canister carries one friendly name normally, or several when
+                // it's a de-duplicated shared dependency canister reached via
+                // multiple alias chains — print one URL for each. Fall back to a
+                // single principal URL when friendly domains are off or no
+                // friendly name is known.
+                let env_name = environment_selection.name();
+                let friendly_names: Vec<String> = if has_friendly {
+                    env.canisters
+                        .get(name)
+                        .map(|(_, c)| c.friendly_names.clone())
+                        .unwrap_or_default()
                 } else {
-                    println!("  {name}: {canister_url}");
+                    Vec::new()
+                };
+                let urls = if friendly_names.is_empty() {
+                    vec![canister_gateway_url(http_gateway_url, canister_id, None)]
+                } else {
+                    friendly_names
+                        .iter()
+                        .map(|fname| {
+                            canister_gateway_url(
+                                http_gateway_url,
+                                canister_id,
+                                Some((fname.as_str(), env_name)),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+                for canister_url in &urls {
+                    if json {
+                        json_canisters.push(JsonDeployedCanister {
+                            name: name.clone(),
+                            canister_id,
+                            url: Some(canister_url.to_string()),
+                        });
+                    } else {
+                        println!("  {name}: {canister_url}");
+                    }
                 }
             } else {
                 // For canisters without http_request, show the Candid UI URL

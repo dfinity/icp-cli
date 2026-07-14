@@ -119,6 +119,16 @@ pub struct Canister {
     /// every sibling" behavior.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bindings: BTreeMap<String, String>,
+
+    /// Subdomain prefixes for the canister's friendly URLs, most-specific label
+    /// first, e.g. `["backend"]` for an own canister or `["backend.openemail"]`
+    /// for a dependency canister (dot-nested by alias chain). A de-duplicated
+    /// shared dependency canister carries one entry per alias chain that reaches
+    /// it. Consumed only at deploy time to build `custom-domains.txt` entries and
+    /// the printed URLs; a runtime display aid that is always recomputed during
+    /// consolidation, so it is never serialized.
+    #[serde(skip)]
+    pub friendly_names: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -330,6 +340,7 @@ impl MockProjectLoader {
             init_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
+            friendly_names: vec!["backend".to_string()],
         };
 
         let local_network = Network {
@@ -415,6 +426,7 @@ impl MockProjectLoader {
             init_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
+            friendly_names: vec!["backend".to_string()],
         };
 
         let frontend_canister = Canister {
@@ -432,6 +444,7 @@ impl MockProjectLoader {
             init_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
+            friendly_names: vec!["frontend".to_string()],
         };
 
         let database_canister = Canister {
@@ -449,6 +462,7 @@ impl MockProjectLoader {
             init_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
+            friendly_names: vec!["database".to_string()],
         };
 
         // Create networks

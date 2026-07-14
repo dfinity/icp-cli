@@ -10,3 +10,13 @@ canisters:
         - type: pre-built
           path: ../../../icp-pre-built/dist/hello_world.wasm
           sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+
+  # An asset canister (serves `http_request`). Because openemail is a *shared*
+  # dependency reached via both `service-a` and `service-b`, `icp deploy` prints
+  # one friendly URL per alias chain for this single canister — see the README.
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+          sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6

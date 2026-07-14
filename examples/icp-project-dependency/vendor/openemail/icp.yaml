@@ -15,9 +15,14 @@ canisters:
           path: ../../../icp-pre-built/dist/hello_world.wasm
           sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
 
+  # `frontend` is an asset canister: it serves the `http_request` endpoint, so
+  # `icp deploy` prints a clickable frontend URL for it. As a dependency canister
+  # its subdomain is namespaced by the alias — `frontend.openemail.<env>.localhost`
+  # — while a compute canister like `backend` (no `http_request`) prints a Candid
+  # UI URL instead.
   - name: frontend
     build:
       steps:
         - type: pre-built
-          path: ../../../icp-pre-built/dist/hello_world.wasm
-          sha256: 17a05e36278cd04c7ae6d3d3226c136267b9df7525a0657521405e22ec96be7a
+          url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+          sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6

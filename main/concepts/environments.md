@@ -43,6 +43,7 @@ networks:
   - name: testnet
     mode: connected
     url: https://testnet.ic0.app
+    root-key: fetch
 ```
 
 Use connected networks for shared testnets and production.
@@ -55,6 +56,7 @@ networks:
     mode: connected
     api-url: https://api.testnet.example.com
     http-gateway-url: https://testnet.example.com
+    root-key: fetch
 ```
 
 If `http-gateway-url` is omitted, canister URLs will not be printed during deploy operations.

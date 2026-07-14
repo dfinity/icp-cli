@@ -260,6 +260,7 @@ networks:
   - name: staging
     mode: connected
     url: https://icp-api.io
+    root-key: mainnet
 
 environments:
   - name: staging
@@ -319,7 +320,7 @@ networks:
 - dfx's `"type": "ephemeral"` maps to icp-cli's `mode: managed` (local networks that icp-cli controls)
 - dfx's `"providers"` array (which can list multiple URLs for redundancy) becomes a single `url` field in icp-cli
 - dfx's `"bind"` address for local networks maps to icp-cli's `gateway.bind` and `gateway.port`
-- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly in the configuration for testnets (connected networks). For local managed networks, icp-cli retrieves the root key from the network launcher. The root key is the public key used to verify responses from the network. Explicit configuration ensures the root key comes from a trusted source rather than the network itself.
+- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly for connected networks, with one of three values: `mainnet` (use the canonical mainnet key — handy for a custom boundary node), `fetch` (fetch it from the network on each use — the equivalent of dfx's automatic behavior, trust-on-first-use and unverified), or a hex-encoded key to pin. For local managed networks, icp-cli retrieves the root key from the network launcher. Requiring an explicit choice means you opt into fetching rather than getting it silently.
 
 **Note:** icp-cli uses `https://icp-api.io` as the default IC mainnet URL, while dfx currently uses `https://icp0.io`. Both URLs point to the same IC mainnet, but `https://icp-api.io` is the recommended API gateway. The implicit `ic` network in icp-cli is configured with `https://icp-api.io`.
 

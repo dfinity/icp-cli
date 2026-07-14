@@ -12,7 +12,7 @@ Read a metadata section from a canister
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON

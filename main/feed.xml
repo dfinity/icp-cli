@@ -6,14 +6,14 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 09 Jul 2026 18:46:29 GMT</lastBuildDate>
-    <pubDate>Wed, 01 Jul 2026 14:54:18 GMT</pubDate>
+    <lastBuildDate>Tue, 14 Jul 2026 00:46:29 GMT</lastBuildDate>
+    <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Wed, 01 Jul 2026 14:54:18 GMT</pubDate>
+      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
@@ -21,8 +21,32 @@
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
       <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Fri, 26 Jun 2026 15:03:30 GMT</pubDate>
+      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Migrating from dfx</title>
+      <link>https://cli.internetcomputer.org/main/migration/from-dfx/</link>
+      <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
+      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Environments and Networks</title>
+      <link>https://cli.internetcomputer.org/main/concepts/environments/</link>
+      <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
+      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/environments/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Model</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
+      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
+      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -31,22 +55,6 @@
       <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
       <pubDate>Fri, 26 Jun 2026 15:03:30 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environments and Networks</title>
-      <link>https://cli.internetcomputer.org/main/concepts/environments/</link>
-      <description>Learn how networks and environments relate to control where and how canisters are deployed.</description>
-      <pubDate>Mon, 15 Jun 2026 12:31:24 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/environments/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Migrating from dfx</title>
-      <link>https://cli.internetcomputer.org/main/migration/from-dfx/</link>
-      <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
-      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -199,14 +207,6 @@
       <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
       <pubDate>Wed, 18 Mar 2026 17:24:54 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/containerized-networks/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Model</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
-      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
-      <pubDate>Wed, 18 Mar 2026 17:24:54 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

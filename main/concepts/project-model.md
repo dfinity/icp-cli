@@ -67,6 +67,7 @@ networks:
     configuration:
       mode: connected
       url: https://icp-api.io
+      root-key: mainnet
   - name: local
     configuration:
       mode: managed

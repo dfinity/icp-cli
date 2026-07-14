@@ -2,6 +2,7 @@ use clap::error::ErrorKind;
 use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
 use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
+use icp::network::RootKeySpec;
 use icp::prelude::LOCAL;
 use url::Url;
 
@@ -64,19 +65,8 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct RootKey(pub Vec<u8>);
-
-fn parse_root_key(input: &str) -> Result<RootKey, String> {
-    let v = hex::decode(input).map_err(|e| format!("Invalid root key hex string: {e}"))?;
-    if v.len() != 133 {
-        Err(format!(
-            "Invalid root key. Expected 133 bytes but got {}",
-            v.len()
-        ))
-    } else {
-        Ok(RootKey(v))
-    }
+fn parse_root_key(input: &str) -> Result<RootKeySpec, String> {
+    RootKeySpec::try_from(input.to_string())
 }
 
 #[derive(Clone, Debug)]
@@ -100,16 +90,17 @@ pub(crate) struct NetworkOptInner {
     network: Option<NetworkTarget>,
 
     /// The root key to use if connecting to a network by URL.
-    /// Required when using `--network <URL>`.
+    /// Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a
+    /// 266-character hex-encoded root key.
     #[arg(long, short = 'k', requires = "network", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_root_key)]
-    root_key: Option<RootKey>,
+    root_key: Option<RootKeySpec>,
 }
 
 // This is wrapper around NetworkOptInner that will do some additional
 // validation to only allow --root-key when the network is a url.
 #[derive(Clone, Debug, Default)]
 pub(crate) enum NetworkOpt {
-    Url(Url, RootKey),
+    Url(Url, RootKeySpec),
 
     Name(String),
 
@@ -169,7 +160,7 @@ impl Args for NetworkOpt {
 impl From<NetworkOpt> for NetworkSelection {
     fn from(v: NetworkOpt) -> Self {
         match v {
-            NetworkOpt::Url(url, RootKey(key)) => NetworkSelection::Url(url, key),
+            NetworkOpt::Url(url, root_key) => NetworkSelection::Url(url, root_key),
             NetworkOpt::Name(name) => NetworkSelection::Named(name),
             NetworkOpt::None => NetworkSelection::Default,
         }

@@ -1,4 +1,5 @@
 use icp::fs::write_string;
+use indoc::formatdoc;
 use predicates::str::{PredicateStrExt, contains};
 
 mod common;
@@ -135,6 +136,7 @@ networks:
   - name: connected-network
     mode: connected
     url: https://ic0.app
+    root-key: mainnet
 "#,
     )
     .expect("failed to write project manifest");
@@ -145,6 +147,77 @@ networks:
         .assert()
         .success()
         .stdout(contains("Url: https://ic0.app"));
+}
+
+/// End-to-end test of the `root-key: fetch` path with no external network:
+/// start a managed local network in one project, then in a second project
+/// define a connected network pointing at it with `root-key: fetch`. `icp`
+/// should fetch the running network's root key trust-on-first-use, warn about
+/// it, and `network status` should report the key as `fetched` and match the
+/// real root key.
+#[tokio::test]
+async fn status_connected_network_fetches_root_key() {
+    let ctx = TestContext::new();
+
+    // Provider project: start a managed local network on a random port.
+    let provider = ctx.create_project_dir("provider");
+    write_string(&provider.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write provider manifest");
+    let _guard = ctx.start_network_in(&provider, "random-network").await;
+    let network = ctx.wait_for_network_descriptor(&provider, "random-network");
+    ctx.ping_until_healthy(&provider, "random-network");
+
+    // Consumer project: connect to the provider's network and fetch its root key.
+    let consumer = ctx.create_project_dir("consumer");
+    write_string(
+        &consumer.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: fetched-network
+                mode: connected
+                url: http://localhost:{port}
+                root-key: fetch
+        "#,
+            port = network.gateway_port,
+        },
+    )
+    .expect("failed to write consumer manifest");
+
+    // Text output: key is labeled as fetched, and the CLI warns on stderr.
+    ctx.icp()
+        .current_dir(&consumer)
+        .args(["network", "status", "fetched-network"])
+        .assert()
+        .success()
+        .stdout(contains("Root Key:"))
+        .stdout(contains("(fetched - unverified, trust-on-first-use)"))
+        .stderr(contains("provenance is not verified"));
+
+    // JSON output: root_key_source is "fetched" and the fetched key matches the
+    // running network's actual root key. (The warning lands on stderr, so the
+    // JSON on stdout stays clean.)
+    let output = ctx
+        .icp()
+        .current_dir(&consumer)
+        .args(["network", "status", "fetched-network", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json_str = String::from_utf8(output).expect("output should be valid UTF-8");
+    let json: serde_json::Value =
+        serde_json::from_str(&json_str).expect("output should be valid JSON");
+
+    assert_eq!(json["root_key_source"], "fetched");
+    assert_eq!(
+        json["root_key"]
+            .as_str()
+            .expect("root_key should be a string"),
+        hex::encode(&network.root_key),
+        "fetched root key should match the running network's root key"
+    );
 }
 
 #[test]

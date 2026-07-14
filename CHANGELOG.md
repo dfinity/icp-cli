@@ -13,6 +13,11 @@ bump. Currently experimental: project bundling
   * `:` is now reserved in canister names as the dependency namespace separator.
   * See the [Project Dependencies](docs/concepts/project-dependencies.md) concept guide for details.
 * feat: `icp canister delete` will now send the canister's remaining cycles to the caller
+* feat: Connected networks now take an explicit `root-key`, which accepts a hex-encoded key or one of two new values:
+  * `mainnet`: use the canonical IC mainnet root key — handy for reaching mainnet through a custom boundary node without repeating the literal.
+  * `fetch`: fetch the key from the network on each use. This is trust-on-first-use and does *not* verify the key's provenance, so it's meant only for testnets you or someone you trust operate; `icp` prints a warning whenever it fetches.
+  * `network status` reports where the key came from — a `root_key_source` field in `--json`, and a `(fetched - unverified, trust-on-first-use)` label in text output.
+  * `root-key` is now required for connected networks (previously optional, silently defaulting to the mainnet key). This is technically breaking, but most working projects are unaffected: a non-mainnet connected network already needed an explicit key, so in practice only a mainnet-via-custom-URL network needs to add `root-key: mainnet`. The built-in `ic` network is unchanged.
 
 # v1.0.2
 

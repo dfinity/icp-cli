@@ -612,6 +612,7 @@ async fn cannot_override_ic() {
               - name: ic
                 mode: connected
                 url: http://fake-ic.local
+                root-key: mainnet
         "#},
     )
     .expect("failed to write project manifest");

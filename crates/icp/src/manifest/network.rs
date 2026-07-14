@@ -123,10 +123,16 @@ pub struct Connected {
     #[serde(flatten)]
     pub endpoints: Endpoints,
 
-    /// The root key of this network
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Option<String>", regex(pattern = "^[0-9a-f]{266}$"))]
-    pub root_key: Option<RootKey>,
+    /// How to obtain the root key used to verify responses from this network.
+    ///
+    /// One of:
+    /// - `mainnet`: use the canonical IC mainnet root key (e.g. to reach mainnet
+    ///   through a non-default boundary node without repeating the key literal).
+    /// - `fetch`: fetch the root key from the network on each use. This is
+    ///   trust-on-first-use and does *not* verify the key's provenance; only use it
+    ///   for testnets that you (or someone you trust) operate.
+    /// - a 266-character hex-encoded root key (133 bytes).
+    pub root_key: RootKeySpec,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
@@ -150,22 +156,67 @@ pub enum Endpoints {
     },
 }
 
+/// The expected byte length of a root key (133 bytes / 266 hex characters).
+pub const ROOT_KEY_LEN: usize = 133;
+
+/// How to obtain the root key used to verify responses from a connected network.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(try_from = "String", into = "String")]
-pub struct RootKey(pub Vec<u8>);
+pub enum RootKeySpec {
+    /// Use the canonical IC mainnet root key.
+    Mainnet,
+    /// Fetch the root key from the network on each use (trust-on-first-use, unverified).
+    Fetch,
+    /// A specific root key (133 bytes).
+    Explicit(Vec<u8>),
+}
 
-impl TryFrom<String> for RootKey {
-    type Error = hex::FromHexError;
+impl TryFrom<String> for RootKeySpec {
+    type Error = String;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        let bytes = hex::decode(value)?;
-        Ok(RootKey(bytes))
+        match value.as_str() {
+            "mainnet" => Ok(RootKeySpec::Mainnet),
+            "fetch" => Ok(RootKeySpec::Fetch),
+            hex => {
+                let bytes = hex::decode(hex)
+                    .map_err(|e| format!("invalid root key: expected \"mainnet\", \"fetch\", or a hex-encoded key, but failed to decode as hex: {e}"))?;
+                if bytes.len() != ROOT_KEY_LEN {
+                    return Err(format!(
+                        "invalid root key: expected {ROOT_KEY_LEN} bytes but got {}",
+                        bytes.len()
+                    ));
+                }
+                Ok(RootKeySpec::Explicit(bytes))
+            }
+        }
     }
 }
 
-impl From<RootKey> for String {
-    fn from(root_key: RootKey) -> Self {
-        hex::encode(root_key.0)
+impl From<RootKeySpec> for String {
+    fn from(spec: RootKeySpec) -> Self {
+        match spec {
+            RootKeySpec::Mainnet => "mainnet".to_string(),
+            RootKeySpec::Fetch => "fetch".to_string(),
+            RootKeySpec::Explicit(bytes) => hex::encode(bytes),
+        }
+    }
+}
+
+impl JsonSchema for RootKeySpec {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "RootKeySpec".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "Root key: \"mainnet\", \"fetch\", or a 266-character hex-encoded key.",
+            "anyOf": [
+                { "enum": ["mainnet", "fetch"] },
+                { "pattern": "^[0-9a-f]{266}$" }
+            ]
+        })
     }
 }
 
@@ -220,6 +271,7 @@ mod tests {
                 name: my-network
                 mode: connected
                 url: https://ic0.app
+                root-key: mainnet
             "#}),
             NetworkManifest {
                 name: "my-network".to_string(),
@@ -227,10 +279,48 @@ mod tests {
                     endpoints: Endpoints::Implicit {
                         url: "https://ic0.app".parse().unwrap(),
                     },
-                    root_key: None
+                    root_key: RootKeySpec::Mainnet,
                 }),
             },
         );
+    }
+
+    #[test]
+    fn connected_network_fetch() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                name: my-network
+                mode: connected
+                url: https://testnet.example.com
+                root-key: fetch
+            "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Connected(Connected {
+                    endpoints: Endpoints::Implicit {
+                        url: "https://testnet.example.com".parse().unwrap(),
+                    },
+                    root_key: RootKeySpec::Fetch,
+                }),
+            },
+        );
+    }
+
+    #[test]
+    fn connected_network_requires_root_key() {
+        match serde_yaml::from_str::<NetworkManifest>(indoc! {r#"
+                name: my-network
+                mode: connected
+                url: https://ic0.app
+            "#})
+        {
+            Ok(_) => panic!("a connected network without a root key should fail"),
+            Err(err) => {
+                if !format!("{err}").contains("root-key") {
+                    panic!("unexpected error for missing root key: {err}");
+                }
+            }
+        };
     }
 
     #[test]
@@ -269,16 +359,14 @@ mod tests {
                     endpoints: Endpoints::Implicit {
                         url: "https://ic0.app".parse().unwrap(),
                     },
-                    root_key: Some(
-                        RootKey::try_from(
-                            "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010\
+                    root_key: RootKeySpec::try_from(
+                        "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010\
                             361008b52b4994f94c7ce4be1c1542d7c81dc79fea17d49efe8fa42e8566373581d4b9\
                             69c4a59e96a0ef51b711fe5027ec01601182519d0a788f4bfe388e593b97cd1d7e4490\
                             4de79422430bca686ac8c21305b3397b5ba4d7037d17877312fb7ee34"
-                                .to_string()
-                        )
-                        .unwrap()
+                            .to_string()
                     )
+                    .unwrap(),
                 }),
             },
         );

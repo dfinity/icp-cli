@@ -7,6 +7,7 @@ use crate::{
     canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
+    manifest::network::RootKeySpec,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
     store_id::{IdMapping, LookupIdError},
@@ -30,7 +31,7 @@ pub enum NetworkSelection {
     /// Use a named network
     Named(String),
     /// Use a network by URL
-    Url(Url, Vec<u8>),
+    Url(Url, RootKeySpec),
 }
 
 /// Selection type for environments - similar to IdentitySelection
@@ -193,7 +194,7 @@ impl Context {
                                 http_gateway_url: Some(
                                     IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
                                 ),
-                                root_key: IC_ROOT_KEY.to_vec(),
+                                root_key: RootKeySpec::Mainnet,
                             },
                         },
                     }
@@ -210,7 +211,7 @@ impl Context {
                     connected: crate::network::Connected {
                         api_url: url.clone(),
                         http_gateway_url: Some(url.clone()),
-                        root_key: root_key.to_vec(),
+                        root_key: root_key.clone(),
                     },
                 },
             },

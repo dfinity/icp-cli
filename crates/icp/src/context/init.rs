@@ -128,14 +128,15 @@ pub fn initialize(
         ));
     }
 
+    // Agent creator
+    let agent_creator = Arc::new(agent::Creator);
+
     // Network accessor
     let netaccess = Arc::new(network::Accessor {
         project_root_locate: project_root_locate.clone(),
         descriptors: dirs.port_descriptor(),
+        agent: agent_creator.clone(),
     });
-
-    // Agent creator
-    let agent_creator = Arc::new(agent::Creator);
 
     // Setup environment
     Ok(Context {

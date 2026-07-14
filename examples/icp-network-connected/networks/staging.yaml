@@ -5,3 +5,4 @@
 name: staging
 mode: connected
 url: https://icp.net
+root-key: mainnet

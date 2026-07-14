@@ -1,6 +1,9 @@
 use anyhow::Context as _;
 use clap::Args;
-use icp::{context::Context, network::Configuration};
+use icp::{
+    context::Context,
+    network::{Configuration, RootKeySource},
+};
 use serde::Serialize;
 
 use super::args::NetworkOrEnvironmentArgs;
@@ -48,6 +51,7 @@ struct NetworkStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     proxy_canister_principal: Option<String>,
     root_key: String,
+    root_key_source: RootKeySource,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
@@ -79,6 +83,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                 api_url: network_access.api_url.to_string(),
                 gateway_url: network_access.http_gateway_url.map(|u| u.to_string()),
                 root_key: hex::encode(network_access.root_key),
+                root_key_source: network_access.root_key_source,
                 candid_ui_principal: descriptor.candid_ui_canister_id.map(|p| p.to_string()),
                 proxy_canister_principal: descriptor.proxy_canister_id.map(|p| p.to_string()),
             }
@@ -90,6 +95,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             candid_ui_principal: None,
             proxy_canister_principal: None,
             root_key: hex::encode(network_access.root_key),
+            root_key_source: network_access.root_key_source,
         },
     };
 
@@ -102,7 +108,13 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         if let Some(gateway_url) = status.gateway_url {
             output.push_str(&format!("Gateway Url: {}\n", gateway_url));
         }
-        output.push_str(&format!("Root Key: {}\n", status.root_key));
+        let root_key_note = match status.root_key_source {
+            RootKeySource::Managed => "",
+            RootKeySource::Mainnet => " (mainnet)",
+            RootKeySource::Configured => " (configured)",
+            RootKeySource::Fetched => " (fetched - unverified, trust-on-first-use)",
+        };
+        output.push_str(&format!("Root Key: {}{root_key_note}\n", status.root_key));
         if let Some(ref principal) = status.candid_ui_principal {
             output.push_str(&format!("Candid UI Principal: {}\n", principal));
         }

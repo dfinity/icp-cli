@@ -8,8 +8,8 @@ This project defines a `staging` network that is an alias for the mainnet. This 
 
 ## Instructions
 
-To deploy the canister to the `staging` network, run the following command:
+This project also defines a `staging` environment that targets the `staging` network. To deploy the canister to it, run:
 
 ```bash
-icp deploy --network staging
+icp deploy --environment staging
 ```

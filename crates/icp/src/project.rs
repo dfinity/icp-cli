@@ -7,7 +7,6 @@ use snafu::prelude::*;
 use crate::{
     Canister, Environment, InitArgs, Network, Project,
     canister::{ControllerRef, Settings, recipe},
-    context::IC_ROOT_KEY,
     fs,
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
@@ -16,6 +15,7 @@ use crate::{
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
         load_manifest_from_path,
+        network::RootKeySpec,
         recipe::RecipeType,
     },
     network::{
@@ -866,7 +866,7 @@ pub async fn consolidate_manifest(
                 connected: Connected {
                     api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
                     http_gateway_url: Some(IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap()),
-                    root_key: IC_ROOT_KEY.to_vec(),
+                    root_key: RootKeySpec::Mainnet,
                 },
             },
         },

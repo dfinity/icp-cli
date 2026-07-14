@@ -273,14 +273,13 @@
       ],
       "properties": {
         "root-key": {
-          "description": "The root key of this network",
-          "pattern": "^[0-9a-f]{266}$",
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/RootKeySpec",
+          "description": "How to obtain the root key used to verify responses from this network.\n\nOne of:\n- `mainnet`: use the canonical IC mainnet root key (e.g. to reach mainnet\n  through a non-default boundary node without repeating the key literal).\n- `fetch`: fetch the root key from the network on each use. This is\n  trust-on-first-use and does *not* verify the key's provenance; only use it\n  for testnets that you (or someone you trust) operate.\n- a 266-character hex-encoded root key (133 bytes)."
         }
       },
+      "required": [
+        "root-key"
+      ],
       "type": "object"
     },
     "ControllerRef": {
@@ -825,6 +824,21 @@
         "url"
       ],
       "type": "object"
+    },
+    "RootKeySpec": {
+      "anyOf": [
+        {
+          "enum": [
+            "mainnet",
+            "fetch"
+          ]
+        },
+        {
+          "pattern": "^[0-9a-f]{266}$"
+        }
+      ],
+      "description": "Root key: \"mainnet\", \"fetch\", or a 266-character hex-encoded key.",
+      "type": "string"
     },
     "Settings": {
       "description": "Canister settings, such as compute and memory allocation.",

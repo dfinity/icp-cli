@@ -98,7 +98,7 @@ The workspace root owns the **network** and the **canister-ID store** for every 
 
 A dependency's own same-named environment still contributes its **per-canister settings and init args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
 
-1. the workspace root's explicit override for that canister (e.g. `settings: { "openemail:backend": … }`)
+1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
 2. the dependency's own environment configuration
 3. the canister's base settings
 

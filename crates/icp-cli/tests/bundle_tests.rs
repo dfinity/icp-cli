@@ -995,6 +995,51 @@ fn bundle_rejects_canister_name_collision() {
         .stderr(contains("sanitize to the same archive segment").and(contains("my_canister")));
 }
 
+/// Bundling a project that pulls in dependency canisters is rejected up front: a
+/// flattened bundle would lose the alias-based wiring and produce ':'-containing
+/// names that cannot be reloaded.
+#[test]
+fn bundle_rejects_dependency_workspace() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    let dep_manifest = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+    write_string(&dep_dir.join("icp.yaml"), &dep_manifest).expect("failed to write dep manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: app
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("bundling a project with dependencies is not yet supported")
+                .and(contains("vendor/openemail:backend")),
+        );
+}
+
 /// The bundle output path must not live inside a directory that will be recursively archived,
 /// otherwise the bundle would include a partial copy of itself.
 #[test]

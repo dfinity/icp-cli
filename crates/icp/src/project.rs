@@ -334,10 +334,21 @@ async fn build_manifest_canisters(
     Ok(result)
 }
 
-/// A dependency instance's own canisters, as `(local name, full store key)`.
-/// Returned by [`import_dependency`] and cached per canonical path so diamond
-/// dependencies reuse the same instance.
-type ImportedInstance = Vec<(String, String)>;
+/// A dependency instance imported into the workspace. Returned by
+/// [`import_dependency`] and cached per canonical path so diamond dependencies
+/// reuse the same instance.
+#[derive(Clone)]
+struct ImportedInstance {
+    /// This instance's own canisters, as `(local name, full store key)` — the
+    /// set exposable to the parent via `canisters:` selection.
+    own: Vec<(String, String)>,
+    /// Every canister in this instance's subtree (its own canisters plus all
+    /// transitively imported ones), as `(store key, local name, alias chain
+    /// from this instance down to the canister's owning project)`. Used to
+    /// register a friendly URL per alias chain when the instance is reached
+    /// again via de-duplication (a diamond), including for its descendants.
+    subtree: Vec<(String, String, Vec<String>)>,
+}
 
 /// A member environment's per-canister config, to be folded into the root's
 /// same-named environment beneath any root overrides.
@@ -397,7 +408,16 @@ fn friendly_name_for(local: &str, alias_chain: &[String]) -> String {
 /// canister names to their store keys, so global controller validation and
 /// deploy-time id lookup operate uniformly on store keys.
 fn translate_controllers(canister: &mut Canister, local_to_key: &BTreeMap<String, String>) {
-    if let Some(controllers) = &mut canister.settings.controllers {
+    translate_settings_controllers(&mut canister.settings, local_to_key);
+}
+
+/// Rewrite `CanisterName` controller references in a `Settings` from a
+/// dependency's local canister names to their store keys.
+fn translate_settings_controllers(
+    settings: &mut Settings,
+    local_to_key: &BTreeMap<String, String>,
+) {
+    if let Some(controllers) = &mut settings.controllers {
         for cref in controllers.iter_mut() {
             if let ControllerRef::CanisterName(name) = cref
                 && let Some(key) = local_to_key.get(name)
@@ -430,17 +450,17 @@ fn compute_bindings(
 /// Select which of a dependency instance's own canisters are exposed to the
 /// parent, per the dependency's `canisters` selection.
 fn select_exposed(
-    inst: &ImportedInstance,
+    own: &[(String, String)],
     selection: &CanisterSelection,
     alias: &str,
 ) -> Result<Vec<(String, String)>, ConsolidateManifestError> {
     match selection {
-        CanisterSelection::Everything => Ok(inst.clone()),
+        CanisterSelection::Everything => Ok(own.to_vec()),
         CanisterSelection::None => Ok(vec![]),
         CanisterSelection::Named(names) => {
             let mut out = Vec::new();
             for name in names {
-                match inst.iter().find(|(local, _)| local == name) {
+                match own.iter().find(|(local, _)| local == name) {
                     Some(pair) => out.push(pair.clone()),
                     None => {
                         return UnknownDependencyCanisterSnafu {
@@ -529,12 +549,16 @@ async fn import_dependency(
 
     // Diamond de-dup: same resolved directory means the same instance, deployed
     // once. It is still reachable via this new alias chain, so register an
-    // additional friendly URL for each of its canisters (§17.3) rather than
-    // picking one.
+    // additional friendly URL per chain (§17.3) rather than picking one — for
+    // the whole subtree (its own canisters *and* its transitive dependencies),
+    // each named by this chain extended with the canister's alias path below the
+    // instance.
     if let Some(inst) = registry.get(&canonical) {
         let inst = inst.clone();
-        for (local, key) in &inst {
-            let fname = friendly_name_for(local, alias_chain);
+        for (key, local, rel_chain) in &inst.subtree {
+            let mut chain = alias_chain.to_vec();
+            chain.extend(rel_chain.iter().cloned());
+            let fname = friendly_name_for(local, &chain);
             if let Some((_, canister)) = canisters.get_mut(key)
                 && !canister.friendly_names.contains(&fname)
             {
@@ -619,12 +643,17 @@ async fn import_dependency(
         if let Some(settings) = &em.settings {
             for (local, s) in settings {
                 if let Some(key) = local_to_key.get(local) {
+                    // Translate the override's own controller references from the
+                    // member's local names to store keys, so name-based controllers
+                    // resolve against the workspace id map just like base settings.
+                    let mut s = s.clone();
+                    translate_settings_controllers(&mut s, &local_to_key);
                     member_env_overrides
                         .entry(em.name.clone())
                         .or_default()
                         .entry(key.clone())
                         .or_default()
-                        .settings = Some(s.clone());
+                        .settings = Some(s);
                 }
             }
         }
@@ -650,6 +679,14 @@ async fn import_dependency(
     let own_names: HashSet<String> = own.iter().map(|(l, _)| l.clone()).collect();
     validate_dependency_aliases(&dep_manifest.dependencies, &own_names)?;
 
+    // The instance's subtree, for diamond-hit friendly-URL propagation: its own
+    // canisters sit at the instance root (empty relative alias chain); each
+    // nested dependency contributes its subtree prefixed with the nested alias.
+    let mut subtree: Vec<(String, String, Vec<String>)> = own
+        .iter()
+        .map(|(local, key)| (key.clone(), local.clone(), Vec::new()))
+        .collect();
+
     let mut edges: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for nested in &dep_manifest.dependencies {
         let mut nested_chain = alias_chain.to_vec();
@@ -667,7 +704,13 @@ async fn import_dependency(
             &nested_chain,
         ))
         .await?;
-        let exposed = select_exposed(&inst, &nested.canisters, &nested.name)?;
+        for (key, local, rel) in &inst.subtree {
+            let mut r = Vec::with_capacity(rel.len() + 1);
+            r.push(nested.name.clone());
+            r.extend(rel.iter().cloned());
+            subtree.push((key.clone(), local.clone(), r));
+        }
+        let exposed = select_exposed(&inst.own, &nested.canisters, &nested.name)?;
         edges.push((nested.name.clone(), exposed));
     }
 
@@ -680,8 +723,9 @@ async fn import_dependency(
     }
 
     stack.pop();
-    registry.insert(canonical, own.clone());
-    Ok(own)
+    let instance = ImportedInstance { own, subtree };
+    registry.insert(canonical, instance.clone());
+    Ok(instance)
 }
 
 /// Canonicalize into a UTF-8 path, or `None` if it does not exist / is not UTF-8.
@@ -859,7 +903,7 @@ pub async fn consolidate_manifest(
             std::slice::from_ref(&dep.name),
         )
         .await?;
-        let exposed = select_exposed(&inst, &dep.canisters, &dep.name)?;
+        let exposed = select_exposed(&inst.own, &dep.canisters, &dep.name)?;
         app_edges.push((dep.name.clone(), exposed));
     }
 
@@ -869,6 +913,43 @@ pub async fn consolidate_manifest(
     for (_, key) in &app_own {
         if let Some((_, canister)) = canisters.get_mut(key) {
             canister.bindings = app_bindings.clone();
+        }
+    }
+
+    // De-collide friendly URLs. A friendly name is a hostname prefix, so two
+    // distinct canisters resolving to the same one would produce an ambiguous
+    // `custom-domains.txt` entry and printed URL. This is normally impossible by
+    // construction (own canisters are shorter than dependency ones), but canister
+    // names may contain '.', so e.g. an own canister literally named
+    // `frontend.openemail` collides with dependency `openemail`'s `frontend`.
+    // Drop any friendly name claimed by more than one canister; those canisters
+    // fall back to a principal-based URL.
+    {
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for (_, canister) in canisters.values() {
+            for fname in &canister.friendly_names {
+                *counts.entry(fname.clone()).or_default() += 1;
+            }
+        }
+        let collisions: HashSet<String> = counts
+            .into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(name, _)| name)
+            .collect();
+        if !collisions.is_empty() {
+            let mut names: Vec<&String> = collisions.iter().collect();
+            names.sort();
+            tracing::warn!(
+                "friendly canister URLs collide and fall back to principal URLs: {}",
+                names
+                    .iter()
+                    .map(|n| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            for (_, canister) in canisters.values_mut() {
+                canister.friendly_names.retain(|f| !collisions.contains(f));
+            }
         }
     }
 
@@ -1511,6 +1592,161 @@ environments:
         assert_eq!(
             friendly_names_of(&p, "umbrella/service-b:backend"),
             &["backend.service-b"]
+        );
+    }
+
+    #[tokio::test]
+    async fn diamond_transitive_dependency_gets_url_per_chain() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // The shared openemail itself depends on libfoo, and is reached via both
+        // service-a and service-b.
+        write(
+            tmp.path(),
+            "umbrella/openemail/libfoo/icp.yaml",
+            &manifest(&["bar"], ""),
+        );
+        write(
+            tmp.path(),
+            "umbrella/openemail/icp.yaml",
+            &manifest(
+                &["backend"],
+                "dependencies:\n  - name: libfoo\n    path: ./libfoo\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "umbrella/service-a/icp.yaml",
+            &manifest(
+                &["service"],
+                "dependencies:\n  - name: openemail\n    path: ../openemail\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "umbrella/service-b/icp.yaml",
+            &manifest(
+                &["service"],
+                "dependencies:\n  - name: openemail\n    path: ../openemail\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &[],
+                "dependencies:\n  - name: service-a\n    path: ./umbrella/service-a\n  - name: service-b\n    path: ./umbrella/service-b\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // The shared instance's own canister gets one URL per chain...
+        assert_eq!(
+            friendly_names_of(&p, "umbrella/openemail:backend"),
+            &["backend.openemail.service-a", "backend.openemail.service-b"]
+        );
+        // ...and so does its *transitive* dependency (the subtree is revisited on
+        // the diamond hit, not just the instance's own canisters).
+        assert_eq!(
+            friendly_names_of(&p, "umbrella/openemail/libfoo:bar"),
+            &[
+                "bar.libfoo.openemail.service-a",
+                "bar.libfoo.openemail.service-b"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn friendly_name_collision_falls_back_to_principal() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(&["frontend"], ""),
+        );
+        // An own canister literally named `frontend.openemail` maps to the same
+        // friendly host as dependency `openemail`'s `frontend` (canister names may
+        // contain '.').
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["frontend.openemail"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // Both would produce `frontend.openemail.<env>.localhost`, so both drop the
+        // colliding friendly name and fall back to principal URLs.
+        assert!(friendly_names_of(&p, "frontend.openemail").is_empty());
+        assert!(friendly_names_of(&p, "openemail:frontend").is_empty());
+    }
+
+    #[tokio::test]
+    async fn member_override_controllers_are_translated_to_store_keys() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail's `staging` override names a controller by its local name.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+environments:
+  - name: staging
+    settings:
+      backend:
+        controllers: ["frontend"]
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: app
+    build:
+      steps:
+        - type: pre-built
+          path: app.wasm
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+        let controllers = staging
+            .canisters
+            .get("openemail:backend")
+            .unwrap()
+            .1
+            .settings
+            .controllers
+            .clone()
+            .expect("controllers set by the member override");
+
+        // The member-local `frontend` must be translated to its store key, so it
+        // resolves against the workspace id map at deploy time.
+        assert_eq!(
+            controllers,
+            vec![ControllerRef::CanisterName(
+                "openemail:frontend".to_string()
+            )]
         );
     }
 

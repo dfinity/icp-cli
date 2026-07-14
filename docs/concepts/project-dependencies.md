@@ -43,7 +43,7 @@ icp canister status "vendor/openemail:backend"
 icp deploy "vendor/openemail:backend"
 ```
 
-`:` is reserved in canister names as the namespace separator.
+Canister names and dependency aliases must contain only ASCII letters, digits, `_`, and `-`. This keeps them safe to reuse as store-key segments, `PUBLIC_CANISTER_ID` env-var names, URL subdomains, and archive paths; `:` in particular is reserved as the namespace separator.
 
 ## Deploy URLs
 

@@ -20,3 +20,6 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the block index
 
+
+
+

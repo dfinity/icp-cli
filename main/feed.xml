@@ -6,15 +6,23 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Tue, 14 Jul 2026 00:46:29 GMT</lastBuildDate>
-    <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
+    <lastBuildDate>Tue, 14 Jul 2026 15:30:58 GMT</lastBuildDate>
+    <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
+      <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Tokens and Cycles</title>
+      <link>https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</link>
+      <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
+      <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -263,14 +271,6 @@
       <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Tokens and Cycles</title>
-      <link>https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</link>
-      <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

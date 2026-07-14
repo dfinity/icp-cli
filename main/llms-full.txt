@@ -4845,6 +4845,84 @@ This works with any ICRC-1 compatible token ledger on the Internet Computer.
 
 **Finding Token Ledger IDs:** You can find ledger canister IDs for various tokens on the [ICP Dashboard](https://dashboard.internetcomputer.org/tokens).
 
+## Approving Token Spending (Allowances)
+
+Beyond direct transfers, ICP and ICRC-2 compatible tokens support *allowances*: you authorize another principal — the **spender**, typically a canister — to transfer a limited amount of tokens from your account on your behalf. This is the foundation for many payment and recurring-billing flows, where a canister pulls funds only when needed (for example, an exchange platform settling a trade or a service charging per use) rather than requiring you to send tokens up front.
+
+Allowances follow the [ICRC-2 standard](https://docs.internetcomputer.org/references/digital-asset-standards/#icrc-2-approve-and-transfer-from) and work with any ICRC-2 compatible ledger, including the ICP ledger.
+
+### Granting an Allowance
+
+Use `icp token approve` to authorize a spender:
+
+```bash
+# Approve a canister to spend up to 5 ICP on your behalf
+icp token approve 5 <SPENDER> -n ic
+
+# Approve 0.01 ckBTC (any ICRC-2 ledger, by canister id)
+icp token mxzaz-hqaaa-aaaar-qaada-cai approve 0.01 <SPENDER> -n ic
+```
+
+`<SPENDER>` is the principal you are authorizing (usually a canister ID). The amount is in whole tokens and supports the same [human-readable suffixes](#amount-format) as transfers.
+
+**Approvals overwrite, they do not add.** Each `approve` call *sets* the allowance to the amount you specify, replacing any previous value. Approving `5` and then `2` leaves an allowance of `2`, not `7`. To revoke an allowance, approve `0`:
+
+```bash
+icp token approve 0 <SPENDER> -n ic
+```
+
+The allowance is granted from your account, which pays the standard ledger fee (0.0001 ICP for the ICP ledger).
+
+### Setting an Expiry
+
+For safety, you can make an allowance expire automatically with `--expires-in`. It accepts a relative duration (suffixes `s`, `m`, `h`, `d`, `w`; a bare number is seconds), the same format used elsewhere in the CLI:
+
+```bash
+# Allow spending for the next 24 hours only
+icp token approve 5 <SPENDER> --expires-in 24h -n ic
+
+# Expire in 30 days
+icp token approve 5 <SPENDER> --expires-in 30d -n ic
+```
+
+A short expiry limits your exposure if the spender is ever compromised. Without `--expires-in`, the allowance stays in effect until you change or revoke it.
+
+### Checking an Allowance
+
+Use `icp token allowance` to see how much a spender is currently authorized to transfer:
+
+```bash
+# Allowance you granted to a spender
+icp token allowance <SPENDER> -n ic
+```
+
+This is a read-only query, so you can inspect any allowance — not just your own. Use `--of-principal` to look up the allowance another account granted:
+
+```bash
+# Allowance that <OWNER> granted to <SPENDER>
+icp token allowance <SPENDER> --of-principal <OWNER> -n ic
+```
+
+The output includes the expiry, if one was set.
+
+### Allowances with Subaccounts
+
+Both commands accept [subaccount](#subaccounts) flags, specified as hex strings just like `balance` and `transfer`:
+
+| Flag | Command | Meaning |
+|------|---------|---------|
+| `--from-subaccount <hex>` | `approve` | Your subaccount the allowance is granted from (the account debited) |
+| `--subaccount <hex>` | `allowance` | The owner subaccount that granted the allowance |
+| `--spender-subaccount <hex>` | both | The spender's subaccount |
+
+```bash
+# Approve from your subaccount 1, to the spender's subaccount 2
+icp token approve 5 <SPENDER> --from-subaccount 1 --spender-subaccount 2 -n ic
+
+# Check that same allowance
+icp token allowance <SPENDER> --subaccount 1 --spender-subaccount 2 -n ic
+```
+
 ## Transferring Cycles
 
 Transfer cycles directly to another principal via the cycles ledger:
@@ -6722,6 +6800,8 @@ This document contains the help content for the `icp` command-line program.
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
 * [`icp token transfer`↴](#icp-token-transfer)
+* [`icp token approve`↴](#icp-token-approve)
+* [`icp token allowance`↴](#icp-token-allowance)
 
 ## `icp`
 
@@ -8295,6 +8375,8 @@ Perform token transactions
 
 * `balance` — Display the token balance on the ledger (default token: icp)
 * `transfer` — Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
+* `approve` — Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+* `allowance` — Display the allowance granted to a spender (ICRC-2) (default token: icp)
 
 ###### **Arguments:**
 
@@ -8344,6 +8426,59 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token approve`
+
+Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+
+Sets the spender's allowance to the given amount, overwriting any existing allowance (this is a set, not an increment). The allowance is granted from the calling identity's account, which is charged the ledger's approval fee, and can optionally be given an expiry with `--expires-in`. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] approve [OPTIONS] <AMOUNT> <SPENDER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — The allowance amount, in whole tokens (e.g. `1.5`), the spender may transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `<SPENDER>` — Principal of the spender being granted the allowance
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--from-subaccount <FROM_SUBACCOUNT>` — The caller's subaccount to grant the allowance from (the account debited), as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--expires-in <DURATION>` — Expire the allowance after this duration from now, e.g. `24h`, `30d` (suffixes: s, m, h, d, w; a bare number is seconds). Never expires if omitted
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token allowance`
+
+Display the allowance granted to a spender (ICRC-2) (default token: icp)
+
+This is a read-only query that works for any owner/spender pair, including accounts you do not control (use `--of-principal` to set the owner). The amount is shown in whole tokens, along with an expiry if one was set. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] allowance [OPTIONS] <SPENDER>`
+
+###### **Arguments:**
+
+* `<SPENDER>` — Principal of the spender whose allowance to look up
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--subaccount <SUBACCOUNT>` — The owner's subaccount that granted the allowance, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--of-principal <OF_PRINCIPAL>` — The allowance owner to look up, instead of the current identity. Lets you inspect allowances granted by any principal
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the allowance amount
 
 
 

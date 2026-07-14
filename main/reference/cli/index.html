@@ -1608,7 +1608,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>--from-subaccount &#x3C;FROM_SUBACCOUNT></code> — The caller’s subaccount to grant the allowance from (the account debited), as a hex string (32 bytes, left-padded). Defaults to the default subaccount</li>
 <li><code>--expires-in &#x3C;DURATION></code> — Expire the allowance after this duration from now, e.g. <code>24h</code>, <code>30d</code> (suffixes: s, m, h, d, w; a bare number is seconds). Never expires if omitted</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
-<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code>. One of <code>mainnet</code>, <code>fetch</code>, or a 266-character hex-encoded root key</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--json</code> — Output command results as JSON</li>
@@ -1628,7 +1628,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>--subaccount &#x3C;SUBACCOUNT></code> — The owner’s subaccount that granted the allowance, as a hex string (32 bytes, left-padded). Defaults to the default subaccount</li>
 <li><code>--of-principal &#x3C;OF_PRINCIPAL></code> — The allowance owner to look up, instead of the current identity. Lets you inspect allowances granted by any principal</li>
 <li><code>-n</code>, <code>--network &#x3C;NETWORK></code> — Name or URL of the network to target, conflicts with environment argument</li>
-<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code></li>
+<li><code>-k</code>, <code>--root-key &#x3C;ROOT_KEY></code> — The root key to use if connecting to a network by URL. Required when using <code>--network &#x3C;URL></code>. One of <code>mainnet</code>, <code>fetch</code>, or a 266-character hex-encoded root key</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
 <li><code>--json</code> — Output command results as JSON</li>

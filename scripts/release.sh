@@ -216,8 +216,19 @@ wait_for_approval_and_merge() {  # <branch> [repo]
 
 # Open a release PR via the release-pr.yml workflow unless one already exists.
 ensure_release_pr() {  # <kind> <branch>
-  local kind="$1" branch="$2" existing
+  local kind="$1" branch="$2" existing id
   existing=$(open_pr_url "$branch")
+  # A release-pr.yml run from a previous invocation may still be opening the PR.
+  # Wait it out before dispatching another, so two runs don't race on the branch.
+  if [[ -z "$existing" ]]; then
+    id=$(ongoing_run_id release-pr.yml "$REPO")
+    if [[ -n "$id" ]]; then
+      info "A release-pr.yml run is already in flight — watching it: https://github.com/$REPO/actions/runs/$id"
+      gh run watch --repo "$REPO" "$id" --exit-status \
+        || fail "release-pr.yml failed in $REPO: https://github.com/$REPO/actions/runs/$id"
+      existing=$(open_pr_url "$branch")
+    fi
+  fi
   if [[ -n "$existing" ]]; then
     info "Reusing existing PR: $existing"
     return 0
@@ -279,7 +290,16 @@ actual=$(awk -F'"' '/^\[/{s=$0} s=="[workspace.package]"&&/^version[[:space:]]*=
 if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
   warn "Tag $TAG already exists on origin — skipping tag push."
 else
-  git tag "$TAG" || fail "Could not create tag $TAG."
+  if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+    # A local tag left over from a run whose push failed. Reuse it only if it
+    # points at the commit we're releasing; otherwise bail rather than release
+    # the wrong tree.
+    [[ "$(git rev-parse "refs/tags/$TAG^{commit}")" == "$(git rev-parse HEAD)" ]] \
+      || fail "Local tag $TAG points at $(git rev-parse --short "refs/tags/$TAG^{commit}"), not the release commit $(git rev-parse --short HEAD). Delete it ('git tag -d $TAG') and re-run."
+    info "Reusing existing local tag $TAG (push failed on a previous run)."
+  else
+    git tag "$TAG" || fail "Could not create tag $TAG."
+  fi
   git push origin "$TAG" || fail "Could not push tag $TAG."
   info "Pushed $TAG."
 fi
@@ -299,6 +319,15 @@ if npm_published "$VERSION"; then
   info "$NPM_PKG@$VERSION is already on npm — skipping publish."
 else
   ensure_workflow_run release-npm.yml "$REPO" "version=$TAG" "npm_package_version=$VERSION"
+  # ensure_workflow_run may have watched a pre-existing run (it matches on
+  # workflow, not version), so confirm the version actually landed on npm.
+  # Allow a few seconds for the registry to reflect the publish.
+  for _ in $(seq 1 6); do
+    npm_published "$VERSION" && break
+    sleep 5
+  done
+  npm_published "$VERSION" \
+    || fail "release-npm.yml finished but $NPM_PKG@$VERSION is still not on npm. Check the run, then re-run this script."
 fi
 info "NPM: https://www.npmjs.com/package/$NPM_PKG/v/$VERSION"
 

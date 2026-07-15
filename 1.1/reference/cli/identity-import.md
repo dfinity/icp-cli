@@ -1,0 +1,40 @@
+﻿# icp identity import
+
+Import a new identity
+
+**Usage:** `icp identity import [OPTIONS] <--from-pem <FILE>|--read-seed-phrase|--from-seed-file <FILE>> <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name for the imported identity
+
+###### **Options:**
+
+* `--storage <STORAGE>` — Where to store the private key
+
+  Default value: `keyring`
+
+  Possible values: `plaintext`, `keyring`, `password`
+
+* `--from-pem <FILE>` — Import from a PEM file
+* `--read-seed-phrase` — Read seed phrase interactively from the terminal
+* `--from-seed-file <FILE>` — Read seed phrase from a file
+* `--decryption-password-from-file <FILE>` — Read the PEM decryption password from a file instead of prompting
+* `--storage-password-file <FILE>` — Read the storage password from a file instead of prompting (for --storage password)
+* `--assert-key-type <ASSERT_KEY_TYPE>` — Specify the key type when it cannot be detected from the PEM file (danger!)
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
+* `--seed-curve <SEED_CURVE>` — Curve for SLIP-0010 key derivation from a seed phrase
+
+  Default value: `secp256k1`
+
+  Possible values: `secp256k1`, `prime256v1`, `ed25519`
+
+* `--delegation <FILE>` — Attach a signed delegation chain JSON (same format as `icp identity delegation sign`).
+
+   For security, in most cases it is better to use `icp identity delegation` instead.
+
+
+
+

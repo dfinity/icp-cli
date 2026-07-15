@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
 use ic_agent::{
     Agent, AgentError,
     agent::{Subnet, SubnetType},
@@ -13,6 +13,7 @@ use ic_ledger_types::{
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
+use icp::parsers::to_token_unit_amount;
 use icp::signal::stop_signal;
 use icp_canister_interfaces::{
     cycles_ledger::{
@@ -70,6 +71,9 @@ pub enum CreateOperationError {
 
     #[snafu(display("ICP amount is too large"))]
     IcpAmountOverflow,
+
+    #[snafu(display("invalid ICP amount: {message}"))]
+    InvalidIcpAmount { message: String },
 
     #[snafu(display("failed to transfer ICP to the cycles minting canister: {source}"))]
     TransferIcp { source: AgentError },
@@ -324,8 +328,11 @@ impl CreateOperation {
             .get_principal()
             .map_err(|message| CreateOperationError::GetPrincipal { message })?;
 
-        // ICP ledger amounts are denominated in e8s (10^-8 ICP).
-        let e8s = (icp * 100_000_000_u64)
+        // ICP ledger amounts are denominated in e8s (10^-8 ICP). Reject any amount
+        // with more precision than e8s can represent rather than silently
+        // truncating it (which would still charge the ledger fee).
+        let e8s = to_token_unit_amount(icp.clone(), 8)
+            .map_err(|message| CreateOperationError::InvalidIcpAmount { message })?
             .to_u64()
             .context(IcpAmountOverflowSnafu)?;
 
@@ -409,12 +416,12 @@ impl CreateOperation {
             result = notify_loop => result,
             _ = sleep(NOTIFY_RETRY_TIMEOUT) => NotifyCreateTimeoutSnafu {
                 height: block_index,
-                command: notify_recovery_command(block_index, caller, selected_subnet, settings),
+                command: notify_recovery_command(&arg),
             }
             .fail(),
             _ = stop_signal() => NotifyCreateInterruptedSnafu {
                 height: block_index,
-                command: notify_recovery_command(block_index, caller, selected_subnet, settings),
+                command: notify_recovery_command(&arg),
             }
             .fail(),
         }
@@ -439,8 +446,16 @@ impl CreateOperation {
         let resp = Decode!(&resp, NotifyCreateCanisterResponse).context(CandidDecodeSnafu)?;
         Ok(match resp {
             Ok(canister_id) => NotifyStep::Created(canister_id),
-            // A refund means the ICP has already been returned; re-notifying is pointless.
-            Err(err @ NotifyError::Refunded { .. }) => NotifyStep::Terminal(err.format_error()),
+            // These are definitive outcomes for this block: the ICP was refunded,
+            // or the transfer can no longer be notified. Re-notifying will never
+            // succeed, so fail fast instead of retrying for a minute.
+            Err(
+                err @ (NotifyError::Refunded { .. }
+                | NotifyError::TransactionTooOld(_)
+                | NotifyError::InvalidTransaction(_)),
+            ) => NotifyStep::Terminal(err.format_error()),
+            // `Processing` is expected while the CMC works; `Other` may be a
+            // transient internal error. Both are worth retrying.
             Err(err) => NotifyStep::Retry(err.format_error()),
         })
     }
@@ -489,29 +504,24 @@ impl CreateOperation {
 /// Builds the `icp canister call` command that re-runs `notify_create_canister`
 /// for an already-paid transfer, so the user can finish a creation that timed out
 /// or was interrupted. Add the network/identity flags used for the original call.
-fn notify_recovery_command(
-    height: u64,
-    caller: Principal,
-    subnet: Principal,
-    settings: &CanisterSettings,
-) -> String {
-    let settings_arg = match &settings.controllers {
-        Some(controllers) => {
-            let list = controllers
-                .iter()
-                .map(|c| format!("principal \"{c}\""))
-                .collect::<Vec<_>>()
-                .join("; ");
-            format!("opt record {{ controllers = opt vec {{ {list} }} }}")
-        }
-        None => "null".to_string(),
-    };
-    format!(
-        "icp canister call {CYCLES_MINTING_CANISTER_CID} notify_create_canister \
-         '(record {{ block_index = {height} : nat64; controller = principal \"{caller}\"; \
-         subnet_selection = opt variant {{ Subnet = record {{ subnet = principal \"{subnet}\" }} }}; \
-         settings = {settings_arg} }})'"
-    )
+///
+/// The argument is rendered from the exact typed `arg`, so every requested setting
+/// is preserved and the manual call matches the original request.
+fn notify_recovery_command(arg: &NotifyCreateCanisterArg) -> String {
+    // Rendering a value we just constructed should never fail; fall back to the
+    // essential fields if candid's textual conversion ever does.
+    let rendered = IDLValue::try_from_candid_type(arg)
+        .map(|value| IDLArgs::new(&[value]).to_string())
+        .unwrap_or_else(|_| {
+            format!(
+                "(record {{ block_index = {} : nat64; controller = principal \"{}\" }})",
+                arg.block_index, arg.controller
+            )
+        });
+    // Single-quote the candid argument for the shell, escaping any embedded single
+    // quotes with the POSIX `'\''` idiom so the command is safe to paste as-is.
+    let escaped = rendered.replace('\'', r"'\''");
+    format!("icp canister call {CYCLES_MINTING_CANISTER_CID} notify_create_canister '{escaped}'")
 }
 
 async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
@@ -530,4 +540,39 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
     }
 
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_command_preserves_all_settings() {
+        let arg = NotifyCreateCanisterArg {
+            block_index: 42,
+            controller: Principal::anonymous(),
+            subnet_selection: Some(SubnetSelection::Subnet {
+                subnet: CYCLES_MINTING_CANISTER_PRINCIPAL,
+            }),
+            settings: Some(CanisterSettings {
+                controllers: Some(vec![Principal::anonymous()]),
+                compute_allocation: Some(Nat::from(5u8)),
+                memory_allocation: Some(Nat::from(4_294_967_296u64)),
+                freezing_threshold: Some(Nat::from(2_592_000u64)),
+                reserved_cycles_limit: Some(Nat::from(1_000_000_000u64)),
+                ..Default::default()
+            }),
+        };
+
+        let command = notify_recovery_command(&arg);
+
+        // The command targets the CMC's notify method with named candid fields, and
+        // every requested setting survives the round-trip (not just controllers).
+        assert!(command.contains("notify_create_canister"));
+        assert!(command.contains("block_index = 42"));
+        assert!(command.contains("compute_allocation = opt (5"));
+        assert!(command.contains("memory_allocation = opt (4_294_967_296"));
+        assert!(command.contains("freezing_threshold = opt (2_592_000"));
+        assert!(command.contains("reserved_cycles_limit = opt (1_000_000_000"));
+    }
 }

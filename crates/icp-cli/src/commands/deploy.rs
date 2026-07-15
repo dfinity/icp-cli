@@ -22,7 +22,7 @@ use crate::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
-        create::{CreateOperation, CreateTarget},
+        create::{CreateFunding, CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
         proxy_management,
         settings::{sync_controller_dependents, sync_settings_many},
@@ -208,7 +208,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         let create_operation = CreateOperation::new(
             agent.clone(),
             target,
-            args.cycles.get(),
+            CreateFunding::Cycles(args.cycles.get()),
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();

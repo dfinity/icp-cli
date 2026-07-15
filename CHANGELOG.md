@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* feat: `icp canister create --with-icp` (not supported in `icp deploy`) uses the CMC to create canisters. Only needed for deploying to restricted system subnets.
+
 # v1.1.0
 
 * feat: `icp token [TOKEN|LEDGER_ID] approve <AMOUNT> <SPENDER>` grants an ICRC-2 allowance, letting a spender transfer tokens on your behalf. Supports `--from-subaccount` (the account debited for the allowance), `--spender-subaccount`, and an optional `--expires-in <DURATION>` (e.g. `24h`, `30d`) to auto-expire the allowance.

@@ -12,7 +12,7 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
 use tracing::info;
 
@@ -98,12 +98,24 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     let env = ctx.get_environment(&environment_selection).await?;
 
-    let cnames = match args.names.is_empty() {
-        // No canisters specified
-        true => env.canisters.keys().cloned().collect(),
-
-        // Individual canisters specified
-        false => args.names.clone(),
+    let mut member_scoped = false;
+    let cnames: Vec<String> = if args.names.is_empty() {
+        // No canisters specified: default to the whole environment, unless the
+        // command is run inside a vendored member — then scope to that member's
+        // own canisters. (The resolved-root notice is emitted centrally during
+        // project load.)
+        let project = ctx.project.load().await?;
+        let member_dir = ctx.project.member_dir();
+        match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
+            Some(scoped) => {
+                member_scoped = true;
+                scoped
+            }
+            None => env.canisters.keys().cloned().collect(),
+        }
+    } else {
+        // Individual canisters specified.
+        args.names.clone()
     };
 
     // Skip doing any work if no canisters are targeted
@@ -113,6 +125,37 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     if args.args_opt.is_some() && cnames.len() != 1 {
         anyhow::bail!("--args and --args-file can only be used when deploying a single canister");
+    }
+
+    // A member-scoped deploy targets only the sub-project's own canisters, but
+    // those canisters are wired to their dependencies' ids — and the dependency
+    // canisters are outside the scope, so they are not (re)deployed here. If any
+    // are missing from the workspace store, fail fast rather than silently
+    // deploying an unwired canister.
+    if member_scoped {
+        let scoped: HashSet<&str> = cnames.iter().map(String::as_str).collect();
+        let deployed: BTreeMap<String, Principal> = ctx
+            .ids_by_environment(&environment_selection)
+            .await?
+            .into_iter()
+            .collect();
+        let mut missing: BTreeSet<String> = BTreeSet::new();
+        for name in &cnames {
+            if let Some((_, canister)) = env.canisters.get(name) {
+                for target in canister.bindings.values() {
+                    if !scoped.contains(target.as_str()) && !deployed.contains_key(target) {
+                        missing.insert(target.clone());
+                    }
+                }
+            }
+        }
+        if !missing.is_empty() {
+            anyhow::bail!(
+                "this sub-project depends on canister(s) not yet deployed in the workspace: {}. \
+                 Run `icp deploy` from the workspace root first (or deploy them explicitly by name).",
+                missing.into_iter().collect::<Vec<_>>().join(", ")
+            );
+        }
     }
 
     let canisters_to_build = try_join_all(
@@ -627,22 +670,46 @@ async fn print_canister_urls(
 
         if let Some(http_gateway_url) = &http_gateway_url {
             let has_http = has_http_request(&agent, canister_id).await;
-            let friendly = if has_friendly {
-                Some((name.as_str(), environment_selection.name()))
-            } else {
-                None
-            };
 
             if has_http {
-                let canister_url = canister_gateway_url(http_gateway_url, canister_id, friendly);
-                if json {
-                    json_canisters.push(JsonDeployedCanister {
-                        name: name.clone(),
-                        canister_id,
-                        url: Some(canister_url.to_string()),
-                    });
+                // A canister carries one friendly name normally, or several when
+                // it's a de-duplicated shared dependency canister reached via
+                // multiple alias chains — print one URL for each. Fall back to a
+                // single principal URL when friendly domains are off or no
+                // friendly name is known.
+                let env_name = environment_selection.name();
+                let friendly_names: Vec<String> = if has_friendly {
+                    env.canisters
+                        .get(name)
+                        .map(|(_, c)| c.friendly_names.clone())
+                        .unwrap_or_default()
                 } else {
-                    println!("  {name}: {canister_url}");
+                    Vec::new()
+                };
+                let urls = if friendly_names.is_empty() {
+                    vec![canister_gateway_url(http_gateway_url, canister_id, None)]
+                } else {
+                    friendly_names
+                        .iter()
+                        .map(|fname| {
+                            canister_gateway_url(
+                                http_gateway_url,
+                                canister_id,
+                                Some((fname.as_str(), env_name)),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+                for canister_url in &urls {
+                    if json {
+                        json_canisters.push(JsonDeployedCanister {
+                            name: name.clone(),
+                            canister_id,
+                            url: Some(canister_url.to_string()),
+                        });
+                    } else {
+                        println!("  {name}: {canister_url}");
+                    }
                 }
             } else {
                 // For canisters without http_request, show the Candid UI URL

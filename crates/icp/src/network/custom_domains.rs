@@ -4,36 +4,68 @@ use candid::Principal;
 use snafu::prelude::*;
 use url::Url;
 
-use crate::{prelude::*, store_id::IdMapping};
+use crate::prelude::*;
 
 /// Writes a `custom-domains.txt` file to the given status directory.
 ///
-/// Each line has the format `<canister_name>.<env_name>.<domain>:<principal>`.
-/// The file is written fresh each time from the full set of current mappings
-/// across all environments sharing this network.
+/// Each line has the format `<friendly_name>.<env_name>.<domain>:<principal>`,
+/// where `<friendly_name>` is a canister's friendly-URL subdomain prefix (a bare
+/// name like `backend` for an own canister, or a dot-nested form like
+/// `backend.openemail` for a dependency canister — see DESIGN §17.2). The file
+/// is written fresh each time from the full set of current entries across all
+/// environments sharing this network. Entries whose assembled host is not a
+/// valid DNS host are skipped (the canister remains reachable by principal).
+///
+/// `env_entries` maps each environment name to `(friendly_name, principal)`
+/// pairs; a de-duplicated shared dependency canister contributes one pair per
+/// alias chain that reaches it.
 ///
 /// `extra_entries` are raw `(full_domain, canister_id)` pairs appended after the
 /// environment-based entries (e.g. system canisters like Internet Identity).
 pub fn write_custom_domains(
     status_dir: &Path,
     domain: &str,
-    env_mappings: &BTreeMap<String, IdMapping>,
+    env_entries: &BTreeMap<String, Vec<(String, Principal)>>,
     extra_entries: &[(String, String)],
 ) -> Result<(), WriteCustomDomainsError> {
     let file_path = status_dir.join("custom-domains.txt");
-    let mut content: String = env_mappings
-        .iter()
-        .flat_map(|(env_name, mappings)| {
-            mappings
-                .iter()
-                .map(move |(name, principal)| format!("{name}.{env_name}.{domain}:{principal}\n"))
-        })
-        .collect();
+    let mut content = String::new();
+    for (env_name, entries) in env_entries {
+        for (friendly_name, principal) in entries {
+            if let Some(host) = friendly_host(friendly_name, env_name, domain) {
+                content.push_str(&format!("{host}:{principal}\n"));
+            }
+        }
+    }
     for (full_domain, canister_id) in extra_entries {
         content.push_str(&format!("{full_domain}:{canister_id}\n"));
     }
     crate::fs::write(&file_path, content.as_bytes())?;
     Ok(())
+}
+
+/// True if `label` is usable as a subdomain label for gateway routing: 1–63
+/// characters of ASCII letters, digits, `-`, or `_`, not starting or ending
+/// with `-`. `_` is not strictly DNS-conformant but is a permitted canister-name
+/// character and routes fine over `*.localhost`, so it is accepted here.
+fn is_dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && label.len() <= 63
+        && label
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+}
+
+/// Assemble the friendly host `<friendly_name>.<env_name>.<domain>`, or `None`
+/// if any resulting dot-separated label is not a valid DNS label — so callers
+/// fall back to a principal-based URL / skip the custom-domains entry rather
+/// than emit a malformed host. `friendly_name` may itself be multi-label (e.g.
+/// `backend.openemail`); every label is validated.
+pub fn friendly_host(friendly_name: &str, env_name: &str, domain: &str) -> Option<String> {
+    let host = format!("{friendly_name}.{env_name}.{domain}");
+    host.split('.').all(is_dns_label).then_some(host)
 }
 
 /// Returns the custom domain entry for the II frontend canister, if II is enabled.
@@ -69,10 +101,14 @@ pub fn gateway_domain(http_gateway_url: &Url) -> Option<&str> {
 /// Constructs a gateway URL for accessing a specific canister.
 ///
 /// For managed networks with a status directory (where friendly domains are
-/// registered), returns `http://<canister_name>.<env_name>.<domain>:<port>`.
+/// registered), returns `http://<friendly_name>.<env_name>.<domain>:<port>`,
+/// where `friendly_name` is the canister's friendly-URL subdomain prefix
+/// (bare name, or dot-nested for a dependency canister — DESIGN §17.2).
 ///
-/// Otherwise falls back to `http://<principal>.<domain>:<port>`, or
-/// `http://<host>:<port>?canisterId=<principal>` if no subdomain is available.
+/// Falls back to `http://<principal>.<domain>:<port>` when there is no friendly
+/// name or the assembled host is not a valid DNS host (e.g. a raw store key), or
+/// to `http://<host>:<port>?canisterId=<principal>` if no subdomain routing is
+/// available at all.
 pub fn canister_gateway_url(
     http_gateway_url: &Url,
     canister_id: Principal,
@@ -80,16 +116,24 @@ pub fn canister_gateway_url(
 ) -> Url {
     let domain = gateway_domain(http_gateway_url);
     let mut url = http_gateway_url.clone();
-    match (friendly, domain) {
-        (Some((canister_name, env_name)), Some(domain)) => {
-            url.set_host(Some(&format!("{canister_name}.{env_name}.{domain}")))
-                .expect("friendly domain should be a valid host");
+    // A friendly subdomain requires both a routing domain and a friendly name
+    // that assembles into a valid host; otherwise fall back below.
+    let host = match (friendly, domain) {
+        (Some((friendly_name, env_name)), Some(domain)) => {
+            friendly_host(friendly_name, env_name, domain)
+        }
+        _ => None,
+    };
+    match (host, domain) {
+        (Some(host), _) => {
+            url.set_host(Some(&host))
+                .expect("validated friendly host should be a valid host");
         }
         (None, Some(domain)) => {
             url.set_host(Some(&format!("{canister_id}.{domain}")))
                 .expect("principal domain should be a valid host");
         }
-        (_, None) => {
+        (None, None) => {
             url.set_query(Some(&format!("canisterId={canister_id}")));
         }
     }
@@ -106,54 +150,124 @@ pub enum WriteCustomDomainsError {
 mod tests {
     use super::*;
 
+    fn cid(text: &str) -> Principal {
+        Principal::from_text(text).unwrap()
+    }
+
     #[test]
     fn write_custom_domains_produces_correct_file() {
         let dir = camino_tempfile::Utf8TempDir::new().unwrap();
-        let mut env_mappings = BTreeMap::new();
+        let mut env_entries: BTreeMap<String, Vec<(String, Principal)>> = BTreeMap::new();
 
-        let mut local_mappings = BTreeMap::new();
-        local_mappings.insert(
-            "backend".to_string(),
-            Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap(),
+        env_entries.insert(
+            "local".to_string(),
+            vec![
+                ("backend".to_string(), cid("bkyz2-fmaaa-aaaaa-qaaaq-cai")),
+                // A dependency canister: dot-nested by its alias chain.
+                (
+                    "frontend.openemail".to_string(),
+                    cid("bd3sg-teaaa-aaaaa-qaaba-cai"),
+                ),
+            ],
         );
-        local_mappings.insert(
-            "frontend".to_string(),
-            Principal::from_text("bd3sg-teaaa-aaaaa-qaaba-cai").unwrap(),
+        env_entries.insert(
+            "staging".to_string(),
+            vec![("backend".to_string(), cid("aaaaa-aa"))],
         );
-        env_mappings.insert("local".to_string(), local_mappings);
 
-        let mut staging_mappings = BTreeMap::new();
-        staging_mappings.insert(
-            "backend".to_string(),
-            Principal::from_text("aaaaa-aa").unwrap(),
-        );
-        env_mappings.insert("staging".to_string(), staging_mappings);
-
-        write_custom_domains(dir.path(), "localhost", &env_mappings, &[]).unwrap();
+        write_custom_domains(dir.path(), "localhost", &env_entries, &[]).unwrap();
 
         let content = std::fs::read_to_string(dir.path().join("custom-domains.txt")).unwrap();
-        // BTreeMap is ordered, so local comes before staging
+        // BTreeMap is ordered, so local comes before staging.
         assert_eq!(
             content,
             "backend.local.localhost:bkyz2-fmaaa-aaaaa-qaaaq-cai\n\
-             frontend.local.localhost:bd3sg-teaaa-aaaaa-qaaba-cai\n\
+             frontend.openemail.local.localhost:bd3sg-teaaa-aaaaa-qaaba-cai\n\
              backend.staging.localhost:aaaaa-aa\n"
         );
     }
 
     #[test]
+    fn write_custom_domains_skips_invalid_hosts() {
+        let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+        let mut env_entries: BTreeMap<String, Vec<(String, Principal)>> = BTreeMap::new();
+        env_entries.insert(
+            "local".to_string(),
+            vec![
+                ("ok".to_string(), cid("bkyz2-fmaaa-aaaaa-qaaaq-cai")),
+                // A raw store key is not a valid host and must be skipped, not
+                // emitted malformed.
+                (
+                    "vendor/openemail:backend".to_string(),
+                    cid("bd3sg-teaaa-aaaaa-qaaba-cai"),
+                ),
+            ],
+        );
+
+        write_custom_domains(dir.path(), "localhost", &env_entries, &[]).unwrap();
+
+        let content = std::fs::read_to_string(dir.path().join("custom-domains.txt")).unwrap();
+        assert_eq!(content, "ok.local.localhost:bkyz2-fmaaa-aaaaa-qaaaq-cai\n");
+    }
+
+    #[test]
     fn write_custom_domains_with_extra_entries() {
         let dir = camino_tempfile::Utf8TempDir::new().unwrap();
-        let env_mappings = BTreeMap::new();
+        let env_entries = BTreeMap::new();
         let extra = vec![(
             "id.ai.localhost".to_string(),
             "uqzsh-gqaaa-aaaaq-qaada-cai".to_string(),
         )];
 
-        write_custom_domains(dir.path(), "localhost", &env_mappings, &extra).unwrap();
+        write_custom_domains(dir.path(), "localhost", &env_entries, &extra).unwrap();
 
         let content = std::fs::read_to_string(dir.path().join("custom-domains.txt")).unwrap();
         assert_eq!(content, "id.ai.localhost:uqzsh-gqaaa-aaaaq-qaada-cai\n");
+    }
+
+    #[test]
+    fn friendly_host_validates_labels() {
+        assert_eq!(
+            friendly_host("backend", "local", "localhost").as_deref(),
+            Some("backend.local.localhost")
+        );
+        assert_eq!(
+            friendly_host("backend.openemail", "local", "localhost").as_deref(),
+            Some("backend.openemail.local.localhost")
+        );
+        assert_eq!(
+            friendly_host("bar.libfoo.openemail", "local", "localhost").as_deref(),
+            Some("bar.libfoo.openemail.local.localhost")
+        );
+        // Underscores are permitted in canister names and route fine.
+        assert_eq!(
+            friendly_host("my_canister", "local", "localhost").as_deref(),
+            Some("my_canister.local.localhost")
+        );
+        // Store-key separators are not valid DNS labels.
+        assert_eq!(
+            friendly_host("vendor/openemail:backend", "local", "localhost"),
+            None
+        );
+        assert_eq!(friendly_host("dep:backend", "local", "localhost"), None);
+        // Empty / leading-hyphen labels rejected.
+        assert_eq!(friendly_host("", "local", "localhost"), None);
+        assert_eq!(friendly_host("-bad", "local", "localhost"), None);
+    }
+
+    #[test]
+    fn registration_and_url_agree_on_host() {
+        // The custom-domains.txt entry and the printed URL must use the same host
+        // for a dependency canister, or the printed URL would not route.
+        let base: Url = "http://localhost:8000".parse().unwrap();
+        let id = cid("bkyz2-fmaaa-aaaaa-qaaaq-cai");
+        let url = canister_gateway_url(&base, id, Some(("frontend.openemail", "local")));
+        let registered = friendly_host("frontend.openemail", "local", "localhost").unwrap();
+        assert_eq!(url.host_str().unwrap(), registered);
+        assert_eq!(
+            url.as_str(),
+            "http://frontend.openemail.local.localhost:8000/"
+        );
     }
 
     #[test]
@@ -179,6 +293,19 @@ mod tests {
         let cid = Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap();
         let url = canister_gateway_url(&base, cid, Some(("backend", "local")));
         assert_eq!(url.as_str(), "http://backend.local.localhost:8000/");
+    }
+
+    #[test]
+    fn canister_gateway_url_namespaced_name_falls_back_to_principal() {
+        let base: Url = "http://localhost:8000".parse().unwrap();
+        let cid = Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap();
+        // A namespaced dependency canister (e.g. `dep:backend`) is not a valid DNS
+        // label, so the friendly host is rejected and we fall back to the principal.
+        let url = canister_gateway_url(&base, cid, Some(("dep:backend", "local")));
+        assert_eq!(
+            url.as_str(),
+            "http://bkyz2-fmaaa-aaaaa-qaaaq-cai.localhost:8000/"
+        );
     }
 
     #[test]

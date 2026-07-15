@@ -642,6 +642,7 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
         canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
+        member_missing_envs: std::collections::HashMap::new(),
     };
 
     let ctx = Context {
@@ -714,6 +715,7 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
         canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
+        member_missing_envs: std::collections::HashMap::new(),
     };
 
     let custom_root_key = vec![1, 2, 3, 4];
@@ -812,6 +814,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         canisters: IndexMap::new(), // No canisters needed for get_agent test
         networks,
         environments,
+        member_missing_envs: std::collections::HashMap::new(),
     };
 
     let local_root_key = vec![1, 2, 3, 4];

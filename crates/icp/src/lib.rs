@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -105,6 +108,27 @@ pub struct Canister {
     /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
     /// `None` when the canister uses explicit build/sync instructions.
     pub registry_recipe: Option<String>,
+
+    /// Canister-discovery wiring. Maps the name this canister reads in a
+    /// `PUBLIC_CANISTER_ID:<name>` environment variable to the store key of the
+    /// referenced canister. Computed during consolidation so each canister sees
+    /// the view its owning project expects: its own project's canisters under
+    /// their local names, plus any declared dependencies under their aliases
+    /// (`<alias>:<canister>`). For a project with no dependencies this maps every
+    /// canister's local name to itself, reproducing the flat "every canister sees
+    /// every sibling" behavior.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bindings: BTreeMap<String, String>,
+
+    /// Subdomain prefixes for the canister's friendly URLs, most-specific label
+    /// first, e.g. `["backend"]` for an own canister or `["backend.openemail"]`
+    /// for a dependency canister (dot-nested by alias chain). A de-duplicated
+    /// shared dependency canister carries one entry per alias chain that reaches
+    /// it. Consumed only at deploy time to build `custom-domains.txt` entries and
+    /// the printed URLs; a runtime display aid that is always recomputed during
+    /// consolidation, so it is never serialized.
+    #[serde(skip)]
+    pub friendly_names: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -149,6 +173,13 @@ pub struct Project {
     pub canisters: IndexMap<String, (PathBuf, Canister)>,
     pub networks: HashMap<String, Network>,
     pub environments: HashMap<String, Environment>,
+
+    /// Environments the workspace defines that some vendored member does *not*
+    /// declare, keyed by environment name → the missing members' store-key
+    /// prefixes. Enforced when the environment is selected (strict rule).
+    /// Empty for standalone projects and workspaces whose members are complete.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub member_missing_envs: HashMap<String, Vec<String>>,
 }
 
 impl Project {
@@ -175,11 +206,44 @@ pub enum ProjectLoadError {
 pub trait ProjectLoad: Sync + Send {
     async fn load(&self) -> Result<Project, ProjectLoadError>;
     async fn exists(&self) -> Result<bool, ProjectLoadError>;
+
+    /// The directory of the member (sub-project) the command is standing in,
+    /// i.e. the nearest `icp.yaml` at or above cwd. Equals the workspace root
+    /// (`Project::dir`) at the root or in a standalone project. `None` when the
+    /// member directory cannot be determined; callers then skip member-scoping.
+    fn member_dir(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 pub struct ProjectLoadImpl {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub recipe: Arc<dyn Resolve>,
+}
+
+/// Ensures the "operating on a workspace root above your sub-project" notice is
+/// printed at most once per process (one CLI invocation), no matter how many
+/// times the project is loaded.
+static WORKSPACE_ROOT_ANNOUNCED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Warn once when the resolved workspace root differs from the sub-project the
+/// command is run in, so the upward resolution (§workspace model) is visible for
+/// every command, not just deploy.
+fn announce_workspace_root_once(member: &Path, root: &Path) {
+    let differs = match (
+        dunce::canonicalize(member.as_std_path()),
+        dunce::canonicalize(root.as_std_path()),
+    ) {
+        (Ok(m), Ok(r)) => m != r,
+        _ => member != root,
+    };
+    if differs && !WORKSPACE_ROOT_ANNOUNCED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            "Running inside sub-project '{member}'; resolved workspace root '{root}'. \
+             Commands operate on the workspace root's network, environments, and canister IDs."
+        );
+    }
 }
 
 #[async_trait]
@@ -190,6 +254,12 @@ impl ProjectLoad for ProjectLoadImpl {
         let pdir = self.project_root_locate.locate().context(LocateSnafu)?;
 
         debug!("Located icp project in {pdir}");
+
+        // Announce (once) when we resolved up to a workspace root above the
+        // sub-project the command is run in, so this is visible for every command.
+        if let Ok(member) = self.project_root_locate.locate_member() {
+            announce_workspace_root_once(&member, &pdir);
+        }
 
         // Load project manifest
         let m = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
@@ -213,6 +283,10 @@ impl ProjectLoad for ProjectLoadImpl {
             Ok(_) => Ok(true),
             Err(ProjectRootLocateError::NotFound { .. }) => Ok(false),
         }
+    }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.project_root_locate.locate_member().ok()
     }
 }
 
@@ -248,6 +322,10 @@ impl<T: ProjectLoad> ProjectLoad for Lazy<T, Project> {
 
         let v = self.0.exists().await?;
         Ok(v)
+    }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.0.member_dir()
     }
 }
 
@@ -292,6 +370,8 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec!["backend".to_string()],
         };
 
         let local_network = Network {
@@ -327,6 +407,7 @@ impl MockProjectLoader {
             canisters,
             networks,
             environments,
+            member_missing_envs: HashMap::new(),
         };
 
         Self::new(project)
@@ -375,6 +456,8 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec!["backend".to_string()],
         };
 
         let frontend_canister = Canister {
@@ -391,6 +474,8 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec!["frontend".to_string()],
         };
 
         let database_canister = Canister {
@@ -407,6 +492,8 @@ impl MockProjectLoader {
             sync: SyncSteps::default(),
             init_args: None,
             registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec!["database".to_string()],
         };
 
         // Create networks
@@ -552,6 +639,7 @@ impl MockProjectLoader {
             canisters,
             networks,
             environments,
+            member_missing_envs: HashMap::new(),
         };
 
         Self::new(project)
@@ -615,6 +703,10 @@ mod tests {
 
     impl ProjectRootLocate for MockProjectRootLocate {
         fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.path.clone())
+        }
+
+        fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError> {
             Ok(self.path.clone())
         }
     }

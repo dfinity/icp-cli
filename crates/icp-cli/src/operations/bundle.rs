@@ -45,6 +45,14 @@ pub enum BundleError {
         names: Vec<String>,
     },
 
+    #[snafu(display(
+        "bundling a project with dependencies is not yet supported: canister '{canister}' is \
+         imported from a dependency (namespaced name). A flattened bundle would lose the alias-based \
+         canister-ID wiring and dependency environment config, and its ':'-containing names cannot \
+         be reloaded. Bundle from a project without dependencies."
+    ))]
+    DependencyWorkspace { canister: String },
+
     #[snafu(transparent)]
     Build { source: BuildManyError },
 
@@ -271,6 +279,10 @@ pub(crate) async fn create_bundle(
 
     let bundle_manifest = ProjectManifest {
         canisters: canister_items,
+        // A bundle flattens every consolidated canister (including any pulled in
+        // from dependencies) into `canisters` as pre-built entries, so no external
+        // dependency references remain.
+        dependencies: vec![],
         networks,
         environments,
     };
@@ -742,6 +754,20 @@ fn append_dir<W: Write>(
 ///  - no sync step is a script (we cannot replay an arbitrary shell command from the bundle)
 ///  - all sanitized canister names are unique (otherwise archive paths collide silently)
 fn validate_canisters(canisters: &[(PathBuf, Canister)]) -> Result<(), BundleError> {
+    // A namespaced name means the canister was imported from a dependency. The
+    // bundle format flattens canisters into a dependency-less manifest, which
+    // would drop the alias-based wiring / dependency env config and produce
+    // ':'-containing names that fail to reload; reject it up front rather than
+    // emit a broken archive.
+    for (_, canister) in canisters {
+        if canister.name.contains(':') {
+            return DependencyWorkspaceSnafu {
+                canister: canister.name.clone(),
+            }
+            .fail();
+        }
+    }
+
     for (_, canister) in canisters {
         for step in &canister.sync.steps {
             if matches!(step, SyncStep::Script(_)) {

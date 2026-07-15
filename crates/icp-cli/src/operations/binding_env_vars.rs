@@ -116,11 +116,6 @@ pub(crate) async fn set_binding_env_vars_many(
         .fail();
     }
 
-    let binding_vars = canister_list
-        .iter()
-        .map(|(n, p)| (format!("PUBLIC_CANISTER_ID:{n}"), p.to_text()))
-        .collect::<Vec<(_, _)>>();
-
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
@@ -128,10 +123,27 @@ pub(crate) async fn set_binding_env_vars_many(
         let pb = progress_manager.create_progress_bar(&info.name);
         let canister_name = info.name.clone();
 
+        // Each canister receives only the ids it is wired to (its own project's
+        // canisters by their local names, plus any declared dependencies under
+        // their aliases), resolved to the ids that exist in this environment.
+        // A project without dependencies wires every canister to every sibling,
+        // reproducing the previous flat behavior.
+        let binding_vars: Vec<(String, String)> = info
+            .bindings
+            .iter()
+            .filter_map(|(env_name, referenced_key)| {
+                canister_list.get(referenced_key).map(|principal| {
+                    (
+                        format!("PUBLIC_CANISTER_ID:{env_name}"),
+                        principal.to_text(),
+                    )
+                })
+            })
+            .collect();
+
         let settings_fn = {
             let agent = agent.clone();
             let pb = pb.clone();
-            let binding_vars = binding_vars.clone();
 
             async move {
                 pb.set_message("Updating environment variables...");

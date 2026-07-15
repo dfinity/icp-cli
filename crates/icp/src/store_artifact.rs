@@ -29,6 +29,12 @@ pub enum SaveError {
     #[snafu(display("failed to write artifact file"))]
     SaveWriteFileError { source: crate::fs::IoError },
 
+    #[snafu(display(
+        "canister '{name}' encodes to a {len}-byte artifact filename, exceeding the 255-byte \
+         filesystem limit; shorten the dependency path or canister name"
+    ))]
+    SaveNameTooLong { name: String, len: usize },
+
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },
 }
@@ -40,6 +46,12 @@ pub enum LookupArtifactError {
 
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
+
+    #[snafu(display(
+        "canister '{name}' encodes to a {len}-byte artifact filename, exceeding the 255-byte \
+         filesystem limit; shorten the dependency path or canister name"
+    ))]
+    LookupNameTooLong { name: String, len: usize },
 
     #[snafu(transparent)]
     LockError { source: crate::fs::lock::LockError },
@@ -53,9 +65,41 @@ struct ArtifactPaths {
     dir: PathBuf,
 }
 
+/// Encode a canister name into a single filename-safe segment.
+///
+/// Canister names may be namespaced store keys containing `/` and `:` (imported
+/// dependency canisters, e.g. `vendor/openemail:backend`), which are not valid
+/// filename characters on every platform. Percent-encoding the unsafe set keeps
+/// the mapping reversible and collision-free; plain names (alphanumeric/`-`/`_`/`.`)
+/// are left unchanged, so existing artifact filenames are unaffected.
+fn sanitize_artifact_name(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '%' => out.push_str("%25"),
+            '/' => out.push_str("%2F"),
+            '\\' => out.push_str("%5C"),
+            ':' => out.push_str("%3A"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Maximum length of a single filename component on common filesystems.
+const NAME_MAX: usize = 255;
+
+/// The encoded filename length if it exceeds `NAME_MAX`, else `None`. A deeply
+/// nested dependency store key can stay within the total path limit yet blow the
+/// per-component limit once its separators are percent-encoded.
+fn artifact_name_overflow(name: &str) -> Option<usize> {
+    let len = sanitize_artifact_name(name).len();
+    (len > NAME_MAX).then_some(len)
+}
+
 impl ArtifactPaths {
     fn artifact_by_name(&self, name: &str) -> PathBuf {
-        self.dir.join(name)
+        self.dir.join(sanitize_artifact_name(name))
     }
 }
 
@@ -89,6 +133,13 @@ impl ArtifactStore {
 #[async_trait]
 impl Access for ArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
+        if let Some(len) = artifact_name_overflow(name) {
+            return SaveNameTooLongSnafu {
+                name: name.to_owned(),
+                len,
+            }
+            .fail();
+        }
         self.lock()?
             .with_write(async |store| {
                 // Save artifact
@@ -99,6 +150,13 @@ impl Access for ArtifactStore {
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
+        if let Some(len) = artifact_name_overflow(name) {
+            return LookupNameTooLongSnafu {
+                name: name.to_owned(),
+                len,
+            }
+            .fail();
+        }
         self.lock()?
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
@@ -160,5 +218,46 @@ impl Access for MockInMemoryArtifactStore {
                 name: name.to_owned(),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{artifact_name_overflow, sanitize_artifact_name};
+
+    #[test]
+    fn plain_names_unchanged() {
+        assert_eq!(sanitize_artifact_name("backend"), "backend");
+        assert_eq!(
+            sanitize_artifact_name("my-canister_1.wasm"),
+            "my-canister_1.wasm"
+        );
+    }
+
+    #[test]
+    fn namespaced_names_are_filename_safe() {
+        let s = sanitize_artifact_name("vendor/openemail:backend");
+        assert_eq!(s, "vendor%2Fopenemail%3Abackend");
+        assert!(!s.contains('/'));
+        assert!(!s.contains(':'));
+    }
+
+    #[test]
+    fn encoding_is_injective() {
+        // `%` is itself encoded, so a literal "%2F" never collides with "/".
+        assert_ne!(
+            sanitize_artifact_name("a%2Fb"),
+            sanitize_artifact_name("a/b")
+        );
+    }
+
+    #[test]
+    fn artifact_name_overflow_flags_only_over_limit_names() {
+        assert!(artifact_name_overflow("backend").is_none());
+        assert!(artifact_name_overflow("vendor/openemail:backend").is_none());
+        // A pathologically deep store key stays within the total path limit but
+        // its single encoded segment exceeds NAME_MAX once separators are encoded.
+        let deep = format!("{}:leaf", vec!["dir"; 80].join("/"));
+        assert!(artifact_name_overflow(&deep).is_some());
     }
 }

@@ -165,6 +165,7 @@ export default defineConfig({
             { label: 'Build, Deploy, Sync', slug: 'concepts/build-deploy-sync' },
             { label: 'Environments and Networks', slug: 'concepts/environments' },
             { label: 'Canister Discovery', slug: 'concepts/canister-discovery' },
+            { label: 'Project Dependencies', slug: 'concepts/project-dependencies' },
             { label: 'Binding Generation', slug: 'concepts/binding-generation' },
             { label: 'Recipes', slug: 'concepts/recipes' },
             { label: 'Sync Plugins', slug: 'concepts/sync-plugins' },

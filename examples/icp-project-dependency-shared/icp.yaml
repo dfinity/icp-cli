@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+#
+# Shared-dependency ("umbrella") example.
+#
+# `umbrella/` bundles three sibling projects — `service-a`, `service-b`, and
+# `openemail` — as it would appear when vendored as a git submodule. Both
+# `service-a` and `service-b` depend on `openemail` via `../openemail`.
+#
+# This app depends on both services. Because both service edges resolve to the
+# SAME `umbrella/openemail` directory, openemail is deployed exactly once and
+# shared: `service-a`'s and `service-b`'s canisters both discover the one
+# openemail instance through `PUBLIC_CANISTER_ID:openemail:backend`.
+
+canisters:
+  # The app's own asset canister: it serves `http_request`, so it prints a
+  # friendly URL `frontend.<env>.localhost` (no alias — it's not a dependency).
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
+          sha256: 865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6
+
+dependencies:
+  - name: service-a
+    path: ./umbrella/service-a
+    canisters: [service]
+  - name: service-b
+    path: ./umbrella/service-b
+    canisters: [service]

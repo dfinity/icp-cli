@@ -2,7 +2,7 @@
 Convention: changes to experimental features live in a dedicated
 `## Experimental` subsection under each version. Experimental features
 may receive breaking changes between releases without a major version
-bump. Currently experimental: project bundling
+bump. Currently experimental: project bundling, project dependencies
 -->
 
 # Unreleased
@@ -15,6 +15,14 @@ bump. Currently experimental: project bundling
   * `fetch`: fetch the key from the network on each use. This is trust-on-first-use and does *not* verify the key's provenance, so it's meant only for testnets you or someone you trust operate; `icp` prints a warning whenever it fetches.
   * `network status` reports where the key came from — a `root_key_source` field in `--json`, and a `(fetched - unverified, trust-on-first-use)` label in text output.
   * `root-key` is now required for connected networks (previously optional, silently defaulting to the mainnet key). This is technically breaking, but most working projects are unaffected: a non-mainnet connected network already needed an explicit key, so in practice only a mainnet-via-custom-URL network needs to add `root-key: mainnet`. The built-in `ic` network is unchanged.
+
+## Experimental
+
+* feat: Projects can now depend on other `icp` projects vendored into them (e.g. as git submodules) via a top-level `dependencies:` block in `icp.yaml`.
+  * `icp deploy` deploys the dependency alongside your project and injects its canister IDs.
+  * Running `icp` from inside a vendored sub-project resolves up to the workspace root, so the whole workspace shares one network and one set of canister IDs.
+  * Canister names and dependency aliases must now contain only ASCII letters, digits, `_`, and `-`, with `:` reserved as the dependency namespace separator. Names using other characters are now rejected.
+  * See the [Project Dependencies](docs/concepts/project-dependencies.md) concept guide for details.
 
 # v1.0.2
 

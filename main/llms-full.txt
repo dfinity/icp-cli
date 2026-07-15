@@ -49,6 +49,7 @@ Always prefer skill guidance over general documentation when both cover the same
 - [Canister Discovery](https://cli.internetcomputer.org/main/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
 - [Environments and Networks](https://cli.internetcomputer.org/main/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
 - [Concepts](https://cli.internetcomputer.org/main/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+- [Project Dependencies](https://cli.internetcomputer.org/main/concepts/project-dependencies.md): How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.
 - [Project Model](https://cli.internetcomputer.org/main/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
 - [Recipes](https://cli.internetcomputer.org/main/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
 - [Sync Plugins](https://cli.internetcomputer.org/main/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
@@ -519,6 +520,12 @@ If you prefer not to use canister environment variables:
 1. **Init arguments** — Pass canister IDs as initialization parameters
 2. **Configuration** — Store IDs in canister state during setup
 
+## Dependency Projects
+
+A project can vendor another `icp` project as a dependency. IDs are injected per project scope: your canisters see the exposed dependency canisters under an alias (`PUBLIC_CANISTER_ID:openemail:backend`), while the dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …). This per-project scoping means vendored code behaves the same whether deployed on its own or as a dependency.
+
+See [Project Dependencies](project-dependencies.md) for how to declare a dependency, deploy it as part of a workspace, and share a single set of canister IDs.
+
 ## Custom Canister Environment Variables
 
 Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom canister environment variables in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.
@@ -791,6 +798,7 @@ Understanding how icp-cli organizes and manages your project.
 - [Recipes](recipes.md) — Templated, reusable build configurations
 - [Sync Plugins](sync-plugins.md) — Sandboxed WebAssembly components that run during the sync phase
 - [Canister Discovery](canister-discovery.md) — How canisters discover each other
+- [Project Dependencies](project-dependencies.md) — Depending on other vendored icp projects and deploying them as a workspace
 - [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
 ## Quick Reference
@@ -804,6 +812,149 @@ Understanding how icp-cli organizes and manages your project.
 | **Recipe** | A Handlebars template that generates build and sync configuration |
 | **Sync plugin** | A sandboxed WebAssembly component that runs post-deployment logic during `icp sync` |
 | **Principal** | A public identifier for an identity or canister on the Internet Computer |
+
+
+---
+
+# Project Dependencies
+
+An `icp` project can build on top of another `icp` project — a **dependency** — whose source is vendored into it, typically as a git submodule. The dependency stays a complete, standalone project: it can be developed and deployed on its own, and it does not need to know it is being consumed.
+
+This supports two related workflows:
+
+- **Reuse** — build on another project's canisters (your canisters call theirs).
+- **Monorepo / workspace** — develop several projects together and deploy them onto one network with a single shared set of canister IDs.
+
+## Declaring a dependency
+
+Add a top-level `dependencies:` block to your `icp.yaml`:
+
+```yaml
+dependencies:
+  - name: openemail            # local alias — namespaces the dependency's canister IDs
+    path: ./vendor/openemail   # directory containing the dependency's icp.yaml
+    canisters: [backend]       # which of its canisters to expose (omit to expose all)
+```
+
+## What gets deployed
+
+`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+
+## Canister ID injection
+
+Each canister receives canister IDs from the perspective of the project that owns it. Your canisters see:
+
+- their own canisters by name — `PUBLIC_CANISTER_ID:backend`
+- each **exposed** dependency canister under the alias — `PUBLIC_CANISTER_ID:openemail:backend`
+
+The dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …), so vendored code behaves identically whether deployed on its own or through your project. See [Canister Discovery](canister-discovery.md) for the injection mechanism.
+
+## Addressing dependency canisters
+
+Because two projects may each define a `backend`, imported canisters are keyed by their path relative to the workspace root, for example `vendor/openemail:backend`. Use that name anywhere a canister name is accepted:
+
+```bash
+icp canister status "vendor/openemail:backend"
+icp deploy "vendor/openemail:backend"
+```
+
+Canister names and dependency aliases must contain only ASCII letters, digits, `_`, and `-`. This keeps them safe to reuse as store-key segments, `PUBLIC_CANISTER_ID` env-var names, URL subdomains, and archive paths; `:` in particular is reserved as the namespace separator.
+
+## Deploy URLs
+
+`icp deploy` prints a clickable URL for every canister it deploys, including a dependency's. A canister that serves the `http_request` endpoint gets a **frontend URL**; any other canister gets a **Candid UI URL**.
+
+On a local network, a dependency canister's frontend subdomain is namespaced by the **alias** (not the store-key path), so it stays short and readable:
+
+```
+Deployed canisters:
+  frontend: http://frontend.local.localhost:8000/
+  vendor/openemail:frontend: http://frontend.openemail.local.localhost:8000/
+  vendor/openemail:backend (Candid UI): http://<candid-ui>.localhost:8000/?id=<id>
+```
+
+A transitive dependency uses its full alias chain (`frontend.libfoo.openemail.<env>.localhost`). A [shared dependency](#shared-dependencies) is deployed once but reached through more than one alias chain, so it prints **one URL per chain**, each resolving to the same canister:
+
+```
+  umbrella/openemail:frontend: http://frontend.openemail.service-a.local.localhost:8000/
+  umbrella/openemail:frontend: http://frontend.openemail.service-b.local.localhost:8000/
+```
+
+## Running commands inside a dependency (the workspace)
+
+Vendored dependencies form a **workspace**. When you run an `icp` command from inside a vendored project, icp-cli walks **up** the directory tree to the outermost project that declares the one you are in as a dependency and treats it as the **workspace root**. The network, environments, and the canister-ID store all come from that root, so there is a single source of truth for canister IDs no matter where you run from.
+
+```
+app/
+  icp.yaml                 # depends on ./vendor/openemail
+  vendor/
+    openemail/
+      icp.yaml             # a standalone project
+```
+
+- `cd app && icp deploy` — deploys `app` and `openemail` into app's environment.
+- `cd app/vendor/openemail && icp deploy` — resolves up to `app` and deploys **only openemail's** canisters into app's environment and ID store. The IDs are the same ones app's canisters were wired to, so iterating on a vendored dependency in place does not fork a separate deployment.
+
+When a command resolves to a workspace root above the project you are standing in, icp-cli announces the resolved root so the behavior is visible.
+
+Resolution is **bounded**: an ancestor is adopted only if it (transitively) declares your project, so an unrelated `icp.yaml` higher up never captures your project. A dependency cloned on its own has no declaring ancestor and behaves as its own root.
+
+### Deploying part of a workspace
+
+From inside a member, `icp deploy` with no canister names defaults to **that member's own canisters**. Deploy the whole workspace by running from the root, or target canisters explicitly by their namespaced names from anywhere.
+
+Because a member-scoped deploy does not redeploy the member's dependencies, it fails with a clear error if any dependency canister it is wired to has not been deployed in the workspace yet — deploy from the workspace root first so those IDs exist.
+
+### Setting the root explicitly
+
+Force the workspace root with the `--project-root-override` flag or the `ICP_PROJECT_ROOT` environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.
+
+## Environments across a workspace
+
+The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
+
+A dependency's own same-named environment still contributes its **per-canister settings and init args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
+
+1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
+2. the dependency's own environment configuration
+3. the canister's base settings
+
+Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
+
+```yaml
+# in the dependency's icp.yaml
+environments:
+  - name: staging
+```
+
+`local` and `ic` are implicit for every project, so they never need to be declared.
+
+## Shared dependencies
+
+If two projects in a workspace depend on the same directory — for example two services that both vendor `../openemail` — it resolves to **one** instance, built and deployed once and shared by both. Identity is the resolved directory on disk, so two independent copies at different paths stay separate.
+
+## Keeping a dependency self-contained
+
+A vendored project must remain a complete `icp` project: it never references its parent, and you can copy or clone it elsewhere and it still works on its own. Vendoring may require [aligning environment names](#environments-across-a-workspace), but never changes to how the dependency finds its own canisters.
+
+## Limitations
+
+- icp-cli deploys a parent-owned copy of each dependency; binding directly to an already-deployed on-chain canister is not yet supported.
+- Candid and binding generation for dependencies are out of scope — each canister generates the bindings it needs itself. See [Binding Generation](binding-generation.md).
+
+## Examples
+
+- [project-dependency](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency) — a single vendored dependency.
+- [project-dependency-shared](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency-shared) — a shared dependency across sibling services.
+
+## See Also
+
+- [Canister Discovery](canister-discovery.md) — How canister IDs are injected
+- [Environments and Networks](environments.md) — Deployment targets and how they relate
+- [Project Model](project-model.md) — How icp-cli discovers and consolidates configuration
+- [Configuration Reference](../reference/configuration.md) — `icp.yaml` fields
+
+[Browse all documentation →](../index.md)
 
 
 ---
@@ -6824,7 +6975,7 @@ This document contains the help content for the `icp` command-line program.
 
 ###### **Options:**
 
-* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found
+* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up to the workspace root (the top-most project that declares the one you are in as a dependency)
 * `--debug` — Enable debug logging
 
   Default value: `false`

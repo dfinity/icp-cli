@@ -130,6 +130,12 @@ If you prefer not to use canister environment variables:
 1. **Init arguments** — Pass canister IDs as initialization parameters
 2. **Configuration** — Store IDs in canister state during setup
 
+## Dependency Projects
+
+A project can vendor another `icp` project as a dependency. IDs are injected per project scope: your canisters see the exposed dependency canisters under an alias (`PUBLIC_CANISTER_ID:openemail:backend`), while the dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …). This per-project scoping means vendored code behaves the same whether deployed on its own or as a dependency.
+
+See [Project Dependencies](project-dependencies.md) for how to declare a dependency, deploy it as part of a workspace, and share a single set of canister IDs.
+
 ## Custom Canister Environment Variables
 
 Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom canister environment variables in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.

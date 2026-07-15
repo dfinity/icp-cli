@@ -6,23 +6,47 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Tue, 14 Jul 2026 15:47:21 GMT</lastBuildDate>
-    <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
+    <lastBuildDate>Wed, 15 Jul 2026 15:43:13 GMT</lastBuildDate>
+    <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Canister Discovery</title>
+      <link>https://cli.internetcomputer.org/main/concepts/canister-discovery/</link>
+      <description>How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.</description>
+      <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/canister-discovery/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Concepts</title>
+      <link>https://cli.internetcomputer.org/main/concepts/</link>
+      <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
+      <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Dependencies</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
+      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
+      <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Tokens and Cycles</title>
       <link>https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</link>
       <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
       <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Tue, 14 Jul 2026 15:46:16 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -143,14 +167,6 @@
       <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
       <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Concepts</title>
-      <link>https://cli.internetcomputer.org/main/concepts/</link>
-      <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
-      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -279,14 +295,6 @@
       <description>Generate type-safe client code from Candid interface files to call canister methods with full type checking.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/binding-generation/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Canister Discovery</title>
-      <link>https://cli.internetcomputer.org/main/concepts/canister-discovery/</link>
-      <description>How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/canister-discovery/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
   </channel>

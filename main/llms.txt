@@ -49,6 +49,7 @@ Always prefer skill guidance over general documentation when both cover the same
 - [Canister Discovery](https://cli.internetcomputer.org/main/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
 - [Environments and Networks](https://cli.internetcomputer.org/main/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
 - [Concepts](https://cli.internetcomputer.org/main/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+- [Project Dependencies](https://cli.internetcomputer.org/main/concepts/project-dependencies.md): How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.
 - [Project Model](https://cli.internetcomputer.org/main/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
 - [Recipes](https://cli.internetcomputer.org/main/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
 - [Sync Plugins](https://cli.internetcomputer.org/main/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.

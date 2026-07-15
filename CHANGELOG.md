@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* feat: `icp deploy --no-create` will error if any canisters do not exist, rather than creating them.
+
 # v1.1.0
 
 * feat: `icp token [TOKEN|LEDGER_ID] approve <AMOUNT> <SPENDER>` grants an ICRC-2 allowance, letting a spender transfer tokens on your behalf. Supports `--from-subaccount` (the account debited for the allowance), `--spender-subaccount`, and an optional `--expires-in <DURATION>` (e.g. `24h`, `30d`) to auto-expire the allowance.

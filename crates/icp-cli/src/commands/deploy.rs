@@ -11,6 +11,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use itertools::Itertools;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
@@ -71,6 +72,10 @@ pub(crate) struct DeployArgs {
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, default_value_t = CyclesAmount::from(create::DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
+
+    /// If any canisters do not exist, error instead of creating them.
+    #[arg(long)]
+    pub(crate) no_create: bool,
 
     /// Skip confirmation prompts, including the Candid interface compatibility check.
     #[arg(long, short)]
@@ -198,7 +203,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .collect::<Vec<_>>();
 
     if canisters_to_create.is_empty() {
-        info!("All canisters already exist");
+        if !args.no_create {
+            info!("All canisters already exist");
+        }
+    } else if args.no_create {
+        bail!(
+            "`--no-create` was specified but the following canisters do not exist: {}",
+            canisters_to_create.iter().format(", ")
+        );
     } else {
         let target = match (args.subnet, args.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),

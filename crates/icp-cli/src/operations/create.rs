@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
@@ -8,8 +8,7 @@ use ic_agent::{
     agent::{Subnet, SubnetType},
 };
 use ic_ledger_types::{
-    AccountIdentifier, Memo, Subaccount, Timestamp, Tokens, TransferArgs, TransferError,
-    TransferResult,
+    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
@@ -30,7 +29,7 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
-use tracing::{info, warn};
+use tracing::info;
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -107,8 +106,6 @@ pub enum CreateOperationError {
 const NOTIFY_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 /// Delay between `notify_create_canister` retries.
 const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
-/// How many times to attempt the funding transfer before giving up.
-const TRANSFER_MAX_ATTEMPTS: u32 = 3;
 
 /// The outcome of a single `notify_create_canister` attempt.
 enum NotifyStep {
@@ -363,52 +360,22 @@ impl CreateOperation {
             &CYCLES_MINTING_CANISTER_PRINCIPAL,
             &Subaccount::from(caller),
         );
-        // Fix the creation time so a retried transfer (after a lost response) is
-        // recognized as a duplicate by the ledger, which then returns the original
-        // block index instead of moving the ICP a second time.
-        let created_at_time = Timestamp {
-            timestamp_nanos: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time is before the Unix epoch")
-                .as_nanos() as u64,
-        };
         let transfer_args = TransferArgs {
             memo: Memo(MEMO_CREATE_CANISTER),
             amount: Tokens::from_e8s(e8s),
             fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
             from_subaccount: None,
             to,
-            created_at_time: Some(created_at_time),
+            created_at_time: None,
         };
-        // Encode once: the argument (including the fixed timestamp) is identical
-        // across retries, which is exactly what makes the transfer idempotent.
-        let transfer_bytes = Encode!(&transfer_args).context(CandidEncodeSnafu)?;
-
-        // Retry transient transport failures. Because created_at_time is fixed, a
-        // retry after a lost response is deduplicated by the ledger (returning
-        // TxDuplicate below) rather than transferring the ICP again.
-        let mut attempt = 1;
-        let transfer_result = loop {
-            match self
-                .inner
-                .agent
-                .update(&ICP_LEDGER_PRINCIPAL, "transfer")
-                .with_arg(transfer_bytes.clone())
-                .call_and_wait()
-                .await
-            {
-                Ok(bytes) => break bytes,
-                Err(err) if attempt < TRANSFER_MAX_ATTEMPTS => {
-                    warn!(
-                        "ICP transfer to the cycles minting canister failed \
-                         (attempt {attempt}), retrying: {err}"
-                    );
-                    attempt += 1;
-                    sleep(NOTIFY_RETRY_INTERVAL).await;
-                }
-                Err(err) => return Err(err).context(TransferIcpSnafu),
-            }
-        };
+        let transfer_result = self
+            .inner
+            .agent
+            .update(&ICP_LEDGER_PRINCIPAL, "transfer")
+            .with_arg(Encode!(&transfer_args).context(CandidEncodeSnafu)?)
+            .call_and_wait()
+            .await
+            .context(TransferIcpSnafu)?;
         let block_index =
             match Decode!(&transfer_result, TransferResult).context(CandidDecodeSnafu)? {
                 Ok(block_index) => block_index,

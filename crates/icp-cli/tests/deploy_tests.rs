@@ -173,9 +173,13 @@ async fn deploy_no_create_fails_when_canister_missing() {
         ])
         .assert()
         .failure()
-        .stderr(contains(
-            "`--no-create` was specified but the following canisters do not exist: my-canister",
-        ));
+        // The error prints without a `Creating canisters:` header in front of it.
+        .stderr(
+            contains(
+                "`--no-create` was specified but the following canisters do not exist: my-canister",
+            )
+            .and(contains("Creating canisters:").not()),
+        );
 }
 
 /// `deploy --no-create` succeeds when the canister already exists: it skips
@@ -207,14 +211,16 @@ async fn deploy_no_create_succeeds_when_canister_exists() {
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
-    // First deploy creates the canister.
+    // First deploy creates the canister, so it prints the `Creating canisters:` header.
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--environment", "random-environment"])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("Creating canisters:"));
 
     // With the canister already created, --no-create has nothing to reject and succeeds.
+    // Nothing is created, so it reports the canisters exist without a `Creating canisters:` header.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -224,7 +230,8 @@ async fn deploy_no_create_succeeds_when_canister_exists() {
             "--no-create",
         ])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("All canisters already exist").and(contains("Creating canisters:").not()));
 
     // Confirm the canister is installed and callable.
     ctx.icp()

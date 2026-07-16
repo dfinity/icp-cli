@@ -4,6 +4,7 @@ pub(crate) mod call;
 pub(crate) mod create;
 pub(crate) mod delete;
 pub(crate) mod install;
+pub(crate) mod link;
 pub(crate) mod list;
 pub(crate) mod logs;
 pub(crate) mod metadata;
@@ -23,6 +24,7 @@ pub(crate) enum Command {
     Create(create::CreateArgs),
     Delete(delete::DeleteArgs),
     Install(install::InstallArgs),
+    Link(link::LinkArgs),
     List(list::ListArgs),
     Logs(logs::LogsArgs),
     Metadata(metadata::MetadataArgs),

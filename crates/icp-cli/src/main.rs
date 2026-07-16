@@ -228,6 +228,10 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::canister::install::exec(ctx, &args).await?
             }
 
+            commands::canister::Command::Link(args) => {
+                commands::canister::link::exec(ctx, &args).await?
+            }
+
             commands::canister::Command::List(args) => {
                 commands::canister::list::exec(ctx, &args).await?
             }

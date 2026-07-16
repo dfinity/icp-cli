@@ -1,4 +1,4 @@
-# ICP CLI Documentation (v1.0)
+# ICP CLI Documentation (v1.1)
 
 > Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).
 
@@ -15,68 +15,69 @@ https://skills.internetcomputer.org/.well-known/skills/{name}/{file}
 Skills contain correct dependency versions, configuration formats, and common pitfalls that prevent build failures.
 Always prefer skill guidance over general documentation when both cover the same topic.
 
-- [icp-cli Documentation](https://cli.internetcomputer.org/1.0/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
+- [icp-cli Documentation](https://cli.internetcomputer.org/1.1/index.md): Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.
 
 ## Start Here
 
-- [Quickstart](https://cli.internetcomputer.org/1.0/quickstart.md): Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
-- [Telemetry](https://cli.internetcomputer.org/1.0/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
-- [Tutorial](https://cli.internetcomputer.org/1.0/tutorial.md): Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
+- [Quickstart](https://cli.internetcomputer.org/1.1/quickstart.md): Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.
+- [Telemetry](https://cli.internetcomputer.org/1.1/telemetry.md): Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.
+- [Tutorial](https://cli.internetcomputer.org/1.1/tutorial.md): Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.
 
 ## Guides
 
-- [Canister Migration](https://cli.internetcomputer.org/1.0/guides/canister-migration.md): Move a canister to a different subnet while optionally preserving its state and canister ID.
-- [Canister Snapshots](https://cli.internetcomputer.org/1.0/guides/canister-snapshots.md): Back up, transfer, and restore full canister state using snapshots.
-- [Using Containerized Networks](https://cli.internetcomputer.org/1.0/guides/containerized-networks.md): Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
-- [Creating Recipes](https://cli.internetcomputer.org/1.0/guides/creating-recipes.md): Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
-- [Creating Project Templates](https://cli.internetcomputer.org/1.0/guides/creating-templates.md): Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
-- [Deploying to IC Mainnet](https://cli.internetcomputer.org/1.0/guides/deploying-to-mainnet.md): Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
-- [Deploying to Specific Subnets](https://cli.internetcomputer.org/1.0/guides/deploying-to-specific-subnets.md): Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
-- [Guides](https://cli.internetcomputer.org/1.0/guides/index.md): Step-by-step guides covering installation, local development, deployment, identity management, and more.
-- [Installation](https://cli.internetcomputer.org/1.0/guides/installation.md): Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
-- [Local Development](https://cli.internetcomputer.org/1.0/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
-- [Managing Environments](https://cli.internetcomputer.org/1.0/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
-- [Managing Identities](https://cli.internetcomputer.org/1.0/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
-- [Proxy Canister](https://cli.internetcomputer.org/1.0/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
-- [Tokens and Cycles](https://cli.internetcomputer.org/1.0/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
-- [Using Recipes](https://cli.internetcomputer.org/1.0/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
-- [Writing a Sync Plugin](https://cli.internetcomputer.org/1.0/guides/writing-sync-plugins.md): Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.
+- [Canister Migration](https://cli.internetcomputer.org/1.1/guides/canister-migration.md): Move a canister to a different subnet while optionally preserving its state and canister ID.
+- [Canister Snapshots](https://cli.internetcomputer.org/1.1/guides/canister-snapshots.md): Back up, transfer, and restore full canister state using snapshots.
+- [Using Containerized Networks](https://cli.internetcomputer.org/1.1/guides/containerized-networks.md): Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.
+- [Creating Recipes](https://cli.internetcomputer.org/1.1/guides/creating-recipes.md): Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.
+- [Creating Project Templates](https://cli.internetcomputer.org/1.1/guides/creating-templates.md): Create custom project templates for icp new using cargo-generate to scaffold new ICP projects.
+- [Deploying to IC Mainnet](https://cli.internetcomputer.org/1.1/guides/deploying-to-mainnet.md): Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.
+- [Deploying to Specific Subnets](https://cli.internetcomputer.org/1.1/guides/deploying-to-specific-subnets.md): Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.
+- [Guides](https://cli.internetcomputer.org/1.1/guides/index.md): Step-by-step guides covering installation, local development, deployment, identity management, and more.
+- [Installation](https://cli.internetcomputer.org/1.1/guides/installation.md): Install icp-cli, ic-wasm, and language toolchains on macOS, Linux, or Windows via npm, Homebrew, or shell script.
+- [Local Development](https://cli.internetcomputer.org/1.1/guides/local-development.md): Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.
+- [Managing Environments](https://cli.internetcomputer.org/1.1/guides/managing-environments.md): Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.
+- [Managing Identities](https://cli.internetcomputer.org/1.1/guides/managing-identities.md): Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.
+- [Proxy Canister](https://cli.internetcomputer.org/1.1/guides/proxy-canister.md): Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.
+- [Tokens and Cycles](https://cli.internetcomputer.org/1.1/guides/tokens-and-cycles.md): Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.
+- [Using Recipes](https://cli.internetcomputer.org/1.1/guides/using-recipes.md): Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.
+- [Writing a Sync Plugin](https://cli.internetcomputer.org/1.1/guides/writing-sync-plugins.md): Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.
 
 ## Concepts
 
-- [Binding Generation](https://cli.internetcomputer.org/1.0/concepts/binding-generation.md): Generate type-safe client code from Candid interface files to call canister methods with full type checking.
-- [Build, Deploy, Sync](https://cli.internetcomputer.org/1.0/concepts/build-deploy-sync.md): Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
-- [Canister Discovery](https://cli.internetcomputer.org/1.0/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
-- [Environments and Networks](https://cli.internetcomputer.org/1.0/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
-- [Concepts](https://cli.internetcomputer.org/1.0/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
-- [Project Model](https://cli.internetcomputer.org/1.0/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
-- [Recipes](https://cli.internetcomputer.org/1.0/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
-- [Sync Plugins](https://cli.internetcomputer.org/1.0/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
+- [Binding Generation](https://cli.internetcomputer.org/1.1/concepts/binding-generation.md): Generate type-safe client code from Candid interface files to call canister methods with full type checking.
+- [Build, Deploy, Sync](https://cli.internetcomputer.org/1.1/concepts/build-deploy-sync.md): Understand the three phases that move canister source code to a running, configured state on the Internet Computer.
+- [Canister Discovery](https://cli.internetcomputer.org/1.1/concepts/canister-discovery.md): How icp-cli enables canisters to find each other through automatic canister ID injection across different environments.
+- [Environments and Networks](https://cli.internetcomputer.org/1.1/concepts/environments.md): Learn how networks and environments relate to control where and how canisters are deployed.
+- [Concepts](https://cli.internetcomputer.org/1.1/concepts/index.md): Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.
+- [Project Dependencies](https://cli.internetcomputer.org/1.1/concepts/project-dependencies.md): How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.
+- [Project Model](https://cli.internetcomputer.org/1.1/concepts/project-model.md): How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.
+- [Recipes](https://cli.internetcomputer.org/1.1/concepts/recipes.md): How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.
+- [Sync Plugins](https://cli.internetcomputer.org/1.1/concepts/sync-plugins.md): How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
 
 ## Reference
 
-- [Canister Settings Reference](https://cli.internetcomputer.org/1.0/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
-- [CLI Reference](https://cli.internetcomputer.org/1.0/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
-  - [`icp build`](https://cli.internetcomputer.org/1.0/reference/cli/build.md): Build canisters
-  - [`icp canister`](https://cli.internetcomputer.org/1.0/reference/cli/canister.md): Perform canister operations against a network
-  - [`icp cycles`](https://cli.internetcomputer.org/1.0/reference/cli/cycles.md): Mint and manage cycles
-  - [`icp deploy`](https://cli.internetcomputer.org/1.0/reference/cli/deploy.md): Deploy a project to an environment
-  - [`icp environment`](https://cli.internetcomputer.org/1.0/reference/cli/environment.md): Show information about the current project environments
-  - [`icp identity`](https://cli.internetcomputer.org/1.0/reference/cli/identity.md): Manage your identities
-  - [`icp network`](https://cli.internetcomputer.org/1.0/reference/cli/network.md): Launch and manage local test networks
-  - [`icp new`](https://cli.internetcomputer.org/1.0/reference/cli/new.md): Create a new ICP project from a template
-  - [`icp project`](https://cli.internetcomputer.org/1.0/reference/cli/project.md): Manage the current project
-  - [`icp settings`](https://cli.internetcomputer.org/1.0/reference/cli/settings.md): Configure user settings
-  - [`icp sync`](https://cli.internetcomputer.org/1.0/reference/cli/sync.md): Synchronize canisters
-  - [`icp token`](https://cli.internetcomputer.org/1.0/reference/cli/token.md): Perform token transactions
-- [Configuration Reference](https://cli.internetcomputer.org/1.0/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
-- [Environment Variables Reference](https://cli.internetcomputer.org/1.0/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
-- [Reference](https://cli.internetcomputer.org/1.0/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
+- [Canister Settings Reference](https://cli.internetcomputer.org/1.1/reference/canister-settings.md): All available canister settings for resource allocation, memory limits, logging, and runtime behavior.
+- [CLI Reference](https://cli.internetcomputer.org/1.1/reference/cli.md): Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.
+  - [`icp build`](https://cli.internetcomputer.org/1.1/reference/cli/build.md): Build canisters
+  - [`icp canister`](https://cli.internetcomputer.org/1.1/reference/cli/canister.md): Perform canister operations against a network
+  - [`icp cycles`](https://cli.internetcomputer.org/1.1/reference/cli/cycles.md): Mint and manage cycles
+  - [`icp deploy`](https://cli.internetcomputer.org/1.1/reference/cli/deploy.md): Deploy a project to an environment
+  - [`icp environment`](https://cli.internetcomputer.org/1.1/reference/cli/environment.md): Show information about the current project environments
+  - [`icp identity`](https://cli.internetcomputer.org/1.1/reference/cli/identity.md): Manage your identities
+  - [`icp network`](https://cli.internetcomputer.org/1.1/reference/cli/network.md): Launch and manage local test networks
+  - [`icp new`](https://cli.internetcomputer.org/1.1/reference/cli/new.md): Create a new ICP project from a template
+  - [`icp project`](https://cli.internetcomputer.org/1.1/reference/cli/project.md): Manage the current project
+  - [`icp settings`](https://cli.internetcomputer.org/1.1/reference/cli/settings.md): Configure user settings
+  - [`icp sync`](https://cli.internetcomputer.org/1.1/reference/cli/sync.md): Synchronize canisters
+  - [`icp token`](https://cli.internetcomputer.org/1.1/reference/cli/token.md): Perform token transactions
+- [Configuration Reference](https://cli.internetcomputer.org/1.1/reference/configuration.md): Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.
+- [Environment Variables Reference](https://cli.internetcomputer.org/1.1/reference/environment-variables.md): All environment variables used by icp-cli during builds, deployments, and script execution.
+- [Reference](https://cli.internetcomputer.org/1.1/reference/index.md): Complete technical specifications including CLI commands, icp.yaml configuration schema, canister settings, and environment variables.
 
 ## Other
 
-- [Migrating from dfx](https://cli.internetcomputer.org/1.0/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
-- [Upgrading from icp-cli 0.2](https://cli.internetcomputer.org/1.0/migration/upgrading-from-v0-2.md): Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.
+- [Migrating from dfx](https://cli.internetcomputer.org/1.1/migration/from-dfx.md): Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.
+- [Upgrading from icp-cli 0.2](https://cli.internetcomputer.org/1.1/migration/upgrading-from-v0-2.md): Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.
 
 
 ---
@@ -519,6 +520,12 @@ If you prefer not to use canister environment variables:
 1. **Init arguments** — Pass canister IDs as initialization parameters
 2. **Configuration** — Store IDs in canister state during setup
 
+## Dependency Projects
+
+A project can vendor another `icp` project as a dependency. IDs are injected per project scope: your canisters see the exposed dependency canisters under an alias (`PUBLIC_CANISTER_ID:openemail:backend`), while the dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …). This per-project scoping means vendored code behaves the same whether deployed on its own or as a dependency.
+
+See [Project Dependencies](project-dependencies.md) for how to declare a dependency, deploy it as part of a workspace, and share a single set of canister IDs.
+
 ## Custom Canister Environment Variables
 
 Beyond automatic `PUBLIC_CANISTER_ID:*` variables, you can define custom canister environment variables in `icp.yaml`. See the [Environment Variables Reference](../reference/environment-variables.md#custom-variables) for configuration syntax.
@@ -605,6 +612,7 @@ networks:
   - name: testnet
     mode: connected
     url: https://testnet.ic0.app
+    root-key: fetch
 ```
 
 Use connected networks for shared testnets and production.
@@ -617,6 +625,7 @@ networks:
     mode: connected
     api-url: https://api.testnet.example.com
     http-gateway-url: https://testnet.example.com
+    root-key: fetch
 ```
 
 If `http-gateway-url` is omitted, canister URLs will not be printed during deploy operations.
@@ -789,6 +798,7 @@ Understanding how icp-cli organizes and manages your project.
 - [Recipes](recipes.md) — Templated, reusable build configurations
 - [Sync Plugins](sync-plugins.md) — Sandboxed WebAssembly components that run during the sync phase
 - [Canister Discovery](canister-discovery.md) — How canisters discover each other
+- [Project Dependencies](project-dependencies.md) — Depending on other vendored icp projects and deploying them as a workspace
 - [Binding Generation](binding-generation.md) — Type-safe canister interfaces
 
 ## Quick Reference
@@ -802,6 +812,149 @@ Understanding how icp-cli organizes and manages your project.
 | **Recipe** | A Handlebars template that generates build and sync configuration |
 | **Sync plugin** | A sandboxed WebAssembly component that runs post-deployment logic during `icp sync` |
 | **Principal** | A public identifier for an identity or canister on the Internet Computer |
+
+
+---
+
+# Project Dependencies
+
+An `icp` project can build on top of another `icp` project — a **dependency** — whose source is vendored into it, typically as a git submodule. The dependency stays a complete, standalone project: it can be developed and deployed on its own, and it does not need to know it is being consumed.
+
+This supports two related workflows:
+
+- **Reuse** — build on another project's canisters (your canisters call theirs).
+- **Monorepo / workspace** — develop several projects together and deploy them onto one network with a single shared set of canister IDs.
+
+## Declaring a dependency
+
+Add a top-level `dependencies:` block to your `icp.yaml`:
+
+```yaml
+dependencies:
+  - name: openemail            # local alias — namespaces the dependency's canister IDs
+    path: ./vendor/openemail   # directory containing the dependency's icp.yaml
+    canisters: [backend]       # which of its canisters to expose (omit to expose all)
+```
+
+## What gets deployed
+
+`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+
+## Canister ID injection
+
+Each canister receives canister IDs from the perspective of the project that owns it. Your canisters see:
+
+- their own canisters by name — `PUBLIC_CANISTER_ID:backend`
+- each **exposed** dependency canister under the alias — `PUBLIC_CANISTER_ID:openemail:backend`
+
+The dependency's own canisters keep their standalone view (`PUBLIC_CANISTER_ID:backend`, …), so vendored code behaves identically whether deployed on its own or through your project. See [Canister Discovery](canister-discovery.md) for the injection mechanism.
+
+## Addressing dependency canisters
+
+Because two projects may each define a `backend`, imported canisters are keyed by their path relative to the workspace root, for example `vendor/openemail:backend`. Use that name anywhere a canister name is accepted:
+
+```bash
+icp canister status "vendor/openemail:backend"
+icp deploy "vendor/openemail:backend"
+```
+
+Canister names and dependency aliases must contain only ASCII letters, digits, `_`, and `-`. This keeps them safe to reuse as store-key segments, `PUBLIC_CANISTER_ID` env-var names, URL subdomains, and archive paths; `:` in particular is reserved as the namespace separator.
+
+## Deploy URLs
+
+`icp deploy` prints a clickable URL for every canister it deploys, including a dependency's. A canister that serves the `http_request` endpoint gets a **frontend URL**; any other canister gets a **Candid UI URL**.
+
+On a local network, a dependency canister's frontend subdomain is namespaced by the **alias** (not the store-key path), so it stays short and readable:
+
+```
+Deployed canisters:
+  frontend: http://frontend.local.localhost:8000/
+  vendor/openemail:frontend: http://frontend.openemail.local.localhost:8000/
+  vendor/openemail:backend (Candid UI): http://<candid-ui>.localhost:8000/?id=<id>
+```
+
+A transitive dependency uses its full alias chain (`frontend.libfoo.openemail.<env>.localhost`). A [shared dependency](#shared-dependencies) is deployed once but reached through more than one alias chain, so it prints **one URL per chain**, each resolving to the same canister:
+
+```
+  umbrella/openemail:frontend: http://frontend.openemail.service-a.local.localhost:8000/
+  umbrella/openemail:frontend: http://frontend.openemail.service-b.local.localhost:8000/
+```
+
+## Running commands inside a dependency (the workspace)
+
+Vendored dependencies form a **workspace**. When you run an `icp` command from inside a vendored project, icp-cli walks **up** the directory tree to the outermost project that declares the one you are in as a dependency and treats it as the **workspace root**. The network, environments, and the canister-ID store all come from that root, so there is a single source of truth for canister IDs no matter where you run from.
+
+```
+app/
+  icp.yaml                 # depends on ./vendor/openemail
+  vendor/
+    openemail/
+      icp.yaml             # a standalone project
+```
+
+- `cd app && icp deploy` — deploys `app` and `openemail` into app's environment.
+- `cd app/vendor/openemail && icp deploy` — resolves up to `app` and deploys **only openemail's** canisters into app's environment and ID store. The IDs are the same ones app's canisters were wired to, so iterating on a vendored dependency in place does not fork a separate deployment.
+
+When a command resolves to a workspace root above the project you are standing in, icp-cli announces the resolved root so the behavior is visible.
+
+Resolution is **bounded**: an ancestor is adopted only if it (transitively) declares your project, so an unrelated `icp.yaml` higher up never captures your project. A dependency cloned on its own has no declaring ancestor and behaves as its own root.
+
+### Deploying part of a workspace
+
+From inside a member, `icp deploy` with no canister names defaults to **that member's own canisters**. Deploy the whole workspace by running from the root, or target canisters explicitly by their namespaced names from anywhere.
+
+Because a member-scoped deploy does not redeploy the member's dependencies, it fails with a clear error if any dependency canister it is wired to has not been deployed in the workspace yet — deploy from the workspace root first so those IDs exist.
+
+### Setting the root explicitly
+
+Force the workspace root with the `--project-root-override` flag or the `ICP_PROJECT_ROOT` environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.
+
+## Environments across a workspace
+
+The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
+
+A dependency's own same-named environment still contributes its **per-canister settings and init args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
+
+1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
+2. the dependency's own environment configuration
+3. the canister's base settings
+
+Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
+
+```yaml
+# in the dependency's icp.yaml
+environments:
+  - name: staging
+```
+
+`local` and `ic` are implicit for every project, so they never need to be declared.
+
+## Shared dependencies
+
+If two projects in a workspace depend on the same directory — for example two services that both vendor `../openemail` — it resolves to **one** instance, built and deployed once and shared by both. Identity is the resolved directory on disk, so two independent copies at different paths stay separate.
+
+## Keeping a dependency self-contained
+
+A vendored project must remain a complete `icp` project: it never references its parent, and you can copy or clone it elsewhere and it still works on its own. Vendoring may require [aligning environment names](#environments-across-a-workspace), but never changes to how the dependency finds its own canisters.
+
+## Limitations
+
+- icp-cli deploys a parent-owned copy of each dependency; binding directly to an already-deployed on-chain canister is not yet supported.
+- Candid and binding generation for dependencies are out of scope — each canister generates the bindings it needs itself. See [Binding Generation](binding-generation.md).
+
+## Examples
+
+- [project-dependency](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency) — a single vendored dependency.
+- [project-dependency-shared](https://github.com/dfinity/icp-cli/tree/main/examples/icp-project-dependency-shared) — a shared dependency across sibling services.
+
+## See Also
+
+- [Canister Discovery](canister-discovery.md) — How canister IDs are injected
+- [Environments and Networks](environments.md) — Deployment targets and how they relate
+- [Project Model](project-model.md) — How icp-cli discovers and consolidates configuration
+- [Configuration Reference](../reference/configuration.md) — `icp.yaml` fields
+
+[Browse all documentation →](../index.md)
 
 
 ---
@@ -875,6 +1028,7 @@ networks:
     configuration:
       mode: connected
       url: https://icp-api.io
+      root-key: mainnet
   - name: local
     configuration:
       mode: managed
@@ -4842,6 +4996,84 @@ This works with any ICRC-1 compatible token ledger on the Internet Computer.
 
 **Finding Token Ledger IDs:** You can find ledger canister IDs for various tokens on the [ICP Dashboard](https://dashboard.internetcomputer.org/tokens).
 
+## Approving Token Spending (Allowances)
+
+Beyond direct transfers, ICP and ICRC-2 compatible tokens support *allowances*: you authorize another principal — the **spender**, typically a canister — to transfer a limited amount of tokens from your account on your behalf. This is the foundation for many payment and recurring-billing flows, where a canister pulls funds only when needed (for example, an exchange platform settling a trade or a service charging per use) rather than requiring you to send tokens up front.
+
+Allowances follow the [ICRC-2 standard](https://docs.internetcomputer.org/references/digital-asset-standards/#icrc-2-approve-and-transfer-from) and work with any ICRC-2 compatible ledger, including the ICP ledger.
+
+### Granting an Allowance
+
+Use `icp token approve` to authorize a spender:
+
+```bash
+# Approve a canister to spend up to 5 ICP on your behalf
+icp token approve 5 <SPENDER> -n ic
+
+# Approve 0.01 ckBTC (any ICRC-2 ledger, by canister id)
+icp token mxzaz-hqaaa-aaaar-qaada-cai approve 0.01 <SPENDER> -n ic
+```
+
+`<SPENDER>` is the principal you are authorizing (usually a canister ID). The amount is in whole tokens and supports the same [human-readable suffixes](#amount-format) as transfers.
+
+**Approvals overwrite, they do not add.** Each `approve` call *sets* the allowance to the amount you specify, replacing any previous value. Approving `5` and then `2` leaves an allowance of `2`, not `7`. To revoke an allowance, approve `0`:
+
+```bash
+icp token approve 0 <SPENDER> -n ic
+```
+
+The allowance is granted from your account, which pays the standard ledger fee (0.0001 ICP for the ICP ledger).
+
+### Setting an Expiry
+
+For safety, you can make an allowance expire automatically with `--expires-in`. It accepts a relative duration (suffixes `s`, `m`, `h`, `d`, `w`; a bare number is seconds), the same format used elsewhere in the CLI:
+
+```bash
+# Allow spending for the next 24 hours only
+icp token approve 5 <SPENDER> --expires-in 24h -n ic
+
+# Expire in 30 days
+icp token approve 5 <SPENDER> --expires-in 30d -n ic
+```
+
+A short expiry limits your exposure if the spender is ever compromised. Without `--expires-in`, the allowance stays in effect until you change or revoke it.
+
+### Checking an Allowance
+
+Use `icp token allowance` to see how much a spender is currently authorized to transfer:
+
+```bash
+# Allowance you granted to a spender
+icp token allowance <SPENDER> -n ic
+```
+
+This is a read-only query, so you can inspect any allowance — not just your own. Use `--of-principal` to look up the allowance another account granted:
+
+```bash
+# Allowance that <OWNER> granted to <SPENDER>
+icp token allowance <SPENDER> --of-principal <OWNER> -n ic
+```
+
+The output includes the expiry, if one was set.
+
+### Allowances with Subaccounts
+
+Both commands accept [subaccount](#subaccounts) flags, specified as hex strings just like `balance` and `transfer`:
+
+| Flag | Command | Meaning |
+|------|---------|---------|
+| `--from-subaccount <hex>` | `approve` | Your subaccount the allowance is granted from (the account debited) |
+| `--subaccount <hex>` | `allowance` | The owner subaccount that granted the allowance |
+| `--spender-subaccount <hex>` | both | The spender's subaccount |
+
+```bash
+# Approve from your subaccount 1, to the spender's subaccount 2
+icp token approve 5 <SPENDER> --from-subaccount 1 --spender-subaccount 2 -n ic
+
+# Check that same allowance
+icp token allowance <SPENDER> --subaccount 1 --spender-subaccount 2 -n ic
+```
+
 ## Transferring Cycles
 
 Transfer cycles directly to another principal via the cycles ledger:
@@ -5699,6 +5931,7 @@ networks:
   - name: staging
     mode: connected
     url: https://icp-api.io
+    root-key: mainnet
 
 environments:
   - name: staging
@@ -5758,7 +5991,7 @@ networks:
 - dfx's `"type": "ephemeral"` maps to icp-cli's `mode: managed` (local networks that icp-cli controls)
 - dfx's `"providers"` array (which can list multiple URLs for redundancy) becomes a single `url` field in icp-cli
 - dfx's `"bind"` address for local networks maps to icp-cli's `gateway.bind` and `gateway.port`
-- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly in the configuration for testnets (connected networks). For local managed networks, icp-cli retrieves the root key from the network launcher. The root key is the public key used to verify responses from the network. Explicit configuration ensures the root key comes from a trusted source rather than the network itself.
+- **Root key handling**: dfx automatically fetches the root key from non-mainnet networks at runtime. icp-cli requires you to specify the `root-key` explicitly for connected networks, with one of three values: `mainnet` (use the canonical mainnet key — handy for a custom boundary node), `fetch` (fetch it from the network on each use — the equivalent of dfx's automatic behavior, trust-on-first-use and unverified), or a hex-encoded key to pin. For local managed networks, icp-cli retrieves the root key from the network launcher. Requiring an explicit choice means you opt into fetching rather than getting it silently.
 
 **Note:** icp-cli uses `https://icp-api.io` as the default IC mainnet URL, while dfx currently uses `https://icp0.io`. Both URLs point to the same IC mainnet, but `https://icp-api.io` is the recommended API gateway. The implicit `ic` network in icp-cli is configured with `https://icp-api.io`.
 
@@ -6718,6 +6951,8 @@ This document contains the help content for the `icp` command-line program.
 * [`icp token`↴](#icp-token)
 * [`icp token balance`↴](#icp-token-balance)
 * [`icp token transfer`↴](#icp-token-transfer)
+* [`icp token approve`↴](#icp-token-approve)
+* [`icp token allowance`↴](#icp-token-allowance)
 
 ## `icp`
 
@@ -6740,7 +6975,7 @@ This document contains the help content for the `icp` command-line program.
 
 ###### **Options:**
 
-* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up until an icp.yaml file is found
+* `--project-root-override <PROJECT_ROOT_OVERRIDE>` — Directory to use as your project root directory. If not specified the directory structure is traversed up to the workspace root (the top-most project that declares the one you are in as a dependency)
 * `--debug` — Enable debug logging
 
   Default value: `false`
@@ -6804,7 +7039,7 @@ Make a canister call
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--args-file <ARGS_FILE>` — Path to a file containing call arguments
@@ -6880,7 +7115,7 @@ Examples:
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--controller <CONTROLLER>` — One or more controllers for the canister. Repeat `--controller` to specify multiple
@@ -6903,7 +7138,9 @@ Examples:
 
 ## `icp canister delete`
 
-Delete a canister from a network
+Delete a canister from a network.
+
+Cycles will be sent to the caller via the cycles ledger. This is done by installing a temporary shim canister.
 
 **Usage:** `icp canister delete [OPTIONS] <CANISTER>`
 
@@ -6914,10 +7151,11 @@ Delete a canister from a network
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
+* `--no-recover-cycles` — Skip recovering the canister's liquid cycles to your cycles-ledger account before deletion (they are burned instead)
 
 
 
@@ -6970,7 +7208,7 @@ Install a built WASM to a canister on a network
 
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check and the dangerous-operation prompt for `--wasm-memory-persistence replace`
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -7005,7 +7243,7 @@ Fetch and display canister logs
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--follow` — Continuously fetch and display new logs until interrupted with Ctrl+C
@@ -7034,7 +7272,7 @@ Read a metadata section from a canister
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -7054,7 +7292,7 @@ Migrate a canister ID from one subnet to another
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — The canister to replace with the source canister's ID
@@ -7094,7 +7332,7 @@ Queries the canister_status endpoint of the management canister and displays onl
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Format output as JSON
@@ -7115,7 +7353,7 @@ Change a canister's settings to specified values
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-f`, `--force` — Force the operation without confirmation prompts
@@ -7156,7 +7394,7 @@ Synchronize a canister's settings with those defined in the project
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
@@ -7193,7 +7431,7 @@ Create a snapshot of a canister's state
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--replace <REPLACE>` — Replace an existing snapshot instead of creating a new one. The old snapshot will be deleted once the new one is successfully created
@@ -7217,7 +7455,7 @@ Delete a canister snapshot
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -7238,7 +7476,7 @@ Download a snapshot to local disk
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-o`, `--output <OUTPUT>` — Output directory for the snapshot files
@@ -7260,7 +7498,7 @@ List all snapshots for a canister
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -7283,7 +7521,7 @@ Restore a canister from a snapshot
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
@@ -7303,7 +7541,7 @@ Upload a snapshot from local disk
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--input <INPUT>` — Input directory containing the snapshot files
@@ -7328,7 +7566,7 @@ Start a canister on a network
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -7365,7 +7603,7 @@ Examples:
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-i`, `--id-only` — Only print the canister ids
@@ -7388,7 +7626,7 @@ Stop a canister on a network
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
@@ -7409,7 +7647,7 @@ Top up a canister with cycles
 
 * `--amount <AMOUNT>` — Amount of cycles to top up. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 
@@ -7438,7 +7676,7 @@ Display the cycles balance
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -7463,7 +7701,7 @@ Exactly one of --icp or --cycles must be provided.
 * `--from-subaccount <FROM_SUBACCOUNT>` — Subaccount to withdraw the ICP from
 * `--to-subaccount <TO_SUBACCOUNT>` — Subaccount to deposit the cycles to
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -7486,7 +7724,7 @@ Transfer cycles to another principal
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer cycles from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
@@ -8288,6 +8526,8 @@ Perform token transactions
 
 * `balance` — Display the token balance on the ledger (default token: icp)
 * `transfer` — Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
+* `approve` — Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+* `allowance` — Display the allowance granted to a spender (ICRC-2) (default token: icp)
 
 ###### **Arguments:**
 
@@ -8306,7 +8546,7 @@ Display the token balance on the ledger (default token: icp)
 ###### **Options:**
 
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--subaccount <SUBACCOUNT>` — The subaccount to check the balance for
@@ -8332,11 +8572,64 @@ Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 * `--to-subaccount <TO_SUBACCOUNT>` — The subaccount to transfer to (only if the receiver is a principal)
 * `--from-subaccount <FROM_SUBACCOUNT>` — The subaccount to transfer from
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
-* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token approve`
+
+Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
+
+Sets the spender's allowance to the given amount, overwriting any existing allowance (this is a set, not an increment). The allowance is granted from the calling identity's account, which is charged the ledger's approval fee, and can optionally be given an expiry with `--expires-in`. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] approve [OPTIONS] <AMOUNT> <SPENDER>`
+
+###### **Arguments:**
+
+* `<AMOUNT>` — The allowance amount, in whole tokens (e.g. `1.5`), the spender may transfer. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `<SPENDER>` — Principal of the spender being granted the allowance
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--from-subaccount <FROM_SUBACCOUNT>` — The caller's subaccount to grant the allowance from (the account debited), as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--expires-in <DURATION>` — Expire the allowance after this duration from now, e.g. `24h`, `30d` (suffixes: s, m, h, d, w; a bare number is seconds). Never expires if omitted
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the block index
+
+
+
+## `icp token allowance`
+
+Display the allowance granted to a spender (ICRC-2) (default token: icp)
+
+This is a read-only query that works for any owner/spender pair, including accounts you do not control (use `--of-principal` to set the owner). The amount is shown in whole tokens, along with an expiry if one was set. Works with any ICRC-2 ledger, referenced by a known token name or a ledger canister id.
+
+**Usage:** `icp token [TOKEN|LEDGER_ID] allowance [OPTIONS] <SPENDER>`
+
+###### **Arguments:**
+
+* `<SPENDER>` — Principal of the spender whose allowance to look up
+
+###### **Options:**
+
+* `--spender-subaccount <SPENDER_SUBACCOUNT>` — The spender's subaccount, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--subaccount <SUBACCOUNT>` — The owner's subaccount that granted the allowance, as a hex string (32 bytes, left-padded). Defaults to the default subaccount
+* `--of-principal <OF_PRINCIPAL>` — The allowance owner to look up, instead of the current identity. Lets you inspect allowances granted by any principal
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the allowance amount
 
 
 
@@ -8643,7 +8936,7 @@ networks:
   - name: testnet
     mode: connected
     url: https://testnet.ic0.app
-    root-key: <hex-encoded-key>  # For non-mainnet
+    root-key: fetch  # mainnet | fetch | <hex-encoded-key>
 ```
 
 | Property | Type | Required | Description |
@@ -8651,7 +8944,15 @@ networks:
 | `name` | string | Yes | Network identifier |
 | `mode` | string | Yes | `connected` |
 | `url` | string | Yes | Network endpoint URL |
-| `root-key` | string | No | Hex-encoded root key (non-mainnet only) |
+| `root-key` | string | Yes | How to obtain the root key: see below |
+
+The `root-key` is the public key used to verify responses from the network, and is required for connected networks. It accepts one of:
+
+- **`mainnet`** — use the canonical IC mainnet root key. Use this to reach mainnet through a non-default boundary node without repeating the key literal; responses are still fully verified against the real mainnet key.
+- **`fetch`** — fetch the root key from the network on each use. This is trust-on-first-use and does **not** verify the key's provenance, so only use it for testnets that you (or someone you trust) operate. `icp` prints a warning whenever it fetches, and `network status` labels such a key as `fetched`.
+- **a 266-character hex-encoded key** — pin a specific root key.
+
+> The built-in `ic` network always uses the mainnet root key and cannot be redefined.
 
 ### Docker Network
 

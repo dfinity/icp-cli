@@ -183,7 +183,11 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     .await?;
 
     // Ensure the selected canisters exist
-    info!("Ensuring canisters exist:");
+    if args.no_create {
+        info!("Checking for canisters:");
+    } else {
+        info!("Creating canisters:");
+    }
 
     let env = ctx
         .get_environment(&environment_selection)

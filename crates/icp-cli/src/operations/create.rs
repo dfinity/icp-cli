@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
@@ -8,7 +8,8 @@ use ic_agent::{
     agent::{Subnet, SubnetType},
 };
 use ic_ledger_types::{
-    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
+    AccountIdentifier, Memo, Subaccount, Timestamp, Tokens, TransferArgs, TransferError,
+    TransferResult,
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
@@ -29,7 +30,7 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
-use tracing::warn;
+use tracing::{info, warn};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -106,6 +107,8 @@ pub enum CreateOperationError {
 const NOTIFY_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 /// Delay between `notify_create_canister` retries.
 const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+/// How many times to attempt the funding transfer before giving up.
+const TRANSFER_MAX_ATTEMPTS: u32 = 3;
 
 /// The outcome of a single `notify_create_canister` attempt.
 enum NotifyStep {
@@ -122,7 +125,14 @@ pub enum CreateFunding {
     /// Attach cycles from the cycles ledger (or provisional/proxy creation).
     Cycles(u128),
     /// Convert ICP to cycles through the cycles minting canister (CMC).
-    Icp(BigDecimal),
+    Icp {
+        /// Amount of ICP to convert into cycles.
+        amount: BigDecimal,
+        /// Identity/network/environment flags to append to the CMC recovery
+        /// command, so a timed-out or interrupted creation can be finished by
+        /// pasting the printed command verbatim.
+        recovery_flags: String,
+    },
 }
 
 /// Determines how a new canister is created.
@@ -186,8 +196,12 @@ impl CreateOperation {
     ) -> Result<Principal, CreateOperationError> {
         // Funding with ICP always goes through the CMC, which handles subnet
         // selection and payment itself.
-        if let CreateFunding::Icp(icp) = &self.inner.funding {
-            return self.create_cmc(settings, icp).await;
+        if let CreateFunding::Icp {
+            amount,
+            recovery_flags,
+        } = &self.inner.funding
+        {
+            return self.create_cmc(settings, amount, recovery_flags).await;
         }
 
         if let CreateTarget::Proxy(proxy) = self.inner.target {
@@ -217,7 +231,7 @@ impl CreateOperation {
     fn cycles(&self) -> u128 {
         match self.inner.funding {
             CreateFunding::Cycles(cycles) => cycles,
-            CreateFunding::Icp(_) => {
+            CreateFunding::Icp { .. } => {
                 panic!("cycles() called on an ICP-funded create operation")
             }
         }
@@ -321,6 +335,7 @@ impl CreateOperation {
         &self,
         settings: &CanisterSettings,
         icp: &BigDecimal,
+        recovery_flags: &str,
     ) -> Result<Principal, CreateOperationError> {
         let caller = self
             .inner
@@ -348,22 +363,52 @@ impl CreateOperation {
             &CYCLES_MINTING_CANISTER_PRINCIPAL,
             &Subaccount::from(caller),
         );
+        // Fix the creation time so a retried transfer (after a lost response) is
+        // recognized as a duplicate by the ledger, which then returns the original
+        // block index instead of moving the ICP a second time.
+        let created_at_time = Timestamp {
+            timestamp_nanos: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time is before the Unix epoch")
+                .as_nanos() as u64,
+        };
         let transfer_args = TransferArgs {
             memo: Memo(MEMO_CREATE_CANISTER),
             amount: Tokens::from_e8s(e8s),
             fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
             from_subaccount: None,
             to,
-            created_at_time: None,
+            created_at_time: Some(created_at_time),
         };
-        let transfer_result = self
-            .inner
-            .agent
-            .update(&ICP_LEDGER_PRINCIPAL, "transfer")
-            .with_arg(Encode!(&transfer_args).context(CandidEncodeSnafu)?)
-            .call_and_wait()
-            .await
-            .context(TransferIcpSnafu)?;
+        // Encode once: the argument (including the fixed timestamp) is identical
+        // across retries, which is exactly what makes the transfer idempotent.
+        let transfer_bytes = Encode!(&transfer_args).context(CandidEncodeSnafu)?;
+
+        // Retry transient transport failures. Because created_at_time is fixed, a
+        // retry after a lost response is deduplicated by the ledger (returning
+        // TxDuplicate below) rather than transferring the ICP again.
+        let mut attempt = 1;
+        let transfer_result = loop {
+            match self
+                .inner
+                .agent
+                .update(&ICP_LEDGER_PRINCIPAL, "transfer")
+                .with_arg(transfer_bytes.clone())
+                .call_and_wait()
+                .await
+            {
+                Ok(bytes) => break bytes,
+                Err(err) if attempt < TRANSFER_MAX_ATTEMPTS => {
+                    warn!(
+                        "ICP transfer to the cycles minting canister failed \
+                         (attempt {attempt}), retrying: {err}"
+                    );
+                    attempt += 1;
+                    sleep(NOTIFY_RETRY_INTERVAL).await;
+                }
+                Err(err) => return Err(err).context(TransferIcpSnafu),
+            }
+        };
         let block_index =
             match Decode!(&transfer_result, TransferResult).context(CandidDecodeSnafu)? {
                 Ok(block_index) => block_index,
@@ -395,7 +440,11 @@ impl CreateOperation {
         // retry until it confirms, up to a one-minute budget. On timeout or
         // interruption we surface the transfer's block height and the command to
         // finish creation manually, so the paid-for ICP is never stranded.
+        info!("Waiting for the cycles minting canister to create the canister...");
         let notify_loop = async {
+            // Only log the CMC's status when it changes, so a normal wait (which
+            // repeats `Processing`) does not flood the output.
+            let mut last_message: Option<String> = None;
             loop {
                 match self.notify_create(&arg_bytes).await? {
                     NotifyStep::Created(canister_id) => return Ok(canister_id),
@@ -403,9 +452,10 @@ impl CreateOperation {
                         return NotifyCreateFailedSnafu { message }.fail();
                     }
                     NotifyStep::Retry(message) => {
-                        warn!(
-                            "cycles minting canister has not created the canister yet: {message}"
-                        );
+                        if last_message.as_deref() != Some(message.as_str()) {
+                            info!("cycles minting canister is not ready yet: {message}");
+                            last_message = Some(message);
+                        }
                         sleep(NOTIFY_RETRY_INTERVAL).await;
                     }
                 }
@@ -416,12 +466,12 @@ impl CreateOperation {
             result = notify_loop => result,
             _ = sleep(NOTIFY_RETRY_TIMEOUT) => NotifyCreateTimeoutSnafu {
                 height: block_index,
-                command: notify_recovery_command(&arg),
+                command: notify_recovery_command(&arg, recovery_flags),
             }
             .fail(),
             _ = stop_signal() => NotifyCreateInterruptedSnafu {
                 height: block_index,
-                command: notify_recovery_command(&arg),
+                command: notify_recovery_command(&arg, recovery_flags),
             }
             .fail(),
         }
@@ -503,11 +553,15 @@ impl CreateOperation {
 
 /// Builds the `icp canister call` command that re-runs `notify_create_canister`
 /// for an already-paid transfer, so the user can finish a creation that timed out
-/// or was interrupted. Add the network/identity flags used for the original call.
+/// or was interrupted.
+///
+/// `recovery_flags` carries the identity/network/environment selection used for
+/// the original call, so the printed command targets the same network and identity
+/// and can be pasted verbatim.
 ///
 /// The argument is rendered from the exact typed `arg`, so every requested setting
 /// is preserved and the manual call matches the original request.
-fn notify_recovery_command(arg: &NotifyCreateCanisterArg) -> String {
+fn notify_recovery_command(arg: &NotifyCreateCanisterArg, recovery_flags: &str) -> String {
     // Rendering a value we just constructed should never fail; fall back to the
     // essential fields if candid's textual conversion ever does.
     let rendered = IDLValue::try_from_candid_type(arg)
@@ -518,10 +572,18 @@ fn notify_recovery_command(arg: &NotifyCreateCanisterArg) -> String {
                 arg.block_index, arg.controller
             )
         });
-    // Single-quote the candid argument for the shell, escaping any embedded single
-    // quotes with the POSIX `'\''` idiom so the command is safe to paste as-is.
-    let escaped = rendered.replace('\'', r"'\''");
-    format!("icp canister call {CYCLES_MINTING_CANISTER_CID} notify_create_canister '{escaped}'")
+    // Single-quote the candid argument (and any selection flags) for the shell so
+    // the command is safe to paste as-is.
+    format!(
+        "icp canister call {CYCLES_MINTING_CANISTER_CID} notify_create_canister {}{recovery_flags}",
+        shell_quote(&rendered)
+    )
+}
+
+/// Single-quotes a value for safe pasting into a POSIX shell, escaping embedded
+/// single quotes with the `'\''` idiom.
+pub(crate) fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
@@ -564,7 +626,7 @@ mod tests {
             }),
         };
 
-        let command = notify_recovery_command(&arg);
+        let command = notify_recovery_command(&arg, " --identity alice --network ic");
 
         // The command targets the CMC's notify method with named candid fields, and
         // every requested setting survives the round-trip (not just controllers).
@@ -574,5 +636,20 @@ mod tests {
         assert!(command.contains("memory_allocation = opt (4_294_967_296"));
         assert!(command.contains("freezing_threshold = opt (2_592_000"));
         assert!(command.contains("reserved_cycles_limit = opt (1_000_000_000"));
+
+        // The identity/network selection is appended so the printed command targets
+        // the same network and identity as the original call.
+        assert!(
+            command
+                .trim_end()
+                .ends_with(" --identity alice --network ic")
+        );
+    }
+
+    #[test]
+    fn shell_quote_escapes_single_quotes() {
+        assert_eq!(shell_quote("plain"), "'plain'");
+        // An embedded single quote is closed, escaped, and reopened via `'\''`.
+        assert_eq!(shell_quote("a'b"), r"'a'\''b'");
     }
 }

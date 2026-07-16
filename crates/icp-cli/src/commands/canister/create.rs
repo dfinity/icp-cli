@@ -6,7 +6,8 @@ use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::canister::resolve_controllers;
-use icp::context::Context;
+use icp::context::{Context, EnvironmentSelection, NetworkSelection};
+use icp::identity::IdentitySelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp::store_id::IdMapping;
 use icp::{Canister, context::CanisterSelection, prelude::*};
@@ -15,7 +16,7 @@ use tracing::{info, warn};
 
 use crate::{
     commands::args,
-    operations::create::{CreateFunding, CreateOperation, CreateTarget},
+    operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote},
 };
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -184,9 +185,47 @@ impl CreateArgs {
     /// CMC, otherwise the (defaulted) cycles amount is used via the cycles ledger.
     fn funding(&self) -> CreateFunding {
         match &self.with_icp {
-            Some(icp) => CreateFunding::Icp(icp.clone()),
+            Some(icp) => CreateFunding::Icp {
+                amount: icp.clone(),
+                recovery_flags: self.recovery_flags(),
+            },
             None => CreateFunding::Cycles(self.cycles.get()),
         }
+    }
+
+    /// Renders the identity/network/environment selection as CLI flags to append
+    /// to the CMC recovery command (see [`CreateFunding::Icp`]), so a timed-out or
+    /// interrupted creation can be finished by pasting the printed command as-is.
+    fn recovery_flags(&self) -> String {
+        let selections = self.cmd_args.selections();
+        let mut flags = String::new();
+        match selections.identity {
+            IdentitySelection::Default => {}
+            IdentitySelection::Anonymous => flags.push_str(" --identity anonymous"),
+            IdentitySelection::Named(name) => {
+                flags.push_str(&format!(" --identity {}", shell_quote(&name)));
+            }
+        }
+        match selections.network {
+            NetworkSelection::Default => {}
+            NetworkSelection::Named(name) => {
+                flags.push_str(&format!(" --network {}", shell_quote(&name)));
+            }
+            NetworkSelection::Url(url, root_key) => {
+                flags.push_str(&format!(
+                    " --network {} --root-key {}",
+                    shell_quote(url.as_str()),
+                    shell_quote(&String::from(root_key)),
+                ));
+            }
+        }
+        match selections.environment {
+            EnvironmentSelection::Default => {}
+            EnvironmentSelection::Named(name) => {
+                flags.push_str(&format!(" --environment {}", shell_quote(&name)));
+            }
+        }
+        flags
     }
 
     fn create_target(&self) -> CreateTarget {

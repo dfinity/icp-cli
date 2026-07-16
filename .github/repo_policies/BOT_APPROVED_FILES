@@ -11,3 +11,4 @@ rust-toolchain.toml
 CHANGELOG.md
 Cargo.toml
 Cargo.lock
+docs-site/versions.json

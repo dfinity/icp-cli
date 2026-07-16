@@ -182,9 +182,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     )
     .await?;
 
-    // Ensure the selected canisters exist
-    info!("Ensuring canisters exist:");
-
+    // Ensure the selected canisters exist, creating any that are missing.
     let env = ctx
         .get_environment(&environment_selection)
         .await
@@ -210,6 +208,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             canisters_to_create.iter().format(", ")
         );
     } else {
+        info!("Creating canisters:");
         let target = match (args.subnet, args.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),
             (_, Some(proxy)) => CreateTarget::Proxy(proxy),

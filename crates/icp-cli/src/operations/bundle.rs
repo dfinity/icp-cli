@@ -154,7 +154,7 @@ pub enum BundleError {
         source: serde_yaml::Error,
     },
 
-    #[snafu(display("`screenshots` in app manifest '{path}' must be a list of file paths"))]
+    #[snafu(display("`images` in app manifest '{path}' must be a list of file paths"))]
     ScreenshotsNotSequence { path: PathBuf },
 
     #[snafu(display("screenshot entries in app manifest '{path}' must be file path strings"))]
@@ -167,7 +167,7 @@ pub enum BundleError {
     ScreenshotEscapesProject { path: PathBuf, root: PathBuf },
 
     #[snafu(display(
-        "screenshots {paths:?} both map to the same bundle path 'screenshots/{sanitized}'; \
+        "images {paths:?} both map to the same bundle path 'images/{sanitized}'; \
          rename one so they use distinct file names"
     ))]
     ScreenshotNameCollision {
@@ -209,15 +209,15 @@ struct InitArgsFile {
 }
 
 /// The optional `icp_appmanifest.yaml` app-metadata file. We only understand its top-level
-/// `screenshots` list; all other keys are preserved semantically.
+/// `images` list; all other keys are preserved semantically.
 struct AppManifest {
     /// YAML to write at `APP_MANIFEST` in the archive. The original source text is used when
     /// no screenshot relocation is needed; otherwise the YAML is re-serialized (formatting/comments may change).
     yaml: String,
-    screenshots: Vec<ScreenshotFile>,
+    images: Vec<ScreenshotFile>,
 }
 
-/// A screenshot referenced from `icp_appmanifest.yaml`, relocated under `screenshots/` in the bundle.
+/// A screenshot referenced from `icp_appmanifest.yaml`, relocated under `images/` in the bundle.
 struct ScreenshotFile {
     src_path: PathBuf,
     archive_path: String,
@@ -567,8 +567,8 @@ async fn inline_environments(
     Ok((out, init_args_files))
 }
 
-/// Load `icp_appmanifest.yaml` if present, rewriting its top-level `screenshots` paths to point at
-/// copies relocated under `screenshots/` in the bundle. Returns `None` when the file is absent.
+/// Load `icp_appmanifest.yaml` if present, rewriting its top-level `images` paths to point at
+/// copies relocated under `images/` in the bundle. Returns `None` when the file is absent.
 fn prepare_app_manifest(
     project_dir: &Path,
     canonical_project_dir: &Path,
@@ -585,20 +585,20 @@ fn prepare_app_manifest(
         path: &manifest_path,
     })?;
 
-    let Some(screenshots_val) = doc.get_mut("screenshots") else {
-        // No screenshots to relocate; embed the file unchanged.
+    let Some(images_val) = doc.get_mut("images") else {
+        // No images to relocate; embed the file unchanged.
         return Ok(Some(AppManifest {
             yaml: raw,
-            screenshots: Vec::new(),
+            images: Vec::new(),
         }));
     };
-    let seq = screenshots_val
+    let seq = images_val
         .as_sequence_mut()
         .context(ScreenshotsNotSequenceSnafu {
             path: &manifest_path,
         })?;
 
-    let mut screenshots = Vec::with_capacity(seq.len());
+    let mut images = Vec::with_capacity(seq.len());
     // Maps a relocated archive name back to the canonical source and original path it came from,
     // so identical entries are deduplicated and distinct sources that flatten to the same name
     // are reported as a collision.
@@ -620,11 +620,11 @@ fn prepare_app_manifest(
             .fail();
         }
 
-        // Flatten into the top-level `screenshots/` folder by basename, sanitized the same way
+        // Flatten into the top-level `images/` folder by basename, sanitized the same way
         // canister name segments are.
         let base = canon.file_name().unwrap_or(orig.as_str());
         let sanitized = path_segment(base);
-        let archive_path = format!("screenshots/{sanitized}");
+        let archive_path = format!("images/{sanitized}");
 
         match seen.get(&sanitized) {
             Some((prev_canon, _)) if *prev_canon == canon => {}
@@ -635,7 +635,7 @@ fn prepare_app_manifest(
             }
             None => {
                 seen.insert(sanitized.clone(), (canon.clone(), orig.clone()));
-                screenshots.push(ScreenshotFile {
+                images.push(ScreenshotFile {
                     src_path: canon,
                     archive_path: archive_path.clone(),
                 });
@@ -646,7 +646,7 @@ fn prepare_app_manifest(
     }
 
     let yaml = serde_yaml::to_string(&doc).context(SerializeAppManifestSnafu)?;
-    Ok(Some(AppManifest { yaml, screenshots }))
+    Ok(Some(AppManifest { yaml, images }))
 }
 
 fn write_archive(
@@ -676,7 +676,7 @@ fn write_archive(
 
     if let Some(app) = app_manifest {
         append_bytes(&mut archive, APP_MANIFEST, app.yaml.as_bytes())?;
-        for shot in &app.screenshots {
+        for shot in &app.images {
             let data = fs::read(&shot.src_path).context(ReadScreenshotSnafu {
                 path: shot.src_path.clone(),
             })?;

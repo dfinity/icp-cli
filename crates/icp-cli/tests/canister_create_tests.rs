@@ -73,6 +73,69 @@ async fn canister_create() {
     );
 }
 
+/// Verifies that `canister create --with-icp` funds creation through the cycles
+/// minting canister (converting ICP to cycles) rather than the cycles ledger.
+#[tokio::test]
+async fn canister_create_with_icp() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Create the identity before starting the network so it is seeded with ICP.
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.create_identity("funded");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+
+    // Wait for network
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Spend ICP directly (no cycles are minted to the cycles ledger first), so the
+    // CMC create flow is exercised end to end.
+    icp_client.use_identity("funded");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--with-icp",
+            "5",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister was recorded and can be looked up.
+    let id_mapping_path = project_dir
+        .join(".icp")
+        .join("cache")
+        .join("mappings")
+        .join("random-environment.ids.json");
+    assert!(
+        id_mapping_path.exists(),
+        "ID mapping file should exist at {id_mapping_path}"
+    );
+}
+
 /// Verifies that `canister create --subnet <id>` creates the canister on the requested subnet.
 ///
 /// The network is configured with multiple application subnets so the placement is an actual

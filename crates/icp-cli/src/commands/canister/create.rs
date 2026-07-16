@@ -1,12 +1,14 @@
 use std::io::stdout;
 
 use anyhow::anyhow;
+use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::canister::resolve_controllers;
-use icp::context::Context;
-use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
+use icp::context::{Context, EnvironmentSelection, NetworkSelection};
+use icp::identity::IdentitySelection;
+use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp::store_id::IdMapping;
 use icp::{Canister, context::CanisterSelection, prelude::*};
 use serde::Serialize;
@@ -14,7 +16,7 @@ use tracing::{info, warn};
 
 use crate::{
     commands::args,
-    operations::create::{CreateOperation, CreateTarget},
+    operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote},
 };
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
@@ -85,6 +87,13 @@ pub(crate) struct CreateArgs {
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, default_value_t = CyclesAmount::from(DEFAULT_CANISTER_CYCLES))]
     pub(crate) cycles: CyclesAmount,
+
+    /// Amount of ICP to convert into cycles to fund canister creation.
+    /// Uses the cycles minting canister (CMC) instead of the cycles ledger.
+    /// Only needed for restricted system subnets.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, conflicts_with_all = ["cycles", "proxy"], value_parser = parse_token_amount)]
+    pub(crate) with_icp: Option<BigDecimal>,
 
     /// The subnet to create canisters on.
     #[arg(long, conflicts_with = "proxy")]
@@ -172,6 +181,53 @@ impl CreateArgs {
         (settings, unresolved)
     }
 
+    /// The funding source for creation: an explicit ICP amount routes through the
+    /// CMC, otherwise the (defaulted) cycles amount is used via the cycles ledger.
+    fn funding(&self) -> CreateFunding {
+        match &self.with_icp {
+            Some(icp) => CreateFunding::Icp {
+                amount: icp.clone(),
+                recovery_flags: self.recovery_flags(),
+            },
+            None => CreateFunding::Cycles(self.cycles.get()),
+        }
+    }
+
+    /// Renders the identity/network/environment selection as CLI flags to append
+    /// to the CMC recovery command (see [`CreateFunding::Icp`]), so a timed-out or
+    /// interrupted creation can be finished by pasting the printed command as-is.
+    fn recovery_flags(&self) -> String {
+        let selections = self.cmd_args.selections();
+        let mut flags = String::new();
+        match selections.identity {
+            IdentitySelection::Default => {}
+            IdentitySelection::Anonymous => flags.push_str(" --identity anonymous"),
+            IdentitySelection::Named(name) => {
+                flags.push_str(&format!(" --identity {}", shell_quote(&name)));
+            }
+        }
+        match selections.network {
+            NetworkSelection::Default => {}
+            NetworkSelection::Named(name) => {
+                flags.push_str(&format!(" --network {}", shell_quote(&name)));
+            }
+            NetworkSelection::Url(url, root_key) => {
+                flags.push_str(&format!(
+                    " --network {} --root-key {}",
+                    shell_quote(url.as_str()),
+                    shell_quote(&String::from(root_key)),
+                ));
+            }
+        }
+        match selections.environment {
+            EnvironmentSelection::Default => {}
+            EnvironmentSelection::Named(name) => {
+                flags.push_str(&format!(" --environment {}", shell_quote(&name)));
+            }
+        }
+        flags
+    }
+
     fn create_target(&self) -> CreateTarget {
         match (self.subnet, self.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),
@@ -238,7 +294,7 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .await?;
 
     let create_operation =
-        CreateOperation::new(agent, args.create_target(), args.cycles.get(), vec![]);
+        CreateOperation::new(agent, args.create_target(), args.funding(), vec![]);
 
     let canister_settings = args.canister_settings();
 
@@ -303,7 +359,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     let create_operation = CreateOperation::new(
         agent.clone(),
         args.create_target(),
-        args.cycles.get(),
+        args.funding(),
         ids.values().copied().collect(),
     );
 

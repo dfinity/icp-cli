@@ -89,6 +89,7 @@ pub(crate) struct CreateArgs {
 
     /// Amount of ICP to convert into cycles to fund canister creation.
     /// Uses the cycles minting canister (CMC) instead of the cycles ledger.
+    /// Only needed for restricted system subnets.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
     #[arg(long, conflicts_with_all = ["cycles", "proxy"], value_parser = parse_token_amount)]
     pub(crate) with_icp: Option<BigDecimal>,

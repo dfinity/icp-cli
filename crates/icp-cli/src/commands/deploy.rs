@@ -74,7 +74,7 @@ pub(crate) struct DeployArgs {
     pub(crate) cycles: CyclesAmount,
 
     /// If any canisters do not exist, error instead of creating them.
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["subnet", "cycles"])]
     pub(crate) no_create: bool,
 
     /// Skip confirmation prompts, including the Candid interface compatibility check.

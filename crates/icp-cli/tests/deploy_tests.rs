@@ -243,6 +243,26 @@ async fn deploy_no_create_succeeds_when_canister_exists() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
+/// `--no-create` conflicts with the creation-only flags (`--subnet`, `--cycles`)
+/// at the clap level, so no network setup is needed. The defaulted `--cycles`
+/// only conflicts when passed explicitly, which is what this exercises.
+#[tokio::test]
+async fn deploy_no_create_conflicts_with_creation_flags() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["deploy", "--no-create", "--cycles", "5t"])
+        .assert()
+        .failure()
+        .stderr(contains("--no-create").and(contains("--cycles")));
+
+    ctx.icp()
+        .args(["deploy", "--no-create", "--subnet", "aaaaa-aa"])
+        .assert()
+        .failure()
+        .stderr(contains("--no-create").and(contains("--subnet")));
+}
+
 #[tokio::test]
 async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();

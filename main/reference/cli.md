@@ -250,6 +250,7 @@ Examples:
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 
   Default value: `2000000000000`
+* `--with-icp <WITH_ICP>` — Amount of ICP to convert into cycles to fund canister creation. Uses the cycles minting canister (CMC) instead of the cycles ledger. Only needed for restricted system subnets. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--subnet <SUBNET>` — The subnet to create canisters on
 * `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
 

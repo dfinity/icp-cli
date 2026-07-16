@@ -182,8 +182,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     )
     .await?;
 
-    // Create the selected canisters
-    info!("Creating canisters:");
+    // Ensure the selected canisters exist
+    info!("Ensuring canisters exist:");
 
     let env = ctx
         .get_environment(&environment_selection)
@@ -203,9 +203,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .collect::<Vec<_>>();
 
     if canisters_to_create.is_empty() {
-        if !args.no_create {
-            info!("All canisters already exist");
-        }
+        info!("All canisters already exist");
     } else if args.no_create {
         bail!(
             "`--no-create` was specified but the following canisters do not exist: {}",

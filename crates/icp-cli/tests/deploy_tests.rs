@@ -133,6 +133,136 @@ async fn deploy() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
+/// `deploy --no-create` must refuse to create canisters that do not yet exist,
+/// failing with a message that names the missing canisters.
+#[tokio::test]
+async fn deploy_no_create_fails_when_canister_missing() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // The canister was never created, so --no-create must error instead of creating it.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--no-create",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "`--no-create` was specified but the following canisters do not exist: my-canister",
+        ));
+}
+
+/// `deploy --no-create` succeeds when the canister already exists: it skips
+/// creation and proceeds to install as normal.
+#[tokio::test]
+async fn deploy_no_create_succeeds_when_canister_exists() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // First deploy creates the canister.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // With the canister already created, --no-create has nothing to reject and succeeds.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--no-create",
+        ])
+        .assert()
+        .success();
+
+    // Confirm the canister is installed and callable.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "greet",
+            "(\"test\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, test!\")").trim());
+}
+
+/// `--no-create` conflicts with the creation-only flags (`--subnet`, `--cycles`)
+/// at the clap level, so no network setup is needed. The defaulted `--cycles`
+/// only conflicts when passed explicitly, which is what this exercises.
+#[tokio::test]
+async fn deploy_no_create_conflicts_with_creation_flags() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["deploy", "--no-create", "--cycles", "5t"])
+        .assert()
+        .failure()
+        .stderr(contains("--no-create").and(contains("--cycles")));
+
+    ctx.icp()
+        .args(["deploy", "--no-create", "--subnet", "aaaaa-aa"])
+        .assert()
+        .failure()
+        .stderr(contains("--no-create").and(contains("--subnet")));
+}
+
 #[tokio::test]
 async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();

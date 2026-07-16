@@ -74,21 +74,29 @@ else
 fi
 echo ""
 
-# Publish platform packages
+# Publish <dir>'s package unless that exact version is already on the registry,
+# so a rerun after a partial publish resumes instead of failing on a 403
+# ("cannot publish over the previously published version").
+publish_pkg() {
+  local dir="$1" name published
+  name=$(node -p "require('./$dir/package.json').name")
+  published=$(npm view "$name@$VERSION" version 2>/dev/null || true)
+  if [ -n "$published" ]; then
+    echo "✓ $name@$VERSION already published — skipping"
+    return 0
+  fi
+  ( cd "$dir" && npm publish --access public $BETA_TAG --provenance )
+  echo "✓ $name published"
+}
+
+# Publish platform packages first, then the main package last.
 for platform in "${PLATFORMS[@]}"; do
   echo "Publishing $platform..."
-  cd "$platform"
-  npm publish --access public $BETA_TAG --provenance
-  cd ..
-  echo "✓ $platform published"
+  publish_pkg "$platform"
 done
 
-# Publish main package
 echo "Publishing main package icp-cli..."
-cd icp-cli
-npm publish --access public $BETA_TAG --provenance
-cd ..
-echo "✓ icp-cli published"
+publish_pkg "icp-cli"
 
 echo ""
 echo "All packages published successfully!"

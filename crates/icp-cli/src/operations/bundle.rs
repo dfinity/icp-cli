@@ -155,22 +155,22 @@ pub enum BundleError {
     },
 
     #[snafu(display("`images` in app manifest '{path}' must be a list of file paths"))]
-    ScreenshotsNotSequence { path: PathBuf },
+    ImagesNotSequence { path: PathBuf },
 
-    #[snafu(display("screenshot entries in app manifest '{path}' must be file path strings"))]
-    ScreenshotNotString { path: PathBuf },
+    #[snafu(display("image entries in app manifest '{path}' must be file path strings"))]
+    ImageNotString { path: PathBuf },
 
     #[snafu(display(
-        "screenshot path '{path}' resolves outside the project directory '{root}'; \
+        "image path '{path}' resolves outside the project directory '{root}'; \
          bundles cannot reference files outside the project"
     ))]
-    ScreenshotEscapesProject { path: PathBuf, root: PathBuf },
+    ImageEscapesProject { path: PathBuf, root: PathBuf },
 
     #[snafu(display(
         "images {paths:?} both map to the same bundle path 'images/{sanitized}'; \
          rename one so they use distinct file names"
     ))]
-    ScreenshotNameCollision {
+    ImageNameCollision {
         sanitized: String,
         paths: Vec<String>,
     },
@@ -178,8 +178,8 @@ pub enum BundleError {
     #[snafu(display("failed to serialize app manifest"))]
     SerializeAppManifest { source: serde_yaml::Error },
 
-    #[snafu(display("failed to read screenshot '{path}'"))]
-    ReadScreenshot { path: PathBuf, source: fs::IoError },
+    #[snafu(display("failed to read image '{path}'"))]
+    ReadImage { path: PathBuf, source: fs::IoError },
 }
 
 /// In-memory bytes destined for a single tar entry.
@@ -212,13 +212,13 @@ struct InitArgsFile {
 /// `images` list; all other keys are preserved semantically.
 struct AppManifest {
     /// YAML to write at `APP_MANIFEST` in the archive. The original source text is used when
-    /// no screenshot relocation is needed; otherwise the YAML is re-serialized (formatting/comments may change).
+    /// no image relocation is needed; otherwise the YAML is re-serialized (formatting/comments may change).
     yaml: String,
-    images: Vec<ScreenshotFile>,
+    images: Vec<ImageFile>,
 }
 
-/// A screenshot referenced from `icp_appmanifest.yaml`, relocated under `images/` in the bundle.
-struct ScreenshotFile {
+/// A image referenced from `icp_appmanifest.yaml`, relocated under `images/` in the bundle.
+struct ImageFile {
     src_path: PathBuf,
     archive_path: String,
 }
@@ -594,7 +594,7 @@ fn prepare_app_manifest(
     };
     let seq = images_val
         .as_sequence_mut()
-        .context(ScreenshotsNotSequenceSnafu {
+        .context(ImagesNotSequenceSnafu {
             path: &manifest_path,
         })?;
 
@@ -606,14 +606,14 @@ fn prepare_app_manifest(
     for entry in seq.iter_mut() {
         let orig = entry
             .as_str()
-            .context(ScreenshotNotStringSnafu {
+            .context(ImageNotStringSnafu {
                 path: &manifest_path,
             })?
             .to_owned();
         let src = project_dir.join(&orig);
         let canon = canonicalize(&src)?;
         if !canon.starts_with(canonical_project_dir) {
-            return ScreenshotEscapesProjectSnafu {
+            return ImageEscapesProjectSnafu {
                 path: src,
                 root: canonical_project_dir.to_path_buf(),
             }
@@ -631,11 +631,11 @@ fn prepare_app_manifest(
             Some((_, prev_orig)) => {
                 let mut paths = vec![prev_orig.clone(), orig.clone()];
                 paths.sort();
-                return ScreenshotNameCollisionSnafu { sanitized, paths }.fail();
+                return ImageNameCollisionSnafu { sanitized, paths }.fail();
             }
             None => {
                 seen.insert(sanitized.clone(), (canon.clone(), orig.clone()));
-                images.push(ScreenshotFile {
+                images.push(ImageFile {
                     src_path: canon,
                     archive_path: archive_path.clone(),
                 });
@@ -677,7 +677,7 @@ fn write_archive(
     if let Some(app) = app_manifest {
         append_bytes(&mut archive, APP_MANIFEST, app.yaml.as_bytes())?;
         for shot in &app.images {
-            let data = fs::read(&shot.src_path).context(ReadScreenshotSnafu {
+            let data = fs::read(&shot.src_path).context(ReadImageSnafu {
                 path: shot.src_path.clone(),
             })?;
             append_bytes(&mut archive, &shot.archive_path, &data)?;

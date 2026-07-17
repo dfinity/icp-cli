@@ -849,7 +849,7 @@ fn bundle_includes_app_manifest_images() {
 
 /// Two images whose basenames collide under the flat `images/` folder must be rejected.
 #[test]
-fn bundle_rejects_screenshot_name_collision() {
+fn bundle_rejects_image_name_collision() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
@@ -885,10 +885,10 @@ fn bundle_rejects_screenshot_name_collision() {
         .stderr(contains("same bundle path").and(contains("shot.png")));
 }
 
-/// A screenshot path resolving outside the project directory must be rejected, like other bundle
+/// A image path resolving outside the project directory must be rejected, like other bundle
 /// sources.
 #[test]
-fn bundle_rejects_screenshot_outside_project() {
+fn bundle_rejects_image_outside_project() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
@@ -897,7 +897,7 @@ fn bundle_rejects_screenshot_outside_project() {
         .parent()
         .expect("project dir has no parent")
         .join("outside.png");
-    write(&outside, b"secret").expect("failed to write outside screenshot");
+    write(&outside, b"secret").expect("failed to write outside image");
 
     let pm = formatdoc! {r#"
         canisters:

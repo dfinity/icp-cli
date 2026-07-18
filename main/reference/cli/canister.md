@@ -10,6 +10,7 @@ Perform canister operations against a network
 * [`create`](canister-create.md) — Create a canister on a network
 * [`delete`](canister-delete.md) — Delete a canister from a network
 * [`install`](canister-install.md) — Install a built WASM to a canister on a network
+* [`link`](canister-link.md) — Link an existing canister to the project by recording its ID in the canister ID store
 * [`list`](canister-list.md) — List the canisters in an environment
 * [`logs`](canister-logs.md) — Fetch and display canister logs
 * [`metadata`](canister-metadata.md) — Read a metadata section from a canister

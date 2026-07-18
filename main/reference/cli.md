@@ -11,6 +11,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister create`↴](#icp-canister-create)
 * [`icp canister delete`↴](#icp-canister-delete)
 * [`icp canister install`↴](#icp-canister-install)
+* [`icp canister link`↴](#icp-canister-link)
 * [`icp canister list`↴](#icp-canister-list)
 * [`icp canister logs`↴](#icp-canister-logs)
 * [`icp canister metadata`↴](#icp-canister-metadata)
@@ -134,6 +135,7 @@ Perform canister operations against a network
 * `create` — Create a canister on a network
 * `delete` — Delete a canister from a network
 * `install` — Install a built WASM to a canister on a network
+* `link` — Link an existing canister to the project by recording its ID in the canister ID store
 * `list` — List the canisters in an environment
 * `logs` — Fetch and display canister logs
 * `metadata` — Read a metadata section from a canister
@@ -336,6 +338,26 @@ Install a built WASM to a canister on a network
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister call through
+
+
+
+## `icp canister link`
+
+Link an existing canister to the project by recording its ID in the canister ID store.
+
+This associates an already-deployed canister with a name declared in the target environment, without creating a new canister. It is the inverse of the record that `icp canister create` writes automatically.
+
+**Usage:** `icp canister link [OPTIONS] <NAME> <PRINCIPAL>`
+
+###### **Arguments:**
+
+* `<NAME>` — Name of the project canister to associate the ID with. Must be declared in the target environment
+* `<PRINCIPAL>` — Principal of the existing canister to link
+
+###### **Options:**
+
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--force` — Overwrite an ID already recorded for this canister
 
 
 

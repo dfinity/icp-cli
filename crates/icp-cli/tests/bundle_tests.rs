@@ -744,10 +744,10 @@ fn bundle_packages_plugin_sync_steps() {
 }
 
 /// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
-/// top-level `screenshots` paths relocated under a top-level `screenshots/` folder and the
+/// top-level `images` paths relocated under a top-level `images/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.
 #[test]
-fn bundle_includes_app_manifest_screenshots() {
+fn bundle_includes_app_manifest_images() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
@@ -770,7 +770,7 @@ fn bundle_includes_app_manifest_screenshots() {
     let app_manifest = formatdoc! {r#"
         name: My App
         description: an app we do not parse
-        screenshots:
+        images:
           - media/home.png
           - media/detail.png
     "#};
@@ -806,14 +806,14 @@ fn bundle_includes_app_manifest_screenshots() {
                     .read_to_string(&mut app_manifest_yaml)
                     .expect("failed to read icp_appmanifest.yaml");
             }
-            "screenshots/home.png" => {
+            "images/home.png" => {
                 let mut buf = Vec::new();
                 entry
                     .read_to_end(&mut buf)
                     .expect("failed to read home.png");
                 home_bytes = Some(buf);
             }
-            "screenshots/detail.png" => {
+            "images/detail.png" => {
                 let mut buf = Vec::new();
                 entry
                     .read_to_end(&mut buf)
@@ -827,24 +827,18 @@ fn bundle_includes_app_manifest_screenshots() {
     assert_eq!(
         home_bytes.as_deref(),
         Some(b"home-bytes".as_slice()),
-        "screenshots/home.png missing or wrong content"
+        "images/home.png missing or wrong content"
     );
     assert_eq!(
         detail_bytes.as_deref(),
         Some(b"detail-bytes".as_slice()),
-        "screenshots/detail.png missing or wrong content"
+        "images/detail.png missing or wrong content"
     );
 
     let parsed: serde_yaml::Value =
         serde_yaml::from_str(&app_manifest_yaml).expect("app manifest yaml is invalid");
-    assert_eq!(
-        parsed["screenshots"][0].as_str(),
-        Some("screenshots/home.png")
-    );
-    assert_eq!(
-        parsed["screenshots"][1].as_str(),
-        Some("screenshots/detail.png")
-    );
+    assert_eq!(parsed["images"][0].as_str(), Some("images/home.png"));
+    assert_eq!(parsed["images"][1].as_str(), Some("images/detail.png"));
     // Unrelated metadata must survive the rewrite.
     assert_eq!(parsed["name"].as_str(), Some("My App"));
     assert_eq!(
@@ -853,9 +847,9 @@ fn bundle_includes_app_manifest_screenshots() {
     );
 }
 
-/// Two screenshots whose basenames collide under the flat `screenshots/` folder must be rejected.
+/// Two images whose basenames collide under the flat `images/` folder must be rejected.
 #[test]
-fn bundle_rejects_screenshot_name_collision() {
+fn bundle_rejects_image_name_collision() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
@@ -876,7 +870,7 @@ fn bundle_rejects_screenshot_name_collision() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     let app_manifest = formatdoc! {r#"
-        screenshots:
+        images:
           - a/shot.png
           - b/shot.png
     "#};
@@ -891,10 +885,10 @@ fn bundle_rejects_screenshot_name_collision() {
         .stderr(contains("same bundle path").and(contains("shot.png")));
 }
 
-/// A screenshot path resolving outside the project directory must be rejected, like other bundle
+/// A image path resolving outside the project directory must be rejected, like other bundle
 /// sources.
 #[test]
-fn bundle_rejects_screenshot_outside_project() {
+fn bundle_rejects_image_outside_project() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
@@ -903,7 +897,7 @@ fn bundle_rejects_screenshot_outside_project() {
         .parent()
         .expect("project dir has no parent")
         .join("outside.png");
-    write(&outside, b"secret").expect("failed to write outside screenshot");
+    write(&outside, b"secret").expect("failed to write outside image");
 
     let pm = formatdoc! {r#"
         canisters:
@@ -916,7 +910,7 @@ fn bundle_rejects_screenshot_outside_project() {
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     let app_manifest = formatdoc! {r#"
-        screenshots:
+        images:
           - ../outside.png
     "#};
     write_string(&project_dir.join("icp_appmanifest.yaml"), &app_manifest)

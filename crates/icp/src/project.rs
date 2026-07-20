@@ -854,6 +854,11 @@ fn build_environment_canisters(
 /// Suitable for consumers that deploy only prebuilt bundles (no `@scope/name`
 /// registry-recipe canisters), so a project manifest can be loaded and validated
 /// with no recipe machinery wired up. This is what [`load_project`] uses.
+///
+/// This is the intended [`recipe::Resolve`] for **external** consumers. Writing
+/// a custom `Resolve` is currently internal-only: [`recipe::Resolve::resolve`]
+/// takes crate-private recipe input types (`manifest::recipe::Recipe`), which are
+/// not exported, so out-of-crate code cannot implement the trait meaningfully.
 pub struct NoRecipes;
 
 #[async_trait::async_trait]
@@ -878,8 +883,10 @@ impl recipe::Resolve for NoRecipes {
 /// collaborators by hand.
 ///
 /// Recipe canisters (`@scope/name` registry references) are not supported here —
-/// see [`NoRecipes`]. Consumers that need them can call [`consolidate_manifest`]
-/// directly with their own [`recipe::Resolve`] implementation.
+/// see [`NoRecipes`]. Resolving recipes requires a [`recipe::Resolve`] whose
+/// input types are crate-private, so that path is internal-only today; external
+/// consumers should ship prebuilt bundles and use [`NoRecipes`] (as this
+/// function does).
 pub async fn load_project(dir: &Path) -> Result<Project, crate::ProjectLoadError> {
     let m = load_manifest_from_path::<ProjectManifest>(&dir.join(PROJECT_MANIFEST))
         .await

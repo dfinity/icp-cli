@@ -3,11 +3,16 @@
 //!
 //! This is a **minimal, self-contained public surface** intended for external
 //! consumers (for example a backend service deploying prebuilt marketplace app
-//! bundles) that need to create canisters and install code from Rust. It does
-//! *not* replicate the binary's cycles-ledger / cycles-minting-canister / proxy
-//! funding paths (see [`crate`]'s sibling `icp-cli` `operations::create`); it
-//! calls the management canister directly, which is what a local replica or a
-//! cloud-engine subnet expects — the caller (or the subnet) provides the cycles.
+//! bundles) that need to create canisters and install code from Rust.
+//!
+//! Scope: it performs **direct** management-canister `create_canister` calls
+//! with **no cycles attached**. That only works on subnets that permit
+//! cycles-free creation — i.e. CloudEngine-style engine subnets, which are the
+//! intended consumer. It is **not** a general local-replica / cycles-ledger /
+//! cycles-minting-canister flow: subnets that require cycles-ledger or CMC
+//! funding to create a canister are out of scope for this API. Use the `icp`
+//! binary's `operations::create` (cycles ledger / CMC / proxy funding) for
+//! those.
 //!
 //! The `icp` binary's own `operations::{create,install}` layer could converge
 //! onto these functions later; today it carries extra machinery (progress bars,
@@ -33,6 +38,14 @@ const CHUNK_SIZE: usize = 1024 * 1024;
 /// deciding whether the install message fits under [`CHUNK_THRESHOLD`].
 const ENCODING_OVERHEAD: usize = 500;
 
+/// Decide whether an install carrying `wasm_len` bytes of module and `arg_len`
+/// bytes of init args must use the chunked-install flow: `true` when the encoded
+/// `install_code` message would exceed the 2 MiB [`CHUNK_THRESHOLD`], `false`
+/// when it fits in a single message. Pure so the boundary is unit-testable.
+fn needs_chunked_install(wasm_len: usize, arg_len: usize) -> bool {
+    wasm_len + arg_len + ENCODING_OVERHEAD > CHUNK_THRESHOLD
+}
+
 #[derive(Debug, Snafu)]
 pub enum DeployError {
     #[snafu(display("failed to encode candid arguments"))]
@@ -54,6 +67,10 @@ pub enum DeployError {
 /// call targeting `subnet`: the first principal in the subnet's canister-id
 /// ranges. `create_canister` has no natural target canister of its own, so the
 /// agent needs an effective id that routes the request to the intended subnet.
+///
+/// This is meant for the direct, cycles-free creation flow against
+/// CloudEngine-style engine subnets (see the [module docs](self)); it is not a
+/// cycles-ledger / CMC creation helper.
 pub async fn effective_canister_id_for_subnet(
     agent: &Agent,
     subnet: Principal,
@@ -67,15 +84,17 @@ pub async fn effective_canister_id_for_subnet(
     Ok(start)
 }
 
-/// Create a canister via the management canister, routing the request to the
-/// subnet that owns `effective_canister_id` (any principal within the target
-/// subnet's id range — see [`effective_canister_id_for_subnet`]). `settings`
-/// carries the controllers, compute/memory allocation, etc.
+/// Create a canister via a **direct** management-canister `create_canister`
+/// call, routing the request to the subnet that owns `effective_canister_id`
+/// (any principal within the target subnet's id range — see
+/// [`effective_canister_id_for_subnet`]). `settings` carries the controllers,
+/// compute/memory allocation, etc.
 ///
-/// No cycles are attached here, so this is appropriate for local replicas and
-/// cloud-engine subnets that provision cycles for created canisters. Funding a
-/// mainnet creation (cycles ledger / CMC) is intentionally out of scope for this
-/// minimal surface.
+/// **No cycles are attached.** This only succeeds on subnets that permit
+/// cycles-free creation — CloudEngine-style engine subnets, the intended
+/// consumer of this API. Subnets that require cycles-ledger or CMC funding
+/// (e.g. mainnet) are out of scope here; use the `icp` binary's
+/// `operations::create` for those.
 pub async fn create_canister(
     agent: &Agent,
     effective_canister_id: Principal,
@@ -98,6 +117,10 @@ pub async fn create_canister(
 
 /// Convenience wrapper over [`create_canister`] that resolves the effective
 /// canister id from `subnet` for you.
+///
+/// Same scope as [`create_canister`]: direct, cycles-free creation suitable for
+/// CloudEngine-style engine subnets only. Subnets requiring cycles-ledger / CMC
+/// funding are out of scope — use the `icp` binary's `operations::create`.
 pub async fn create_canister_on_subnet(
     agent: &Agent,
     subnet: Principal,
@@ -160,9 +183,7 @@ pub async fn install_wasm(
         .map(|a| a.to_vec())
         .unwrap_or_else(|| Encode!().expect("encoding empty candid args cannot fail"));
 
-    let total_install_size = wasm.len() + arg.len() + ENCODING_OVERHEAD;
-
-    if total_install_size <= CHUNK_THRESHOLD {
+    if !needs_chunked_install(wasm.len(), arg.len()) {
         let install_args = InstallCodeArgs {
             mode,
             canister_id: cid,
@@ -175,9 +196,34 @@ pub async fn install_wasm(
     }
 
     // Large module: clear any stale chunks, upload the wasm in chunks, then
-    // install by hash.
+    // install by hash. Anything from here on can leave chunks charged to the
+    // canister, so the chunk store is cleared again on *every* outcome below —
+    // not just success — while the original error (if any) is preserved.
     clear_chunk_store(agent, canister_id, cid).await?;
 
+    let install_result = upload_and_install_chunked(agent, canister_id, cid, wasm, mode, arg).await;
+
+    // Free the chunk store regardless of the outcome. A cleanup failure must not
+    // mask an upload/install error, so on `Err` we drop the (best-effort) clear
+    // result and return the original error; on `Ok` we surface a clear failure.
+    let clear_result = clear_chunk_store(agent, canister_id, cid).await;
+    match install_result {
+        Ok(()) => clear_result,
+        Err(e) => Err(e),
+    }
+}
+
+/// Upload `wasm` to `canister_id`'s chunk store in [`CHUNK_SIZE`] pieces, then
+/// `install_chunked_code` by hash. Split out of [`install_wasm`] so the caller
+/// can run chunk-store cleanup around it on every outcome.
+async fn upload_and_install_chunked(
+    agent: &Agent,
+    canister_id: Principal,
+    cid: CanisterId,
+    wasm: &[u8],
+    mode: CanisterInstallMode,
+    arg: Vec<u8>,
+) -> Result<(), DeployError> {
     let mut chunk_hashes: Vec<ChunkHash> = Vec::new();
     for chunk in wasm.chunks(CHUNK_SIZE) {
         let upload_args = UploadChunkArgs {
@@ -204,12 +250,7 @@ pub async fn install_wasm(
         arg,
         sender_canister_version: None,
     };
-    let install_result = mgmt_call(agent, canister_id, "install_chunked_code", &chunked_args).await;
-
-    // Free the chunk store regardless of the install outcome, preferring to
-    // surface the original install error.
-    let clear_result = clear_chunk_store(agent, canister_id, cid).await;
-    install_result.and(clear_result)
+    mgmt_call(agent, canister_id, "install_chunked_code", &chunked_args).await
 }
 
 /// Encode `arg`, send it as an update to the management canister for `method`,
@@ -242,4 +283,57 @@ async fn clear_chunk_store(
         &ClearChunkStoreArgs { canister_id: cid },
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The install flow itself (upload_chunk / install_code / clear_chunk_store
+    // ordering and the failure-cleanup / error-precedence path in `install_wasm`)
+    // talks to the management canister through `ic_agent::Agent`, which has no
+    // lightweight fake to inject here, so that path needs a live-replica
+    // integration test rather than a unit test. What is unit-testable without a
+    // network is the pure chunking-threshold decision, covered below.
+
+    #[test]
+    fn small_install_fits_single_message() {
+        assert!(!needs_chunked_install(0, 0));
+        assert!(!needs_chunked_install(1024, 0));
+        assert!(!needs_chunked_install(1024, 1024));
+    }
+
+    #[test]
+    fn threshold_boundary_is_inclusive() {
+        // wasm + arg + overhead == CHUNK_THRESHOLD still fits in one message.
+        let wasm_at_limit = CHUNK_THRESHOLD - ENCODING_OVERHEAD;
+        assert!(!needs_chunked_install(wasm_at_limit, 0));
+        // One byte over the limit tips into the chunked flow.
+        assert!(needs_chunked_install(wasm_at_limit + 1, 0));
+    }
+
+    #[test]
+    fn init_args_can_push_over_the_threshold() {
+        let wasm_len = CHUNK_THRESHOLD - ENCODING_OVERHEAD - 10;
+        // Wasm alone fits...
+        assert!(!needs_chunked_install(wasm_len, 0));
+        // ...but adding enough init-arg bytes to exceed the limit forces chunking.
+        assert!(needs_chunked_install(wasm_len, 11));
+    }
+
+    #[test]
+    fn large_module_requires_chunking() {
+        assert!(needs_chunked_install(8 * 1024 * 1024, 0));
+    }
+
+    #[test]
+    fn chunk_size_is_within_the_spec_per_chunk_limit() {
+        // Each uploaded chunk must stay under the 1 MiB per-chunk spec limit, and
+        // a module just over the single-message threshold must split into >1 chunk.
+        const { assert!(CHUNK_SIZE <= 1024 * 1024) };
+        let wasm = vec![0u8; CHUNK_THRESHOLD + 1];
+        let chunks = wasm.chunks(CHUNK_SIZE).count();
+        assert!(chunks > 1);
+        assert!(wasm.chunks(CHUNK_SIZE).all(|c| c.len() <= CHUNK_SIZE));
+    }
 }

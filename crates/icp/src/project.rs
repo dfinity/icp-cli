@@ -849,6 +849,46 @@ fn build_environment_canisters(
     Ok(cs)
 }
 
+/// A [`recipe::Resolve`] that rejects every recipe reference.
+///
+/// Suitable for consumers that deploy only prebuilt bundles (no `@scope/name`
+/// registry-recipe canisters), so a project manifest can be loaded and validated
+/// with no recipe machinery wired up. This is what [`load_project`] uses.
+pub struct NoRecipes;
+
+#[async_trait::async_trait]
+impl recipe::Resolve for NoRecipes {
+    async fn resolve(
+        &self,
+        recipe: &crate::manifest::recipe::Recipe,
+        _context: &recipe::RecipeContext,
+    ) -> Result<(crate::manifest::canister::BuildSteps, SyncSteps), recipe::ResolveError> {
+        Err(recipe::ResolveError::Unsupported {
+            recipe: recipe.recipe_type.to_string(),
+        })
+    }
+}
+
+/// Load and validate the project rooted at `dir` from its `icp.yaml`, resolving
+/// every declared canister into a consolidated [`Project`].
+///
+/// This is the one-call entry point for external consumers that want to read,
+/// parse, and validate a project manifest (capability 1 of the programmatic
+/// deploy surface) without constructing a [`crate::ProjectLoadImpl`] and its
+/// collaborators by hand.
+///
+/// Recipe canisters (`@scope/name` registry references) are not supported here —
+/// see [`NoRecipes`]. Consumers that need them can call [`consolidate_manifest`]
+/// directly with their own [`recipe::Resolve`] implementation.
+pub async fn load_project(dir: &Path) -> Result<Project, crate::ProjectLoadError> {
+    let m = load_manifest_from_path::<ProjectManifest>(&dir.join(PROJECT_MANIFEST))
+        .await
+        .context(crate::ProjectManifestSnafu)?;
+    consolidate_manifest(dir, &NoRecipes, &m)
+        .await
+        .context(crate::ProjectSnafu)
+}
+
 /// Turns the ProjectManifest into a Project struct
 /// - Adds the default Networks
 /// - Adds the default Environment

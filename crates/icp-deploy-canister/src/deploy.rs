@@ -18,7 +18,6 @@ use snafu::prelude::*;
 use crate::{
     Canister, Project,
     files::{FileAccess, FileAccessError},
-    http::HttpAccess,
     icp_access::{IcpAccess, IcpAccessError},
     ids::IdStore,
     manifest::canister::SyncStep,
@@ -662,15 +661,11 @@ pub async fn deploy_canister(
     mode: InstallMode,
     proxy: Option<Principal>,
     files: &dyn FileAccess,
-    // Reserved to match the canister-usable API; the current core path does not
-    // fetch over HTTP (remote wasm/recipe fetches stay host-side).
-    http: &dyn HttpAccess,
     icp: &dyn IcpAccess,
     ids: &dyn IdStore,
     sync_exec: &dyn PluginExecutor,
     progress: Option<&dyn StepProgress>,
 ) -> Result<Vec<String>, DeployCanisterError> {
-    let _ = http;
     let env = project
         .environments
         .get(environment)
@@ -755,7 +750,6 @@ pub async fn deploy(
     proxy: Option<Principal>,
     artifact_paths: &BTreeMap<String, PathBuf>,
     files: &dyn FileAccess,
-    http: &dyn HttpAccess,
     icp: &dyn IcpAccess,
     ids: &dyn IdStore,
     sync_exec: &dyn PluginExecutor,
@@ -780,7 +774,6 @@ pub async fn deploy(
             mode,
             proxy,
             files,
-            http,
             icp,
             ids,
             sync_exec,

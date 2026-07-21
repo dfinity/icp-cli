@@ -1,8 +1,8 @@
 //! Canister installation, syncing, and the project model, with all host IO
 //! abstracted behind trait objects so the core can run inside a canister.
 //!
-//! See the module-level docs on the IO traits ([`files`], [`http`],
-//! [`icp_access`], [`ids`]) for the abstraction boundary.
+//! See the module-level docs on the IO traits ([`files`], [`icp_access`],
+//! [`ids`]) for the abstraction boundary.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -25,7 +25,6 @@ use crate::{
 pub mod canister;
 pub mod deploy;
 pub mod files;
-pub mod http;
 pub mod icp_access;
 pub mod ids;
 pub mod manifest;
@@ -44,7 +43,6 @@ pub use deploy::{
     resolve_install_mode_and_status, run_sync_steps, start_canister, sync_canister,
 };
 pub use files::{FileAccess, FileAccessError};
-pub use http::{HttpAccess, HttpAccessError};
 pub use icp_access::{IcpAccess, IcpAccessError};
 pub use ids::{IdMapping, IdStore, IdStoreError};
 pub use project::{consolidate_manifest, load_project, verify_sandbox};

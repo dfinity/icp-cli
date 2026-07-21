@@ -292,7 +292,9 @@ impl Resolve for Handlebars {
     ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
         self.resolve_impl(recipe, recipe_context)
             .await
-            .context(super::HandlebarsSnafu)
+            .map_err(|source| ResolveError::Resolve {
+                source: Box::new(source),
+            })
     }
 }
 

@@ -1,31 +1,12 @@
-use std::collections::BTreeMap;
-
 use async_trait::async_trait;
-use candid::Principal;
 use ic_agent::Agent;
+use icp_deploy_canister::sync_exec::{PluginInvocation, ScriptInvocation};
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::manifest::canister::SyncStep;
 use crate::package::PackageCache;
-use crate::prelude::*;
 
 mod plugin;
-mod script;
-
-pub struct Params {
-    pub path: PathBuf,
-    pub cid: Principal,
-    /// Name of the environment being synced (e.g. "local", "production").
-    /// Passed to sync plugin steps via `SyncExecInput`.
-    pub environment: String,
-    /// Name of the network (e.g. "local", "ic").
-    pub network: String,
-    /// IDs of all named canisters in the project for this environment.
-    pub canister_ids: BTreeMap<String, Principal>,
-    /// Proxy canister to route calls through, if `--proxy` was passed.
-    pub proxy: Option<Principal>,
-}
 
 #[derive(Debug, Snafu)]
 pub enum SynchronizeError {
@@ -36,15 +17,28 @@ pub enum SynchronizeError {
     Plugin { source: plugin::PluginError },
 }
 
+/// Host execution of the two sync-step mechanisms that can't run inside a
+/// canister: WASI plugins (wasmtime) and subprocess scripts.
+///
+/// Step dispatch and *all* input derivation (plugin dirs/files, the `ICP_CLI_*`
+/// script environment) live in `icp-deploy-canister`; implementations here
+/// receive a fully-resolved [`PluginInvocation`] / [`ScriptInvocation`] and
+/// perform only the irreducible host action. This trait is the injection seam
+/// the [`crate::context::Context`] carries so tests can stub it out.
 #[async_trait]
 pub trait Synchronize: Sync + Send {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        step: &SyncStep,
-        params: &Params,
+        invocation: &PluginInvocation,
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
+    ) -> Result<Vec<String>, SynchronizeError>;
+
+    async fn run_script(
+        &self,
+        invocation: &ScriptInvocation,
+        stdio: Option<Sender<String>>,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
 
@@ -52,27 +46,31 @@ pub struct Syncer;
 
 #[async_trait]
 impl Synchronize for Syncer {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        step: &SyncStep,
-        params: &Params,
+        invocation: &PluginInvocation,
         agent: &Agent,
         stdio: Option<Sender<String>>,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
-        match step {
-            SyncStep::Script(adapter) => Ok(script::sync(adapter, params, stdio).await?),
-            SyncStep::Plugin(adapter) => Ok(plugin::sync(
-                adapter,
-                params,
-                agent,
-                &params.environment,
-                params.proxy,
-                stdio,
-                pkg_cache,
-            )
-            .await?),
-        }
+        Ok(plugin::run(invocation, agent, stdio, pkg_cache).await?)
+    }
+
+    async fn run_script(
+        &self,
+        invocation: &ScriptInvocation,
+        stdio: Option<Sender<String>>,
+    ) -> Result<Vec<String>, SynchronizeError> {
+        let env_refs: Vec<(&str, &str)> = invocation
+            .env
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        super::script::execute_commands(&invocation.commands, &invocation.cwd, &env_refs, stdio)
+            .await?;
+        // Persistent stderr is a sync-plugin feature only; script steps don't
+        // currently retain any output past the rolling step view.
+        Ok(vec![])
     }
 }
 
@@ -84,14 +82,21 @@ pub struct UnimplementedMockSyncer;
 #[cfg(test)]
 #[async_trait]
 impl Synchronize for UnimplementedMockSyncer {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        _step: &SyncStep,
-        _params: &Params,
+        _invocation: &PluginInvocation,
         _agent: &Agent,
         _stdio: Option<Sender<String>>,
         _pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
-        unimplemented!("UnimplementedMockSyncer::sync")
+        unimplemented!("UnimplementedMockSyncer::run_plugin")
+    }
+
+    async fn run_script(
+        &self,
+        _invocation: &ScriptInvocation,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<Vec<String>, SynchronizeError> {
+        unimplemented!("UnimplementedMockSyncer::run_script")
     }
 }

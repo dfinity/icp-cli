@@ -36,6 +36,7 @@ ic-ledger-types = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-utils = { workspace = true }
 icp-canister-interfaces = { workspace = true }
+icp-deploy-canister = { workspace = true }
 icp-sync-plugin = { workspace = true }
 icrc-ledger-types = { workspace = true }
 indexmap = { workspace = true }
@@ -74,6 +75,11 @@ url = { workspace = true }
 uuid = { workspace = true }
 wslpath2 = { workspace = true }
 zeroize = { workspace = true }
+
+[features]
+# Enables `clap::ValueEnum` derives on CLI-facing enums, including the manifest
+# enums now defined in `icp-deploy-canister`.
+clap = ["dep:clap", "icp-deploy-canister/clap"]
 
 [target.'cfg(windows)'.dependencies]
 winreg = { workspace = true }

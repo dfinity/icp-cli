@@ -42,14 +42,14 @@ pub enum EnvironmentError {
 
 #[derive(Debug, Snafu)]
 pub enum ConsolidateManifestError {
-    #[snafu(display("failed to parse glob pattern"))]
+    #[snafu(display("failed to perform glob parsing"))]
     GlobParse { source: glob::PatternError },
 
-    #[snafu(display("failed to read a glob match"))]
+    #[snafu(display("failed to get glob iter"))]
     GlobIter { source: glob::GlobError },
 
-    #[snafu(display("glob matched a non-UTF-8 path"))]
-    Utf8Path { source: camino::FromPathBufError },
+    #[snafu(display("failed to convert path to UTF-8"))]
+    Utf8Path { source: FromPathBufError },
 
     #[snafu(display("failed to load canister manifest"))]
     LoadCanister { source: LoadManifestError },
@@ -314,10 +314,11 @@ async fn build_manifest_canisters(
                 }
             };
 
-            let init_args = match m.init_args.as_ref() {
-                Some(mia) => Some(resolve_manifest_init_args(mia, &cdir, &m.name)?),
-                None => None,
-            };
+            let init_args = m
+                .init_args
+                .as_ref()
+                .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                .transpose()?;
 
             result.push((
                 m.name.clone(),
@@ -927,7 +928,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.is_file() {
+                if !path.exists() || !path.is_file() {
                     return NotFoundSnafu {
                         kind: "network".to_string(),
                         path: path.to_string(),
@@ -1005,7 +1006,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.is_file() {
+                if !path.exists() || !path.is_file() {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: path.to_string(),

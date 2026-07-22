@@ -1,9 +1,9 @@
 //! Host-side project facade.
 //!
 //! Consolidation of manifests into a [`Project`] lives in
-//! `icp_deploy_canister::project` (over an injected `FileAccess`) and is
-//! re-exported here. Member-scoping resolves real filesystem paths, so it stays
-//! host-side.
+//! `icp_deploy_canister::project` and is re-exported here. Member-scoping
+//! resolves real filesystem paths against the current working directory, so it
+//! stays here.
 
 pub use icp_deploy_canister::project::{
     ConsolidateManifestError, EnvironmentError, LoadProjectError, VerifySandboxError,

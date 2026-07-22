@@ -919,8 +919,8 @@ pub struct DeployError {
 
 /// Deploy the `selected` already-built canisters in `environment`, each through
 /// [`deploy_canister`]. `artifact_paths` maps canister name → its built wasm
-/// path. Per-canister failures are aggregated. The CLI keeps its own fan-out
-/// (for progress); this entry point is for programmatic/canister callers.
+/// path. Per-canister failures are aggregated. This is a batch entry point with
+/// no progress reporting; the CLI drives its own per-canister fan-out instead.
 #[allow(clippy::too_many_arguments)]
 pub async fn deploy(
     project: &Project,

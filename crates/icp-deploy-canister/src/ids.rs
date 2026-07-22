@@ -1,4 +1,4 @@
-//! Abstracted canister-id store.
+//! Canister-id store: per-environment `name → principal` mappings.
 
 use std::{collections::BTreeMap, sync::Mutex};
 
@@ -19,9 +19,9 @@ pub enum IdStoreError {
 
 /// Read/write access to canister-id mappings.
 ///
-/// The `is_cache` flag selects the managed-network cache store vs. the
-/// connected-network data store, matching the host implementation. Passed as
-/// `&dyn IdStore` (interior-mutable), not `&mut`.
+/// The `is_cache` flag lets an implementation that keeps two stores — a
+/// managed-network cache and a connected-network data store — pick the right
+/// one. `register` mutates through `&self`, so the store is interior-mutable.
 pub trait IdStore: Send + Sync {
     fn lookup(
         &self,

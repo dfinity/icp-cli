@@ -1,9 +1,9 @@
 //! Host-side manifest facade.
 //!
 //! The manifest *model* (types, `Item<T>`, constants) lives in
-//! `icp_deploy_canister::manifest` and is re-exported here for back-compat. This
-//! module keeps the host-only pieces: locating the project/workspace root on the
-//! real filesystem and the `std::fs`-based manifest loader.
+//! `icp_deploy_canister::manifest` and is re-exported here. This module keeps
+//! the pieces that walk the real filesystem: locating the project/workspace root
+//! and the `std::fs`-based manifest loader.
 
 use std::collections::HashSet;
 

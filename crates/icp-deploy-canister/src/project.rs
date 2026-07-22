@@ -7,7 +7,7 @@ use snafu::prelude::*;
 use crate::{
     Canister, Environment, InitArgs, Network, Project,
     canister::{ControllerRef, Settings, recipe},
-    files::{FileAccess, FileAccessError},
+    fs,
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
         Item, LoadManifestError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
@@ -45,8 +45,11 @@ pub enum ConsolidateManifestError {
     #[snafu(display("failed to parse glob pattern"))]
     GlobParse { source: glob::PatternError },
 
-    #[snafu(display("failed to list directory while expanding a glob"))]
-    ListDir { source: FileAccessError },
+    #[snafu(display("failed to read a glob match"))]
+    GlobIter { source: glob::GlobError },
+
+    #[snafu(display("glob matched a non-UTF-8 path"))]
+    Utf8Path { source: camino::FromPathBufError },
 
     #[snafu(display("failed to load canister manifest"))]
     LoadCanister { source: LoadManifestError },
@@ -78,7 +81,7 @@ pub enum ConsolidateManifestError {
 
     #[snafu(display("failed to read init_args file for canister '{canister}'"))]
     ReadInitArgs {
-        source: FileAccessError,
+        source: fs::IoError,
         canister: String,
     },
 
@@ -143,8 +146,7 @@ pub enum ConsolidateManifestError {
 
 /// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
 /// any file references relative to `base_path`.
-async fn resolve_manifest_init_args(
-    files: &dyn FileAccess,
+fn resolve_manifest_init_args(
     manifest_init_args: &ManifestInitArgs,
     base_path: &Path,
     canister: &str,
@@ -158,17 +160,12 @@ async fn resolve_manifest_init_args(
             let file_path = base_path.join(path);
             match format {
                 ArgsFormat::Bin => {
-                    let bytes = files
-                        .read_file(&file_path)
-                        .await
-                        .context(ReadInitArgsSnafu { canister })?;
+                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Binary(bytes))
                 }
                 fmt => {
-                    let content = files
-                        .read_to_string(&file_path)
-                        .await
-                        .context(ReadInitArgsSnafu { canister })?;
+                    let content =
+                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
                     Ok(InitArgs::Text {
                         content: content.trim().to_owned(),
                         format: fmt.clone(),
@@ -188,71 +185,6 @@ async fn resolve_manifest_init_args(
 
 fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
-}
-
-/// Collect `dir` and all of its descendant directories (recursively), used to
-/// expand a `**` glob segment through the injected [`FileAccess`].
-async fn collect_descendant_dirs(
-    files: &dyn FileAccess,
-    dir: &Path,
-    out: &mut Vec<PathBuf>,
-) -> Result<(), ConsolidateManifestError> {
-    // Iterative BFS to avoid boxing a recursive async fn.
-    let mut queue = vec![dir.to_owned()];
-    while let Some(d) = queue.pop() {
-        let entries = files.read_dir(&d).await.context(ListDirSnafu)?;
-        for entry in entries {
-            if files.is_dir(&entry).await {
-                out.push(entry.clone());
-                queue.push(entry);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Expand a glob `pattern` (relative to `base`) into concrete paths, using the
-/// injected [`FileAccess`] instead of the real filesystem. Supports literal
-/// segments, single-segment wildcards (`*`, `?`, `[...]`, `{...}` via
-/// [`glob::Pattern`]), and the `**` recursive segment.
-async fn expand_glob(
-    files: &dyn FileAccess,
-    base: &Path,
-    pattern: &str,
-) -> Result<Vec<PathBuf>, ConsolidateManifestError> {
-    let mut current = vec![base.to_owned()];
-    for seg in pattern.split('/') {
-        if seg.is_empty() {
-            continue;
-        }
-        let mut next = Vec::new();
-        if seg == "**" {
-            for dir in &current {
-                next.push(dir.clone());
-                collect_descendant_dirs(files, dir, &mut next).await?;
-            }
-        } else if is_glob(seg) {
-            let pat = glob::Pattern::new(seg).context(GlobParseSnafu)?;
-            for dir in &current {
-                if !files.is_dir(dir).await {
-                    continue;
-                }
-                for entry in files.read_dir(dir).await.context(ListDirSnafu)? {
-                    if let Some(name) = entry.file_name()
-                        && pat.matches(name)
-                    {
-                        next.push(entry);
-                    }
-                }
-            }
-        } else {
-            for dir in &current {
-                next.push(dir.join(seg));
-            }
-        }
-        current = next;
-    }
-    Ok(current)
 }
 
 /// Whether `name` is a valid canister name or dependency alias: non-empty and
@@ -276,10 +208,9 @@ fn is_valid_name(name: &str) -> bool {
 /// callers assign store keys and bindings. Does not check for duplicate names
 /// across projects — that is the caller's responsibility (via the global map).
 async fn build_manifest_canisters(
-    files: &dyn FileAccess,
     pdir: &Path,
     manifest_canisters: &[Item<CanisterManifest>],
-    recipe_resolver: &dyn recipe::Resolve,
+    recipe_resolver: &dyn recipe::RemoteResourceResolve,
 ) -> Result<Vec<(String, PathBuf, Canister)>, ConsolidateManifestError> {
     let mut result: Vec<(String, PathBuf, Canister)> = Vec::new();
 
@@ -287,27 +218,37 @@ async fn build_manifest_canisters(
         let ms = match i {
             Item::Path(pattern) => {
                 let is_glob_pattern = is_glob(pattern);
-                let paths = if is_glob_pattern {
-                    expand_glob(files, pdir, pattern).await?
-                } else {
-                    vec![pdir.join(pattern)]
+                let paths = match is_glob_pattern {
+                    // Explicit path
+                    false => vec![pdir.join(pattern)],
+
+                    // Glob pattern
+                    true => {
+                        let paths =
+                            glob::glob(pdir.join(pattern).as_str()).context(GlobParseSnafu)?;
+
+                        let mut v = vec![];
+                        for p in paths {
+                            let path = p.context(GlobIterSnafu)?;
+                            let utf8_path = PathBuf::try_from(path).context(Utf8PathSnafu)?;
+                            v.push(utf8_path);
+                        }
+                        v
+                    }
                 };
 
                 let paths = if is_glob_pattern {
                     // For glob patterns, filter out non-directories and non-canister directories
-                    let mut kept = Vec::new();
-                    for p in paths {
-                        if files.is_dir(&p).await && files.exists(&p.join(CANISTER_MANIFEST)).await
-                        {
-                            kept.push(p);
-                        }
-                    }
-                    kept
+                    paths
+                        .into_iter()
+                        .filter(|p| p.is_dir())
+                        .filter(|p| p.join(CANISTER_MANIFEST).exists())
+                        .collect::<Vec<_>>()
                 } else {
                     // For explicit paths, validate that they exist and contain canister.yaml
                     let mut validated_paths = vec![];
                     for p in paths {
-                        if !files.is_file(&p.join(CANISTER_MANIFEST)).await {
+                        if !p.join(CANISTER_MANIFEST).is_file() {
                             return NotFoundSnafu {
                                 kind: "canister".to_string(),
                                 path: pattern.to_string(),
@@ -323,8 +264,7 @@ async fn build_manifest_canisters(
                 for p in paths {
                     ms.push((
                         p.to_owned(),
-                        load_manifest::<CanisterManifest>(files, &p.join(CANISTER_MANIFEST))
-                            .await
+                        load_manifest::<CanisterManifest>(&p.join(CANISTER_MANIFEST))
                             .context(LoadCanisterSnafu)?,
                     ));
                 }
@@ -366,7 +306,7 @@ async fn build_manifest_canisters(
                         canister_name: m.name.clone(),
                     };
                     recipe_resolver
-                        .resolve(recipe, &ctx)
+                        .resolve_recipe(recipe, &ctx)
                         .await
                         .context(RecipeSnafu {
                             recipe_type: recipe.recipe_type.clone(),
@@ -375,7 +315,7 @@ async fn build_manifest_canisters(
             };
 
             let init_args = match m.init_args.as_ref() {
-                Some(mia) => Some(resolve_manifest_init_args(files, mia, &cdir, &m.name).await?),
+                Some(mia) => Some(resolve_manifest_init_args(mia, &cdir, &m.name)?),
                 None => None,
             };
 
@@ -439,18 +379,16 @@ struct MemberEnvInfo {
 
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
 /// de-dup / cycle-detection identity.
-async fn canonicalize_dep(
-    files: &dyn FileAccess,
-    alias: &str,
-    dep_root: &Path,
-) -> Result<PathBuf, ConsolidateManifestError> {
-    files.canonicalize(dep_root).await.ok_or_else(|| {
+fn canonicalize_dep(alias: &str, dep_root: &Path) -> Result<PathBuf, ConsolidateManifestError> {
+    let build_err = || {
         DependencyCanonicalizeSnafu {
             alias: alias.to_owned(),
             path: dep_root.to_string(),
         }
         .build()
-    })
+    };
+    let canon = dunce::canonicalize(dep_root.as_std_path()).map_err(|_| build_err())?;
+    PathBuf::try_from(canon).map_err(|_| build_err())
 }
 
 /// Store-key prefix for a dependency instance: its canonical directory relative
@@ -582,11 +520,10 @@ fn validate_dependency_aliases(
 /// instance's prefix and its own canisters.
 #[allow(clippy::too_many_arguments)]
 async fn import_dependency(
-    files: &dyn FileAccess,
     app_root_canonical: &Path,
     parent_dir: &Path,
     dep: &DependencyManifest,
-    recipe_resolver: &dyn recipe::Resolve,
+    recipe_resolver: &dyn recipe::RemoteResourceResolve,
     canisters: &mut IndexMap<String, (PathBuf, Canister)>,
     registry: &mut HashMap<PathBuf, ImportedInstance>,
     stack: &mut Vec<PathBuf>,
@@ -598,7 +535,7 @@ async fn import_dependency(
 ) -> Result<ImportedInstance, ConsolidateManifestError> {
     let dep_root = parent_dir.join(&dep.path);
     let manifest_path = dep_root.join(PROJECT_MANIFEST);
-    if !files.is_file(&manifest_path).await {
+    if !manifest_path.is_file() {
         return DependencyNotFoundSnafu {
             alias: dep.name.clone(),
             path: dep_root.to_string(),
@@ -606,7 +543,7 @@ async fn import_dependency(
         .fail();
     }
 
-    let canonical = canonicalize_dep(files, &dep.name, &dep_root).await?;
+    let canonical = canonicalize_dep(&dep.name, &dep_root)?;
 
     // Cycle detection.
     if stack.contains(&canonical) {
@@ -644,18 +581,15 @@ async fn import_dependency(
     let prefix = relative_prefix(app_root_canonical, &canonical);
 
     let dep_manifest: ProjectManifest =
-        load_manifest(files, &manifest_path)
-            .await
-            .context(LoadDependencyManifestSnafu {
-                alias: dep.name.clone(),
-            })?;
+        load_manifest(&manifest_path).context(LoadDependencyManifestSnafu {
+            alias: dep.name.clone(),
+        })?;
 
     // Build the dependency's own canisters and key them under the prefix. All of
     // them are imported (deploy-all); the `canisters` exposure subset is applied
     // by the caller when wiring env vars.
     let built =
-        build_manifest_canisters(files, &dep_root, &dep_manifest.canisters, recipe_resolver)
-            .await?;
+        build_manifest_canisters(&dep_root, &dep_manifest.canisters, recipe_resolver).await?;
 
     let mut own: Vec<(String, String)> = Vec::new();
     let mut local_to_key: BTreeMap<String, String> = BTreeMap::new();
@@ -699,16 +633,14 @@ async fn import_dependency(
             Item::Manifest(m) => m.clone(),
             Item::Path(path) => {
                 let p = dep_root.join(path);
-                if !files.is_file(&p).await {
+                if !p.is_file() {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: p.to_string(),
                     }
                     .fail();
                 }
-                load_manifest::<EnvironmentManifest>(files, &p)
-                    .await
-                    .context(LoadEnvironmentSnafu)?
+                load_manifest::<EnvironmentManifest>(&p).context(LoadEnvironmentSnafu)?
             }
         };
         defined_envs.insert(em.name.clone());
@@ -764,7 +696,6 @@ async fn import_dependency(
         let mut nested_chain = alias_chain.to_vec();
         nested_chain.push(nested.name.clone());
         let inst = Box::pin(import_dependency(
-            files,
             app_root_canonical,
             &dep_root,
             nested,
@@ -805,8 +736,7 @@ async fn import_dependency(
 /// member overrides for this environment (standalone-equivalence), then
 /// the root's own overrides (highest precedence). Precedence is therefore
 /// root-explicit > member-env > canister-base.
-async fn build_environment_canisters(
-    files: &dyn FileAccess,
+fn build_environment_canisters(
     canisters: &IndexMap<String, (PathBuf, Canister)>,
     env_name: &str,
     selection: &CanisterSelection,
@@ -841,8 +771,7 @@ async fn build_environment_canisters(
                     canister.settings = s.clone();
                 }
                 if let Some(ia) = &ov.init_args {
-                    canister.init_args =
-                        Some(resolve_manifest_init_args(files, ia, cpath, key).await?);
+                    canister.init_args = Some(resolve_manifest_init_args(ia, cpath, key)?);
                 }
             }
         }
@@ -859,8 +788,7 @@ async fn build_environment_canisters(
     if let Some(init_args) = root_init_args {
         for (name, ia) in init_args {
             if let Some((cpath, canister)) = cs.get_mut(name) {
-                canister.init_args =
-                    Some(resolve_manifest_init_args(files, ia, cpath, name).await?);
+                canister.init_args = Some(resolve_manifest_init_args(ia, cpath, name)?);
             }
         }
     }
@@ -878,9 +806,8 @@ async fn build_environment_canisters(
 ///     - All the referenced canisters exist
 ///     - All the recipes have been resolved
 pub async fn consolidate_manifest(
-    files: &dyn FileAccess,
     pdir: &Path,
-    recipe_resolver: &dyn recipe::Resolve,
+    recipe_resolver: &dyn recipe::RemoteResourceResolve,
     m: &ProjectManifest,
 ) -> Result<Project, ConsolidateManifestError> {
     // Canisters. IndexMap (not HashMap) so the order from the project manifest is preserved
@@ -889,13 +816,11 @@ pub async fn consolidate_manifest(
 
     // Canonical app root, used to derive stable, order-independent store-key
     // prefixes for imported dependency canisters.
-    let app_root_canonical = files
-        .canonicalize(pdir)
-        .await
-        .unwrap_or_else(|| pdir.to_owned());
+    let app_root_canonical =
+        canonicalize_dep("<project>", pdir).unwrap_or_else(|_| pdir.to_owned());
 
     // This project's own canisters, keyed by their bare local names.
-    let app_built = build_manifest_canisters(files, pdir, &m.canisters, recipe_resolver).await?;
+    let app_built = build_manifest_canisters(pdir, &m.canisters, recipe_resolver).await?;
     let mut app_own: Vec<(String, String)> = Vec::new();
     for (local, cdir, canister) in app_built {
         app_own.push((local.clone(), local.clone()));
@@ -928,7 +853,6 @@ pub async fn consolidate_manifest(
     let mut app_edges: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for dep in &m.dependencies {
         let inst = import_dependency(
-            files,
             &app_root_canonical,
             pdir,
             dep,
@@ -1003,16 +927,14 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !files.is_file(&path).await {
+                if !path.is_file() {
                     return NotFoundSnafu {
                         kind: "network".to_string(),
                         path: path.to_string(),
                     }
                     .fail();
                 }
-                load_manifest::<NetworkManifest>(files, &path)
-                    .await
-                    .context(LoadNetworkSnafu)?
+                load_manifest::<NetworkManifest>(&path).context(LoadNetworkSnafu)?
             }
             Item::Manifest(ms) => ms.clone(),
         };
@@ -1083,16 +1005,14 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !files.is_file(&path).await {
+                if !path.is_file() {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: path.to_string(),
                     }
                     .fail();
                 }
-                load_manifest::<EnvironmentManifest>(files, &path)
-                    .await
-                    .context(LoadEnvironmentSnafu)?
+                load_manifest::<EnvironmentManifest>(&path).context(LoadEnvironmentSnafu)?
             }
             Item::Manifest(ms) => ms.clone(),
         };
@@ -1128,15 +1048,13 @@ pub async fn consolidate_manifest(
                     // Embed canisters in environment, folding member overrides
                     // beneath the root's own settings/init_args overrides.
                     canisters: build_environment_canisters(
-                        files,
                         &canisters,
                         &m.name,
                         &m.canisters,
                         member_env_overrides.get(&m.name),
                         m.settings.as_ref(),
                         m.init_args.as_ref(),
-                    )
-                    .await?,
+                    )?,
                 });
             }
         }
@@ -1159,15 +1077,13 @@ pub async fn consolidate_manifest(
             name: LOCAL.to_string(),
             network,
             canisters: build_environment_canisters(
-                files,
                 &canisters,
                 LOCAL,
                 &CanisterSelection::Everything,
                 member_env_overrides.get(LOCAL),
                 None,
                 None,
-            )
-            .await?,
+            )?,
         });
     }
     if let Entry::Vacant(vacant_entry) = environments.entry(IC.to_string()) {
@@ -1185,15 +1101,13 @@ pub async fn consolidate_manifest(
             name: IC.to_string(),
             network,
             canisters: build_environment_canisters(
-                files,
                 &canisters,
                 IC,
                 &CanisterSelection::Everything,
                 member_env_overrides.get(IC),
                 None,
                 None,
-            )
-            .await?,
+            )?,
         });
     }
 
@@ -1236,17 +1150,14 @@ pub enum LoadProjectError {
 }
 
 /// Load and consolidate the project rooted at `project_dir` (already located by
-/// the caller), reading all files through `files` and resolving recipes through
-/// `recipe`.
+/// the caller), resolving recipes through `recipe`.
 pub async fn load_project(
-    files: &dyn FileAccess,
-    recipe: &dyn recipe::Resolve,
+    recipe: &dyn recipe::RemoteResourceResolve,
     project_dir: &Path,
 ) -> Result<Project, LoadProjectError> {
-    let m: ProjectManifest = load_manifest(files, &project_dir.join(PROJECT_MANIFEST))
-        .await
-        .context(ProjectManifestSnafu)?;
-    let p = consolidate_manifest(files, project_dir, recipe, &m).await?;
+    let m: ProjectManifest =
+        load_manifest(&project_dir.join(PROJECT_MANIFEST)).context(ProjectManifestSnafu)?;
+    let p = consolidate_manifest(project_dir, recipe, &m).await?;
     Ok(p)
 }
 
@@ -1298,23 +1209,34 @@ pub fn verify_sandbox(project: &Project) -> Result<(), VerifySandboxError> {
 #[cfg(test)]
 mod dependency_tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
+    use crate::canister::recipe::{RecipeContext, RemoteResourceResolve, ResolveError};
+    use crate::manifest::adapter::prebuilt::SourceField;
     use crate::manifest::canister::{BuildSteps, SyncSteps};
     use crate::manifest::recipe::Recipe;
-    use crate::testutil::HostFiles;
     use camino_tempfile::Utf8TempDir;
+    use tokio::sync::mpsc::Sender;
 
-    /// Recipes are never used in these tests; every canister is pre-built.
+    /// Recipes and plugins are never used in these tests; every canister is pre-built.
     struct PanicResolver;
 
     #[async_trait::async_trait]
-    impl Resolve for PanicResolver {
-        async fn resolve(
+    impl RemoteResourceResolve for PanicResolver {
+        async fn resolve_recipe(
             &self,
             _recipe: &Recipe,
             _context: &RecipeContext,
         ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             panic!("recipe resolver should not be called in dependency tests");
+        }
+
+        async fn resolve_wasm(
+            &self,
+            _source: &SourceField,
+            _base_dir: &Path,
+            _sha256: Option<&str>,
+            _stdio: Option<Sender<String>>,
+        ) -> Result<PathBuf, ResolveError> {
+            panic!("wasm resolver should not be called in dependency tests");
         }
     }
 
@@ -1343,11 +1265,9 @@ mod dependency_tests {
     }
 
     async fn consolidate(pdir: &Path) -> Result<Project, ConsolidateManifestError> {
-        let files = HostFiles;
-        let m: ProjectManifest = load_manifest(&files, &pdir.join(PROJECT_MANIFEST))
-            .await
-            .expect("failed to parse project manifest");
-        consolidate_manifest(&files, pdir, &PanicResolver, &m).await
+        let m: ProjectManifest =
+            load_manifest(&pdir.join(PROJECT_MANIFEST)).expect("failed to parse project manifest");
+        consolidate_manifest(pdir, &PanicResolver, &m).await
     }
 
     fn bindings_of<'a>(p: &'a Project, key: &str) -> &'a BTreeMap<String, String> {

@@ -57,25 +57,36 @@ pub fn member_scoped_canisters(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
-    use crate::host_files::HostFileAccess;
+    use crate::canister::recipe::{RecipeContext, RemoteResourceResolve, ResolveError};
+    use crate::manifest::adapter::prebuilt::SourceField;
     use crate::manifest::canister::{BuildSteps, SyncSteps};
     use crate::manifest::recipe::Recipe;
     use crate::manifest::{PROJECT_MANIFEST, ProjectManifest, load_manifest_from_path};
     use crate::prelude::LOCAL;
     use camino_tempfile::Utf8TempDir;
+    use tokio::sync::mpsc::Sender;
 
-    /// Recipes are never used in this test; every canister is pre-built.
+    /// Recipes and plugins are never used in this test; every canister is pre-built.
     struct PanicResolver;
 
     #[async_trait::async_trait]
-    impl Resolve for PanicResolver {
-        async fn resolve(
+    impl RemoteResourceResolve for PanicResolver {
+        async fn resolve_recipe(
             &self,
             _recipe: &Recipe,
             _context: &RecipeContext,
         ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
             panic!("recipe resolver should not be called in this test");
+        }
+
+        async fn resolve_wasm(
+            &self,
+            _source: &SourceField,
+            _base_dir: &Path,
+            _sha256: Option<&str>,
+            _stdio: Option<Sender<String>>,
+        ) -> Result<PathBuf, ResolveError> {
+            panic!("wasm resolver should not be called in this test");
         }
     }
 
@@ -118,11 +129,10 @@ mod tests {
             ),
         );
 
-        let files = HostFileAccess;
         let m: ProjectManifest = load_manifest_from_path(&tmp.path().join(PROJECT_MANIFEST))
             .await
             .unwrap();
-        let p = consolidate_manifest(&files, tmp.path(), &PanicResolver, &m)
+        let p = consolidate_manifest(tmp.path(), &PanicResolver, &m)
             .await
             .unwrap();
         let env = p.environments.get(LOCAL).expect("local environment");

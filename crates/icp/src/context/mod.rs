@@ -4,7 +4,7 @@ use url::Url;
 use crate::{
     Canister,
     agent::CreateAgentError,
-    canister::{build::Build, sync::Synchronize},
+    canister::build::Build,
     directories,
     identity::IdentitySelection,
     manifest::network::RootKeySpec,
@@ -96,9 +96,6 @@ pub struct Context {
     /// Canister builder
     pub builder: Arc<dyn Build>,
 
-    /// Canister synchronizer
-    pub syncer: Arc<dyn Synchronize>,
-
     /// Whether debug is enabled
     pub debug: bool,
 
@@ -110,6 +107,18 @@ pub struct Context {
 }
 
 impl Context {
+    /// Build a resolver for the project's remote resources — recipe templates
+    /// and plugin wasms — backed by the package cache and an HTTP client.
+    pub fn resource_resolver(
+        &self,
+    ) -> Result<Arc<dyn crate::canister::recipe::RemoteResourceResolve>, crate::fs::lock::LockError>
+    {
+        Ok(Arc::new(crate::canister::recipe::handlebars::Handlebars {
+            http_client: reqwest::Client::new(),
+            pkg_cache: self.dirs.package_cache()?,
+        }))
+    }
+
     /// Gets an identity based on the provided identity selection.
     // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
     pub async fn get_identity(
@@ -610,7 +619,6 @@ impl Context {
             network: Arc::new(crate::network::MockNetworkAccessor::new()),
             agent: Arc::new(crate::agent::Creator),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
-            syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
             telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
             password_func: Arc::new(|| Err("no password available in mock context".to_string())),

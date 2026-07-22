@@ -2,21 +2,15 @@ use async_trait::async_trait;
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
-use icp::{
-    Canister,
-    canister::sync::{Synchronize, SynchronizeError},
-    package::PackageCache,
-    prelude::PathBuf,
-};
-use icp_deploy_canister::manifest::adapter::prebuilt::SourceField;
+use icp::{Canister, canister::recipe::RemoteResourceResolve, canister::script, prelude::PathBuf};
 use icp_deploy_canister::sync_exec::{
-    PluginExecutor, PluginExecutorError, PluginInvocation, ScriptInvocation, StepProgress,
+    ScriptInvocation, ScriptRunError, ScriptRunner, StepProgress,
 };
 use icp_deploy_canister::{SyncCanisterError, SyncStepContext, run_sync_steps};
 use snafu::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::mpsc::Sender;
 use tracing::error;
 
 use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
@@ -35,89 +29,48 @@ struct SyncFailure {
     progress_output: Vec<String>,
 }
 
-/// Per-canister mutable state guarded so the `&self` [`PluginExecutor`] can drive
-/// the (mutable, sequential) progress bar.
-struct SyncStepState<'a> {
-    pb: &'a mut MultiStepProgressBar,
-    /// 1-based index of the step about to run, for the progress header.
-    next: usize,
-}
-
-/// [`PluginExecutor`] that runs a resolved step via the host [`Synchronize`]
-/// implementation (WASI plugin / subprocess script) and frames it on the
-/// canister's multi-step progress bar. The library owns the step loop and all
-/// input derivation ([`run_sync_steps`]); this only performs the host action and
-/// streams its output.
-struct AgentSyncExecutor<'a> {
-    syncer: Arc<dyn Synchronize>,
-    agent: Agent,
-    pkg_cache: &'a PackageCache,
-    total: usize,
-    state: Mutex<SyncStepState<'a>>,
-}
-
-impl AgentSyncExecutor<'_> {
-    /// Frame a step on the shared progress bar: advance the counter, print the
-    /// header, run `f` against a fresh line sender, and close the step. Holding
-    /// the guard across `f` keeps steps framed sequentially on the shared bar.
-    async fn framed<F, Fut>(
-        &self,
-        header: impl FnOnce(usize, usize) -> String,
-        f: F,
-    ) -> Result<Vec<String>, SynchronizeError>
-    where
-        F: FnOnce(tokio::sync::mpsc::Sender<String>) -> Fut,
-        Fut: Future<Output = Result<Vec<String>, SynchronizeError>>,
-    {
-        let mut st = self.state.lock().await;
-        st.next += 1;
-        let header = header(st.next, self.total);
-        let tx = st.pb.begin_step(header);
-        let result = f(tx).await;
-        st.pb.end_step().await;
-        result
-    }
-}
+/// [`ScriptRunner`] backed by the host subprocess executor. Sync-step dispatch
+/// and the `ICP_CLI_*` environment are assembled by `icp_deploy_canister`; this
+/// only spawns the resolved command(s).
+struct HostScriptRunner;
 
 #[async_trait]
-impl PluginExecutor for AgentSyncExecutor<'_> {
-    async fn run_plugin(
-        &self,
-        invocation: PluginInvocation,
-        _progress: Option<&dyn StepProgress>,
-    ) -> Result<Vec<String>, PluginExecutorError> {
-        let src = match &invocation.source {
-            SourceField::Local(l) => format!("path: {}", l.path),
-            SourceField::Remote(r) => format!("url: {}", r.url),
-        };
-        self.framed(
-            |n, total| format!("\nSyncing: plugin {src} {n} of {total}"),
-            |tx| async move {
-                self.syncer
-                    .run_plugin(&invocation, &self.agent, Some(tx), self.pkg_cache)
-                    .await
-            },
-        )
-        .await
-        .map_err(|source| PluginExecutorError::Plugin {
-            source: Box::new(source),
-        })
-    }
-
+impl ScriptRunner for HostScriptRunner {
     async fn run_script(
         &self,
         invocation: ScriptInvocation,
-        _progress: Option<&dyn StepProgress>,
-    ) -> Result<Vec<String>, PluginExecutorError> {
-        let desc = invocation.commands.join("\n");
-        self.framed(
-            |n, total| format!("\nSyncing: script {desc} {n} of {total}"),
-            |tx| async move { self.syncer.run_script(&invocation, Some(tx)).await },
-        )
-        .await
-        .map_err(|source| PluginExecutorError::Script {
-            source: Box::new(source),
-        })
+        stdio: Option<Sender<String>>,
+    ) -> Result<Vec<String>, ScriptRunError> {
+        let env_refs: Vec<(&str, &str)> = invocation
+            .env
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        script::execute_commands(&invocation.commands, &invocation.cwd, &env_refs, stdio)
+            .await
+            .map_err(|source| ScriptRunError {
+                source: Box::new(source),
+            })?;
+        // Persistent stderr is a sync-plugin feature only; script steps don't
+        // currently retain any output past the rolling step view.
+        Ok(vec![])
+    }
+}
+
+/// [`StepProgress`] that frames each sync step on the canister's multi-step
+/// progress bar and streams the step's output lines to it.
+struct BarStepProgress<'a> {
+    pb: &'a mut MultiStepProgressBar,
+}
+
+#[async_trait]
+impl StepProgress for BarStepProgress<'_> {
+    fn begin_step(&mut self, header: String) -> Option<Sender<String>> {
+        Some(self.pb.begin_step(header))
+    }
+
+    async fn end_step(&mut self) {
+        self.pb.end_step().await;
     }
 }
 
@@ -125,8 +78,8 @@ impl PluginExecutor for AgentSyncExecutor<'_> {
 /// on `pb`. Environment variables are applied separately by the caller.
 #[allow(clippy::too_many_arguments)]
 async fn sync_canister(
-    syncer: Arc<dyn Synchronize>,
-    agent: Agent,
+    agent: &Agent,
+    resolver: &dyn RemoteResourceResolve,
     canister_path: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
@@ -135,7 +88,6 @@ async fn sync_canister(
     canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     pb: &mut MultiStepProgressBar,
-    pkg_cache: &PackageCache,
 ) -> Result<Vec<String>, SyncCanisterError> {
     let ctx = SyncStepContext {
         canister_path,
@@ -145,28 +97,29 @@ async fn sync_canister(
         canister_ids: canister_ids.clone(),
         proxy,
     };
-    let executor = AgentSyncExecutor {
-        syncer,
+    let mut progress = BarStepProgress { pb };
+    run_sync_steps(
+        canister_info,
+        &ctx,
         agent,
-        pkg_cache,
-        total: canister_info.sync.steps.len(),
-        state: Mutex::new(SyncStepState { pb, next: 0 }),
-    };
-    run_sync_steps(canister_info, &ctx, &executor, None).await
+        resolver,
+        &HostScriptRunner,
+        Some(&mut progress),
+    )
+    .await
 }
 
 /// Orchestrates syncing multiple canisters with progress tracking
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync_many(
-    syncer: Arc<dyn Synchronize>,
     agent: Agent,
+    resolver: Arc<dyn RemoteResourceResolve>,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     environment: String,
     network: String,
     canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     debug: bool,
-    pkg_cache: &PackageCache,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
@@ -176,15 +129,15 @@ pub(crate) async fn sync_many(
 
         let fut = {
             let agent = agent.clone();
-            let syncer = syncer.clone();
+            let resolver = resolver.clone();
             let environment = environment.clone();
             let network = network.clone();
             let canister_ids = canister_ids.clone();
 
             async move {
                 let sync_result = sync_canister(
-                    syncer,
-                    agent,
+                    &agent,
+                    resolver.as_ref(),
                     canister_path,
                     cid,
                     &canister_info,
@@ -193,7 +146,6 @@ pub(crate) async fn sync_many(
                     &canister_ids,
                     proxy,
                     &mut pb,
-                    pkg_cache,
                 )
                 .await;
 

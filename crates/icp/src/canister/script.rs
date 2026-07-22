@@ -49,7 +49,7 @@ pub enum ScriptError {
     WslBash,
 }
 
-pub(super) async fn execute(
+pub async fn execute(
     adapter: &Adapter,
     cwd: &Path,
     envs: &[(&str, &str)],
@@ -64,7 +64,7 @@ pub(super) async fn execute(
 ///
 /// The sync path resolves its `commands` (and the `ICP_CLI_*` environment) in
 /// `icp-deploy-canister`; the build path calls [`execute`] with its adapter.
-pub(super) async fn execute_commands(
+pub async fn execute_commands(
     cmds: &[String],
     cwd: &Path,
     envs: &[(&str, &str)],

@@ -24,8 +24,7 @@ use crate::{
 
 pub mod canister;
 pub mod deploy;
-pub mod files;
-pub mod icp_access;
+pub mod fs;
 pub mod ids;
 pub mod manifest;
 pub mod network;
@@ -34,21 +33,16 @@ pub mod prelude;
 pub mod project;
 pub mod sync_exec;
 
-#[cfg(test)]
-mod testutil;
-
 pub use deploy::{
     DeployCanisterError, DeployError, InstallCanisterError, InstallMode, SyncCanisterError,
-    apply_binding_env_vars, deploy, deploy_canister, install_canister, install_canister_resolved,
-    resolve_install_mode_and_status, run_sync_steps, start_canister, sync_canister,
+    SyncStepError, UpdateOrProxyError, apply_binding_env_vars, binding_env_vars, deploy,
+    deploy_canister, install_canister, install_canister_resolved, resolve_install_mode_and_status,
+    run_sync_steps, start_canister, sync_canister,
 };
-pub use files::{FileAccess, FileAccessError};
-pub use icp_access::{IcpAccess, IcpAccessError};
 pub use ids::{IdMapping, IdStore, IdStoreError};
 pub use project::{consolidate_manifest, load_project, verify_sandbox};
 pub use sync_exec::{
-    PluginExecutor, PluginExecutorError, PluginInvocation, ScriptInvocation, StepProgress,
-    SyncStepContext, system_env_vars,
+    ScriptInvocation, ScriptRunError, ScriptRunner, StepProgress, SyncStepContext, system_env_vars,
 };
 
 /// Resolved initialization arguments, with any file references already loaded.

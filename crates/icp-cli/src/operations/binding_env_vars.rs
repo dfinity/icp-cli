@@ -8,7 +8,6 @@ use icp_deploy_canister::{SyncCanisterError, apply_binding_env_vars};
 use snafu::Snafu;
 use tracing::error;
 
-use crate::operations::access::AgentIcpAccess;
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 #[derive(Debug, Snafu)]
@@ -62,7 +61,6 @@ pub(crate) async fn set_binding_env_vars_many(
         .fail();
     }
 
-    let icp = Arc::new(AgentIcpAccess::new(agent, proxy));
     let canister_list = Arc::new(canister_list);
 
     let mut futs = FuturesOrdered::new();
@@ -71,14 +69,14 @@ pub(crate) async fn set_binding_env_vars_many(
     for (cid, info) in target_canisters {
         let pb = progress_manager.create_progress_bar(&info.name);
         let canister_name = info.name.clone();
-        let icp = icp.clone();
+        let agent = agent.clone();
         let canister_list = canister_list.clone();
 
         let settings_fn = {
             let pb = pb.clone();
             async move {
                 pb.set_message("Updating environment variables...");
-                apply_binding_env_vars(&info, cid, &canister_list, icp.as_ref()).await
+                apply_binding_env_vars(&info, cid, &canister_list, &agent, proxy).await
             }
         };
 

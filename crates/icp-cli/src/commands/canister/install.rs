@@ -10,13 +10,11 @@ use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};
 
-use icp::host_files::HostFileAccess;
 use icp_deploy_canister::install_canister_resolved;
 
 use crate::{
     commands::args::{self, ArgsOpt},
     operations::{
-        access::{AgentIcpAccess, ArtifactFileAccess},
         candid_compat::{CandidCompatibility, check_candid_compatibility},
         install::{WasmMemoryPersistenceOpt, is_eop_canister, resolve_install_mode_and_status},
     },
@@ -185,49 +183,21 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         }
     }
 
-    let icp = AgentIcpAccess::new(agent.clone(), args.proxy);
     let wmp = args
         .wasm_memory_persistence
         .map(WasmMemoryPersistenceOpt::to_ic);
-    match &args.wasm {
-        // Explicit wasm file: read it through the host filesystem.
-        Some(wasm_path) => {
-            install_canister_resolved(
-                &canister_display,
-                canister_id,
-                wasm_path,
-                install_mode,
-                status,
-                init_args_bytes.as_deref(),
-                wmp,
-                &HostFileAccess,
-                &icp,
-            )
-            .await?;
-        }
-        // Build output: read it through the artifact store, keyed by canister name.
-        None => {
-            let name = match &selections.canister {
-                CanisterSelection::Named(name) => name,
-                CanisterSelection::Principal(_) => {
-                    unreachable!("installing from the build output requires a named canister")
-                }
-            };
-            let files = ArtifactFileAccess(ctx.artifacts.clone());
-            install_canister_resolved(
-                &canister_display,
-                canister_id,
-                Path::new(name),
-                install_mode,
-                status,
-                init_args_bytes.as_deref(),
-                wmp,
-                &files,
-                &icp,
-            )
-            .await?;
-        }
-    }
+    install_canister_resolved(
+        &canister_display,
+        canister_id,
+        &wasm,
+        install_mode,
+        status,
+        init_args_bytes.as_deref(),
+        wmp,
+        &agent,
+        args.proxy,
+    )
+    .await?;
 
     info!("Canister {canister_display} installed successfully");
 

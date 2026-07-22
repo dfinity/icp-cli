@@ -141,17 +141,16 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     )
     .await?;
 
-    let pkg_cache = ctx.dirs.package_cache()?;
+    let resolver = ctx.resource_resolver()?;
     sync_many(
-        ctx.syncer.clone(),
         agent,
+        resolver,
         sync_canisters,
         environment_selection.name().to_owned(),
         env.network.name.clone(),
         canister_ids,
         args.proxy,
         ctx.debug,
-        &pkg_cache,
     )
     .await?;
 

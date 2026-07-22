@@ -23,7 +23,9 @@ use crate::{
     prelude::*,
 };
 
-use super::{Resolve, ResolveError};
+use super::{RemoteResourceResolve, ResolveError};
+use crate::manifest::adapter::prebuilt::SourceField;
+use tokio::sync::mpsc::Sender;
 
 pub struct Handlebars {
     /// Http client for fetching remote recipe templates
@@ -284,8 +286,8 @@ impl Handlebars {
 }
 
 #[async_trait]
-impl Resolve for Handlebars {
-    async fn resolve(
+impl RemoteResourceResolve for Handlebars {
+    async fn resolve_recipe(
         &self,
         recipe: &Recipe,
         recipe_context: &super::RecipeContext,
@@ -293,6 +295,20 @@ impl Resolve for Handlebars {
         self.resolve_impl(recipe, recipe_context)
             .await
             .map_err(|source| ResolveError::Resolve {
+                source: Box::new(source),
+            })
+    }
+
+    async fn resolve_wasm(
+        &self,
+        source: &SourceField,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        stdio: Option<Sender<String>>,
+    ) -> Result<PathBuf, ResolveError> {
+        crate::canister::wasm::resolve(source, base_dir, sha256, stdio.as_ref(), &self.pkg_cache)
+            .await
+            .map_err(|source| ResolveError::ResolveWasm {
                 source: Box::new(source),
             })
     }

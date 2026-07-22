@@ -10,7 +10,7 @@ pub use icp_deploy_canister::{
 };
 
 use crate::{
-    canister::recipe::Resolve,
+    canister::recipe::RemoteResourceResolve,
     manifest::{
         LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
         load_manifest_from_path,
@@ -29,7 +29,6 @@ pub mod canister;
 pub mod context;
 pub mod directories;
 pub mod fs;
-pub mod host_files;
 pub mod identity;
 pub mod manifest;
 pub mod network;
@@ -77,7 +76,7 @@ pub trait ProjectLoad: Sync + Send {
 
 pub struct ProjectLoadImpl {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
-    pub recipe: Arc<dyn Resolve>,
+    pub recipe: Arc<dyn RemoteResourceResolve>,
 }
 
 /// Ensures the "operating on a workspace root above your sub-project" notice is
@@ -128,14 +127,9 @@ impl ProjectLoad for ProjectLoadImpl {
         debug!("Loaded project manifest: {m:#?}");
 
         // Consolidate manifest into project, reading files from the host filesystem.
-        let p = project::consolidate_manifest(
-            &crate::host_files::HostFileAccess,
-            &pdir,
-            self.recipe.as_ref(),
-            &m,
-        )
-        .await
-        .context(ProjectSnafu)?;
+        let p = project::consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
+            .await
+            .context(ProjectSnafu)?;
 
         debug!("Rendered project definition: {p:#?}");
 
@@ -546,14 +540,16 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
+    use crate::canister::recipe::{RecipeContext, RemoteResourceResolve, ResolveError};
     use crate::manifest::{
         ProjectRootLocate, ProjectRootLocateError,
+        adapter::prebuilt::SourceField,
         canister::{BuildSteps, SyncSteps},
         recipe::Recipe,
     };
     use camino_tempfile::Utf8TempDir;
     use indoc::indoc;
+    use tokio::sync::mpsc::Sender;
 
     struct MockProjectRootLocate {
         path: PathBuf,
@@ -578,15 +574,13 @@ mod tests {
     struct MockRecipeResolver;
 
     #[async_trait]
-    impl Resolve for MockRecipeResolver {
-        async fn resolve(
+    impl RemoteResourceResolve for MockRecipeResolver {
+        async fn resolve_recipe(
             &self,
             _recipe: &Recipe,
             _context: &RecipeContext,
         ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-            use crate::manifest::adapter::prebuilt::{
-                Adapter as PrebuiltAdapter, LocalSource, SourceField,
-            };
+            use crate::manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource};
             use crate::manifest::canister::BuildStep;
 
             // Create a minimal BuildSteps with a dummy prebuilt step
@@ -600,6 +594,16 @@ mod tests {
             };
 
             Ok((build_steps, SyncSteps::default()))
+        }
+
+        async fn resolve_wasm(
+            &self,
+            _source: &SourceField,
+            _base_dir: &Path,
+            _sha256: Option<&str>,
+            _stdio: Option<Sender<String>>,
+        ) -> Result<PathBuf, ResolveError> {
+            unimplemented!("MockRecipeResolver::resolve_wasm")
         }
     }
 

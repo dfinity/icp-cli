@@ -3,13 +3,11 @@ use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterStatusType, WasmMemoryPersistence,
 };
-use icp::prelude::*;
 use icp_deploy_canister::{InstallCanisterError, install_canister_resolved};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
 use tracing::error;
 
-use crate::operations::access::{AgentIcpAccess, ArtifactFileAccess};
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::misc::fetch_canister_metadata;
@@ -87,35 +85,53 @@ pub(crate) struct ResolveInstallModeError {
     source: UpdateOrProxyError,
 }
 
+#[derive(Debug, Snafu)]
+pub(crate) enum InstallStoredError {
+    #[snafu(display("failed to read the built artifact for canister '{canister}'"))]
+    ReadArtifact {
+        canister: String,
+        source: icp::store_artifact::LookupArtifactError,
+    },
+
+    #[snafu(transparent)]
+    Install { source: InstallCanisterError },
+}
+
 /// Install one canister whose build artifact lives in the store, addressed by
 /// its store key `canister_name`. The install-code/chunking/EOP logic lives in
-/// `icp_deploy_canister::install_canister_resolved`; this is a thin wrapper over
-/// the artifact-backed `FileAccess` and agent-backed `IcpAccess`.
+/// `icp_deploy_canister::install_canister_resolved`; this reads the built wasm
+/// from the artifact store and hands it to the agent-backed installer.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn install_stored_canister(
-    icp: &AgentIcpAccess,
-    files: &ArtifactFileAccess,
+    agent: &Agent,
+    proxy: Option<Principal>,
+    artifacts: &dyn icp::store_artifact::Access,
     canister_id: &Principal,
     canister_name: &str,
     mode: CanisterInstallMode,
     status: CanisterStatusType,
     init_args: Option<&[u8]>,
     wasm_memory_persistence: Option<WasmMemoryPersistenceOpt>,
-) -> Result<(), InstallCanisterError> {
+) -> Result<(), InstallStoredError> {
+    let wasm = artifacts
+        .lookup(canister_name)
+        .await
+        .context(ReadArtifactSnafu {
+            canister: canister_name,
+        })?;
     install_canister_resolved(
         canister_name,
         *canister_id,
-        // The artifact `FileAccess` resolves the store key, so the "path" is the
-        // canister name.
-        Path::new(canister_name),
+        &wasm,
         mode,
         status,
         init_args,
         wasm_memory_persistence.map(WasmMemoryPersistenceOpt::to_ic),
-        files,
-        icp,
+        agent,
+        proxy,
     )
-    .await
+    .await?;
+    Ok(())
 }
 
 #[derive(Debug, Snafu)]
@@ -128,7 +144,7 @@ pub struct InstallManyError {
 struct InstallFailure {
     canister_name: String,
     canister_id: Principal,
-    error: InstallCanisterError,
+    error: InstallStoredError,
 }
 
 /// Installs code to multiple canisters and displays progress bars.
@@ -147,16 +163,13 @@ pub(crate) async fn install_many(
     artifacts: Arc<dyn icp::store_artifact::Access>,
     debug: bool,
 ) -> Result<(), InstallManyError> {
-    let icp = Arc::new(AgentIcpAccess::new(agent, proxy));
-    let files = Arc::new(ArtifactFileAccess(artifacts));
-
     let mut futs = FuturesOrdered::new();
     let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode, status, init_args) in canisters {
         let pb = progress_manager.create_progress_bar(&name);
-        let icp = icp.clone();
-        let files = files.clone();
+        let agent = agent.clone();
+        let artifacts = artifacts.clone();
         let install_fn = {
             let pb = pb.clone();
             let name = name.clone();
@@ -164,8 +177,9 @@ pub(crate) async fn install_many(
             async move {
                 pb.set_message("Installing...");
                 install_stored_canister(
-                    &icp,
-                    &files,
+                    &agent,
+                    proxy,
+                    artifacts.as_ref(),
                     &cid,
                     &name,
                     mode,

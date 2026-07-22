@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
-use crate::files::{FileAccess, FileAccessError};
+use crate::fs;
 use crate::prelude::*;
 
 pub mod adapter;
@@ -35,7 +35,7 @@ pub const CANISTER_MANIFEST: &str = "canister.yaml";
 #[derive(Debug, Snafu)]
 pub enum LoadManifestError {
     #[snafu(transparent)]
-    Read { source: FileAccessError },
+    Read { source: fs::IoError },
 
     #[snafu(display("failed to parse manifest at '{path}'"))]
     Parse {
@@ -44,12 +44,12 @@ pub enum LoadManifestError {
     },
 }
 
-/// Load and parse a YAML manifest of type `T` through the injected [`FileAccess`].
-pub async fn load_manifest<T>(files: &dyn FileAccess, path: &Path) -> Result<T, LoadManifestError>
+/// Load and parse a YAML manifest of type `T` from disk.
+pub fn load_manifest<T>(path: &Path) -> Result<T, LoadManifestError>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let content = files.read_file(path).await?;
+    let content = fs::read(path)?;
     let m = serde_yaml::from_slice::<T>(&content).context(ParseSnafu {
         path: path.to_path_buf(),
     })?;

@@ -82,6 +82,49 @@ pub enum ResolveError {
     },
 }
 
+/// A [`RemoteResourceResolve`] that always fails, for environments that don't
+/// support remote recipe templates or plugin wasms.
+pub struct NoResolve;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("remote recipes are not allowed"))]
+pub struct NoResolveError;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("remote modules are not allowed"))]
+pub struct NoResolveModuleError;
+
+#[async_trait]
+impl RemoteResourceResolve for NoResolve {
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError> {
+        match &recipe.recipe_type {
+            RecipeType::File(path) => {
+                crate::fs::read_to_string(path.as_ref()).map_err(|e| ResolveError::Resolve {
+                    source: Box::new(e),
+                })
+            }
+            _ => Err(ResolveError::Resolve {
+                source: Box::new(NoResolveError),
+            }),
+        }
+    }
+
+    async fn resolve_wasm(
+        &self,
+        source: &SourceField,
+        _base_dir: &Path,
+        _sha256: Option<&str>,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<PathBuf, ResolveError> {
+        match source {
+            SourceField::Local(source) => Ok(source.path.clone()),
+            _ => Err(ResolveError::ResolveWasm {
+                source: Box::new(NoResolveModuleError),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Snafu)]
 pub enum RenderRecipeError {
     #[snafu(display("recipe template for '{recipe}' failed to render"))]

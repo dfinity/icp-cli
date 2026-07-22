@@ -41,6 +41,7 @@ pub trait IdStore: Send + Sync {
     ) -> Result<(), IdStoreError>;
 }
 
+#[derive(Debug, Default)]
 pub struct InMemoryIdStore(pub Mutex<BTreeMap<String, IdMapping>>);
 
 impl IdStore for InMemoryIdStore {

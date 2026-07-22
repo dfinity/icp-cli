@@ -1,8 +1,10 @@
-//! Canister installation, syncing, and the project model, with all host IO
-//! abstracted behind trait objects so the core can run inside a canister.
+//! The project model plus canister installation, syncing, and deploy
+//! orchestration over an `ic-agent` `Agent`.
 //!
-//! See the module-level docs on the IO traits ([`files`], [`icp_access`],
-//! [`ids`]) for the abstraction boundary.
+//! Subprocess script execution and remote-resource resolution (recipe templates
+//! and plugin wasms, which use the host's package cache) are provided by the
+//! host through the [`sync_exec::ScriptRunner`] and
+//! [`canister::recipe::RemoteResourceResolve`] traits.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -130,6 +132,55 @@ pub struct Canister {
     pub friendly_names: Vec<String>,
 }
 
+#[derive(Debug, Snafu)]
+pub enum BundleModulePathError {
+    #[snafu(display(
+        "canister '{canister}' does not have a single build step (found {count}); a bundled \
+         canister must be built by exactly one pre-built step"
+    ))]
+    NotSingleBuildStep { canister: String, count: usize },
+
+    #[snafu(display(
+        "canister '{canister}' is not built by a pre-built step; a bundled canister's module \
+         must come from a `pre-built` build step"
+    ))]
+    NotPrebuilt { canister: String },
+
+    #[snafu(display("canister '{canister}' is built from a remote URL, not a local module path"))]
+    NotLocal { canister: String },
+}
+
+/// Extract the local wasm module path a bundled canister is built from.
+///
+/// A bundle's canisters are each built by a single `pre-built` step pointing at
+/// the module on disk; this returns that path, erroring if the build is not that
+/// single-prebuilt-local-path shape.
+pub fn bundle_get_canister_module_path(
+    canister: &Canister,
+) -> Result<&Path, BundleModulePathError> {
+    let steps = &canister.build.steps;
+    let [step] = steps.as_slice() else {
+        return NotSingleBuildStepSnafu {
+            canister: canister.name.clone(),
+            count: steps.len(),
+        }
+        .fail();
+    };
+    let manifest::BuildStep::Prebuilt(adapter) = step else {
+        return NotPrebuiltSnafu {
+            canister: canister.name.clone(),
+        }
+        .fail();
+    };
+    match &adapter.source {
+        manifest::prebuilt::SourceField::Local(local) => Ok(&local.path),
+        manifest::prebuilt::SourceField::Remote(_) => NotLocalSnafu {
+            canister: canister.name.clone(),
+        }
+        .fail(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Network {
     pub name: String,
@@ -184,5 +235,77 @@ pub struct Project {
 impl Project {
     pub fn get_canister(&self, canister_name: &str) -> Option<&(PathBuf, Canister)> {
         self.canisters.get(canister_name)
+    }
+}
+
+#[cfg(test)]
+mod bundle_tests {
+    use super::*;
+    use crate::canister::Settings;
+    use crate::manifest::adapter::prebuilt::{LocalSource, RemoteSource};
+    use crate::manifest::adapter::{prebuilt, script};
+    use crate::manifest::canister::{BuildStep, SyncSteps};
+
+    fn canister_with_build(steps: Vec<BuildStep>) -> Canister {
+        Canister {
+            name: "backend".to_owned(),
+            settings: Settings::default(),
+            build: BuildSteps { steps },
+            sync: SyncSteps { steps: vec![] },
+            init_args: None,
+            registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec![],
+        }
+    }
+
+    fn prebuilt_local(path: &str) -> BuildStep {
+        BuildStep::Prebuilt(prebuilt::Adapter {
+            source: prebuilt::SourceField::Local(LocalSource { path: path.into() }),
+            sha256: None,
+        })
+    }
+
+    #[test]
+    fn extracts_the_single_prebuilt_local_path() {
+        let c = canister_with_build(vec![prebuilt_local("out/backend.wasm")]);
+        assert_eq!(
+            bundle_get_canister_module_path(&c).unwrap(),
+            Path::new("out/backend.wasm")
+        );
+    }
+
+    #[test]
+    fn rejects_zero_or_multiple_build_steps() {
+        let two = canister_with_build(vec![prebuilt_local("a.wasm"), prebuilt_local("b.wasm")]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&two),
+            Err(BundleModulePathError::NotSingleBuildStep { count: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_a_non_prebuilt_step() {
+        let c = canister_with_build(vec![BuildStep::Script(script::Adapter {
+            command: script::CommandField::Command("make".to_owned()),
+        })]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&c),
+            Err(BundleModulePathError::NotPrebuilt { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_a_remote_prebuilt_source() {
+        let c = canister_with_build(vec![BuildStep::Prebuilt(prebuilt::Adapter {
+            source: prebuilt::SourceField::Remote(RemoteSource {
+                url: "https://example.com/backend.wasm".to_owned(),
+            }),
+            sha256: Some("abc".to_owned()),
+        })]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&c),
+            Err(BundleModulePathError::NotLocal { .. })
+        ));
     }
 }

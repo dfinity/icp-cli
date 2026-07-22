@@ -57,6 +57,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SignArgs) -> Result<(), SignError
         pubkey: target_pubkey.clone(),
         expiration,
         targets: args.canisters.clone(),
+        permissions: None,
     };
 
     let sig = identity

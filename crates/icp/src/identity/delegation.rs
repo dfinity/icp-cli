@@ -76,6 +76,7 @@ pub fn to_agent_types(
                     pubkey,
                     expiration,
                     targets,
+                    permissions: None,
                 },
                 signature,
             })

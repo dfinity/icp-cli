@@ -477,6 +477,7 @@ fn create_pem_session_and_build_identity(
         pubkey: session_pubkey.clone(),
         expiration,
         targets: None,
+        permissions: None,
     };
 
     let sig = identity

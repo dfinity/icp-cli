@@ -305,6 +305,10 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         log_memory_limit: args.log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         log_visibility,
         environment_variables,
+        // TODO: expose snapshot_visibility as a `settings update` flag (with
+        // set/add/remove-viewer sub-flags), mirroring log_visibility. Tracked for
+        // a follow-up PR; until then, leave it unchanged.
+        snapshot_visibility: None,
     };
 
     proxy_management::update_settings(

@@ -57,9 +57,8 @@ pub fn member_scoped_canisters(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, RemoteResourceResolve, ResolveError};
+    use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
     use crate::manifest::adapter::prebuilt::SourceField;
-    use crate::manifest::canister::{BuildSteps, SyncSteps};
     use crate::manifest::recipe::Recipe;
     use crate::manifest::{PROJECT_MANIFEST, ProjectManifest, load_manifest_from_path};
     use crate::prelude::LOCAL;
@@ -71,11 +70,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl RemoteResourceResolve for PanicResolver {
-        async fn resolve_recipe(
-            &self,
-            _recipe: &Recipe,
-            _context: &RecipeContext,
-        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
             panic!("recipe resolver should not be called in this test");
         }
 

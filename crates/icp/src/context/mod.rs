@@ -113,10 +113,12 @@ impl Context {
         &self,
     ) -> Result<Arc<dyn crate::canister::recipe::RemoteResourceResolve>, crate::fs::lock::LockError>
     {
-        Ok(Arc::new(crate::canister::recipe::handlebars::Handlebars {
-            http_client: reqwest::Client::new(),
-            pkg_cache: self.dirs.package_cache()?,
-        }))
+        Ok(Arc::new(
+            crate::canister::recipe::resolver::ResourceResolver {
+                http_client: reqwest::Client::new(),
+                pkg_cache: self.dirs.package_cache()?,
+            },
+        ))
     }
 
     /// Gets an identity based on the provided identity selection.

@@ -540,12 +540,9 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, RemoteResourceResolve, ResolveError};
+    use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
     use crate::manifest::{
-        ProjectRootLocate, ProjectRootLocateError,
-        adapter::prebuilt::SourceField,
-        canister::{BuildSteps, SyncSteps},
-        recipe::Recipe,
+        ProjectRootLocate, ProjectRootLocateError, adapter::prebuilt::SourceField, recipe::Recipe,
     };
     use camino_tempfile::Utf8TempDir;
     use indoc::indoc;
@@ -575,25 +572,15 @@ mod tests {
 
     #[async_trait]
     impl RemoteResourceResolve for MockRecipeResolver {
-        async fn resolve_recipe(
-            &self,
-            _recipe: &Recipe,
-            _context: &RecipeContext,
-        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-            use crate::manifest::adapter::prebuilt::{Adapter as PrebuiltAdapter, LocalSource};
-            use crate::manifest::canister::BuildStep;
-
-            // Create a minimal BuildSteps with a dummy prebuilt step
-            let build_steps = BuildSteps {
-                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
-                    source: SourceField::Local(LocalSource {
-                        path: "dummy.wasm".into(),
-                    }),
-                    sha256: None,
-                })],
-            };
-
-            Ok((build_steps, SyncSteps::default()))
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
+            // A minimal recipe template rendering to a single prebuilt build step.
+            Ok(indoc! {r#"
+                build:
+                  steps:
+                    - type: pre-built
+                      path: dummy.wasm
+            "#}
+            .to_owned())
         }
 
         async fn resolve_wasm(

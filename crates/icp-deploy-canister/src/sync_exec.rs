@@ -117,3 +117,24 @@ pub trait ScriptRunner: Sync + Send {
         stdio: Option<Sender<String>>,
     ) -> Result<Vec<String>, ScriptRunError>;
 }
+
+/// A [`ScriptRunner`] that always fails, for environments that don't support
+/// subprocess script sync steps.
+pub struct NoScripts;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("script sync steps are not supported in this environment"))]
+pub struct NoScriptsError;
+
+#[async_trait]
+impl ScriptRunner for NoScripts {
+    async fn run_script(
+        &self,
+        _invocation: ScriptInvocation,
+        _stdio: Option<Sender<String>>,
+    ) -> Result<Vec<String>, ScriptRunError> {
+        Err(ScriptRunError {
+            source: Box::new(NoScriptsError),
+        })
+    }
+}

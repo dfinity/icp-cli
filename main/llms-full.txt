@@ -1507,11 +1507,11 @@ The plugin runs with a deliberately narrow capability surface.
 | Resource | Limit |
 |----------|-------|
 | Wasm call-stack depth | 512 KiB |
-| Pure compute time | 60 seconds |
+| Pure compute time | 60 seconds (default) |
 | Linear memory | wasm32 address space (≤ 4 GiB) |
 | stdout / stderr per stream | 1 MiB |
 
-The 60-second budget counts only wasm instruction execution. Time spent waiting for a `canister-call` to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a `canister-call` to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
 
 ## Next Steps
 
@@ -9326,6 +9326,24 @@ export ICP_CLI_NETWORK_LAUNCHER_PATH=/path/to/icp-cli-network-launcher
 - CI environments where you pre-download dependencies
 
 Download the launcher manually from [icp-cli-network-launcher releases](https://github.com/dfinity/icp-cli-network-launcher/releases).
+
+### `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`
+
+Maximum seconds of pure WebAssembly compute a [sync plugin](../concepts/sync-plugins.md) may use during `icp sync`. Defaults to `60`.
+
+This is a runaway guard, not a security limit: sync plugins run locally in a read-only sandbox, so the limit only protects the machine running `icp sync` from a plugin that never terminates. Network/canister-call latency is already excluded from the budget, so the limit counts only time the plugin spends executing.
+
+Legitimately heavy plugins — for example, brotli-compressing a large asset bundle — can exceed the default, especially on slower CI runners where the same work takes more wall-clock time. Raise the limit if you hit `plugin exceeded the 60s compute-time limit`:
+
+```bash
+export ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS=300
+```
+
+An invalid value (non-integer or `0`) is rejected rather than silently ignored, so a typo can't leave you thinking you raised the limit when you didn't.
+
+**Use cases:**
+- CI jobs syncing large asset bundles that trip the default limit
+- Compression-heavy or otherwise compute-intensive sync plugins
 
 ## Windows-Specific Variables
 

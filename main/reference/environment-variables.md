@@ -136,6 +136,24 @@ export ICP_CLI_NETWORK_LAUNCHER_PATH=/path/to/icp-cli-network-launcher
 
 Download the launcher manually from [icp-cli-network-launcher releases](https://github.com/dfinity/icp-cli-network-launcher/releases).
 
+### `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`
+
+Maximum seconds of pure WebAssembly compute a [sync plugin](../concepts/sync-plugins.md) may use during `icp sync`. Defaults to `60`.
+
+This is a runaway guard, not a security limit: sync plugins run locally in a read-only sandbox, so the limit only protects the machine running `icp sync` from a plugin that never terminates. Network/canister-call latency is already excluded from the budget, so the limit counts only time the plugin spends executing.
+
+Legitimately heavy plugins — for example, brotli-compressing a large asset bundle — can exceed the default, especially on slower CI runners where the same work takes more wall-clock time. Raise the limit if you hit `plugin exceeded the 60s compute-time limit`:
+
+```bash
+export ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS=300
+```
+
+An invalid value (non-integer or `0`) is rejected rather than silently ignored, so a typo can't leave you thinking you raised the limit when you didn't.
+
+**Use cases:**
+- CI jobs syncing large asset bundles that trip the default limit
+- Compression-heavy or otherwise compute-intensive sync plugins
+
 ## Windows-Specific Variables
 
 ### `ICP_CLI_BASH_PATH`

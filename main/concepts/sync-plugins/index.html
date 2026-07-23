@@ -275,8 +275,8 @@
 
 
 
-<table><thead><tr><th>Resource</th><th>Limit</th></tr></thead><tbody><tr><td>Wasm call-stack depth</td><td>512 KiB</td></tr><tr><td>Pure compute time</td><td>60 seconds</td></tr><tr><td>Linear memory</td><td>wasm32 address space (≤ 4 GiB)</td></tr><tr><td>stdout / stderr per stream</td><td>1 MiB</td></tr></tbody></table>
-<p>The 60-second budget counts only wasm instruction execution. Time spent waiting for a <code>canister-call</code> to return over the network is <strong>not</strong> charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.</p>
+<table><thead><tr><th>Resource</th><th>Limit</th></tr></thead><tbody><tr><td>Wasm call-stack depth</td><td>512 KiB</td></tr><tr><td>Pure compute time</td><td>60 seconds (default)</td></tr><tr><td>Linear memory</td><td>wasm32 address space (≤ 4 GiB)</td></tr><tr><td>stdout / stderr per stream</td><td>1 MiB</td></tr></tbody></table>
+<p>The compute-time budget defaults to 60 seconds and is overridable with the <a href="../../reference/environment-variables/#icp_cli_plugin_compute_limit_secs"><code>ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS</code></a> environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a <code>canister-call</code> to return over the network is <strong>not</strong> charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="../../guides/writing-sync-plugins/">Writing a Sync Plugin</a> — Author your own plugin in Rust</li>

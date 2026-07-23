@@ -6,9 +6,25 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 23 Jul 2026 17:31:49 GMT</lastBuildDate>
-    <pubDate>Thu, 23 Jul 2026 16:00:52 GMT</pubDate>
+    <lastBuildDate>Thu, 23 Jul 2026 20:21:04 GMT</lastBuildDate>
+    <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Sync Plugins</title>
+      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
+      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
+      <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Tutorial</title>
       <link>https://cli.internetcomputer.org/main/tutorial/</link>
@@ -87,14 +103,6 @@
       <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
       <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Sync Plugins</title>
-      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
-      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
-      <pubDate>Fri, 26 Jun 2026 15:03:30 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -215,14 +223,6 @@
       <description>Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.</description>
       <pubDate>Tue, 19 May 2026 18:44:03 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/proxy-canister/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Thu, 14 May 2026 17:52:40 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

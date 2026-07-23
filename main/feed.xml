@@ -6,9 +6,25 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Sat, 18 Jul 2026 10:33:15 GMT</lastBuildDate>
-    <pubDate>Sat, 18 Jul 2026 10:32:21 GMT</pubDate>
+    <lastBuildDate>Thu, 23 Jul 2026 16:02:13 GMT</lastBuildDate>
+    <pubDate>Thu, 23 Jul 2026 16:00:52 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Tutorial</title>
+      <link>https://cli.internetcomputer.org/main/tutorial/</link>
+      <description>Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.</description>
+      <pubDate>Thu, 23 Jul 2026 16:00:52 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/tutorial/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Dependencies</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
+      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
+      <pubDate>Thu, 23 Jul 2026 16:00:52 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
@@ -31,14 +47,6 @@
       <description>Overview of core icp-cli concepts including project model, build lifecycle, environments, recipes, and canister discovery.</description>
       <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Dependencies</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
-      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
-      <pubDate>Wed, 15 Jul 2026 15:42:07 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -191,14 +199,6 @@
       <description>Install icp-cli and deploy a fullstack Internet Computer app to a local network in under 5 minutes.</description>
       <pubDate>Wed, 20 May 2026 13:43:10 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/quickstart/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Tutorial</title>
-      <link>https://cli.internetcomputer.org/main/tutorial/</link>
-      <description>Step-by-step walkthrough of deploying a fullstack Motoko and React app on the Internet Computer.</description>
-      <pubDate>Wed, 20 May 2026 13:43:10 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/tutorial/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

@@ -1,7 +1,9 @@
 use camino::Utf8PathBuf;
 use candid::Principal;
 use ic_agent::Agent;
-use icp_sync_plugin::{RunPluginError, run_plugin};
+use icp_sync_plugin::{
+    DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, RunPluginError, run_plugin,
+};
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
@@ -17,8 +19,34 @@ pub enum PluginError {
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },
 
+    #[snafu(display(
+        "invalid {PLUGIN_COMPUTE_LIMIT_ENV} value '{value}': expected a positive integer number of seconds"
+    ))]
+    InvalidComputeLimit { value: String },
+
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
+}
+
+/// Resolve the plugin compute-time limit, honoring the
+/// [`PLUGIN_COMPUTE_LIMIT_ENV`] override. Fails loudly on a malformed value so
+/// a typo doesn't silently fall back to the default and leave the caller
+/// wondering why their raised limit had no effect.
+fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
+    match std::env::var(PLUGIN_COMPUTE_LIMIT_ENV) {
+        Err(_) => Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS),
+        Ok(value) => parse_compute_limit(&value),
+    }
+}
+
+fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
+    match value.trim().parse::<u64>() {
+        Ok(secs) if secs >= 1 => Ok(secs),
+        _ => InvalidComputeLimitSnafu {
+            value: value.to_owned(),
+        }
+        .fail(),
+    }
 }
 
 pub(super) async fn sync(
@@ -30,6 +58,11 @@ pub(super) async fn sync(
     stdio: Option<Sender<String>>,
     pkg_cache: &PackageCache,
 ) -> Result<Vec<String>, PluginError> {
+    // 0. Resolve the compute-time limit up front so a malformed
+    //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
+    //    wasm or touching the network — rather than after doing that work.
+    let compute_limit_secs = resolve_compute_limit_secs()?;
+
     // 1. Determine the on-disk path for the wasm. run_plugin needs a path, not raw bytes.
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
@@ -71,8 +104,33 @@ pub(super) async fn sync(
             proxy,
             identity_principal,
             environment_owned,
+            compute_limit_secs,
             stdio_clone,
         )
     })
     .context(RunSnafu)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_compute_limit_accepts_positive_integers() {
+        assert_eq!(parse_compute_limit("300").unwrap(), 300);
+        // Surrounding whitespace is tolerated.
+        assert_eq!(parse_compute_limit("  42 ").unwrap(), 42);
+    }
+
+    #[test]
+    fn parse_compute_limit_rejects_invalid_values() {
+        for bad in ["0", "abc", "30O", "-5", "1.5", ""] {
+            let err =
+                parse_compute_limit(bad).expect_err(&format!("expected '{bad}' to be rejected"));
+            assert!(
+                matches!(err, PluginError::InvalidComputeLimit { .. }),
+                "unexpected error for '{bad}': {err}"
+            );
+        }
+    }
 }

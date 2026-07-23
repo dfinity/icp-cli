@@ -9,8 +9,16 @@ use std::time::{Duration, Instant};
 const MAX_PLUGIN_OUTPUT: usize = 1024 * 1024; // 1 MiB per stream
 // Maximum wasm call-stack depth (in bytes).
 const MAX_WASM_STACK: usize = 512 * 1024;
-// How many seconds of pure wasm compute a plugin may use (host-call latency is excluded).
-const PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
+/// Default seconds of pure wasm compute a plugin may use (host-call latency is
+/// excluded). This is a runaway guard, not a security boundary: the plugin runs
+/// locally in a read-only WASI sandbox, so the limit only protects the machine
+/// running `icp sync` from a plugin that never terminates. Legitimately heavy
+/// plugins (e.g. brotli-compressing a large asset bundle) can exceed it,
+/// especially on slower CI runners, so it is overridable via the
+/// [`PLUGIN_COMPUTE_LIMIT_ENV`] environment variable.
+pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
+/// Environment variable that overrides [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
+pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 
 use bytes::Bytes;
 use camino::Utf8PathBuf;
@@ -124,8 +132,12 @@ impl SyncPluginImports for HostState {
 // must return wasmtime::Error (= anyhow::Error). Snafu derives std::error::Error
 // so .into() converts it via anyhow's blanket From<impl StdError + Send + Sync>.
 #[derive(Debug, Snafu)]
-#[snafu(display("plugin exceeded the {PLUGIN_COMPUTE_LIMIT_SECS}s compute time limit"))]
-struct ComputeTimeLimitExceeded;
+#[snafu(display(
+    "plugin exceeded the {limit_secs}s compute-time limit. If this plugin legitimately needs more compute time (e.g. brotli-compressing a large asset bundle), raise the limit by setting {PLUGIN_COMPUTE_LIMIT_ENV} above {limit_secs}s."
+))]
+struct ComputeTimeLimitExceeded {
+    limit_secs: u64,
+}
 
 #[derive(Debug, Snafu)]
 pub enum RunPluginError {
@@ -189,6 +201,7 @@ pub enum RunPluginError {
     PluginFailed { message: String },
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_plugin(
     wasm_path: Utf8PathBuf,
     base_dir: Utf8PathBuf,
@@ -199,6 +212,7 @@ pub fn run_plugin(
     proxy: Option<Principal>,
     identity_principal: Principal,
     environment: String,
+    compute_limit_secs: u64,
     stdio: Option<Sender<String>>,
 ) -> Result<Vec<String>, RunPluginError> {
     use wasmtime::component::{Component, Linker};
@@ -312,13 +326,16 @@ pub fn run_plugin(
     )?;
 
     let mut store = Store::new(&engine, host_state);
-    store.set_epoch_deadline(PLUGIN_COMPUTE_LIMIT_SECS);
+    store.set_epoch_deadline(compute_limit_secs);
     store.epoch_deadline_callback(move |_| {
         let extra = epoch_extension.swap(0, Ordering::Relaxed);
         if extra > 0 {
             Ok(wasmtime::UpdateDeadline::Continue(extra))
         } else {
-            Err(ComputeTimeLimitExceeded.into())
+            Err(ComputeTimeLimitExceeded {
+                limit_secs: compute_limit_secs,
+            }
+            .into())
         }
     });
 
@@ -538,9 +555,23 @@ mod tests {
             None,
             anon(),
             "test".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(result, Err(RunPluginError::LoadComponent { .. })));
+    }
+
+    #[test]
+    fn compute_time_limit_error_reflects_the_configured_limit() {
+        // The remediation must anchor to the actual limit (not a hardcoded
+        // literal), so it reads correctly whether the limit is the default or
+        // an env-var override. Use a distinctive value to catch a regression.
+        let msg = ComputeTimeLimitExceeded { limit_secs: 120 }.to_string();
+        assert!(msg.contains("exceeded the 120s"), "got: {msg}");
+        // The suggestion tells the user to go above the current limit — the
+        // value must flow into the remediation clause too.
+        assert!(msg.contains("above 120s"), "got: {msg}");
+        assert!(msg.contains(PLUGIN_COMPUTE_LIMIT_ENV), "got: {msg}");
     }
 
     // -------------------------------------------------------------------------
@@ -562,6 +593,7 @@ mod tests {
             None,
             anon(),
             "test".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
@@ -589,6 +621,7 @@ mod tests {
             None,
             anon(),
             "test".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
@@ -609,6 +642,7 @@ mod tests {
             None,
             anon(),
             "test".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(result, Err(RunPluginError::ReadFile { .. })));
@@ -636,6 +670,7 @@ mod tests {
             None,
             anon(),
             "test".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(result, Err(RunPluginError::SymlinkFile { .. })));
@@ -656,6 +691,7 @@ mod tests {
             None,
             anon(),
             "ok".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(result.is_ok());
@@ -676,12 +712,48 @@ mod tests {
             None,
             anon(),
             "error".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             None,
         );
         assert!(matches!(
             result,
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate failure"
         ));
+    }
+
+    #[test]
+    fn plugin_exceeding_compute_limit_is_trapped() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        // The "spin" fixture busy-loops forever; a 1-second limit keeps the
+        // test fast while still exercising the epoch-interruption trap.
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "spin".to_string(),
+            1,
+            None,
+        );
+        let err = result.expect_err("spinning plugin should hit the compute limit");
+        // The trap surfaces through the CallExec source chain, so walk it and
+        // assert the message names both the limit and the override env var.
+        let mut chain = err.to_string();
+        let mut cur: &dyn std::error::Error = &err;
+        while let Some(src) = cur.source() {
+            chain = format!("{chain}: {src}");
+            cur = src;
+        }
+        assert!(
+            chain.contains("compute-time limit") && chain.contains(PLUGIN_COMPUTE_LIMIT_ENV),
+            "unexpected error chain: {chain}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -701,6 +773,7 @@ mod tests {
                 None,
                 anon(),
                 "print".to_string(),
+                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
                 Some(tx),
             )
         });
@@ -726,6 +799,7 @@ mod tests {
                 None,
                 anon(),
                 "hello".to_string(),
+                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
                 Some(tx),
             )
         });

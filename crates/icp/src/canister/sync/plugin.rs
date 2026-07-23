@@ -34,8 +34,15 @@ pub enum PluginError {
 /// wondering why their raised limit had no effect.
 fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
     match std::env::var(PLUGIN_COMPUTE_LIMIT_ENV) {
-        Err(_) => Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS),
         Ok(value) => parse_compute_limit(&value),
+        // Only a genuinely unset variable selects the default. A variable that
+        // is present but not valid UTF-8 is a malformed value, not "unset", so
+        // it must be rejected to honor the fail-loudly contract.
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS),
+        Err(std::env::VarError::NotUnicode(raw)) => InvalidComputeLimitSnafu {
+            value: raw.to_string_lossy().into_owned(),
+        }
+        .fail(),
     }
 }
 

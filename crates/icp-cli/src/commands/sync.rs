@@ -8,8 +8,10 @@ use icp::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 
+use icp::Canister;
+
 use crate::{
-    operations::{proxy_management, sync::sync_many},
+    operations::{binding_env_vars::set_binding_env_vars_many, proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
 };
 
@@ -122,17 +124,33 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .into_iter()
         .collect();
 
-    let pkg_cache = ctx.dirs.package_cache()?;
+    // Apply the generated `PUBLIC_CANISTER_ID:*` environment variables before
+    // syncing. `deploy` does this, but standalone `icp sync` previously did not,
+    // so a synced canister could run against stale/absent binding ids.
+    let target_canisters: Vec<(Principal, Canister)> = sync_canisters
+        .iter()
+        .map(|(cid, _, info)| (*cid, info.clone()))
+        .collect();
+    set_binding_env_vars_many(
+        agent.clone(),
+        args.proxy,
+        environment_selection.name(),
+        target_canisters,
+        canister_ids.clone(),
+        ctx.debug,
+    )
+    .await?;
+
+    let resolver = ctx.resource_resolver()?;
     sync_many(
-        ctx.syncer.clone(),
         agent,
+        resolver,
         sync_canisters,
         environment_selection.name().to_owned(),
         env.network.name.clone(),
         canister_ids,
         args.proxy,
         ctx.debug,
-        &pkg_cache,
     )
     .await?;
 

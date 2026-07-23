@@ -43,6 +43,7 @@ ic-management-canister-types.workspace = true
 ic-utils.workspace = true
 icp-canister-interfaces.workspace = true
 icp = { workspace = true, features = ["clap"] }
+icp-deploy-canister.workspace = true
 icrc-ledger-types.workspace = true
 indicatif.workspace = true
 itertools.workspace = true

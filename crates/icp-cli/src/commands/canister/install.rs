@@ -10,14 +10,13 @@ use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};
 
+use icp_deploy_canister::install_canister_resolved;
+
 use crate::{
     commands::args::{self, ArgsOpt},
     operations::{
         candid_compat::{CandidCompatibility, check_candid_compatibility},
-        install::{
-            WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
-            resolve_install_mode_and_status,
-        },
+        install::{WasmMemoryPersistenceOpt, is_eop_canister, resolve_install_mode_and_status},
     },
 };
 
@@ -184,16 +183,19 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         }
     }
 
-    install_canister(
-        &agent,
-        args.proxy,
-        &canister_id,
+    let wmp = args
+        .wasm_memory_persistence
+        .map(WasmMemoryPersistenceOpt::to_ic);
+    install_canister_resolved(
         &canister_display,
+        canister_id,
         &wasm,
         install_mode,
         status,
         init_args_bytes.as_deref(),
-        args.wasm_memory_persistence,
+        wmp,
+        &agent,
+        args.proxy,
     )
     .await?;
 

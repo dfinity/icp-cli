@@ -1,0 +1,49 @@
+[package]
+name = "icp-deploy-canister"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Enables `clap::ValueEnum` derives on manifest enums used as CLI value types
+# (e.g. `ArgsFormat`). Enabled transitively by `icp/clap`.
+clap = ["dep:clap"]
+
+[dependencies]
+async-trait.workspace = true
+bigdecimal.workspace = true
+camino.workspace = true
+candid.workspace = true
+clap = { workspace = true, optional = true }
+candid_parser.workspace = true
+dunce.workspace = true
+futures.workspace = true
+glob.workspace = true
+handlebars.workspace = true
+hex.workspace = true
+ic-agent.workspace = true
+ic-management-canister-types.workspace = true
+icp-canister-interfaces.workspace = true
+icp-sync-plugin.workspace = true
+indexmap.workspace = true
+itertools.workspace = true
+num-bigint.workspace = true
+num-integer.workspace = true
+num-traits.workspace = true
+pathdiff.workspace = true
+schemars.workspace = true
+serde.workspace = true
+sha2.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+snafu.workspace = true
+strum.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+indoc.workspace = true
+jsonschema.workspace = true

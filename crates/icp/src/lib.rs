@@ -1,28 +1,28 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use indexmap::IndexMap;
-use serde::Serialize;
 use snafu::prelude::*;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use candid_parser::parse_idl_args;
+pub use icp_deploy_canister::{
+    Canister, Environment, InitArgs, InitArgsToBytesError, Network, Project,
+};
 
 use crate::{
-    canister::{Settings, recipe::Resolve},
+    canister::recipe::RemoteResourceResolve,
     manifest::{
-        ArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
-        ProjectRootLocateError,
-        canister::{BuildSteps, SyncSteps},
+        LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate, ProjectRootLocateError,
         load_manifest_from_path,
     },
-    network::Configuration,
     prelude::*,
 };
+
+// Imports used only by the in-crate test mock builders below.
+#[cfg(test)]
+use std::collections::{BTreeMap, HashMap};
+#[cfg(test)]
+use {crate::canister::Settings, indexmap::IndexMap};
 
 pub mod agent;
 pub mod canister;
@@ -45,148 +45,6 @@ pub mod telemetry_data;
 const ICP_BASE: &str = ".icp";
 const CACHE_DIR: &str = "cache";
 const DATA_DIR: &str = "data";
-
-/// Resolved initialization arguments, with any file references already loaded.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum InitArgs {
-    /// Text content (inline or loaded from file). Format is always known.
-    Text { content: String, format: ArgsFormat },
-    /// Raw binary bytes (from a file with `format: bin`). Used directly.
-    Binary(Vec<u8>),
-}
-
-#[derive(Debug, Snafu)]
-pub enum InitArgsToBytesError {
-    #[snafu(display("failed to decode hex init args"))]
-    HexDecode { source: hex::FromHexError },
-
-    #[snafu(display("failed to parse Candid init args"))]
-    CandidParse { source: candid_parser::Error },
-
-    #[snafu(display("failed to encode Candid init args to bytes"))]
-    CandidEncode { source: candid::Error },
-}
-
-impl InitArgs {
-    /// Resolve to raw bytes according to the format.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, InitArgsToBytesError> {
-        match self {
-            InitArgs::Binary(bytes) => Ok(bytes.clone()),
-            InitArgs::Text { content, format } => match format {
-                ArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
-                ArgsFormat::Candid => {
-                    let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
-                    args.to_bytes().context(CandidEncodeSnafu)
-                }
-                ArgsFormat::Bin => {
-                    unreachable!("binary format cannot appear in InitArgs::Text")
-                }
-            },
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Canister {
-    pub name: String,
-
-    /// Canister settings, such as memory constaints, etc.
-    pub settings: Settings,
-
-    /// The build configuration specifying how to compile the canister's source
-    /// code into a WebAssembly module, including the adapter to use.
-    pub build: BuildSteps,
-
-    /// The configuration specifying how to sync the canister
-    pub sync: SyncSteps,
-
-    /// Initialization arguments passed to the canister during installation.
-    /// Resolved from the manifest — file contents are already loaded.
-    pub init_args: Option<InitArgs>,
-
-    /// If the canister was defined via a recipe reference, this holds the
-    /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
-    /// `None` when the canister uses explicit build/sync instructions.
-    pub registry_recipe: Option<String>,
-
-    /// Canister-discovery wiring. Maps the name this canister reads in a
-    /// `PUBLIC_CANISTER_ID:<name>` environment variable to the store key of the
-    /// referenced canister. Computed during consolidation so each canister sees
-    /// the view its owning project expects: its own project's canisters under
-    /// their local names, plus any declared dependencies under their aliases
-    /// (`<alias>:<canister>`). For a project with no dependencies this maps every
-    /// canister's local name to itself, reproducing the flat "every canister sees
-    /// every sibling" behavior.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub bindings: BTreeMap<String, String>,
-
-    /// Subdomain prefixes for the canister's friendly URLs, most-specific label
-    /// first, e.g. `["backend"]` for an own canister or `["backend.openemail"]`
-    /// for a dependency canister (dot-nested by alias chain). A de-duplicated
-    /// shared dependency canister carries one entry per alias chain that reaches
-    /// it. Consumed only at deploy time to build `custom-domains.txt` entries and
-    /// the printed URLs; a runtime display aid that is always recomputed during
-    /// consolidation, so it is never serialized.
-    #[serde(skip)]
-    pub friendly_names: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Network {
-    pub name: String,
-    pub configuration: Configuration,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Environment {
-    pub name: String,
-    pub network: Network,
-    pub canisters: IndexMap<String, (PathBuf, Canister)>,
-}
-
-impl Environment {
-    pub fn get_canister_names(&self) -> Vec<String> {
-        self.canisters.keys().cloned().collect()
-    }
-
-    pub fn contains_canister(&self, canister_name: &str) -> bool {
-        self.canisters.contains_key(canister_name)
-    }
-
-    pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
-        self.canisters
-            .get(canister)
-            .ok_or_else(|| {
-                format!(
-                    "canister '{}' not declared in environment '{}'",
-                    canister, self.name
-                )
-            })
-            .cloned()
-    }
-}
-
-/// Consolidated project definition
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Project {
-    pub dir: PathBuf,
-    pub canisters: IndexMap<String, (PathBuf, Canister)>,
-    pub networks: HashMap<String, Network>,
-    pub environments: HashMap<String, Environment>,
-
-    /// Environments the workspace defines that some vendored member does *not*
-    /// declare, keyed by environment name → the missing members' store-key
-    /// prefixes. Enforced when the environment is selected (strict rule).
-    /// Empty for standalone projects and workspaces whose members are complete.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub member_missing_envs: HashMap<String, Vec<String>>,
-}
-
-impl Project {
-    pub fn get_canister(&self, canister_name: &str) -> Option<&(PathBuf, Canister)> {
-        self.canisters.get(canister_name)
-    }
-}
 
 #[derive(Debug, Snafu)]
 pub enum ProjectLoadError {
@@ -218,7 +76,7 @@ pub trait ProjectLoad: Sync + Send {
 
 pub struct ProjectLoadImpl {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
-    pub recipe: Arc<dyn Resolve>,
+    pub recipe: Arc<dyn RemoteResourceResolve>,
 }
 
 /// Ensures the "operating on a workspace root above your sub-project" notice is
@@ -268,7 +126,7 @@ impl ProjectLoad for ProjectLoadImpl {
 
         debug!("Loaded project manifest: {m:#?}");
 
-        // Consolidate manifest into project
+        // Consolidate manifest into project, reading files from the host filesystem.
         let p = project::consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
             .await
             .context(ProjectSnafu)?;
@@ -682,14 +540,13 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
+    use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
     use crate::manifest::{
-        ProjectRootLocate, ProjectRootLocateError,
-        canister::{BuildSteps, SyncSteps},
-        recipe::Recipe,
+        ProjectRootLocate, ProjectRootLocateError, adapter::prebuilt::SourceField, recipe::Recipe,
     };
     use camino_tempfile::Utf8TempDir;
     use indoc::indoc;
+    use tokio::sync::mpsc::Sender;
 
     struct MockProjectRootLocate {
         path: PathBuf,
@@ -714,28 +571,26 @@ mod tests {
     struct MockRecipeResolver;
 
     #[async_trait]
-    impl Resolve for MockRecipeResolver {
-        async fn resolve(
+    impl RemoteResourceResolve for MockRecipeResolver {
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
+            // A minimal recipe template rendering to a single prebuilt build step.
+            Ok(indoc! {r#"
+                build:
+                  steps:
+                    - type: pre-built
+                      path: dummy.wasm
+            "#}
+            .to_owned())
+        }
+
+        async fn resolve_wasm(
             &self,
-            _recipe: &Recipe,
-            _context: &RecipeContext,
-        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
-            use crate::manifest::adapter::prebuilt::{
-                Adapter as PrebuiltAdapter, LocalSource, SourceField,
-            };
-            use crate::manifest::canister::BuildStep;
-
-            // Create a minimal BuildSteps with a dummy prebuilt step
-            let build_steps = BuildSteps {
-                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
-                    source: SourceField::Local(LocalSource {
-                        path: "dummy.wasm".into(),
-                    }),
-                    sha256: None,
-                })],
-            };
-
-            Ok((build_steps, SyncSteps::default()))
+            _source: &SourceField,
+            _base_dir: &Path,
+            _sha256: Option<&str>,
+            _stdio: Option<Sender<String>>,
+        ) -> Result<PathBuf, ResolveError> {
+            unimplemented!("MockRecipeResolver::resolve_wasm")
         }
     }
 

@@ -73,9 +73,16 @@ jobs:
     # Always build for pushes, tags, and manual runs (the workflow-level push
     # paths filter already gates those). On pull requests, build only when docs
     # changed; otherwise the job is skipped and docs-build:required reports as a
-    # passing (skipped) required check. always() is required because `changes`
-    # is skipped on non-PR events and would otherwise skip this job too.
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.docs == 'true')
+    # passing (skipped) required check.
+    #
+    # Fail closed: if `changes` did not succeed (e.g. checkout or the paths-filter
+    # step failed) its `docs` output is empty, which would skip the build and let
+    # the required check pass vacuously — bypassing the gate. Building whenever
+    # `changes.result != 'success'` ensures a broken detection step can't do that.
+    #
+    # always() is required because `changes` is skipped on non-PR events and would
+    # otherwise cascade-skip this job.
+    if: always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.docs == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -53,9 +53,13 @@ On a local network, a dependency canister's frontend subdomain is namespaced by 
 
 ```
 Deployed canisters:
+
+Frontends (serving http_request):
   frontend: http://frontend.local.localhost:8000/
   vendor/openemail:frontend: http://frontend.openemail.local.localhost:8000/
-  vendor/openemail:backend (Candid UI): http://<candid-ui>.localhost:8000/?id=<id>
+
+Backends (Candid UI):
+  vendor/openemail:backend: http://<candid-ui>.localhost:8000/?id=<id>
 ```
 
 A transitive dependency uses its full alias chain (`frontend.libfoo.openemail.<env>.localhost`). A [shared dependency](#shared-dependencies) is deployed once but reached through more than one alias chain, so it prints **one URL per chain**, each resolving to the same canister:

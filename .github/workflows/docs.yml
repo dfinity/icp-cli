@@ -41,6 +41,9 @@ concurrency:
 jobs:
   # Build job - validates that docs build successfully
   build:
+    # Explicit :required name follows the repo convention for gating checks and
+    # gives branch-protection an unambiguous context to require (vs. bare "build").
+    name: docs-build:required
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

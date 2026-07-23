@@ -614,20 +614,26 @@ fn is_serving_reject(err: &AgentError) -> bool {
 /// when we can't hand it a valid request. So rather than sending a crafted
 /// request payload — whose Candid type must match the canister's exactly, and
 /// which silently yields a false negative when it doesn't (the bug this
-/// replaces) — we send an empty argument and look only at *why* the call fails.
+/// replaces) — we send a zero-argument call and look only at *why* it fails.
 ///
 /// The replica reports a missing method as `CanisterMethodNotFound` (error code
-/// `IC0536`). Any other outcome means the method exists and ran: a reply, or —
-/// far more likely, since `http_request` won't decode an empty argument — a
-/// trap/decode failure (`IC0502`/`IC0503`/`IC0504`). Note the reject *code*
-/// can't tell these apart: method-not-found and a trap are both `CanisterError`
-/// (5), so only the `error_code` string distinguishes them. Transport/other
-/// errors are inconclusive and, per the false-positive bias, also count as
-/// "has `http_request`".
+/// `IC0536`). Any other outcome means the method exists and ran: a reply (from a
+/// zero-argument `http_request`), or — far more likely — a trap/decode failure
+/// (`IC0502`/`IC0503`/`IC0504`) from feeding a normal single-argument
+/// `http_request` the wrong number of arguments. Note the reject *code* can't
+/// tell these apart: method-not-found and a trap are both `CanisterError` (5),
+/// so only the `error_code` string distinguishes them. Transport/other errors
+/// are inconclusive and, per the false-positive bias, also count as "has
+/// `http_request`".
 async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
+    // A valid Candid encoding of zero arguments (`DIDL\0\0`) — *not* raw empty
+    // bytes, which are not a well-formed Candid message. This lets a genuine
+    // zero-argument `http_request` reply, while a single-argument one still
+    // fails to decode and traps; either way the method exists.
+    let empty_args = candid::encode_args(()).expect("encoding () never fails");
     let result = agent
         .query(&canister_id, "http_request")
-        .with_arg(Vec::<u8>::new())
+        .with_arg(empty_args)
         .call()
         .await;
 
@@ -638,17 +644,28 @@ async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
 }
 
 /// True when a query error is the replica's definitive "this method does not
-/// exist" signal — `CanisterMethodNotFound` (`IC0536`) — with a message-substring
-/// fallback for replicas that don't populate `error_code`.
+/// exist" signal — `CanisterMethodNotFound` (`IC0536`).
+///
+/// When the replica populates `error_code` we trust it exclusively: a trap or
+/// decode failure (`IC0503`/`IC0504`) is *not* method-absent, even if its
+/// message happens to mention a missing method — treating it as absent would
+/// reintroduce the very false negative this probe exists to avoid. Only when
+/// `error_code` is absent (older replicas) do we fall back to the message, and
+/// then only when it names `http_request`, so a nested "no such method" bubbled
+/// up from an existing handler isn't mistaken for `http_request` being absent.
 fn is_method_not_found(err: &AgentError) -> bool {
     let reject = match err {
         AgentError::CertifiedReject { reject, .. }
         | AgentError::UncertifiedReject { reject, .. } => reject,
         _ => return false,
     };
-    reject.error_code.as_deref() == Some("IC0536")
-        || reject.reject_message.contains("has no query method")
-        || reject.reject_message.contains("has no update method")
+    match reject.error_code.as_deref() {
+        Some(code) => code == "IC0536",
+        None => {
+            reject.reject_message.contains("has no query method")
+                && reject.reject_message.contains("http_request")
+        }
+    }
 }
 
 /// Prints URLs for deployed canisters
@@ -871,16 +888,36 @@ mod tests {
 
     #[test]
     fn method_not_found_detected_by_message_when_error_code_absent() {
-        // Replicas that don't populate `error_code` still carry the message.
+        // Replicas that don't populate `error_code` still carry the message,
+        // which names the missing method (`http_request`, since we query it).
         let query = reject(None, "Canister abc has no query method 'http_request'");
-        let update = reject(None, "Canister abc has no update method 'http_request'");
         assert!(is_method_not_found(&query));
-        assert!(is_method_not_found(&update));
     }
 
     #[test]
-    fn trap_from_empty_arg_is_not_method_not_found() {
-        // The method exists but can't decode the empty argument, so it traps
+    fn present_error_code_wins_over_misleading_message() {
+        // An existing `http_request` that traps (IC0503) is NOT method-absent,
+        // even when its message happens to contain a "has no query method"
+        // phrase (e.g. bubbled up from a downstream call). Trusting the present
+        // error code prevents the false negative this probe exists to avoid.
+        let err = reject(
+            Some("IC0503"),
+            "downstream canister xyz has no query method 'http_request'",
+        );
+        assert!(!is_method_not_found(&err));
+    }
+
+    #[test]
+    fn unrelated_missing_method_message_without_error_code_is_ignored() {
+        // With no `error_code`, a "has no query method" message about some
+        // *other* method must not count as `http_request` being absent.
+        let err = reject(None, "Canister abc has no query method 'greet'");
+        assert!(!is_method_not_found(&err));
+    }
+
+    #[test]
+    fn trap_from_wrong_arg_count_is_not_method_not_found() {
+        // The method exists but can't decode a zero-argument call, so it traps
         // (IC0503) — the canister still speaks the protocol, so this is a
         // frontend, not a missing method.
         let trap = reject(

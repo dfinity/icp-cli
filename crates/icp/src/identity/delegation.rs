@@ -76,6 +76,12 @@ pub fn to_agent_types(
                     pubkey,
                     expiration,
                     targets,
+                    // The wire `DelegationChain` carries no request-kind
+                    // permissions, and the delegations the CLI signs are always
+                    // unrestricted, so every delegation here was signed with
+                    // `permissions` absent. `None` reproduces the exact signed
+                    // bytes (it is `skip_serializing_if`'d out of the hash), so
+                    // the chain still verifies in `DelegatedIdentity::new`.
                     permissions: None,
                 },
                 signature,

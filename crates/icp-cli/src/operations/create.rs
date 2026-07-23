@@ -3,16 +3,14 @@ use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{
-    Agent, AgentError,
-    agent::{Subnet, SubnetType},
-};
+use ic_agent::{Agent, AgentError, agent::SubnetType};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
+    CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
+use ic_utils::interfaces::ManagementCanister;
 use icp::parsers::to_token_unit_amount;
 use icp::signal::stop_signal;
 use icp_canister_interfaces::{
@@ -216,7 +214,7 @@ impl CreateOperation {
             .await
             .context(GetSubnetSnafu)?;
         let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
-            self.create_mgmt(settings, &subnet_info).await?
+            self.create_mgmt(settings, selected_subnet).await?
         } else {
             self.create_ledger(settings, selected_subnet).await?
         };
@@ -278,32 +276,22 @@ impl CreateOperation {
     async fn create_mgmt(
         &self,
         settings: &CanisterSettings,
-        selected_subnet: &Subnet,
+        subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let arg = MgmtCreateCanisterArgs {
-            settings: Some(settings.clone()),
-            sender_canister_version: None,
-        };
-
-        // Call management canister create_canister
-        let resp = self
-            .inner
-            .agent
-            .update(&Principal::management_canister(), "create_canister")
-            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
-            .with_effective_canister_id(
-                *selected_subnet
-                    .iter_canister_ranges()
-                    .next()
-                    .context(CreateCanisterSnafu {
-                        message: "subnet did not contain canister ranges",
-                    })?
-                    .start(),
-            )
+        // Call the management canister's create_canister, routing the request to
+        // the target subnet by its id (subnet-scoped, so no canister on that
+        // subnet is needed to derive an effective canister id) and forwarding the
+        // settings as a whole via `with_canister_settings`. Subnet-scoped routing
+        // requires subnet-administrator permissions, which the CloudEngine path has.
+        let mgmt = ManagementCanister::create(&self.inner.agent);
+        let (canister_id,) = mgmt
+            .create_canister()
+            .with_effective_subnet_id(subnet)
+            .with_canister_settings(settings.clone())
+            .call_and_wait()
             .await
             .context(AgentSnafu)?;
-        let resp: CanisterIdRecord = Decode!(&resp, CanisterIdRecord).context(CandidDecodeSnafu)?;
-        Ok(resp.canister_id)
+        Ok(canister_id)
     }
 
     async fn create_proxy(

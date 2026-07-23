@@ -200,6 +200,10 @@ pub(crate) async fn sync_settings(
         log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         environment_variables: environment_variable_setting,
         controllers: controllers_setting,
+        // TODO: make snapshot_visibility configurable from the manifest and synced
+        // here, mirroring log_visibility (Controllers/Public/AllowedViewers).
+        // Tracked for a follow-up PR; until then, leave it unchanged.
+        snapshot_visibility: None,
     };
 
     proxy_management::update_settings(

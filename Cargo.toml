@@ -53,15 +53,15 @@ hex = { version = "0.4.3", features = ["serde"] }
 hmac = { version = "0.13", features = ["zeroize"] }
 hybrid-array = { version = "0.4.10", features = ["zeroize"] }
 httptest = "0.16.3"
-ic-agent = { version = "0.47.0" }
+ic-agent = { version = "0.49.1" }
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
-ic-management-canister-types = { version = "0.7.1" }
-ic-utils = { version = "0.47.0" }
+ic-management-canister-types = { version = "0.8.0" }
+ic-utils = { version = "0.49.1" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }
-ic-identity-hsm = "0.47.0"
+ic-identity-hsm = "0.49.1"
 icrc-ledger-types = "0.1.10"
 indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.18.0"

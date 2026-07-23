@@ -26,11 +26,17 @@ permissions:
 env:
   PUBLIC_SITE: https://cli.internetcomputer.org
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Concurrency is split by event so PR validation never shares a lane with deployments:
+#   - Pull requests get an isolated per-ref lane and cancel superseded builds, so a
+#     burst of unrelated PRs (or pushes) can no longer cancel a PR's own build before
+#     it runs — which previously let a broken docs build slip through review.
+#   - Pushes, tags, and manual runs share the single "pages" lane with
+#     cancel-in-progress: false: only one deployment runs at a time, queued runs
+#     between in-progress and latest are skipped, and in-progress production
+#     deployments are always allowed to complete.
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('docs-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Build job - validates that docs build successfully

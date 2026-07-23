@@ -7,6 +7,7 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* feat(sync-plugin): the compute-time limit for `plugin` sync steps is now configurable via the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable (default `60`). Raise it for compute-heavy plugins (e.g. brotli-compressing a large asset bundle) that legitimately exceed the default, especially on slower CI runners. The limit-exceeded error now names the variable and the current limit, and a malformed value is rejected rather than silently ignored.
 * feat: `icp canister link` assigns an existing canister principal to a project canister
 * feat: `icp canister create --with-icp` (not supported in `icp deploy`) uses the CMC to create canisters. Only needed for deploying to restricted system subnets.
 * feat: `icp deploy --no-create` will error if any canisters do not exist, rather than creating them.

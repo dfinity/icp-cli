@@ -613,6 +613,12 @@ async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
         url: String,
         headers: Vec<(String, String)>,
         body: Vec<u8>,
+        // Signals which HTTP gateway certification version the caller supports.
+        // Modern gateways send `Some(2)`, and V2-only asset canisters (e.g.
+        // dfinity/certified-assets, used by the `static-site` recipe) trap when
+        // it is absent. Sending it keeps the probe accepted by both current and
+        // legacy asset canisters, so they are correctly recognized as frontends.
+        certificate_version: Option<u16>,
     }
 
     // Construct an HttpRequest for '/index.html'
@@ -621,6 +627,7 @@ async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
         url: "/index.html".to_string(),
         headers: vec![],
         body: vec![],
+        certificate_version: Some(2),
     };
 
     let args = candid::encode_one(&request).expect("failed to encode request");

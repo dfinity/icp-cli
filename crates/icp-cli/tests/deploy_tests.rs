@@ -630,6 +630,55 @@ async fn deploy_prints_friendly_url_for_asset_canister() {
         ));
 }
 
+/// Regression test: the `static-site` recipe deploys dfinity/certified-assets,
+/// a V2-only asset canister whose `http_request` traps unless the request sets
+/// `certificate_version: Some(2)`. The frontend probe must send it so the
+/// canister is recognized as a frontend and gets the friendly URL rather than a
+/// Candid UI URL. Complements `deploy_prints_friendly_url_for_asset_canister`,
+/// which covers the legacy SDK `assetstorage.wasm` that tolerates its absence.
+#[tokio::test]
+async fn deploy_prints_friendly_url_for_certified_assets_canister() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Project manifest with the pre-built certified-assets canister (the wasm
+    // the `static-site` recipe deploys).
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: pre-built
+                  url: https://github.com/dfinity/certified-assets/releases/download/v0.3.0/canister-release.wasm.gz
+                  sha256: 9363c3f89d0eb9a2dec3111b1123d8ece17d4f76ae9d64e5605cfa0c3e63c427
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deploy and check that the friendly URL is printed (not the Candid UI form)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stdout(contains("Deployed canisters:"))
+        .stdout(contains(
+            "my-canister: http://my-canister.random-environment.localhost:",
+        ));
+}
+
 #[cfg(unix)] // moc
 #[tokio::test]
 async fn deploy_upgrade_rejects_incompatible_candid() {

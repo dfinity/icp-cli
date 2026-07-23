@@ -10,6 +10,7 @@ bump. Currently experimental: project bundling, project dependencies
 * feat: `icp canister link` assigns an existing canister principal to a project canister
 * feat: `icp canister create --with-icp` (not supported in `icp deploy`) uses the CMC to create canisters. Only needed for deploying to restricted system subnets.
 * feat: `icp deploy --no-create` will error if any canisters do not exist, rather than creating them.
+* fix: `icp deploy` now prints the frontend URL for any canister that exposes an `http_request` endpoint. Previously a canister whose `http_request` signature differed from a hard-coded shape (e.g. some certified-asset canisters) was misdetected and shown a Candid UI URL instead of its site URL. Deploy URLs are also now grouped by kind (frontends vs. Candid UI) instead of interleaved.
 
 # v1.1.0
 

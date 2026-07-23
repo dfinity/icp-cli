@@ -112,8 +112,12 @@ After deployment, you'll see output like:
 
 ```
 Deployed canisters:
-  backend (Candid UI): http://...localhost:8000/?id=...
+
+Frontends (serving http_request):
   frontend: http://...localhost:8000
+
+Backends (Candid UI):
+  backend: http://...localhost:8000/?id=...
 ```
 
 ## Explore Your App

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail};
-use candid::{CandidType, Principal};
+use candid::Principal;
 use clap::Args;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
@@ -605,35 +605,67 @@ fn is_serving_reject(err: &AgentError) -> bool {
     !stopped
 }
 
-/// Checks if a canister has an `http_request` function by querying it
+/// Checks whether a canister speaks the HTTP gateway protocol — i.e. exposes an
+/// `http_request` query method — so we print its gateway (frontend) URL instead
+/// of a Candid UI URL.
+///
+/// The probe deliberately errs toward false positives over false negatives: any
+/// canister that *has* an `http_request` method should get a frontend URL, even
+/// when we can't hand it a valid request. So rather than sending a crafted
+/// request payload — whose Candid type must match the canister's exactly, and
+/// which silently yields a false negative when it doesn't (the bug this
+/// replaces) — we send a zero-argument call and look only at *why* it fails.
+///
+/// The replica reports a missing method as `CanisterMethodNotFound` (error code
+/// `IC0536`). Any other outcome means the method exists and ran: a reply (from a
+/// zero-argument `http_request`), or — far more likely — a trap/decode failure
+/// (`IC0502`/`IC0503`/`IC0504`) from feeding a normal single-argument
+/// `http_request` the wrong number of arguments. Note the reject *code* can't
+/// tell these apart: method-not-found and a trap are both `CanisterError` (5),
+/// so only the `error_code` string distinguishes them. Transport/other errors
+/// are inconclusive and, per the false-positive bias, also count as "has
+/// `http_request`".
 async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
-    #[derive(CandidType, Serialize)]
-    struct HttpRequest {
-        method: String,
-        url: String,
-        headers: Vec<(String, String)>,
-        body: Vec<u8>,
-    }
-
-    // Construct an HttpRequest for '/index.html'
-    let request = HttpRequest {
-        method: "GET".to_string(),
-        url: "/index.html".to_string(),
-        headers: vec![],
-        body: vec![],
-    };
-
-    let args = candid::encode_one(&request).expect("failed to encode request");
-
-    // Try to query the http_request endpoint
+    // A valid Candid encoding of zero arguments (`DIDL\0\0`) — *not* raw empty
+    // bytes, which are not a well-formed Candid message. This lets a genuine
+    // zero-argument `http_request` reply, while a single-argument one still
+    // fails to decode and traps; either way the method exists.
+    let empty_args = candid::encode_args(()).expect("encoding () never fails");
     let result = agent
         .query(&canister_id, "http_request")
-        .with_arg(args)
+        .with_arg(empty_args)
         .call()
         .await;
 
-    // If the query succeeds (regardless of the response), the canister has http_request
-    result.is_ok()
+    match result {
+        Ok(_) => true,
+        Err(err) => !is_method_not_found(&err),
+    }
+}
+
+/// True when a query error is the replica's definitive "this method does not
+/// exist" signal — `CanisterMethodNotFound` (`IC0536`).
+///
+/// When the replica populates `error_code` we trust it exclusively: a trap or
+/// decode failure (`IC0503`/`IC0504`) is *not* method-absent, even if its
+/// message happens to mention a missing method — treating it as absent would
+/// reintroduce the very false negative this probe exists to avoid. Only when
+/// `error_code` is absent (older replicas) do we fall back to the message, and
+/// then only when it names `http_request`, so a nested "no such method" bubbled
+/// up from an existing handler isn't mistaken for `http_request` being absent.
+fn is_method_not_found(err: &AgentError) -> bool {
+    let reject = match err {
+        AgentError::CertifiedReject { reject, .. }
+        | AgentError::UncertifiedReject { reject, .. } => reject,
+        _ => return false,
+    };
+    match reject.error_code.as_deref() {
+        Some(code) => code == "IC0536",
+        None => {
+            reject.reject_message.contains("has no query method")
+                && reject.reject_message.contains("http_request")
+        }
+    }
 }
 
 /// Prints URLs for deployed canisters
@@ -660,10 +692,14 @@ async fn print_canister_urls(
     };
 
     let mut json_canisters = Vec::new();
-
-    if !json {
-        println!("Deployed canisters:");
-    }
+    // Human-readable output is grouped by kind so the two URL flavors don't
+    // interleave: frontends (something to open in a browser) first, then
+    // backends (a Candid UI to poke the interface).
+    let mut frontend_lines: Vec<String> = Vec::new();
+    let mut backend_lines: Vec<String> = Vec::new();
+    // Only populated when the network exposes no gateway at all — there is then
+    // nothing to group, so these render as a flat list under the header.
+    let mut no_gateway_lines: Vec<String> = Vec::new();
 
     for name in canister_names {
         let canister_id = match ctx
@@ -677,85 +713,76 @@ async fn print_canister_urls(
             Err(_) => continue,
         };
 
-        if let Some(http_gateway_url) = &http_gateway_url {
-            let has_http = has_http_request(&agent, canister_id).await;
-
-            if has_http {
-                // A canister carries one friendly name normally, or several when
-                // it's a de-duplicated shared dependency canister reached via
-                // multiple alias chains — print one URL for each. Fall back to a
-                // single principal URL when friendly domains are off or no
-                // friendly name is known.
-                let env_name = environment_selection.name();
-                let friendly_names: Vec<String> = if has_friendly {
-                    env.canisters
-                        .get(name)
-                        .map(|(_, c)| c.friendly_names.clone())
-                        .unwrap_or_default()
-                } else {
-                    Vec::new()
-                };
-                let urls = if friendly_names.is_empty() {
-                    vec![canister_gateway_url(http_gateway_url, canister_id, None)]
-                } else {
-                    friendly_names
-                        .iter()
-                        .map(|fname| {
-                            canister_gateway_url(
-                                http_gateway_url,
-                                canister_id,
-                                Some((fname.as_str(), env_name)),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                };
-                for canister_url in &urls {
-                    if json {
-                        json_canisters.push(JsonDeployedCanister {
-                            name: name.clone(),
-                            canister_id,
-                            url: Some(canister_url.to_string()),
-                        });
-                    } else {
-                        println!("  {name}: {canister_url}");
-                    }
-                }
-            } else {
-                // For canisters without http_request, show the Candid UI URL
-                let url = if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
-                    let domain = gateway_domain(http_gateway_url);
-                    let mut candid_url = canister_gateway_url(http_gateway_url, ui_id, None);
-                    if domain.is_some() {
-                        candid_url.set_query(Some(&format!("id={canister_id}")));
-                    } else {
-                        candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
-                    }
-                    if !json {
-                        println!("  {name} (Candid UI): {candid_url}");
-                    }
-                    Some(candid_url.to_string())
-                } else {
-                    if !json {
-                        println!("  {name}: {canister_id} (Candid UI not available)");
-                    }
-                    None
-                };
-                if json {
-                    json_canisters.push(JsonDeployedCanister {
-                        name: name.clone(),
-                        canister_id,
-                        url,
-                    });
-                }
-            }
-        } else if json {
+        let Some(http_gateway_url) = &http_gateway_url else {
             json_canisters.push(JsonDeployedCanister {
                 name: name.clone(),
                 canister_id,
                 url: None,
             });
+            no_gateway_lines.push(format!(
+                "  {name}: {canister_id} (No gateway URL available)"
+            ));
+            continue;
+        };
+
+        if has_http_request(&agent, canister_id).await {
+            // A canister carries one friendly name normally, or several when
+            // it's a de-duplicated shared dependency canister reached via
+            // multiple alias chains — print one URL for each. Fall back to a
+            // single principal URL when friendly domains are off or no
+            // friendly name is known.
+            let env_name = environment_selection.name();
+            let friendly_names: Vec<String> = if has_friendly {
+                env.canisters
+                    .get(name)
+                    .map(|(_, c)| c.friendly_names.clone())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let urls = if friendly_names.is_empty() {
+                vec![canister_gateway_url(http_gateway_url, canister_id, None)]
+            } else {
+                friendly_names
+                    .iter()
+                    .map(|fname| {
+                        canister_gateway_url(
+                            http_gateway_url,
+                            canister_id,
+                            Some((fname.as_str(), env_name)),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+            for canister_url in &urls {
+                json_canisters.push(JsonDeployedCanister {
+                    name: name.clone(),
+                    canister_id,
+                    url: Some(canister_url.to_string()),
+                });
+                frontend_lines.push(format!("  {name}: {canister_url}"));
+            }
         } else {
-            println!("  {name}: {canister_id} (No gateway URL available)");
+            // No http_request: offer the Candid UI URL instead.
+            let url = if let Some(ui_id) = get_candid_ui_id(ctx, environment_selection).await {
+                let domain = gateway_domain(http_gateway_url);
+                let mut candid_url = canister_gateway_url(http_gateway_url, ui_id, None);
+                if domain.is_some() {
+                    candid_url.set_query(Some(&format!("id={canister_id}")));
+                } else {
+                    candid_url.set_query(Some(&format!("canisterId={ui_id}&id={canister_id}")));
+                }
+                backend_lines.push(format!("  {name}: {candid_url}"));
+                Some(candid_url.to_string())
+            } else {
+                backend_lines.push(format!("  {name}: {canister_id} (Candid UI not available)"));
+                None
+            };
+            json_canisters.push(JsonDeployedCanister {
+                name: name.clone(),
+                canister_id,
+                url,
+            });
         }
     }
 
@@ -766,6 +793,26 @@ async fn print_canister_urls(
                 canisters: json_canisters,
             },
         )?;
+        return Ok(());
+    }
+
+    println!("Deployed canisters:");
+    if !frontend_lines.is_empty() {
+        println!();
+        println!("Frontends (serving http_request):");
+        for line in &frontend_lines {
+            println!("{line}");
+        }
+    }
+    if !backend_lines.is_empty() {
+        println!();
+        println!("Backends (Candid UI):");
+        for line in &backend_lines {
+            println!("{line}");
+        }
+    }
+    for line in &no_gateway_lines {
+        println!("{line}");
     }
 
     Ok(())
@@ -807,5 +854,85 @@ async fn get_candid_ui_id(
             // For connected networks, use the mainnet Candid UI
             Some(MAINNET_CANDID_UI_CID)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_agent::agent::{RejectCode, RejectResponse};
+
+    fn reject(error_code: Option<&str>, reject_message: &str) -> AgentError {
+        AgentError::UncertifiedReject {
+            reject: RejectResponse {
+                // Both a missing method and a trap surface as `CanisterError`,
+                // so the reject code is intentionally the same across cases —
+                // only `error_code`/message distinguishes them.
+                reject_code: RejectCode::CanisterError,
+                reject_message: reject_message.to_string(),
+                error_code: error_code.map(String::from),
+            },
+            operation: None,
+        }
+    }
+
+    #[test]
+    fn method_not_found_detected_by_error_code() {
+        // IC0536 = CanisterMethodNotFound: the method genuinely does not exist.
+        let err = reject(
+            Some("IC0536"),
+            "Canister abc has no query method 'http_request'",
+        );
+        assert!(is_method_not_found(&err));
+    }
+
+    #[test]
+    fn method_not_found_detected_by_message_when_error_code_absent() {
+        // Replicas that don't populate `error_code` still carry the message,
+        // which names the missing method (`http_request`, since we query it).
+        let query = reject(None, "Canister abc has no query method 'http_request'");
+        assert!(is_method_not_found(&query));
+    }
+
+    #[test]
+    fn present_error_code_wins_over_misleading_message() {
+        // An existing `http_request` that traps (IC0503) is NOT method-absent,
+        // even when its message happens to contain a "has no query method"
+        // phrase (e.g. bubbled up from a downstream call). Trusting the present
+        // error code prevents the false negative this probe exists to avoid.
+        let err = reject(
+            Some("IC0503"),
+            "downstream canister xyz has no query method 'http_request'",
+        );
+        assert!(!is_method_not_found(&err));
+    }
+
+    #[test]
+    fn unrelated_missing_method_message_without_error_code_is_ignored() {
+        // With no `error_code`, a "has no query method" message about some
+        // *other* method must not count as `http_request` being absent.
+        let err = reject(None, "Canister abc has no query method 'greet'");
+        assert!(!is_method_not_found(&err));
+    }
+
+    #[test]
+    fn trap_from_wrong_arg_count_is_not_method_not_found() {
+        // The method exists but can't decode a zero-argument call, so it traps
+        // (IC0503) — the canister still speaks the protocol, so this is a
+        // frontend, not a missing method.
+        let trap = reject(
+            Some("IC0503"),
+            "Canister abc trapped explicitly: failed to decode call arguments",
+        );
+        let contract = reject(Some("IC0504"), "Canister abc violated contract");
+        assert!(!is_method_not_found(&trap));
+        assert!(!is_method_not_found(&contract));
+    }
+
+    #[test]
+    fn non_reject_error_is_inconclusive_not_method_not_found() {
+        // Transport/other errors are not evidence the method is absent; the
+        // false-positive bias then treats the canister as a frontend.
+        assert!(!is_method_not_found(&AgentError::InvalidReplicaStatus));
     }
 }

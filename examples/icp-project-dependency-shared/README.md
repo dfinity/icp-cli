@@ -69,12 +69,16 @@ at the same canister:
 
 ```
 Deployed canisters:
+
+Frontends (serving http_request):
   frontend: http://frontend.local.localhost:<port>/
-  umbrella/service-a:service (Candid UI): ...
-  umbrella/service-b:service (Candid UI): ...
-  umbrella/openemail:backend (Candid UI): ...
   umbrella/openemail:frontend: http://frontend.openemail.service-a.local.localhost:<port>/
   umbrella/openemail:frontend: http://frontend.openemail.service-b.local.localhost:<port>/
+
+Backends (Candid UI):
+  umbrella/service-a:service: ...
+  umbrella/service-b:service: ...
+  umbrella/openemail:backend: ...
 ```
 
 The dependency subdomains are namespaced by the **alias chain**, not the on-disk

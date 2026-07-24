@@ -86,6 +86,9 @@ pub async fn spawn_network_launcher(
         cmd.args(["--gateway-port", &port.to_string()]);
     }
     cmd.args(["--status-dir", status_dir.as_str()]);
+    if verbose {
+        cmd.arg("--verbose");
+    }
     cmd.args(launcher_settings_flags(launcher_config));
     if background {
         info!("For background mode, network output will be redirected:");
@@ -97,12 +100,9 @@ pub async fn spawn_network_launcher(
             .context(CreateStdioFileSnafu { path: &stderr_file })?;
         cmd.stdout(Stdio::from(stdout));
         cmd.stderr(Stdio::from(stderr));
-    } else if verbose {
+    } else {
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-    } else {
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
     }
     let watcher = wait_for_launcher_status(status_dir).context(WatchStatusDirSnafu)?;
     let child = cmd.spawn().context(SpawnLauncherSnafu {

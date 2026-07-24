@@ -52,4 +52,7 @@ pub trait Resolve: Sync + Send {
 pub enum ResolveError {
     #[snafu(display("failed to resolve handlebars template"))]
     Handlebars { source: handlebars::HandlebarsError },
+
+    #[snafu(display("recipe resolution is not supported by this resolver: {recipe}"))]
+    Unsupported { recipe: String },
 }

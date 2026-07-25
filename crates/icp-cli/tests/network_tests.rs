@@ -493,7 +493,32 @@ async fn network_run_and_stop_background() {
 async fn background_start_port_conflict_surfaces_launcher_output() {
     use std::net::TcpListener;
 
+    // The launcher spawns pocket-ic before it fails to bind the gateway, and on this error
+    // path pocket-ic is left orphaned (no descriptor is written to stop it later). Reap any
+    // process whose binary lives under this test's isolated temp home so we don't leak it;
+    // the home is unique per test, so this can't touch other tests or real networks.
+    //
+    // This runs on `Drop` (not inline after the assertion) so it still fires if an assertion
+    // below panics — the failure path is exactly the one that orphans pocket-ic.
+    struct Reaper(PathBuf);
+    impl Drop for Reaper {
+        fn drop(&mut self) {
+            use sysinfo::{ProcessesToUpdate, System};
+            let mut system = System::new();
+            system.refresh_processes(ProcessesToUpdate::All, true);
+            for process in system.processes().values() {
+                if process
+                    .exe()
+                    .is_some_and(|exe| exe.starts_with(self.0.as_std_path()))
+                {
+                    process.kill();
+                }
+            }
+        }
+    }
+
     let ctx = TestContext::new();
+    let _reaper = Reaper(ctx.home_path().to_path_buf());
     let project_dir = ctx.create_project_dir("portconflict");
 
     // Occupy a port with a plain TCP listener. icp-cli's own port check only looks for a live
@@ -517,31 +542,13 @@ async fn background_start_port_conflict_surfaces_launcher_output() {
         .args(["network", "start", "portconflict-network", "--background"])
         .assert()
         .failure()
-        // Assert the launcher's captured output was attached to the error (issue #597),
-        // without pinning the exact launcher / pocket-ic wording.
-        .stderr(
-            contains("exited prematurely")
-                .and(contains("Launcher error output").or(contains("See the launcher log at"))),
-        );
+        // Require the captured-output header (our own string, not PocketIC's wording): this
+        // proves the real launcher's stderr was read and wired into the error. Accepting the
+        // empty/unreadable fallback here would let a wiring regression pass unnoticed.
+        .stderr(contains("exited prematurely").and(contains("Launcher error output")));
 
     // Hold the socket open until after the launcher has tried (and failed) to bind.
     drop(blocker);
-
-    // The launcher spawns pocket-ic before it fails to bind the gateway, and on this error
-    // path pocket-ic is left orphaned (no descriptor is written to stop it later). Reap any
-    // process whose binary lives under this test's isolated temp home so we don't leak it;
-    // the home is unique per test, so this can't touch other tests or real networks.
-    {
-        use sysinfo::{ProcessesToUpdate, System};
-        let home = ctx.home_path().as_std_path();
-        let mut system = System::new();
-        system.refresh_processes(ProcessesToUpdate::All, true);
-        for process in system.processes().values() {
-            if process.exe().is_some_and(|exe| exe.starts_with(home)) {
-                process.kill();
-            }
-        }
-    }
 }
 
 #[tokio::test]

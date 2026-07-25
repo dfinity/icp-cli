@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, TcpListener};
+use std::net::SocketAddr;
 
 use candid::Principal;
 use icp_canister_interfaces::{
@@ -491,6 +491,8 @@ async fn network_run_and_stop_background() {
 #[cfg(unix)]
 #[tokio::test]
 async fn background_start_port_conflict_surfaces_launcher_output() {
+    use std::net::TcpListener;
+
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("portconflict");
 

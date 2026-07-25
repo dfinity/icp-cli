@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
 
 use candid::Principal;
 use icp_canister_interfaces::{
@@ -480,6 +480,66 @@ async fn network_run_and_stop_background() {
         status_result.is_err(),
         "Network should not be reachable after stopping"
     );
+}
+
+/// Regression test for #597: when the native launcher exits prematurely in background mode
+/// (here because its fixed gateway port is already taken), the error must surface the
+/// launcher's captured stderr instead of only the bare exit status.
+///
+/// Unix-only: on Windows `network start` uses the Docker launcher, which does not go through
+/// `spawn_network_launcher`'s stderr-capture path.
+#[cfg(unix)]
+#[tokio::test]
+async fn background_start_port_conflict_surfaces_launcher_output() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("portconflict");
+
+    // Occupy a port with a plain TCP listener. icp-cli's own port check only looks for a live
+    // network descriptor, so it passes; the launcher then fails to bind the gateway and exits.
+    // Binding to :0 lets the OS choose a free port, avoiding collisions with other tests.
+    let blocker = TcpListener::bind("127.0.0.1:0").expect("failed to bind blocker socket");
+    let port = blocker.local_addr().unwrap().port();
+
+    let pm = formatdoc! {r#"
+        networks:
+          - name: portconflict-network
+            mode: managed
+            gateway:
+              bind: 127.0.0.1
+              port: {port}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "portconflict-network", "--background"])
+        .assert()
+        .failure()
+        // Assert the launcher's captured output was attached to the error (issue #597),
+        // without pinning the exact launcher / pocket-ic wording.
+        .stderr(
+            contains("exited prematurely")
+                .and(contains("Launcher error output").or(contains("See the launcher log at"))),
+        );
+
+    // Hold the socket open until after the launcher has tried (and failed) to bind.
+    drop(blocker);
+
+    // The launcher spawns pocket-ic before it fails to bind the gateway, and on this error
+    // path pocket-ic is left orphaned (no descriptor is written to stop it later). Reap any
+    // process whose binary lives under this test's isolated temp home so we don't leak it;
+    // the home is unique per test, so this can't touch other tests or real networks.
+    {
+        use sysinfo::{ProcessesToUpdate, System};
+        let home = ctx.home_path().as_std_path();
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        for process in system.processes().values() {
+            if process.exe().is_some_and(|exe| exe.starts_with(home)) {
+                process.kill();
+            }
+        }
+    }
 }
 
 #[tokio::test]

@@ -39,11 +39,14 @@ pub enum SpawnNetworkLauncherError {
     #[snafu(display("failed to watch launcher status file"))]
     WatchForStatusFile { source: WaitForLauncherStatusError },
     #[snafu(display(
-        "network launcher at {network_launcher_path} exited prematurely with status {exit_status}"
+        "network launcher at {network_launcher_path} exited prematurely with status {exit_status}{detail}"
     ))]
     LauncherExitedPrematurely {
         network_launcher_path: PathBuf,
         exit_status: std::process::ExitStatus,
+        /// Either empty, or a leading-newline suffix carrying the launcher's captured
+        /// stderr tail (background mode only). See [`premature_exit_detail`].
+        detail: String,
     },
     #[snafu(display("failed to watch launcher process for exit code"))]
     WatchLauncher {
@@ -117,9 +120,14 @@ pub async fn spawn_network_launcher(
             let exit_status = res.context(WatchLauncherSnafu {
                 network_launcher_path,
             })?;
+            // In background mode the launcher's stderr was redirected to a file rather than
+            // inherited, so nothing was shown live. Read it back so the error explains *why*
+            // it exited (e.g. a port conflict) instead of just reporting the exit status.
+            let detail = premature_exit_detail(background, stderr_file);
             return LauncherExitedPrematurelySnafu {
                 exit_status,
-                network_launcher_path: &network_launcher_path,
+                network_launcher_path,
+                detail,
             }.fail();
         },
     };
@@ -150,6 +158,51 @@ pub async fn spawn_network_launcher(
         },
         ChildLocator::Pid { pid, start_time },
     ))
+}
+
+/// Upper bounds on how much captured stderr to fold into the premature-exit error, so a
+/// verbose launcher log (e.g. `--debug` with `-d`) can't produce a wall-of-text error.
+const MAX_STDERR_TAIL_LINES: usize = 50;
+const MAX_STDERR_TAIL_BYTES: usize = 8 * 1024;
+
+/// Builds the trailing detail appended to [`SpawnNetworkLauncherError::LauncherExitedPrematurely`].
+///
+/// In foreground mode the launcher's stderr is inherited and was already shown live, so this
+/// returns an empty string. In background mode it was redirected to `stderr_file`; we read the
+/// tail back so the cause travels with the error. The read is best-effort: if it fails or the
+/// file is empty we fall back to pointing at the log path rather than masking the exit status.
+fn premature_exit_detail(background: bool, stderr_file: &Path) -> String {
+    if !background {
+        return String::new();
+    }
+    match crate::fs::read_to_string(stderr_file) {
+        Ok(contents) => {
+            let tail = stderr_tail(&contents);
+            if tail.is_empty() {
+                format!("\nSee the launcher log at {stderr_file} for details.")
+            } else {
+                format!("\nLauncher error output (from {stderr_file}):\n{tail}")
+            }
+        }
+        Err(_) => format!("\nSee the launcher log at {stderr_file} for details."),
+    }
+}
+
+/// Returns the trailing portion of `contents`, capped to the last [`MAX_STDERR_TAIL_LINES`]
+/// lines and then to [`MAX_STDERR_TAIL_BYTES`] (cutting on a char boundary), trimmed.
+fn stderr_tail(contents: &str) -> String {
+    let lines: Vec<&str> = contents.lines().collect();
+    let start = lines.len().saturating_sub(MAX_STDERR_TAIL_LINES);
+    let by_lines = lines[start..].join("\n");
+    let by_lines = by_lines.trim();
+    if by_lines.len() <= MAX_STDERR_TAIL_BYTES {
+        return by_lines.to_string();
+    }
+    let mut cut = by_lines.len() - MAX_STDERR_TAIL_BYTES;
+    while !by_lines.is_char_boundary(cut) {
+        cut += 1;
+    }
+    by_lines[cut..].trim_start().to_string()
 }
 
 pub async fn stop_launcher(pid: Pid) {
@@ -374,5 +427,67 @@ struct WatchRecv(Sender<notify::Result<notify::Event>>);
 impl EventHandler for WatchRecv {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
         let _ = self.0.blocking_send(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stderr_tail_keeps_short_content_verbatim() {
+        assert_eq!(stderr_tail("line one\nline two"), "line one\nline two");
+    }
+
+    #[test]
+    fn stderr_tail_trims_surrounding_whitespace() {
+        assert_eq!(stderr_tail("\n\n  boom  \n\n"), "boom");
+    }
+
+    #[test]
+    fn stderr_tail_keeps_only_last_lines() {
+        let input = (0..200)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tail = stderr_tail(&input);
+        let lines: Vec<&str> = tail.lines().collect();
+        assert_eq!(lines.len(), MAX_STDERR_TAIL_LINES);
+        assert_eq!(*lines.first().unwrap(), "150");
+        assert_eq!(*lines.last().unwrap(), "199");
+    }
+
+    #[test]
+    fn stderr_tail_caps_bytes_on_a_single_long_line() {
+        let input = "x".repeat(MAX_STDERR_TAIL_BYTES * 2);
+        let tail = stderr_tail(&input);
+        assert!(tail.len() <= MAX_STDERR_TAIL_BYTES);
+        assert!(!tail.is_empty());
+    }
+
+    #[test]
+    fn premature_exit_detail_is_empty_in_foreground() {
+        // Foreground inherits stderr, so there is nothing to read back.
+        let missing = Path::new("/nonexistent/stderr.log");
+        assert_eq!(premature_exit_detail(false, missing), "");
+    }
+
+    #[test]
+    fn premature_exit_detail_includes_captured_output() {
+        let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+        let file = dir.path().join("stderr.log");
+        crate::fs::write(&file, b"Address already in use (os error 48)\n").unwrap();
+        let detail = premature_exit_detail(true, &file);
+        assert!(detail.starts_with('\n'));
+        assert!(detail.contains("Address already in use"));
+        assert!(detail.contains(file.as_str()));
+    }
+
+    #[test]
+    fn premature_exit_detail_falls_back_to_log_path_when_unreadable() {
+        let missing = Path::new("/nonexistent/stderr.log");
+        let detail = premature_exit_detail(true, missing);
+        assert!(detail.contains("See the launcher log at"));
+        assert!(detail.contains(missing.as_str()));
     }
 }

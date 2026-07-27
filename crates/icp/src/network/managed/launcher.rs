@@ -184,6 +184,8 @@ fn premature_exit_detail(background: bool, stderr_file: &Path) -> String {
                 format!("\nLauncher error output (from {stderr_file}):\n{tail}")
             }
         }
+        // The read error is deliberately ignored: this is already an error path, and the
+        // fallback carries `stderr_file` so the user can still find the log.
         Err(_) => format!("\nSee the launcher log at {stderr_file} for details."),
     }
 }

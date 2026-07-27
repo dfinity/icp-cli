@@ -465,6 +465,63 @@ async fn sync_plugin_registers_seed_data() {
         );
 }
 
+/// A malformed `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` must abort the sync with an
+/// actionable error rather than being silently ignored. This also exercises the
+/// end-to-end wiring: it proves the override is actually read on the real plugin
+/// sync path (if it weren't, the bogus value would be ignored and the sync would
+/// proceed), which the unit tests can't cover on their own.
+#[tokio::test]
+async fn sync_plugin_rejects_invalid_compute_limit_env() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // deploy runs the sync step, which reads ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS.
+    // A non-integer value must abort with a message that names the variable and
+    // echoes the offending value.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .env("ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS", "not-a-number")
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("invalid ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS value")
+                .and(contains("not-a-number")),
+        );
+}
+
 /// A `dirs:` entry that is a symlink (here pointing outside the project) is
 /// rejected before the plugin runs, so a preopen cannot escape the canister
 /// directory. Symlinks are forbidden outright for now — see

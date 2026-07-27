@@ -56,7 +56,13 @@ async fn canister_top_up() {
 
     let agent = ctx.agent();
     let mgmt = ManagementCanister::create(&agent);
-    let canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;
+    let canister_balance = mgmt
+        .canister_status(&canister_id)
+        .call()
+        .await
+        .unwrap()
+        .0
+        .cycles;
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -102,6 +108,12 @@ async fn canister_top_up() {
         ))
         .success();
 
-    let new_canister_balance = mgmt.canister_status(&canister_id).await.unwrap().0.cycles;
+    let new_canister_balance = mgmt
+        .canister_status(&canister_id)
+        .call()
+        .await
+        .unwrap()
+        .0
+        .cycles;
     assert!((canister_balance + 10 * TRILLION) - new_canister_balance < 100_000_000_u128);
 }

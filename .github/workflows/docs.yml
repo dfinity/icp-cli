@@ -13,11 +13,14 @@ on:
       - 'docs/**'
       - 'docs-site/**'
       - '.github/workflows/docs.yml'
+  # No paths filter here on purpose. docs-build:required is a required status
+  # check, so it must report a conclusion on EVERY pull request. A workflow-level
+  # paths filter would skip the whole workflow on docs-less PRs, leaving the
+  # required check permanently "expected" and blocking the merge (e.g. release
+  # PRs that only touch Cargo.toml/CHANGELOG.md). Instead the `changes` job below
+  # gates the build, so unrelated PRs report a passing (skipped) check. This
+  # mirrors checks.yml / validate-examples.yml.
   pull_request:
-    paths:
-      - 'docs/**'
-      - 'docs-site/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -26,15 +29,60 @@ permissions:
 env:
   PUBLIC_SITE: https://cli.internetcomputer.org
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Concurrency is split by event so PR validation never shares a lane with deployments:
+#   - Pull requests get an isolated per-ref lane and cancel superseded builds, so a
+#     burst of unrelated PRs (or pushes) can no longer cancel a PR's own build before
+#     it runs — which previously let a broken docs build slip through review.
+#   - Pushes, tags, and manual runs share the single "pages" lane with
+#     cancel-in-progress: false: only one deployment runs at a time, queued runs
+#     between in-progress and latest are skipped, and in-progress production
+#     deployments are always allowed to complete.
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('docs-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Detect whether documentation sources changed. Runs only on pull requests;
+  # pushes/tags/manual runs skip it and rely on always() in `build` below.
+  # This lets docs-build:required report a passing (skipped) check on PRs that
+  # don't touch docs, instead of the workflow being filtered out entirely.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+              - 'docs-site/**'
+              - '.github/workflows/docs.yml'
+
   # Build job - validates that docs build successfully
   build:
+    # Explicit :required name follows the repo convention for gating checks and
+    # gives branch-protection an unambiguous context to require (vs. bare "build").
+    name: docs-build:required
+    needs: changes
+    # Always build for pushes, tags, and manual runs (the workflow-level push
+    # paths filter already gates those). On pull requests, build only when docs
+    # changed; otherwise the job is skipped and docs-build:required reports as a
+    # passing (skipped) required check.
+    #
+    # Fail closed: if `changes` did not succeed (e.g. checkout or the paths-filter
+    # step failed) its `docs` output is empty, which would skip the build and let
+    # the required check pass vacuously — bypassing the gate. Building whenever
+    # `changes.result != 'success'` ensures a broken detection step can't do that.
+    #
+    # always() is required because `changes` is skipped on non-PR events and would
+    # otherwise cascade-skip this job.
+    if: always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.docs == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -62,8 +110,19 @@ jobs:
 
   # Publish root index, versions list, and IC config files - only runs on main branch
   publish-root-files:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
+    # `!cancelled()` is a STATUS-CHECK FUNCTION, so GitHub does NOT prepend the
+    # implicit success() gate to this `if`. We then gate explicitly on build having
+    # succeeded via `needs.build.result`. This is required because `build` depends on
+    # the `changes` job, which is SKIPPED on push/workflow_dispatch events. Without a
+    # status-check function here, the implicit success() would evaluate the whole
+    # needs chain (including that skipped `changes` job) and skip this job even though
+    # build itself succeeded — the exact bug that stopped the v1.2 docs from
+    # publishing (see #671).
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -225,8 +284,14 @@ jobs:
 
   # Publish main branch docs for preview (always available at /main/)
   publish-main-docs:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
+    # See publish-root-files: `!cancelled()` suppresses the implicit success() so the
+    # skipped `changes` job in the needs chain can't cascade-skip this job; we gate
+    # explicitly on build succeeding instead.
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -266,8 +331,15 @@ jobs:
 
   # Publish versioned docs - runs on tags (v*) or docs branches (docs/v*)
   publish-versioned-docs:
-    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/docs/v'))
     needs: build
+    # See publish-root-files: `!cancelled()` suppresses the implicit success() so the
+    # skipped `changes` job in the needs chain can't cascade-skip this job; we gate
+    # explicitly on build succeeding instead. This is the job that publishes /X.Y/;
+    # the cascade-skip here is why the v1.2.0 tag push produced no /1.2/ folder.
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/docs/v'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -325,10 +397,20 @@ jobs:
           destination_dir: ${{ env.DOCS_VERSION }}
 
   # Deploy docs-deployment branch to IC asset canister.
-  # Runs when at least one publish job succeeded (skipped on PR builds).
-  # always() prevents auto-skip when publish-versioned-docs is skipped (e.g. on main branch pushes).
+  # always() prevents auto-skip when some publish jobs are skipped (e.g.
+  # publish-versioned-docs is legitimately skipped on main-branch pushes).
+  #
+  # `contains(needs.*.result, 'success')` requires that AT LEAST ONE publish job
+  # actually succeeded. Without it, a run where ALL three publish jobs were skipped
+  # would still deploy — silently re-pushing the stale docs-deployment branch to IC
+  # mainnet and reporting green. That is exactly what masked the v1.2 failure: every
+  # publish job skipped, yet this job ran and redeployed unchanged content. Now, if
+  # nothing was published there is nothing to deploy, and the run makes that visible.
   deploy-to-ic:
     needs: [publish-root-files, publish-main-docs, publish-versioned-docs]
-    if: always() && github.event_name != 'pull_request' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    if: >-
+      always() && github.event_name != 'pull_request' &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') &&
+      contains(needs.*.result, 'success')
     uses: ./.github/workflows/docs-deploy.yml
     secrets: inherit

@@ -69,6 +69,7 @@ pub fn run_plugin(
     proxy: Option<Principal>,
     identity_principal: Principal,
     environment: String,
+    compute_limit_secs: u64,
     stdio: Option<Sender<String>>,
 ) -> Result<Vec<String>, RunPluginError>
 ```
@@ -138,6 +139,10 @@ calls block the guest while the host awaits the network, `canister_call` records
 the elapsed time and the `epoch_deadline_callback` grants it back via
 `epoch_extension` — so network latency is *not* charged against the limit. The
 ticker thread stops when its RAII guard drops at the end of `run_plugin`.
+
+The deadline in seconds is the `compute_limit_secs` parameter. The CLI resolves
+it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable, defaulting
+to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset.
 
 ### stdio capture
 

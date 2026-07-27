@@ -988,3 +988,99 @@ async fn network_recovers_from_stale_descriptor() {
         "Network should be healthy"
     );
 }
+
+/// A launcher can outlive the replica it supervises, in which case its PID stays alive while the
+/// gateway refuses connections. Process liveness alone then reports the network as running and
+/// `network start` refuses to do anything (dfinity/icp-cli#577). A plain long-lived process stands
+/// in for such a launcher: unambiguously alive, unambiguously not serving a gateway.
+#[cfg(unix)] // spawns `sleep` as the stand-in launcher process
+#[tokio::test]
+async fn network_replaces_defunct_launcher() {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("defunct-launcher");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    let network_dir = project_dir.join(".icp/cache/networks/random-network");
+    std::fs::create_dir_all(&network_dir).expect("failed to create network directory");
+
+    // Reserve and release a port so the descriptor names one nothing is listening on, making the
+    // gateway probe fail by refusal rather than by timeout.
+    let dead_port = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .expect("failed to reserve a port")
+        .local_addr()
+        .expect("failed to read reserved port")
+        .port();
+
+    let mut stand_in = std::process::Command::new("sleep")
+        .arg("300")
+        .spawn()
+        .expect("failed to spawn stand-in launcher");
+    let stand_in_pid = stand_in.id();
+    let start_time = {
+        let pid = Pid::from_u32(stand_in_pid);
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        system
+            .process(pid)
+            .expect("stand-in launcher is not visible to sysinfo")
+            .start_time()
+    };
+    // Reap in the background so the stand-in leaves the process table as soon as it is signalled,
+    // instead of lingering as a zombie that still looks alive.
+    let reaper = std::thread::spawn(move || {
+        stand_in
+            .wait()
+            .expect("failed to wait for stand-in launcher")
+    });
+
+    let defunct_descriptor = serde_json::json!({
+        "v": "1",
+        "id": "22222222-2222-2222-2222-222222222222",
+        "project-dir": project_dir.to_string(),
+        "network": "random-network",
+        "network-dir": network_dir.to_string(),
+        "gateway": {
+            "fixed": false,
+            "port": dead_port,
+            "host": "127.0.0.1",
+            "ip": "127.0.0.1"
+        },
+        "child-locator": {
+            "type": "pid",
+            "pid": stand_in_pid,
+            "start-time": start_time
+        },
+        "root-key": "308182301c300d06092a864886f70d0101010500030b008081007f",
+        "pocketic-config-port": null,
+        "pocketic-instance-id": null,
+        "candid-ui-canister-id": null,
+        "proxy-canister-id": null,
+        "status-dir": null,
+        "use-friendly-domains": false
+    });
+    let descriptor_bytes =
+        serde_json::to_vec(&defunct_descriptor).expect("failed to serialize descriptor");
+    ctx.write_network_descriptor(&project_dir, "random-network", &descriptor_bytes);
+
+    // Start network - should stop the defunct launcher and start fresh rather than refuse
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "random-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("no longer serving requests"));
+
+    let exit = reaper.join().expect("reaper thread panicked");
+    assert!(
+        !exit.success(),
+        "defunct launcher should have been signalled, exited with {exit}"
+    );
+
+    ctx.wait_for_network_descriptor(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
+}

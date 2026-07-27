@@ -10,11 +10,18 @@
 //!
 //! See [`crate::network::directory`] for the file hierarchy where descriptors are stored.
 
+use std::time::Duration;
+
 use candid::Principal;
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
+use url::Url;
 use uuid::Uuid;
 
 use crate::prelude::*;
+
+/// How long to wait for the gateway to answer before concluding the network is defunct.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn default_gateway_host() -> String {
     "localhost".to_string()
@@ -144,4 +151,53 @@ impl NetworkDescriptorModel {
 
         None
     }
+
+    /// Asks the gateway whether it is serving requests.
+    ///
+    /// A launcher can outlive the replica it supervises — a host suspend can leave the process
+    /// running with a defunct PocketIC behind it — so [`ChildLocator::is_alive`] is not on its
+    /// own evidence that the network works.
+    ///
+    /// `Ok(false)` means the network answered for itself that it is unusable: nothing accepted
+    /// the connection, it never replied, or it replied with a failure. Any other outcome is an
+    /// error, because it leaves the question unanswered rather than answering it in the
+    /// negative.
+    pub async fn is_responsive(&self) -> Result<bool, ProbeNetworkError> {
+        let status_url = Url::parse(&format!(
+            "http://{}:{}/api/v2/status",
+            self.gateway.host, self.gateway.port
+        ))
+        .context(ParseStatusUrlSnafu {
+            host: &self.gateway.host,
+            port: self.gateway.port,
+        })?;
+        let client = reqwest::Client::builder()
+            .timeout(PROBE_TIMEOUT)
+            .build()
+            .context(BuildProbeClientSnafu {
+                url: status_url.clone(),
+            })?;
+        match client.get(status_url.clone()).send().await {
+            Ok(response) => Ok(response.status().is_success()),
+            Err(source) if source.is_connect() || source.is_timeout() => Ok(false),
+            Err(source) => Err(ProbeNetworkError::QueryStatus {
+                source,
+                url: status_url,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ProbeNetworkError {
+    #[snafu(display("failed to build a status URL for the gateway at {host}:{port}"))]
+    ParseStatusUrl {
+        source: url::ParseError,
+        host: String,
+        port: u16,
+    },
+    #[snafu(display("failed to build an HTTP client to probe {url}"))]
+    BuildProbeClient { source: reqwest::Error, url: Url },
+    #[snafu(display("failed to query the network status at {url}"))]
+    QueryStatus { source: reqwest::Error, url: Url },
 }

@@ -9,9 +9,12 @@ use icp::{
     identity::manifest::IdentityList,
     network::{
         Configuration,
-        managed::cache::{
-            check_launcher_update_available, download_launcher_version,
-            get_cached_launcher_version_if_fresh,
+        managed::{
+            cache::{
+                check_launcher_update_available, download_launcher_version,
+                get_cached_launcher_version_if_fresh,
+            },
+            run::stop_network,
         },
         run_network,
     },
@@ -93,18 +96,29 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
             "Found network descriptor for {} in: {}",
             nd.network_name, nd.network_root
         );
-        if descriptor.child_locator.is_alive().await {
+        let alive = descriptor.child_locator.is_alive().await;
+        if alive && descriptor.is_responsive().await? {
             bail!("network '{}' is already running", network.name);
+        }
+        if alive {
+            // The launcher outlived its replica, so it will neither serve requests nor free the
+            // gateway port for the launcher we are about to spawn.
+            warn!(
+                "Network '{}' has a launcher process that is no longer serving requests. \
+                 Stopping it and starting fresh.",
+                network.name
+            );
+            stop_network(&descriptor.child_locator).await?;
         } else {
             warn!(
                 "Found stale network descriptor for '{}' (process is no longer running). \
                  Cleaning up and starting fresh.",
                 network.name
             );
-            nd.cleanup_port_descriptor(descriptor.gateway_port())
-                .await?;
-            nd.cleanup_project_network_descriptor().await?;
         }
+        nd.cleanup_port_descriptor(descriptor.gateway_port())
+            .await?;
+        nd.cleanup_project_network_descriptor().await?;
     }
 
     // Clean up any existing canister ID mappings of which environment is on this network

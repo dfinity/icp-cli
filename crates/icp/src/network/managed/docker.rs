@@ -27,7 +27,9 @@ use crate::network::{
 };
 use crate::prelude::*;
 
-use super::launcher::{MAX_OUTPUT_TAIL_LINES, output_tail, wait_for_launcher_status};
+use super::launcher::{
+    MAX_OUTPUT_TAIL_BYTES, MAX_OUTPUT_TAIL_LINES, output_tail, tail_bytes, wait_for_launcher_status,
+};
 
 /// Error converting a path for WSL2.
 #[derive(Debug, Snafu)]
@@ -603,16 +605,28 @@ fn follow_container_logs(docker: &Docker, container_id: &str) -> JoinHandle<()> 
 /// delays the error instead of hanging `network start`.
 const LOG_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Ceiling on the buffer held while reading the container's log for a premature-exit error. Twice
+/// the final byte cap, so the line-based trim in [`output_tail`] still has its full budget to
+/// choose from after the incremental trimming.
+const MAX_LOG_BUFFER_BYTES: usize = 2 * MAX_OUTPUT_TAIL_BYTES;
+
 /// Waits for [`follow_container_logs`] to finish so its output is on the terminal before the
-/// premature-exit error is rendered. Bounded, and deliberately ignores both outcomes: the error
-/// is reported either way, at worst without the container's last few lines.
-async fn drain_log_follower(follower: JoinHandle<()>) {
-    if tokio::time::timeout(LOG_DRAIN_TIMEOUT, follower)
+/// premature-exit error is rendered. Bounded, and deliberately ignores the task's own outcome: the
+/// error is reported either way, at worst without the container's last few lines.
+async fn drain_log_follower(mut follower: JoinHandle<()>) {
+    if tokio::time::timeout(LOG_DRAIN_TIMEOUT, &mut follower)
         .await
-        .is_err()
+        .is_ok()
     {
-        debug!("timed out draining container log output");
+        return;
     }
+    debug!("timed out draining container log output");
+    // Dropping a `JoinHandle` detaches the task rather than cancelling it, so returning here
+    // would leave the follower free to write *after* the error — the interleaving this drain
+    // exists to prevent. Abort it, then wait for it to actually stop, under the same bound again
+    // so a wedged write degrades to a late error rather than a hung `network start`.
+    follower.abort();
+    let _ = tokio::time::timeout(LOG_DRAIN_TIMEOUT, follower).await;
 }
 
 /// Builds the trailing detail appended to [`DockerLauncherError::ContainerExitedPrematurely`].
@@ -660,6 +674,14 @@ async fn premature_exit_detail(
             // The stream error is deliberately ignored: this is already an error path, and
             // whatever arrived before it is still worth showing.
             Err(_) => break,
+        }
+        // Docker's `tail` caps the number of lines, not their length, so a container emitting a
+        // few enormous lines would otherwise be held whole in memory just to have nearly all of
+        // it discarded below. Trim as we go instead. This is a raw byte cut, not `output_tail`:
+        // that one trims trailing whitespace, which mid-stream would glue the next chunk onto
+        // the end of the current line.
+        if output.len() > MAX_LOG_BUFFER_BYTES {
+            output = tail_bytes(&output, MAX_LOG_BUFFER_BYTES).to_string();
         }
     }
     // The full id is already on the error's first line, so the hint uses the short form.

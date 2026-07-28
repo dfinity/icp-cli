@@ -165,7 +165,7 @@ pub async fn spawn_network_launcher(
 ///
 /// Shared with the Docker path, which applies the same bounds to the container log tail.
 pub(super) const MAX_OUTPUT_TAIL_LINES: usize = 50;
-const MAX_OUTPUT_TAIL_BYTES: usize = 8 * 1024;
+pub(super) const MAX_OUTPUT_TAIL_BYTES: usize = 8 * 1024;
 
 /// Builds the trailing detail appended to [`SpawnNetworkLauncherError::LauncherExitedPrematurely`].
 ///
@@ -199,14 +199,24 @@ pub(super) fn output_tail(contents: &str) -> String {
     let start = lines.len().saturating_sub(MAX_OUTPUT_TAIL_LINES);
     let by_lines = lines[start..].join("\n");
     let by_lines = by_lines.trim();
-    if by_lines.len() <= MAX_OUTPUT_TAIL_BYTES {
-        return by_lines.to_string();
+    tail_bytes(by_lines, MAX_OUTPUT_TAIL_BYTES)
+        .trim_start()
+        .to_string()
+}
+
+/// Returns at most the trailing `max_bytes` of `contents`, cutting on a char boundary.
+///
+/// Split out of [`output_tail`] so a caller streaming output in can hold a bounded buffer
+/// without duplicating the boundary handling.
+pub(super) fn tail_bytes(contents: &str, max_bytes: usize) -> &str {
+    if contents.len() <= max_bytes {
+        return contents;
     }
-    let mut cut = by_lines.len() - MAX_OUTPUT_TAIL_BYTES;
-    while !by_lines.is_char_boundary(cut) {
+    let mut cut = contents.len() - max_bytes;
+    while !contents.is_char_boundary(cut) {
         cut += 1;
     }
-    by_lines[cut..].trim_start().to_string()
+    &contents[cut..]
 }
 
 pub async fn stop_launcher(pid: Pid) {
@@ -467,6 +477,21 @@ mod tests {
         let tail = output_tail(&input);
         assert!(tail.len() <= MAX_OUTPUT_TAIL_BYTES);
         assert!(!tail.is_empty());
+    }
+
+    #[test]
+    fn tail_bytes_returns_everything_within_the_limit() {
+        assert_eq!(tail_bytes("line one\nline two", 1024), "line one\nline two");
+    }
+
+    #[test]
+    fn tail_bytes_cuts_on_a_char_boundary() {
+        // Each 'é' is two bytes, so cutting at a raw byte offset can land mid-character — which
+        // would panic when slicing rather than merely truncate.
+        let input = "é".repeat(8);
+        let tail = tail_bytes(&input, 5);
+        assert!(tail.len() <= 5, "{}", tail.len());
+        assert!(tail.chars().all(|c| c == 'é'), "{tail}");
     }
 
     #[test]

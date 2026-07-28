@@ -638,6 +638,62 @@ async fn network_docker() {
     assert!(balance > 0_u128);
 }
 
+/// A docker-mode manifest whose container writes a known line to stderr and exits nonzero without
+/// ever writing status.json — exactly the premature-exit path.
+///
+/// Overriding the entrypoint is far more deterministic than trying to make the real launcher fail
+/// from outside the container: it tolerates unrecognized arguments, and its ports live in the
+/// container's namespace so they can't be made to conflict. What is under test is icp-cli's log
+/// plumbing, not the launcher — whatever the container printed has to reach the user.
+///
+/// `rm-on-exit` also makes the container clean itself up, which additionally pins the ordering:
+/// the logs must be read before the drop guard removes the container.
+const FAILING_CONTAINER_MARKER: &str = "simulated-launcher-startup-failure";
+
+fn failing_docker_manifest() -> String {
+    formatdoc! {r#"
+        {NETWORK_DOCKER}
+            rm-on-exit: true
+            entrypoint:
+              - /bin/sh
+              - -c
+            args:
+              - "echo {FAILING_CONTAINER_MARKER} >&2; exit 3"
+    "#}
+}
+
+/// Regression test for #677: when the container exits prematurely, the error must surface the
+/// container's log tail instead of only the bare exit status. This is the Docker counterpart of
+/// `background_start_port_conflict_surfaces_launcher_output` — the container's stdio belongs to
+/// the daemon, so the cause comes back over `docker logs` rather than from a local file.
+#[tag(docker)]
+#[tokio::test]
+async fn docker_start_surfaces_container_output_on_premature_exit() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("docker-premature-exit");
+    write_string(&project_dir.join("icp.yaml"), &failing_docker_manifest())
+        .expect("failed to write project manifest");
+
+    ctx.docker_pull_network();
+
+    // `--background` bounds the test: were the container to stay up, the command returns
+    // instead of blocking, and the `failure()` assertion fails fast.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "docker-network", "--background"])
+        .assert()
+        .failure()
+        // The header is our own string, and the marker is the container's actual bytes: together
+        // they prove the log was fetched and folded into the error. Accepting the no-output
+        // fallback here would let a wiring regression pass unnoticed.
+        .stderr(
+            contains("exited prematurely with status 3")
+                .and(contains("Container output"))
+                .and(contains(FAILING_CONTAINER_MARKER)),
+        );
+}
+
 #[tokio::test]
 #[file_serial(default_local_network)]
 async fn override_local_network_with_custom_port() {

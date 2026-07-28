@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* fix: `icp network start` now explains why a Docker-based network failed to come up. A container that exited before the network was ready was reported as `failed to watch docker container <id> for exit` with an empty cause, discarding the actual reason (e.g. the gateway port already being taken); the container's output is now attached to the error.
+
 # v1.2.0
 
 * feat(sync-plugin): the compute-time limit for `plugin` sync steps is now configurable via the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable (default `60`). Raise it for compute-heavy plugins (e.g. brotli-compressing a large asset bundle) that legitimately exceed the default, especially on slower CI runners. The limit-exceeded error now names the variable and the current limit, and a malformed value is rejected rather than silently ignored.

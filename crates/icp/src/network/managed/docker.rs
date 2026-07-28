@@ -7,7 +7,7 @@ use bollard::{
     errors::Error as BollardError,
     models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
     query_parameters::{
-        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
+        CreateContainerOptions, CreateImageOptions, InspectContainerOptions, LogsOptions,
         RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
 };
@@ -26,7 +26,7 @@ use crate::network::{
 };
 use crate::prelude::*;
 
-use super::launcher::wait_for_launcher_status;
+use super::launcher::{MAX_OUTPUT_TAIL_LINES, output_tail, wait_for_launcher_status};
 
 /// Error converting a path for WSL2.
 #[derive(Debug, Snafu)]
@@ -384,7 +384,7 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
-    info!("Created container {}", &container_id[..12]);
+    info!("Created container {}", short_id(&container_id));
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -401,18 +401,28 @@ pub async fn spawn_docker_launcher(
     let launcher_status = select! {
         content = watcher => content?,
         res = wait_container.try_next() => {
-            let exit = res.context(WatchContainerSnafu { container_id })?;
-            if let Some(exit) = exit {
-                return ContainerExitedPrematurelySnafu {
-                    container_id,
-                    exit_status: exit.status_code,
-                }.fail();
-            } else {
-                return RequiredFieldMissingSnafu {
+            // bollard turns any nonzero exit into `DockerContainerWaitError` instead of an `Ok`
+            // response carrying the status code, so both shapes have to reach the same error.
+            // Otherwise the case that matters — a container that *failed* — surfaced as an
+            // opaque "failed to watch container for exit" with an empty cause.
+            let (exit_status, wait_error) = match res {
+                Ok(Some(exit)) => (
+                    exit.status_code,
+                    exit.error.and_then(|e| e.message).unwrap_or_default(),
+                ),
+                Ok(None) => return RequiredFieldMissingSnafu {
                     field: "StatusCode",
                     route: "wait_container",
-                }.fail()
-            }
+                }.fail(),
+                Err(BollardError::DockerContainerWaitError { code, error }) => (code, error),
+                Err(source) => return Err(source).context(WatchContainerSnafu { container_id }),
+            };
+            let detail = premature_exit_detail(docker, container_id, &wait_error).await;
+            return ContainerExitedPrematurelySnafu {
+                container_id,
+                exit_status,
+                detail,
+            }.fail();
         },
     };
     let container_info = docker
@@ -510,6 +520,64 @@ pub async fn spawn_docker_launcher(
         locator,
         gateway_port_was_fixed,
     ))
+}
+
+/// Docker resolves an unambiguous id prefix, so log messages use the short form users see in
+/// `docker ps`. `min` keeps this from panicking on an error path if the daemon ever hands back
+/// something shorter than a full id.
+fn short_id(container_id: &str) -> &str {
+    &container_id[..container_id.len().min(12)]
+}
+
+/// Builds the trailing detail appended to [`DockerLauncherError::ContainerExitedPrematurely`].
+///
+/// The native launcher's stderr is either inherited or redirected to a local file, so its
+/// premature-exit path can read the cause back from disk. Here the daemon owns the container's
+/// stdio and nothing local mirrors it, so the only way to recover the cause is to ask the daemon
+/// for the log tail. Docker's own `tail` bounds the request, and [`output_tail`] applies the same
+/// caps as the native path on top of it so a chatty image can't produce a wall-of-text error.
+///
+/// Best-effort: if the fetch fails or the container logged nothing, this points at `docker logs`
+/// rather than masking the exit status.
+///
+/// `wait_error` is the daemon's own wait-level message, which is normally empty but is the only
+/// explanation available when the container itself printed nothing.
+async fn premature_exit_detail(docker: &Docker, container_id: &str, wait_error: &str) -> String {
+    let mut detail = String::new();
+    if !wait_error.is_empty() {
+        detail.push_str(&format!("\nDocker reported: {wait_error}"));
+    }
+    let mut logs = std::pin::pin!(docker.logs(
+        container_id,
+        Some(LogsOptions {
+            stdout: true,
+            stderr: true,
+            tail: MAX_OUTPUT_TAIL_LINES.to_string(),
+            ..<_>::default()
+        }),
+    ));
+    let mut output = String::new();
+    while let Some(chunk) = logs.next().await {
+        match chunk {
+            Ok(chunk) => output.push_str(&chunk.to_string()),
+            // The stream error is deliberately ignored: this is already an error path, and
+            // whatever arrived before it is still worth showing.
+            Err(_) => break,
+        }
+    }
+    // The full id is already on the error's first line, so the hint uses the short form.
+    let short_id = short_id(container_id);
+    let tail = output_tail(&output);
+    if tail.is_empty() {
+        detail.push_str(&format!(
+            "\nNo output was captured; see `docker logs {short_id}` for details."
+        ));
+    } else {
+        detail.push_str(&format!(
+            "\nContainer output (from `docker logs {short_id}`):\n{tail}"
+        ));
+    }
+    detail
 }
 
 /// Connect to the Docker daemon at the given socket.
@@ -699,11 +767,14 @@ pub enum DockerLauncherError {
         container_id: String,
     },
     #[snafu(display(
-        "docker container {container_id} exited prematurely with status {exit_status}"
+        "docker container {container_id} exited prematurely with status {exit_status}{detail}"
     ))]
     ContainerExitedPrematurely {
         container_id: String,
         exit_status: i64,
+        /// A leading-newline suffix carrying the container's log tail, or a pointer to
+        /// `docker logs` when none could be read. See [`premature_exit_detail`].
+        detail: String,
     },
     #[snafu(display("failed to query docker image {image}"))]
     QueryImage {

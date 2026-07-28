@@ -308,7 +308,21 @@ sudo systemctl start docker  # Linux
 
 **Problem**: Container exits immediately or fails to start.
 
-**Solution**: Check container logs:
+**Solution**: `icp network start` reports the cause itself — the container's output is attached to the error:
+
+```
+Error: docker container 63ded6aedbbd... exited prematurely with status 101
+Container output (from `docker logs 63ded6aedbbd`):
+gateway bind failed: Address already in use (os error 98)
+```
+
+Common issues:
+- Image pull failed (check internet connection)
+- Port conflict inside container (check `port-mapping`)
+- Insufficient resources (increase Docker memory/CPU limits)
+
+If the container was removed before you could inspect it (`rm-on-exit: true`), re-run with that setting off and read the full log directly:
+
 ```bash
 # Find container ID
 docker ps -a | grep icp-cli-network-launcher
@@ -316,11 +330,6 @@ docker ps -a | grep icp-cli-network-launcher
 # View logs
 docker logs <container-id>
 ```
-
-Common issues:
-- Image pull failed (check internet connection)
-- Port conflict inside container (check `port-mapping`)
-- Insufficient resources (increase Docker memory/CPU limits)
 
 ### "Network unreachable after start"
 

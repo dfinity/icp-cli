@@ -160,10 +160,12 @@ pub async fn spawn_network_launcher(
     ))
 }
 
-/// Upper bounds on how much captured stderr to fold into the premature-exit error, so a
+/// Upper bounds on how much captured output to fold into a premature-exit error, so a
 /// verbose launcher log (e.g. `--debug` with `-d`) can't produce a wall-of-text error.
-const MAX_STDERR_TAIL_LINES: usize = 50;
-const MAX_STDERR_TAIL_BYTES: usize = 8 * 1024;
+///
+/// Shared with the Docker path, which applies the same bounds to the container log tail.
+pub(super) const MAX_OUTPUT_TAIL_LINES: usize = 50;
+const MAX_OUTPUT_TAIL_BYTES: usize = 8 * 1024;
 
 /// Builds the trailing detail appended to [`SpawnNetworkLauncherError::LauncherExitedPrematurely`].
 ///
@@ -177,7 +179,7 @@ fn premature_exit_detail(background: bool, stderr_file: &Path) -> String {
     }
     match crate::fs::read_to_string(stderr_file) {
         Ok(contents) => {
-            let tail = stderr_tail(&contents);
+            let tail = output_tail(&contents);
             if tail.is_empty() {
                 format!("\nSee the launcher log at {stderr_file} for details.")
             } else {
@@ -190,17 +192,17 @@ fn premature_exit_detail(background: bool, stderr_file: &Path) -> String {
     }
 }
 
-/// Returns the trailing portion of `contents`, capped to the last [`MAX_STDERR_TAIL_LINES`]
-/// lines and then to [`MAX_STDERR_TAIL_BYTES`] (cutting on a char boundary), trimmed.
-fn stderr_tail(contents: &str) -> String {
+/// Returns the trailing portion of `contents`, capped to the last [`MAX_OUTPUT_TAIL_LINES`]
+/// lines and then to [`MAX_OUTPUT_TAIL_BYTES`] (cutting on a char boundary), trimmed.
+pub(super) fn output_tail(contents: &str) -> String {
     let lines: Vec<&str> = contents.lines().collect();
-    let start = lines.len().saturating_sub(MAX_STDERR_TAIL_LINES);
+    let start = lines.len().saturating_sub(MAX_OUTPUT_TAIL_LINES);
     let by_lines = lines[start..].join("\n");
     let by_lines = by_lines.trim();
-    if by_lines.len() <= MAX_STDERR_TAIL_BYTES {
+    if by_lines.len() <= MAX_OUTPUT_TAIL_BYTES {
         return by_lines.to_string();
     }
-    let mut cut = by_lines.len() - MAX_STDERR_TAIL_BYTES;
+    let mut cut = by_lines.len() - MAX_OUTPUT_TAIL_BYTES;
     while !by_lines.is_char_boundary(cut) {
         cut += 1;
     }
@@ -437,33 +439,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stderr_tail_keeps_short_content_verbatim() {
-        assert_eq!(stderr_tail("line one\nline two"), "line one\nline two");
+    fn output_tail_keeps_short_content_verbatim() {
+        assert_eq!(output_tail("line one\nline two"), "line one\nline two");
     }
 
     #[test]
-    fn stderr_tail_trims_surrounding_whitespace() {
-        assert_eq!(stderr_tail("\n\n  boom  \n\n"), "boom");
+    fn output_tail_trims_surrounding_whitespace() {
+        assert_eq!(output_tail("\n\n  boom  \n\n"), "boom");
     }
 
     #[test]
-    fn stderr_tail_keeps_only_last_lines() {
+    fn output_tail_keeps_only_last_lines() {
         let input = (0..200)
             .map(|i| i.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        let tail = stderr_tail(&input);
+        let tail = output_tail(&input);
         let lines: Vec<&str> = tail.lines().collect();
-        assert_eq!(lines.len(), MAX_STDERR_TAIL_LINES);
+        assert_eq!(lines.len(), MAX_OUTPUT_TAIL_LINES);
         assert_eq!(*lines.first().unwrap(), "150");
         assert_eq!(*lines.last().unwrap(), "199");
     }
 
     #[test]
-    fn stderr_tail_caps_bytes_on_a_single_long_line() {
-        let input = "x".repeat(MAX_STDERR_TAIL_BYTES * 2);
-        let tail = stderr_tail(&input);
-        assert!(tail.len() <= MAX_STDERR_TAIL_BYTES);
+    fn output_tail_caps_bytes_on_a_single_long_line() {
+        let input = "x".repeat(MAX_OUTPUT_TAIL_BYTES * 2);
+        let tail = output_tail(&input);
+        assert!(tail.len() <= MAX_OUTPUT_TAIL_BYTES);
         assert!(!tail.is_empty());
     }
 

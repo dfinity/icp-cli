@@ -7,6 +7,12 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+## Experimental
+
+* feat(bundle): `icp project bundle` now works on projects that declare `dependencies:`, which it previously refused outright. The bundle mirrors the workspace instead of flattening it: the root project's `icp.yaml` sits at the archive root, each dependency instance gets its own `icp.yaml` at the directory it occupies in the workspace, and the `dependencies:` declarations are carried through unchanged. A shared (diamond) dependency is still a single instance, canister names stay as each project wrote them, and canister discovery (`PUBLIC_CANISTER_ID:<alias>:<canister>`) works in the extracted bundle exactly as it did in the source workspace.
+  * Every dependency must resolve to a directory inside the workspace root; one that resolves outside it (including through a symlink) is rejected, because the archive could not contain it. As a result, a vendored member that depends on a sibling cannot be bundled as a standalone project (e.g. via `ICP_PROJECT_ROOT`) — bundle the workspace root instead.
+  * Projects with script sync steps still cannot be bundled, and the restriction now covers every project in the workspace.
+
 # v1.2.0
 
 * feat(sync-plugin): the compute-time limit for `plugin` sync steps is now configurable via the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable (default `60`). Raise it for compute-heavy plugins (e.g. brotli-compressing a large asset bundle) that legitimately exceed the default, especially on slower CI runners. The limit-exceeded error now names the variable and the current limit, and a malformed value is rejected rather than silently ignored.

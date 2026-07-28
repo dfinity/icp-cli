@@ -407,6 +407,137 @@ fn relative_prefix(app_root_canonical: &Path, dep_canonical: &Path) -> String {
     rel.as_str().replace('\\', "/")
 }
 
+/// One project in a workspace: the root project, or a dependency instance
+/// reachable from it. Returned by [`workspace_instances`].
+#[derive(Debug)]
+pub struct WorkspaceInstance {
+    /// Store-key prefix for this instance's canisters — its canonical directory
+    /// relative to the canonical workspace root, forward-slash separated. Empty
+    /// for the root project, whose canisters are keyed by their bare names.
+    pub prefix: String,
+
+    /// The instance's directory as reached from the workspace root, and the base
+    /// for resolving the relative paths inside [`Self::manifest`]. Not
+    /// canonicalized, so it keeps the spelling the declaring manifest used.
+    pub dir: PathBuf,
+
+    /// The instance's manifest, exactly as written on disk.
+    pub manifest: ProjectManifest,
+
+    /// The `(alias, path)` of the first dependency edge that reached this
+    /// instance, for error messages. `None` for the root project.
+    pub declared_as: Option<(String, String)>,
+}
+
+#[derive(Debug, Snafu)]
+pub enum WorkspaceInstancesError {
+    #[snafu(display("failed to load the project manifest at '{path}'"))]
+    LoadWorkspaceRoot {
+        path: PathBuf,
+        source: LoadManifestFromPathError,
+    },
+
+    #[snafu(display("could not find a project manifest for dependency '{alias}' at: '{path}'"))]
+    InstanceNotFound { alias: String, path: PathBuf },
+
+    #[snafu(display("failed to canonicalize path for dependency '{alias}' at: '{path}'"))]
+    InstanceCanonicalize { alias: String, path: PathBuf },
+
+    #[snafu(display("failed to load project manifest for dependency '{alias}' at '{path}'"))]
+    LoadInstance {
+        alias: String,
+        path: PathBuf,
+        source: LoadManifestFromPathError,
+    },
+}
+
+/// Walk the workspace rooted at `pdir`, returning the root project followed by
+/// every dependency instance reachable from it, in depth-first declaration
+/// order.
+///
+/// This retraces the same edges [`import_dependency`] follows — de-duplicating
+/// instances by canonical directory, so a diamond yields one entry whose
+/// `prefix` matches the store-key prefix its canisters were assigned — but keeps
+/// each instance's *raw* manifest instead of folding its canisters into the
+/// workspace. Callers that need to reproduce the workspace structure (notably
+/// `icp project bundle`) need the dependency edges and per-instance environments,
+/// which consolidation deliberately flattens away.
+///
+/// Cycles are rejected by [`consolidate_manifest`], which every caller runs
+/// first; the visited set here only keeps the walk finite.
+pub async fn workspace_instances(
+    pdir: &Path,
+) -> Result<Vec<WorkspaceInstance>, WorkspaceInstancesError> {
+    let root_manifest_path = pdir.join(PROJECT_MANIFEST);
+    let root_manifest: ProjectManifest = load_manifest_from_path(&root_manifest_path)
+        .await
+        .context(LoadWorkspaceRootSnafu {
+            path: &root_manifest_path,
+        })?;
+
+    // Same fallback as `consolidate_manifest`, so prefixes agree with the store
+    // keys even when the root directory cannot be canonicalized.
+    let app_root_canonical = canonicalize_or(pdir).unwrap_or_else(|| pdir.to_owned());
+
+    // Depth-first, declaration order: push each instance's dependencies reversed
+    // so the top of the stack is always the next edge in manifest order.
+    let mut stack: Vec<(PathBuf, DependencyManifest)> = root_manifest
+        .dependencies
+        .iter()
+        .rev()
+        .map(|d| (pdir.to_owned(), d.clone()))
+        .collect();
+
+    let mut visited: HashSet<PathBuf> = HashSet::from([app_root_canonical.clone()]);
+    let mut out = vec![WorkspaceInstance {
+        prefix: String::new(),
+        dir: pdir.to_owned(),
+        manifest: root_manifest,
+        declared_as: None,
+    }];
+
+    while let Some((parent_dir, dep)) = stack.pop() {
+        let dep_root = parent_dir.join(&dep.path);
+        let manifest_path = dep_root.join(PROJECT_MANIFEST);
+        if !manifest_path.is_file() {
+            return InstanceNotFoundSnafu {
+                alias: dep.name,
+                path: dep_root,
+            }
+            .fail();
+        }
+
+        let canonical = canonicalize_or(&dep_root).context(InstanceCanonicalizeSnafu {
+            alias: &dep.name,
+            path: &dep_root,
+        })?;
+        if !visited.insert(canonical.clone()) {
+            continue;
+        }
+
+        let manifest: ProjectManifest =
+            load_manifest_from_path(&manifest_path)
+                .await
+                .context(LoadInstanceSnafu {
+                    alias: &dep.name,
+                    path: &manifest_path,
+                })?;
+
+        for nested in manifest.dependencies.iter().rev() {
+            stack.push((dep_root.clone(), nested.clone()));
+        }
+
+        out.push(WorkspaceInstance {
+            prefix: relative_prefix(&app_root_canonical, &canonical),
+            dir: dep_root,
+            manifest,
+            declared_as: Some((dep.name, dep.path)),
+        });
+    }
+
+    Ok(out)
+}
+
 /// Build a dependency canister's friendly-URL subdomain prefix: the canister's
 /// local name as the most-specific label, followed by its alias chain reversed
 /// (root-most alias last). E.g. local `backend` reached via `[service-a,

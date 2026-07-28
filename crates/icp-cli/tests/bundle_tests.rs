@@ -222,6 +222,128 @@ async fn bundle_and_deploy() {
         );
 }
 
+/// Bundle a workspace whose *dependency* owns the plugin sync step, then deploy the
+/// extracted tree. Covers the paths that only resolve at deploy time: a dependency's
+/// pre-built wasm and plugin wasm are referenced relative to the dependency's own
+/// directory in the archive, and its preopened dir is unpacked under it.
+#[tokio::test]
+async fn bundle_with_dependency_deploys() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    let app_wasm = ctx.make_asset("example_icp_mo.wasm");
+    let (registry_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // The dependency's plugin reads its own `seed-data` dir on deploy.
+    let dep_dir = project_dir.join("vendor/openemail");
+    let seed_data = dep_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&seed_data.join("fruit-02.txt"), "banana").expect("failed to write fruit-02.txt");
+
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: registry
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{registry_wasm}' "$ICP_WASM_OUTPUT_PATH"
+                sync:
+                  steps:
+                    - type: plugin
+                      path: {plugin_wasm}
+                      dirs:
+                        - seed-data
+
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: app
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{app_wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+            dependencies:
+              - name: openemail
+                path: ./vendor/openemail
+                canisters: [registry]
+
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let bundle_dir = project_dir.join("bundle-extracted");
+    create_dir_all(&bundle_dir).expect("failed to create bundle-extracted dir");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    Archive::new(gz)
+        .unpack(bundle_dir.as_std_path())
+        .expect("failed to extract bundle");
+
+    let _g = ctx.start_network_in(&bundle_dir, "random-network").await;
+    ctx.ping_until_healthy(&bundle_dir, "random-network");
+
+    clients::icp(&ctx, &bundle_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&bundle_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&bundle_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "app",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"Hello, world!\")").trim());
+
+    // The dependency canister keeps its workspace store key, and its bundled
+    // plugin ran during deploy with the archived seed data.
+    ctx.icp()
+        .current_dir(&bundle_dir)
+        .args([
+            "canister",
+            "call",
+            "vendor/openemail:registry",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("apple").and(contains("banana")));
+}
+
 /// Bundle a canister whose environment override uses an external init_args file.
 /// The file must be copied into the archive at a normalized path and the manifest
 /// reference rewritten to match.
@@ -988,39 +1110,233 @@ fn bundle_rejects_canister_name_collision() {
         .stderr(contains("sanitize to the same archive segment").and(contains("_CON")));
 }
 
-/// Bundling a project that pulls in dependency canisters is rejected up front: a
-/// flattened bundle would lose the alias-based wiring and produce ':'-containing
-/// names that cannot be reloaded.
+/// A workspace with dependencies bundles as a workspace: the root project at the
+/// archive root and each dependency instance at its workspace-relative directory,
+/// with its own manifest. Uses a shared (diamond) dependency to check that the
+/// instance is archived exactly once and that both services still reach it.
 #[test]
-fn bundle_rejects_dependency_workspace() {
+fn bundle_preserves_dependency_structure() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
 
-    let dep_dir = project_dir.join("vendor/openemail");
-    create_dir_all(&dep_dir).expect("failed to create dependency dir");
-    let dep_manifest = formatdoc! {r#"
-        canisters:
-          - name: backend
-            build:
+    let build_step = formatdoc! {r#"
+        build:
               steps:
                 - type: script
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
     "#};
-    write_string(&dep_dir.join("icp.yaml"), &dep_manifest).expect("failed to write dep manifest");
 
-    let pm = formatdoc! {r#"
-        canisters:
-          - name: app
-            build:
+    // umbrella/{service-a,service-b} both depend on the sibling umbrella/openemail.
+    for member in ["service-a", "service-b"] {
+        let dir = project_dir.join(format!("umbrella/{member}"));
+        create_dir_all(&dir).expect("failed to create member dir");
+        write_string(
+            &dir.join("icp.yaml"),
+            &formatdoc! {r#"
+                canisters:
+                  - name: service
+                    {build_step}
+                dependencies:
+                  - name: openemail
+                    path: ../openemail
+                    canisters: [backend]
+            "#},
+        )
+        .expect("failed to write member manifest");
+    }
+
+    let dep_dir = project_dir.join("umbrella/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+            dependencies:
+              - name: service-a
+                path: ./umbrella/service-a
+                canisters: [service]
+              - name: service-b
+                path: ./umbrella/service-b
+                canisters: [service]
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut entries: Vec<String> = Vec::new();
+    let mut manifests: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path.ends_with("icp.yaml") {
+            let mut yaml = String::new();
+            entry
+                .read_to_string(&mut yaml)
+                .expect("failed to read manifest");
+            manifests.insert(path.clone(), yaml);
+        }
+        entries.push(path);
+    }
+
+    for expected in [
+        "icp.yaml",
+        "canisters/frontend.wasm",
+        "umbrella/service-a/icp.yaml",
+        "umbrella/service-a/canisters/service.wasm",
+        "umbrella/service-b/icp.yaml",
+        "umbrella/service-b/canisters/service.wasm",
+        "umbrella/openemail/icp.yaml",
+        "umbrella/openemail/canisters/backend.wasm",
+    ] {
+        assert!(
+            entries.iter().any(|e| e == expected),
+            "{expected} not found in bundle; entries: {entries:?}"
+        );
+    }
+
+    // The shared dependency is one instance, so it is archived once.
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|e| e.as_str() == "umbrella/openemail/canisters/backend.wasm")
+            .count(),
+        1,
+        "shared dependency should be archived exactly once"
+    );
+
+    // Dependency edges are carried through verbatim, including the sibling spelling.
+    let root_manifest = &manifests["icp.yaml"];
+    assert!(
+        root_manifest.contains("path: ./umbrella/service-a") && root_manifest.contains("- service"),
+        "root manifest should keep its dependency paths and selections: {root_manifest}"
+    );
+    let member_manifest = &manifests["umbrella/service-a/icp.yaml"];
+    assert!(
+        member_manifest.contains("path: ../openemail") && member_manifest.contains("- backend"),
+        "member manifest should keep its sibling dependency edge: {member_manifest}"
+    );
+
+    // Each instance declares its canisters under their local names, pre-built.
+    let dep_manifest = &manifests["umbrella/openemail/icp.yaml"];
+    assert!(
+        dep_manifest.contains("name: backend")
+            && dep_manifest.contains("path: canisters/backend.wasm")
+            && dep_manifest.contains("pre-built")
+            && dep_manifest.contains("sha256:"),
+        "dependency manifest should declare a pre-built local canister: {dep_manifest}"
+    );
+    for (path, yaml) in &manifests {
+        assert!(
+            !yaml.contains("type: script"),
+            "{path} should not contain script steps: {yaml}"
+        );
+    }
+
+    // Extract the bundle and re-consolidate it: because every instance keeps its
+    // workspace-relative directory, the store keys — and the `PUBLIC_CANISTER_ID`
+    // wiring derived from them — come out identical to the source workspace.
+    let bundle_dir = project_dir.join("bundle-extracted");
+    create_dir_all(&bundle_dir).expect("failed to create bundle-extracted dir");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    Archive::new(gz)
+        .unpack(bundle_dir.as_std_path())
+        .expect("failed to extract bundle");
+
+    let show = |dir: &Path| -> String {
+        let out = ctx
+            .icp()
+            .current_dir(dir)
+            .args(["project", "show"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        String::from_utf8(out).expect("project show output is not UTF-8")
+    };
+
+    let extracted = show(&bundle_dir);
+    for expected in [
+        "umbrella/openemail:backend",
+        "umbrella/service-a:service",
+        "umbrella/service-b:service",
+        "openemail:backend",
+        "service-a:service",
+    ] {
+        assert!(
+            extracted.contains(expected),
+            "extracted bundle should keep '{expected}': {extracted}"
+        );
+    }
+}
+
+/// A dependency that resolves outside the workspace root cannot be bundled: the
+/// archive would either have to reach outside itself or silently relocate the
+/// dependency. This also covers forcing a member to be the root, which turns its
+/// in-workspace siblings into out-of-root dependencies.
+#[test]
+fn bundle_rejects_dependency_outside_workspace() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let outside_dir = ctx.create_project_dir("outside");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
               steps:
                 - type: script
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
-        dependencies:
-          - name: openemail
-            path: ./vendor/openemail
     "#};
-    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &outside_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write outside manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: app
+                {build_step}
+            dependencies:
+              - name: openemail
+                path: ../outside
+        "#},
+    )
+    .expect("failed to write project manifest");
 
     ctx.icp()
         .current_dir(&project_dir)
@@ -1028,9 +1344,75 @@ fn bundle_rejects_dependency_workspace() {
         .assert()
         .failure()
         .stderr(
-            contains("bundling a project with dependencies is not yet supported")
-                .and(contains("vendor/openemail:backend")),
+            contains("outside the workspace root")
+                .and(contains("openemail"))
+                .and(contains("../outside")),
         );
+}
+
+/// Bundling a member as if it were the workspace root is rejected when the member
+/// depends on a sibling: the sibling is outside the forced root, so the member is
+/// not self-contained and cannot become a bundle on its own.
+#[test]
+fn bundle_rejects_member_forced_as_root() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    let member_dir = project_dir.join("umbrella/service-a");
+    create_dir_all(&member_dir).expect("failed to create member dir");
+    write_string(
+        &member_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: service
+                {build_step}
+            dependencies:
+              - name: openemail
+                path: ../openemail
+        "#},
+    )
+    .expect("failed to write member manifest");
+
+    let dep_dir = project_dir.join("umbrella/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+            dependencies:
+              - name: service-a
+                path: ./umbrella/service-a
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&member_dir)
+        .env("ICP_PROJECT_ROOT", member_dir.as_str())
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("outside the workspace root").and(contains("../openemail")));
 }
 
 /// The bundle output path must not live inside a directory that will be recursively archived,

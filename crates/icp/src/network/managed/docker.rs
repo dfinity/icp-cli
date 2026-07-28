@@ -28,7 +28,7 @@ use crate::network::{
 use crate::prelude::*;
 
 use super::launcher::{
-    MAX_OUTPUT_TAIL_BYTES, MAX_OUTPUT_TAIL_LINES, output_tail, tail_bytes, wait_for_launcher_status,
+    MAX_OUTPUT_TAIL_BYTES, MAX_OUTPUT_TAIL_LINES, output_tail, wait_for_launcher_status,
 };
 
 /// Error converting a path for WSL2.
@@ -404,15 +404,9 @@ pub async fn spawn_docker_launcher(
     // Foreground mirrors the native launcher's inherited stdio by streaming the container's
     // output live. Background can't: the CLI exits while the container keeps running, and unlike
     // a native child process — whose fds keep the log files filling after we're gone — the
-    // daemon owns the stdio and there is nothing left here to pump it. Point at `docker logs`
-    // instead, which is where the daemon already persists it.
-    let log_follower = if background {
-        info!("For background mode, network output is captured by Docker:");
-        info!("  view with: docker logs -f {}", short_id(container_id));
-        None
-    } else {
-        Some(follow_container_logs(docker, container_id))
-    };
+    // daemon owns the stdio and there is nothing left here to pump it. Those runs are pointed at
+    // `docker logs` once the network is up, which is where the daemon already persists it.
+    let log_follower = (!background).then(|| follow_container_logs(docker, container_id));
     let mut wait_container = docker.wait_container(container_id, None::<WaitContainerOptions>);
     let launcher_status = select! {
         content = watcher => content?,
@@ -438,7 +432,9 @@ pub async fn spawn_docker_launcher(
             if let Some(follower) = log_follower {
                 drain_log_follower(follower).await;
             }
-            let detail = premature_exit_detail(docker, container_id, &wait_error, background).await;
+            let detail = premature_exit_detail(
+                docker, container_id, &wait_error, background, *rm_on_exit,
+            ).await;
             return ContainerExitedPrematurelySnafu {
                 container_id,
                 exit_status,
@@ -446,6 +442,13 @@ pub async fn spawn_docker_launcher(
             }.fail();
         },
     };
+    if background {
+        // Deferred until the network is actually up. Advertised any earlier it would also print
+        // on the failure path above, where `rm-on-exit` may already have deleted the container
+        // out from under the reader — and where the error carries the output anyway.
+        info!("For background mode, network output is captured by Docker:");
+        info!("  view with: docker logs -f {}", short_id(container_id));
+    }
     let container_info = docker
         .inspect_container(container_id, None::<InspectContainerOptions>)
         .await
@@ -647,6 +650,7 @@ async fn premature_exit_detail(
     container_id: &str,
     wait_error: &str,
     background: bool,
+    rm_on_exit: bool,
 ) -> String {
     let mut detail = String::new();
     if !wait_error.is_empty() {
@@ -667,33 +671,48 @@ async fn premature_exit_detail(
             ..<_>::default()
         }),
     ));
-    let mut output = String::new();
+    // Accumulate bytes and decode once at the end rather than decoding each chunk, so the
+    // boundaries the daemon happens to frame on can't affect the result.
+    //
+    // This does not rescue a multi-byte character split across those frames: the json-file driver
+    // stores each entry as a JSON string, so the daemon has already replaced the bisected halves
+    // with U+FFFD before we see them. Plain `docker logs` shows the same replacements.
+    let mut output: Vec<u8> = Vec::new();
     while let Some(chunk) = logs.next().await {
         match chunk {
-            Ok(chunk) => output.push_str(&chunk.to_string()),
+            Ok(chunk) => output.extend_from_slice(chunk.as_ref()),
             // The stream error is deliberately ignored: this is already an error path, and
             // whatever arrived before it is still worth showing.
             Err(_) => break,
         }
         // Docker's `tail` caps the number of lines, not their length, so a container emitting a
         // few enormous lines would otherwise be held whole in memory just to have nearly all of
-        // it discarded below. Trim as we go instead. This is a raw byte cut, not `output_tail`:
-        // that one trims trailing whitespace, which mid-stream would glue the next chunk onto
-        // the end of the current line.
+        // it discarded below. Drop the excess from the front as we go.
         if output.len() > MAX_LOG_BUFFER_BYTES {
-            output = tail_bytes(&output, MAX_LOG_BUFFER_BYTES).to_string();
+            let mut cut = output.len() - MAX_LOG_BUFFER_BYTES;
+            // Step over continuation bytes so the cut lands on a character boundary; otherwise
+            // this trim would itself bisect a character and the decode below would replace it.
+            while cut < output.len() && output[cut] & 0b1100_0000 == 0b1000_0000 {
+                cut += 1;
+            }
+            output.drain(..cut);
         }
     }
-    // The full id is already on the error's first line, so the hint uses the short form.
-    let short_id = short_id(container_id);
-    let tail = output_tail(&output);
-    if tail.is_empty() {
-        detail.push_str(&format!(
-            "\nNo output was captured; see `docker logs {short_id}` for details."
-        ));
+    let tail = output_tail(&String::from_utf8_lossy(&output));
+    if !tail.is_empty() {
+        // No `docker logs` attribution here: the output is inline, and naming a command that may
+        // no longer work (see below) would just send the reader somewhere empty.
+        detail.push_str(&format!("\nContainer output:\n{tail}"));
+    } else if rm_on_exit {
+        // The drop guard removes the container as this error propagates, so by the time anyone
+        // reads this there is nothing left to inspect. Say that instead of pointing at a
+        // container that has been deleted — which is the *common* case, since autocontainerized
+        // networks (always, on Windows) set `rm-on-exit`.
+        detail.push_str("\nThe container produced no output, and was removed on exit.");
     } else {
         detail.push_str(&format!(
-            "\nContainer output (from `docker logs {short_id}`):\n{tail}"
+            "\nThe container produced no output; see `docker logs {}` for details.",
+            short_id(container_id)
         ));
     }
     detail

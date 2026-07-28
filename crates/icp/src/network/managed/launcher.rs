@@ -208,7 +208,7 @@ pub(super) fn output_tail(contents: &str) -> String {
 ///
 /// Split out of [`output_tail`] so a caller streaming output in can hold a bounded buffer
 /// without duplicating the boundary handling.
-pub(super) fn tail_bytes(contents: &str, max_bytes: usize) -> &str {
+fn tail_bytes(contents: &str, max_bytes: usize) -> &str {
     if contents.len() <= max_bytes {
         return contents;
     }

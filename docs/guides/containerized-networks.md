@@ -312,7 +312,7 @@ sudo systemctl start docker  # Linux
 
 ```
 Error: docker container 63ded6aedbbd... exited prematurely with status 101
-Container output (from `docker logs 63ded6aedbbd`):
+Container output:
 gateway bind failed: Address already in use (os error 98)
 ```
 
@@ -321,7 +321,7 @@ Common issues:
 - Port conflict inside container (check `port-mapping`)
 - Insufficient resources (increase Docker memory/CPU limits)
 
-If the container was removed before you could inspect it (`rm-on-exit: true`), re-run with that setting off and read the full log directly:
+The attached output is the tail of the log, capped so a chatty image can't bury the error. To read all of it, note that a failed container is deleted straight away when `rm-on-exit: true` is set (which is also the case for [autocontainerized](#always-use-containers) networks) — re-run with it off, then inspect the container directly:
 
 ```bash
 # Find container ID

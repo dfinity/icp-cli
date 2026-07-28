@@ -687,13 +687,15 @@ async fn docker_background_start_surfaces_container_output_on_premature_exit() {
         .failure()
         // The header is our own string, and the marker is the container's actual bytes: together
         // they prove the log was fetched and folded into the error. Accepting the no-output
-        // fallback here would let a wiring regression pass unnoticed. The `docker logs` hint
-        // stands in for native background mode's "stderr: <path>" message.
+        // fallback here would let a wiring regression pass unnoticed.
         .stderr(
             contains("exited prematurely with status 3")
                 .and(contains("Container output"))
                 .and(contains(FAILING_CONTAINER_MARKER))
-                .and(contains("view with: docker logs -f")),
+                // The `docker logs` hint is deferred until the network is up, so a start that
+                // failed must not advertise it — this manifest sets `rm-on-exit`, so the
+                // container is already gone by the time anyone could run it.
+                .and(contains("docker logs").not()),
         );
 }
 
@@ -724,7 +726,7 @@ async fn docker_foreground_streams_container_output() {
                 .and(contains("exited prematurely with status 3"))
                 .and(contains("Container output").not())
                 // Streaming replaces the retrieval hint; it is background-only.
-                .and(contains("docker logs -f").not()),
+                .and(contains("docker logs").not()),
         );
 }
 

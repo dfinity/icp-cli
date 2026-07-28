@@ -662,13 +662,14 @@ fn failing_docker_manifest() -> String {
     "#}
 }
 
-/// Regression test for #677: when the container exits prematurely, the error must surface the
-/// container's log tail instead of only the bare exit status. This is the Docker counterpart of
-/// `background_start_port_conflict_surfaces_launcher_output` — the container's stdio belongs to
-/// the daemon, so the cause comes back over `docker logs` rather than from a local file.
+/// Regression test for #677: when the container exits prematurely in **background** mode, the
+/// error must surface the container's log tail instead of only the bare exit status. This is the
+/// Docker counterpart of `background_start_port_conflict_surfaces_launcher_output` — the
+/// container's stdio belongs to the daemon, so the cause comes back over `docker logs` rather than
+/// from a local file.
 #[tag(docker)]
 #[tokio::test]
-async fn docker_start_surfaces_container_output_on_premature_exit() {
+async fn docker_background_start_surfaces_container_output_on_premature_exit() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("docker-premature-exit");
@@ -686,11 +687,44 @@ async fn docker_start_surfaces_container_output_on_premature_exit() {
         .failure()
         // The header is our own string, and the marker is the container's actual bytes: together
         // they prove the log was fetched and folded into the error. Accepting the no-output
-        // fallback here would let a wiring regression pass unnoticed.
+        // fallback here would let a wiring regression pass unnoticed. The `docker logs` hint
+        // stands in for native background mode's "stderr: <path>" message.
         .stderr(
             contains("exited prematurely with status 3")
                 .and(contains("Container output"))
-                .and(contains(FAILING_CONTAINER_MARKER)),
+                .and(contains(FAILING_CONTAINER_MARKER))
+                .and(contains("view with: docker logs -f")),
+        );
+}
+
+/// In **foreground** mode the container's output must be streamed live, the way the native
+/// launcher's inherited stdio is. Asserting the absence of the `Container output` header is the
+/// point: it proves the marker arrived over the live stream rather than the premature-exit tail,
+/// and that the two don't both fire and print the cause twice.
+#[tag(docker)]
+#[tokio::test]
+async fn docker_foreground_streams_container_output() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("docker-foreground-logs");
+    write_string(&project_dir.join("icp.yaml"), &failing_docker_manifest())
+        .expect("failed to write project manifest");
+
+    ctx.docker_pull_network();
+
+    // No `--background`, and the container exits on its own, so this terminates without needing
+    // to interrupt a healthy network.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "docker-network"])
+        .assert()
+        .failure()
+        .stderr(
+            contains(FAILING_CONTAINER_MARKER)
+                .and(contains("exited prematurely with status 3"))
+                .and(contains("Container output").not())
+                // Streaming replaces the retrieval hint; it is background-only.
+                .and(contains("docker logs -f").not()),
         );
 }
 

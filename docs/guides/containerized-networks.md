@@ -331,6 +331,21 @@ docker ps -a | grep icp-cli-network-launcher
 docker logs <container-id>
 ```
 
+### Viewing network output
+
+In the foreground, the container's output is streamed to your terminal as it runs, the same as a non-containerized network:
+
+```bash
+icp network start my-network
+```
+
+In background mode the output stays with the Docker daemon, since icp-cli exits while the container keeps running. `icp network start` prints the command to follow it:
+
+```
+For background mode, network output is captured by Docker:
+  view with: docker logs -f 63ded6aedbbd
+```
+
 ### "Network unreachable after start"
 
 **Problem**: `icp network start` succeeds but cannot connect.

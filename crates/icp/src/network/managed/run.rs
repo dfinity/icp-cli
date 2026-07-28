@@ -182,7 +182,7 @@ async fn run_network_launcher(
             match launch_mode {
                 LaunchMode::Image(options) => {
                     let (guard, instance, locator, fixed) =
-                        spawn_docker_launcher(&options, status_dir.path()).await?;
+                        spawn_docker_launcher(&options, status_dir.path(), background).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,

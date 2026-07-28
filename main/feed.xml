@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 24 Jul 2026 12:26:11 GMT</lastBuildDate>
-    <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
+    <lastBuildDate>Tue, 28 Jul 2026 18:50:44 GMT</lastBuildDate>
+    <pubDate>Tue, 28 Jul 2026 18:49:36 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Using Containerized Networks</title>
+      <link>https://cli.internetcomputer.org/main/guides/containerized-networks/</link>
+      <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
+      <pubDate>Tue, 28 Jul 2026 18:49:36 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/containerized-networks/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Environment Variables Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
@@ -223,14 +231,6 @@
       <description>Forward calls with cycles and reach canister-only management methods using the proxy canister pattern.</description>
       <pubDate>Tue, 19 May 2026 18:44:03 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/proxy-canister/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Using Containerized Networks</title>
-      <link>https://cli.internetcomputer.org/main/guides/containerized-networks/</link>
-      <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
-      <pubDate>Wed, 18 Mar 2026 17:24:54 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/containerized-networks/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

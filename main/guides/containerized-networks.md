@@ -305,7 +305,21 @@ sudo systemctl start docker  # Linux
 
 **Problem**: Container exits immediately or fails to start.
 
-**Solution**: Check container logs:
+**Solution**: `icp network start` reports the cause itself — the container's output is attached to the error:
+
+```
+Error: docker container 63ded6aedbbd... exited prematurely with status 101
+Container output:
+gateway bind failed: Address already in use (os error 98)
+```
+
+Common issues:
+- Image pull failed (check internet connection)
+- Port conflict inside container (check `port-mapping`)
+- Insufficient resources (increase Docker memory/CPU limits)
+
+The attached output is the tail of the log, capped so a chatty image can't bury the error. To read all of it, note that a failed container is deleted straight away when `rm-on-exit: true` is set (which is also the case for [autocontainerized](#always-use-containers) networks) — re-run with it off, then inspect the container directly:
+
 ```bash
 # Find container ID
 docker ps -a | grep icp-cli-network-launcher
@@ -314,10 +328,20 @@ docker ps -a | grep icp-cli-network-launcher
 docker logs <container-id>
 ```
 
-Common issues:
-- Image pull failed (check internet connection)
-- Port conflict inside container (check `port-mapping`)
-- Insufficient resources (increase Docker memory/CPU limits)
+### Viewing network output
+
+In the foreground, the container's output is streamed to your terminal as it runs, the same as a non-containerized network:
+
+```bash
+icp network start my-network
+```
+
+In background mode the output stays with the Docker daemon, since icp-cli exits while the container keeps running. `icp network start` prints the command to follow it:
+
+```
+For background mode, network output is captured by Docker:
+  view with: docker logs -f 63ded6aedbbd
+```
 
 ### "Network unreachable after start"
 

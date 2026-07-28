@@ -1,13 +1,14 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
 use bollard::{
     Docker,
+    container::LogOutput,
     errors::Error as BollardError,
     models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
     query_parameters::{
-        CreateContainerOptions, CreateImageOptions, InspectContainerOptions,
+        CreateContainerOptions, CreateImageOptions, InspectContainerOptions, LogsOptions,
         RemoveContainerOptions, StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
 };
@@ -15,8 +16,8 @@ use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use snafu::ResultExt;
 use snafu::{OptionExt, Snafu};
-use tokio::select;
-use tracing::info;
+use tokio::{io::AsyncWriteExt, select, task::JoinHandle};
+use tracing::{debug, info};
 use wslpath2::Conversion;
 
 use crate::network::{
@@ -26,7 +27,9 @@ use crate::network::{
 };
 use crate::prelude::*;
 
-use super::launcher::wait_for_launcher_status;
+use super::launcher::{
+    MAX_OUTPUT_TAIL_BYTES, MAX_OUTPUT_TAIL_LINES, output_tail, wait_for_launcher_status,
+};
 
 /// Error converting a path for WSL2.
 #[derive(Debug, Snafu)]
@@ -241,6 +244,7 @@ pub(super) fn translate_launcher_args_for_docker(args: Vec<String>) -> Vec<Strin
 pub async fn spawn_docker_launcher(
     options: &ManagedImageOptions,
     host_status_dir: &Path,
+    background: bool,
 ) -> Result<
     (
         AsyncDropper<DockerDropGuard>,
@@ -384,7 +388,7 @@ pub async fn spawn_docker_launcher(
         .await
         .context(CreateContainerSnafu { image_name: image })?;
     let container_id = container_resp.id;
-    info!("Created container {}", &container_id[..12]);
+    info!("Created container {}", short_id(&container_id));
     let guard = AsyncDropper::new(DockerDropGuard {
         container_id: Some(container_id),
         docker: Some(docker),
@@ -397,24 +401,54 @@ pub async fn spawn_docker_launcher(
         .start_container(container_id, None::<StartContainerOptions>)
         .await
         .context(StartContainerSnafu { container_id })?;
+    // Foreground mirrors the native launcher's inherited stdio by streaming the container's
+    // output live. Background can't: the CLI exits while the container keeps running, and unlike
+    // a native child process — whose fds keep the log files filling after we're gone — the
+    // daemon owns the stdio and there is nothing left here to pump it. Those runs are pointed at
+    // `docker logs` once the network is up, which is where the daemon already persists it.
+    let log_follower = (!background).then(|| follow_container_logs(docker, container_id));
     let mut wait_container = docker.wait_container(container_id, None::<WaitContainerOptions>);
     let launcher_status = select! {
         content = watcher => content?,
         res = wait_container.try_next() => {
-            let exit = res.context(WatchContainerSnafu { container_id })?;
-            if let Some(exit) = exit {
-                return ContainerExitedPrematurelySnafu {
-                    container_id,
-                    exit_status: exit.status_code,
-                }.fail();
-            } else {
-                return RequiredFieldMissingSnafu {
+            // bollard turns any nonzero exit into `DockerContainerWaitError` instead of an `Ok`
+            // response carrying the status code, so both shapes have to reach the same error.
+            // Otherwise the case that matters — a container that *failed* — surfaced as an
+            // opaque "failed to watch container for exit" with an empty cause.
+            let (exit_status, wait_error) = match res {
+                Ok(Some(exit)) => (
+                    exit.status_code,
+                    exit.error.and_then(|e| e.message).unwrap_or_default(),
+                ),
+                Ok(None) => return RequiredFieldMissingSnafu {
                     field: "StatusCode",
                     route: "wait_container",
-                }.fail()
+                }.fail(),
+                Err(BollardError::DockerContainerWaitError { code, error }) => (code, error),
+                Err(source) => return Err(source).context(WatchContainerSnafu { container_id }),
+            };
+            // The container has exited, so the follower's stream is ending; let it finish first
+            // so its output lands *before* the error explaining it rather than racing it.
+            if let Some(follower) = log_follower {
+                drain_log_follower(follower).await;
             }
+            let detail = premature_exit_detail(
+                docker, container_id, &wait_error, background, *rm_on_exit,
+            ).await;
+            return ContainerExitedPrematurelySnafu {
+                container_id,
+                exit_status,
+                detail,
+            }.fail();
         },
     };
+    if background {
+        // Deferred until the network is actually up. Advertised any earlier it would also print
+        // on the failure path above, where `rm-on-exit` may already have deleted the container
+        // out from under the reader — and where the error carries the output anyway.
+        info!("For background mode, network output is captured by Docker:");
+        info!("  view with: docker logs -f {}", short_id(container_id));
+    }
     let container_info = docker
         .inspect_container(container_id, None::<InspectContainerOptions>)
         .await
@@ -510,6 +544,178 @@ pub async fn spawn_docker_launcher(
         locator,
         gateway_port_was_fixed,
     ))
+}
+
+/// Docker resolves an unambiguous id prefix, so log messages use the short form users see in
+/// `docker ps`. `min` keeps this from panicking on an error path if the daemon ever hands back
+/// something shorter than a full id.
+fn short_id(container_id: &str) -> &str {
+    &container_id[..container_id.len().min(12)]
+}
+
+/// Streams the container's stdout and stderr onto the CLI's own stdout and stderr for as long as
+/// the container runs, so a containerized launcher is as observable as a native one — which gets
+/// this for free from [`Stdio::inherit`](std::process::Stdio::inherit).
+///
+/// The follow request replays from the start of the container's log, so nothing written between
+/// `start_container` and this call is lost. The task ends on its own when the container stops and
+/// the stream closes; on the premature-exit path it is drained first by [`drain_log_follower`].
+fn follow_container_logs(docker: &Docker, container_id: &str) -> JoinHandle<()> {
+    let docker = docker.clone();
+    let container_id = container_id.to_string();
+    tokio::spawn(async move {
+        let mut logs = std::pin::pin!(docker.logs(
+            &container_id,
+            Some(LogsOptions {
+                follow: true,
+                stdout: true,
+                stderr: true,
+                ..<_>::default()
+            }),
+        ));
+        let mut stdout = tokio::io::stdout();
+        let mut stderr = tokio::io::stderr();
+        while let Some(chunk) = logs.next().await {
+            let written = match chunk {
+                Ok(LogOutput::StdErr { message }) => stderr.write_all(&message).await,
+                // `Console` only appears for tty containers, which we never create; route it to
+                // stdout rather than dropping it in case an image is run that way.
+                Ok(LogOutput::StdOut { message }) | Ok(LogOutput::Console { message }) => {
+                    stdout.write_all(&message).await
+                }
+                Ok(LogOutput::StdIn { .. }) => Ok(()),
+                Err(source) => {
+                    debug!("stopped following logs of container {container_id}: {source}");
+                    break;
+                }
+            };
+            // Losing the stream is not worth failing a running network over: the launcher itself
+            // is unaffected, so report once and stop mirroring.
+            if let Err(source) = written {
+                debug!("failed to write output of container {container_id}: {source}");
+                break;
+            }
+        }
+        // Both handles are unbuffered wrappers, but flush so a final partial line can't be left
+        // sitting behind whatever the CLI prints next.
+        let _ = stdout.flush().await;
+        let _ = stderr.flush().await;
+    })
+}
+
+/// How long to wait for the log follower to drain after the container has exited. Generous enough
+/// for the daemon to close a stream it has already finished, short enough that a wedged stream
+/// delays the error instead of hanging `network start`.
+const LOG_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Ceiling on the buffer held while reading the container's log for a premature-exit error. Twice
+/// the final byte cap, so the line-based trim in [`output_tail`] still has its full budget to
+/// choose from after the incremental trimming.
+const MAX_LOG_BUFFER_BYTES: usize = 2 * MAX_OUTPUT_TAIL_BYTES;
+
+/// Waits for [`follow_container_logs`] to finish so its output is on the terminal before the
+/// premature-exit error is rendered. Bounded, and deliberately ignores the task's own outcome: the
+/// error is reported either way, at worst without the container's last few lines.
+async fn drain_log_follower(mut follower: JoinHandle<()>) {
+    if tokio::time::timeout(LOG_DRAIN_TIMEOUT, &mut follower)
+        .await
+        .is_ok()
+    {
+        return;
+    }
+    debug!("timed out draining container log output");
+    // Dropping a `JoinHandle` detaches the task rather than cancelling it, so returning here
+    // would leave the follower free to write *after* the error — the interleaving this drain
+    // exists to prevent. Abort it, then wait for it to actually stop, under the same bound again
+    // so a wedged write degrades to a late error rather than a hung `network start`.
+    follower.abort();
+    let _ = tokio::time::timeout(LOG_DRAIN_TIMEOUT, follower).await;
+}
+
+/// Builds the trailing detail appended to [`DockerLauncherError::ContainerExitedPrematurely`].
+///
+/// The native launcher's stderr is either inherited or redirected to a local file, so its
+/// premature-exit path can read the cause back from disk. Here the daemon owns the container's
+/// stdio and nothing local mirrors it, so the only way to recover the cause is to ask the daemon
+/// for the log tail. Docker's own `tail` bounds the request, and [`output_tail`] applies the same
+/// caps as the native path on top of it so a chatty image can't produce a wall-of-text error.
+///
+/// Best-effort: if the fetch fails or the container logged nothing, this points at `docker logs`
+/// rather than masking the exit status.
+///
+/// `wait_error` is the daemon's own wait-level message, which is normally empty but is the only
+/// explanation available when the container itself printed nothing.
+async fn premature_exit_detail(
+    docker: &Docker,
+    container_id: &str,
+    wait_error: &str,
+    background: bool,
+    rm_on_exit: bool,
+) -> String {
+    let mut detail = String::new();
+    if !wait_error.is_empty() {
+        detail.push_str(&format!("\nDocker reported: {wait_error}"));
+    }
+    if !background {
+        // Foreground streamed the container's output live and the follower has been drained, so
+        // the cause is already on the terminal — appending the tail would only repeat it. This is
+        // the same split the native path makes for its inherited stderr.
+        return detail;
+    }
+    let mut logs = std::pin::pin!(docker.logs(
+        container_id,
+        Some(LogsOptions {
+            stdout: true,
+            stderr: true,
+            tail: MAX_OUTPUT_TAIL_LINES.to_string(),
+            ..<_>::default()
+        }),
+    ));
+    // Accumulate bytes and decode once at the end rather than decoding each chunk, so the
+    // boundaries the daemon happens to frame on can't affect the result.
+    //
+    // This does not rescue a multi-byte character split across those frames: the json-file driver
+    // stores each entry as a JSON string, so the daemon has already replaced the bisected halves
+    // with U+FFFD before we see them. Plain `docker logs` shows the same replacements.
+    let mut output: Vec<u8> = Vec::new();
+    while let Some(chunk) = logs.next().await {
+        match chunk {
+            Ok(chunk) => output.extend_from_slice(chunk.as_ref()),
+            // The stream error is deliberately ignored: this is already an error path, and
+            // whatever arrived before it is still worth showing.
+            Err(_) => break,
+        }
+        // Docker's `tail` caps the number of lines, not their length, so a container emitting a
+        // few enormous lines would otherwise be held whole in memory just to have nearly all of
+        // it discarded below. Drop the excess from the front as we go.
+        if output.len() > MAX_LOG_BUFFER_BYTES {
+            let mut cut = output.len() - MAX_LOG_BUFFER_BYTES;
+            // Step over continuation bytes so the cut lands on a character boundary; otherwise
+            // this trim would itself bisect a character and the decode below would replace it.
+            while cut < output.len() && output[cut] & 0b1100_0000 == 0b1000_0000 {
+                cut += 1;
+            }
+            output.drain(..cut);
+        }
+    }
+    let tail = output_tail(&String::from_utf8_lossy(&output));
+    if !tail.is_empty() {
+        // No `docker logs` attribution here: the output is inline, and naming a command that may
+        // no longer work (see below) would just send the reader somewhere empty.
+        detail.push_str(&format!("\nContainer output:\n{tail}"));
+    } else if rm_on_exit {
+        // The drop guard removes the container as this error propagates, so by the time anyone
+        // reads this there is nothing left to inspect. Say that instead of pointing at a
+        // container that has been deleted — which is the *common* case, since autocontainerized
+        // networks (always, on Windows) set `rm-on-exit`.
+        detail.push_str("\nThe container produced no output, and was removed on exit.");
+    } else {
+        detail.push_str(&format!(
+            "\nThe container produced no output; see `docker logs {}` for details.",
+            short_id(container_id)
+        ));
+    }
+    detail
 }
 
 /// Connect to the Docker daemon at the given socket.
@@ -699,11 +905,14 @@ pub enum DockerLauncherError {
         container_id: String,
     },
     #[snafu(display(
-        "docker container {container_id} exited prematurely with status {exit_status}"
+        "docker container {container_id} exited prematurely with status {exit_status}{detail}"
     ))]
     ContainerExitedPrematurely {
         container_id: String,
         exit_status: i64,
+        /// A leading-newline suffix carrying the container's log tail, or a pointer to
+        /// `docker logs` when none could be read. See [`premature_exit_detail`].
+        detail: String,
     },
     #[snafu(display("failed to query docker image {image}"))]
     QueryImage {

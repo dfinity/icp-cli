@@ -7,6 +7,10 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* fix: `icp network start` now explains why a Docker-based network failed to come up. A container that exited before the network was ready was reported as `failed to watch docker container <id> for exit` with an empty cause, discarding the actual reason (e.g. the gateway port already being taken); the container's output is now attached to the error.
+* feat: Docker-based networks now show the launcher's output like non-containerized ones do. In the foreground the container's stdout and stderr are streamed to your terminal as it runs; in background mode `icp network start` prints the `docker logs -f <container-id>` command to follow it. Previously container output was never shown at all — which on Windows, where the launcher always runs in a container, meant `icp network start` was silent.
+* fix: a network launcher running in a container (`icp settings autocontainerize true`, and always on Windows) now receives `--verbose` when `icp -d` is used, matching the non-containerized launcher.
+
 # v1.2.0
 
 * feat(sync-plugin): the compute-time limit for `plugin` sync steps is now configurable via the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable (default `60`). Raise it for compute-heavy plugins (e.g. brotli-compressing a large asset bundle) that legitimately exceed the default, especially on slower CI runners. The limit-exceeded error now names the variable and the current limit, and a malformed value is rejected rather than silently ignored.

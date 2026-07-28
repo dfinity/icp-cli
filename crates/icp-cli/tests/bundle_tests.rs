@@ -1343,22 +1343,24 @@ fn bundle_rewrites_dependency_paths_to_archive_locations() {
     )
     .expect("failed to write absolute dependency manifest");
 
-    let mut dependencies = formatdoc! {r#"
+    let dependencies = formatdoc! {r#"
         dependencies:
           - name: absolute
             path: {abs_dir}
     "#};
 
+    // Creating a symlink needs no privileges only on unix, so the symlinked edge is
+    // exercised there; the absolute-path edge covers every platform.
     #[cfg(unix)]
-    {
+    let dependencies = {
         create_dir_all(&project_dir.join("vendor")).expect("failed to create vendor dir");
         std::os::unix::fs::symlink(
             real_dir.as_std_path(),
             project_dir.join("vendor/openemail").as_std_path(),
         )
         .expect("failed to create symlink");
-        dependencies.push_str("  - name: linked\n    path: ./vendor/openemail\n");
-    }
+        format!("{dependencies}  - name: linked\n    path: ./vendor/openemail\n")
+    };
 
     write_string(
         &project_dir.join("icp.yaml"),

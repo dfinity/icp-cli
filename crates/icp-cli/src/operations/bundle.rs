@@ -14,10 +14,10 @@ use icp::{
     canister::{ControllerRef, Settings, build::Build, wasm},
     fs,
     manifest::{
-        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, EnvironmentManifest, Instructions,
-        Item, LoadManifestFromPathError, ManagedMode, ManifestInitArgs, Mode, NetworkManifest,
-        PROJECT_MANIFEST, ProjectManifest, SyncStep, SyncSteps, load_manifest_from_path, plugin,
-        prebuilt,
+        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
+        EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
+        ManifestInitArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
+        SyncSteps, load_manifest_from_path, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
@@ -69,10 +69,28 @@ pub enum BundleError {
     OrphanCanister { canister: String },
 
     #[snafu(display(
-        "two different files would be written to '{path}' in the bundle archive; \
-         this is a bug in `icp project bundle`"
+        "two different files would be written to '{path}' in the bundle archive. \
+         A dependency vendored in a directory that a canister's bundled artifacts \
+         also occupy can cause this; vendor it elsewhere in the workspace"
     ))]
     DuplicateArchiveEntry { path: String },
+
+    #[snafu(display(
+        "the bundle archive would hold both the file '{parent}' and '{child}' beneath it, \
+         which cannot be extracted. A dependency vendored in a directory that a canister's \
+         bundled artifacts also occupy can cause this; vendor it elsewhere in the workspace"
+    ))]
+    NestedArchiveEntry { parent: String, child: String },
+
+    #[snafu(display(
+        "instance '{instance}' declares {declared} dependencies but {resolved} were resolved; \
+         this is a bug in `icp project bundle`"
+    ))]
+    DependencyPrefixMismatch {
+        instance: String,
+        declared: usize,
+        resolved: usize,
+    },
 
     #[snafu(transparent)]
     Build { source: BuildManyError },
@@ -273,6 +291,10 @@ struct Instance {
 
     manifest: ProjectManifest,
 
+    /// Archive directory of the instance each `manifest.dependencies` entry
+    /// resolves to, index-aligned with it.
+    dependency_prefixes: Vec<String>,
+
     /// `(canister directory, consolidated canister)`, in workspace order. The
     /// canisters still carry their workspace store keys as names.
     canisters: Vec<(PathBuf, Canister)>,
@@ -343,6 +365,7 @@ pub(crate) async fn create_bundle(
         let networks = inline_networks(&instance.manifest.networks, &instance.dir).await?;
         let environments = inline_environments(
             &instance.manifest.environments,
+            &instance.prefix,
             &instance.dir,
             &canonical_project_dir,
             &canister_dirs,
@@ -354,9 +377,7 @@ pub(crate) async fn create_bundle(
 
         let manifest = ProjectManifest {
             canisters: canister_items,
-            // Verbatim: every instance keeps its workspace-relative directory in
-            // the archive, so the paths still resolve to the same instances.
-            dependencies: instance.manifest.dependencies.clone(),
+            dependencies: rewrite_dependencies(instance)?,
             networks,
             environments,
         };
@@ -405,6 +426,67 @@ fn archive_join(prefix: &str, relative: &str) -> String {
     }
 }
 
+/// The path from one instance's archive directory to another's. Both prefixes are
+/// clean relative paths, so the result only rises to their common ancestor —
+/// every directory it traverses is one the archive itself creates.
+fn relative_archive_path(from: &str, to: &str) -> String {
+    let split = |p: &str| -> Vec<String> {
+        p.split('/')
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let from = split(from);
+    let to = split(to);
+
+    let shared = from
+        .iter()
+        .zip(to.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let mut parts: Vec<String> = vec!["..".to_owned(); from.len() - shared];
+    parts.extend_from_slice(&to[shared..]);
+    match parts.is_empty() {
+        // Only reachable if an instance depended on itself, which consolidation
+        // rejects as a cycle before bundling starts.
+        true => ".".to_owned(),
+        false => parts.join("/"),
+    }
+}
+
+/// Point each dependency declaration at the instance's directory *in the
+/// archive*.
+///
+/// The declared `path:` cannot be reused verbatim: it may be absolute, or reach
+/// the instance through a symlink, in which case it does not describe where the
+/// instance sits relative to the workspace root — and therefore not where it sits
+/// in the archive either. For a plainly vendored layout the rewritten path is the
+/// same path, modulo a leading `./`.
+fn rewrite_dependencies(instance: &Instance) -> Result<Vec<DependencyManifest>, BundleError> {
+    let declared = &instance.manifest.dependencies;
+    let targets = &instance.dependency_prefixes;
+    // `workspace_instances` resolves one prefix per declaration, in order.
+    if declared.len() != targets.len() {
+        return DependencyPrefixMismatchSnafu {
+            instance: instance.prefix.clone(),
+            declared: declared.len(),
+            resolved: targets.len(),
+        }
+        .fail();
+    }
+
+    Ok(declared
+        .iter()
+        .zip(targets)
+        .map(|(dep, target_prefix)| DependencyManifest {
+            name: dep.name.clone(),
+            path: relative_archive_path(&instance.prefix, target_prefix),
+            canisters: dep.canisters.clone(),
+        })
+        .collect())
+}
+
 /// Whether an instance's archive directory stays inside the workspace root.
 ///
 /// The prefix is the instance's canonical directory relative to the canonical
@@ -445,6 +527,7 @@ fn group_canisters(
             prefix: instance.prefix,
             dir: instance.dir,
             manifest: instance.manifest,
+            dependency_prefixes: instance.dependency_prefixes,
             canisters: Vec::new(),
         });
     }
@@ -708,6 +791,7 @@ async fn inline_networks(
 #[allow(clippy::too_many_arguments)]
 async fn inline_environments(
     items: &[Item<EnvironmentManifest>],
+    instance_prefix: &str,
     instance_dir: &Path,
     canonical_project_dir: &Path,
     canister_dirs: &HashMap<&str, &Path>,
@@ -741,10 +825,18 @@ async fn inline_environments(
                     // An override's path resolves against the referenced
                     // canister's directory, which for a dependency canister is
                     // its own project — not the manifest declaring the override.
-                    // Inline canisters resolve relative to their project dir
-                    // (matches the Item::Manifest behavior in project.rs).
+                    //
+                    // A member's manifest names its own canisters locally
+                    // (`registry`), while the root's names theirs by store key
+                    // (`vendor/openemail:registry`); prefixing with the declaring
+                    // instance turns either spelling into the store key the
+                    // workspace-wide maps are keyed by.
+                    let store_key = match instance_prefix.is_empty() {
+                        true => canister_name.clone(),
+                        false => format!("{instance_prefix}:{canister_name}"),
+                    };
                     let base = canister_dirs
-                        .get(canister_name.as_str())
+                        .get(store_key.as_str())
                         .copied()
                         .unwrap_or(instance_dir);
                     let src = base.join(orig_path);
@@ -758,10 +850,14 @@ async fn inline_environments(
                         path_segment(canister_name),
                         normalize_archive_dir(orig_path)
                     );
+                    // The reference is resolved against the canister's directory,
+                    // so the file has to be archived under the *canister's*
+                    // instance — which is not the declaring instance when the root
+                    // overrides a dependency's canister.
                     let owner_prefix = owner_prefixes
-                        .get(canister_name.as_str())
+                        .get(store_key.as_str())
                         .copied()
-                        .unwrap_or_default();
+                        .unwrap_or(instance_prefix);
                     let archive_path = archive_join(owner_prefix, &manifest_path);
                     if seen_archive_paths.insert(archive_path.clone()) {
                         init_args_files.push(InitArgsFile {
@@ -865,13 +961,55 @@ fn prepare_app_manifest(
     Ok(Some(AppManifest { yaml, images }))
 }
 
-/// A tar builder that refuses to write two different files to the same entry
-/// path. Instance directories are workspace-relative, so a dependency vendored
-/// at, say, `canisters/` shares an archive directory with the root's wasms; a
-/// silent duplicate would be resolved by whichever entry is extracted last.
+/// Reject an entry layout the archive cannot represent.
+///
+/// Instance directories are workspace-relative, so a dependency vendored at, say,
+/// `canisters/` shares an archive directory with the root's wasms. Two entries at
+/// the same path would be silently resolved by whichever is extracted last, and an
+/// entry *nested under* another — a wasm at `canisters/app.wasm` alongside a
+/// manifest at `canisters/app.wasm/icp.yaml` — would need one path to be both a
+/// file and a directory. Recursively appended directories are covered by the same
+/// rule: everything they contribute lives under the prefix checked here, so a
+/// nested entry is exactly what would collide with their contents.
+///
+/// Checked before the output file is created, so a rejected bundle leaves nothing
+/// behind.
+fn validate_archive_paths(paths: &[&str]) -> Result<(), BundleError> {
+    let entries: HashSet<&str> = HashSet::from_iter(paths.iter().copied());
+    if entries.len() != paths.len() {
+        let mut seen: HashSet<&str> = HashSet::new();
+        let duplicate = paths
+            .iter()
+            .find(|p| !seen.insert(p))
+            .expect("a duplicate exists when the set is smaller than the list");
+        return DuplicateArchiveEntrySnafu {
+            path: (*duplicate).to_owned(),
+        }
+        .fail();
+    }
+
+    for path in paths {
+        // Every proper ancestor of an entry must not itself be an entry.
+        let mut ancestor = *path;
+        while let Some((parent, _)) = ancestor.rsplit_once('/') {
+            if entries.contains(parent) {
+                return NestedArchiveEntrySnafu {
+                    parent: parent.to_owned(),
+                    child: (*path).to_owned(),
+                }
+                .fail();
+            }
+            ancestor = parent;
+        }
+    }
+
+    Ok(())
+}
+
+/// A tar builder for the bundle's entries. Paths are validated by
+/// [`validate_archive_paths`] before any of this runs.
 struct ArchiveWriter<W: Write> {
     builder: Builder<W>,
-    seen: HashSet<String>,
 }
 
 impl<W: Write> ArchiveWriter<W> {
@@ -885,24 +1023,10 @@ impl<W: Write> ArchiveWriter<W> {
         // `append_dir_all`, which walks `read_dir` in the filesystem's order, so entry ordering
         // within a directory can still differ between machines.
         builder.mode(tar::HeaderMode::Deterministic);
-        Self {
-            builder,
-            seen: HashSet::new(),
-        }
-    }
-
-    fn claim(&mut self, archive_path: &str) -> Result<(), BundleError> {
-        match self.seen.insert(archive_path.to_owned()) {
-            true => Ok(()),
-            false => DuplicateArchiveEntrySnafu {
-                path: archive_path.to_owned(),
-            }
-            .fail(),
-        }
+        Self { builder }
     }
 
     fn bytes(&mut self, archive_path: &str, bytes: &[u8]) -> Result<(), BundleError> {
-        self.claim(archive_path)?;
         let mut header = tar::Header::new_gnu();
         header.set_size(bytes.len() as u64);
         header.set_mode(0o644);
@@ -915,7 +1039,6 @@ impl<W: Write> ArchiveWriter<W> {
     }
 
     fn dir(&mut self, src_path: &Path, archive_prefix: &str) -> Result<(), BundleError> {
-        self.claim(archive_prefix)?;
         self.builder
             .append_dir_all(archive_prefix, src_path.as_std_path())
             .context(WriteArchiveEntrySnafu {
@@ -935,6 +1058,35 @@ fn write_archive(
     init_args_files: &[InitArgsFile],
     app_manifest: Option<&AppManifest>,
 ) -> Result<(), BundleError> {
+    let paths: Vec<&str> = manifests
+        .iter()
+        .map(|m| m.archive_path.as_str())
+        .chain(app_manifest.iter().flat_map(|app| {
+            std::iter::once(APP_MANIFEST).chain(app.images.iter().map(|i| i.archive_path.as_str()))
+        }))
+        .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
+        .chain(init_args_files.iter().map(|f| f.archive_path.as_str()))
+        .chain(
+            artifacts
+                .plugin_wasms
+                .iter()
+                .map(|nb| nb.archive_path.as_str()),
+        )
+        .chain(
+            artifacts
+                .plugin_dirs
+                .iter()
+                .map(|d| d.archive_prefix.as_str()),
+        )
+        .chain(
+            artifacts
+                .plugin_files
+                .iter()
+                .map(|f| f.archive_path.as_str()),
+        )
+        .collect();
+    validate_archive_paths(&paths)?;
+
     let file = File::create(output.as_std_path()).context(CreateOutputSnafu {
         path: output.to_path_buf(),
     })?;

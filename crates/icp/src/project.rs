@@ -424,6 +424,16 @@ pub struct WorkspaceInstance {
     /// The instance's manifest, exactly as written on disk.
     pub manifest: ProjectManifest,
 
+    /// The store-key prefix of the instance each of this instance's
+    /// `dependencies` entries resolves to, index-aligned with
+    /// `manifest.dependencies`.
+    ///
+    /// A declared `path:` need not agree with the instance's location relative to
+    /// the workspace root — it can be absolute, or traverse a symlink — so a
+    /// caller reproducing the workspace elsewhere cannot derive the target from
+    /// the spelling alone.
+    pub dependency_prefixes: Vec<String>,
+
     /// The `(alias, path)` of the first dependency edge that reached this
     /// instance, for error messages. `None` for the root project.
     pub declared_as: Option<(String, String)>,
@@ -449,6 +459,48 @@ pub enum WorkspaceInstancesError {
         path: PathBuf,
         source: LoadManifestFromPathError,
     },
+}
+
+/// One dependency declaration resolved to the instance it points at.
+struct ResolvedEdge {
+    /// The instance's directory as the declaring manifest reaches it.
+    dir: PathBuf,
+    canonical: PathBuf,
+    /// Store-key prefix of the instance this edge resolves to.
+    prefix: String,
+    alias: String,
+    path: String,
+}
+
+/// Resolve one project's dependency declarations, in declaration order.
+fn resolve_edges(
+    dir: &Path,
+    manifest: &ProjectManifest,
+    app_root_canonical: &Path,
+) -> Result<Vec<ResolvedEdge>, WorkspaceInstancesError> {
+    let mut out = Vec::with_capacity(manifest.dependencies.len());
+    for dep in &manifest.dependencies {
+        let dep_root = dir.join(&dep.path);
+        if !dep_root.join(PROJECT_MANIFEST).is_file() {
+            return InstanceNotFoundSnafu {
+                alias: dep.name.clone(),
+                path: dep_root,
+            }
+            .fail();
+        }
+        let canonical = canonicalize_or(&dep_root).context(InstanceCanonicalizeSnafu {
+            alias: &dep.name,
+            path: &dep_root,
+        })?;
+        out.push(ResolvedEdge {
+            prefix: relative_prefix(app_root_canonical, &canonical),
+            dir: dep_root,
+            canonical,
+            alias: dep.name.clone(),
+            path: dep.path.clone(),
+        });
+    }
+    Ok(out)
 }
 
 /// Walk the workspace rooted at `pdir`, returning the root project followed by
@@ -479,59 +531,44 @@ pub async fn workspace_instances(
     // keys even when the root directory cannot be canonicalized.
     let app_root_canonical = canonicalize_or(pdir).unwrap_or_else(|| pdir.to_owned());
 
+    let root_edges = resolve_edges(pdir, &root_manifest, &app_root_canonical)?;
+
     // Depth-first, declaration order: push each instance's dependencies reversed
     // so the top of the stack is always the next edge in manifest order.
-    let mut stack: Vec<(PathBuf, DependencyManifest)> = root_manifest
-        .dependencies
-        .iter()
-        .rev()
-        .map(|d| (pdir.to_owned(), d.clone()))
-        .collect();
-
     let mut visited: HashSet<PathBuf> = HashSet::from([app_root_canonical.clone()]);
     let mut out = vec![WorkspaceInstance {
         prefix: String::new(),
         dir: pdir.to_owned(),
         manifest: root_manifest,
+        dependency_prefixes: root_edges.iter().map(|e| e.prefix.clone()).collect(),
         declared_as: None,
     }];
+    let mut stack: Vec<ResolvedEdge> = root_edges.into_iter().rev().collect();
 
-    while let Some((parent_dir, dep)) = stack.pop() {
-        let dep_root = parent_dir.join(&dep.path);
-        let manifest_path = dep_root.join(PROJECT_MANIFEST);
-        if !manifest_path.is_file() {
-            return InstanceNotFoundSnafu {
-                alias: dep.name,
-                path: dep_root,
-            }
-            .fail();
-        }
-
-        let canonical = canonicalize_or(&dep_root).context(InstanceCanonicalizeSnafu {
-            alias: &dep.name,
-            path: &dep_root,
-        })?;
-        if !visited.insert(canonical.clone()) {
+    while let Some(edge) = stack.pop() {
+        if !visited.insert(edge.canonical.clone()) {
             continue;
         }
 
+        let manifest_path = edge.dir.join(PROJECT_MANIFEST);
         let manifest: ProjectManifest =
             load_manifest_from_path(&manifest_path)
                 .await
                 .context(LoadInstanceSnafu {
-                    alias: &dep.name,
+                    alias: &edge.alias,
                     path: &manifest_path,
                 })?;
 
-        for nested in manifest.dependencies.iter().rev() {
-            stack.push((dep_root.clone(), nested.clone()));
-        }
+        let edges = resolve_edges(&edge.dir, &manifest, &app_root_canonical)?;
+        let dependency_prefixes = edges.iter().map(|e| e.prefix.clone()).collect();
+        stack.extend(edges.into_iter().rev());
 
         out.push(WorkspaceInstance {
-            prefix: relative_prefix(&app_root_canonical, &canonical),
-            dir: dep_root,
+            prefix: edge.prefix,
+            dir: edge.dir,
             manifest,
-            declared_as: Some((dep.name, dep.path)),
+            dependency_prefixes,
+            declared_as: Some((edge.alias, edge.path)),
         });
     }
 

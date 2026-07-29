@@ -18,6 +18,10 @@ use icp_canister_interfaces::{
         CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
         SubnetSelectionArg,
     },
+    engine_canister::{
+        GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
+        GetEngineOperatorBySubnetResult, engine_canister_id,
+    },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_CID, CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_CREATE_CANISTER,
         NotifyCreateCanisterArg, NotifyCreateCanisterResponse, NotifyError, SubnetSelection,
@@ -27,7 +31,7 @@ use icp_canister_interfaces::{
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -48,6 +52,20 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to get subnet for canister: {source}"))]
     GetSubnet { source: AgentError },
+
+    #[snafu(display("invalid engine-canister id: {message}"))]
+    EngineCanisterId { message: String },
+
+    #[snafu(display("failed to query the engine-canister registry: {source}"))]
+    EngineCanisterQuery { source: AgentError },
+
+    #[snafu(display(
+        "no engine-operator registered for CloudEngine subnet {subnet} in engine-canister {engine_registry}"
+    ))]
+    NoEngineOperator {
+        subnet: Principal,
+        engine_registry: Principal,
+    },
 
     #[snafu(display("registry error: {message}"))]
     Registry { message: String },
@@ -214,7 +232,19 @@ impl CreateOperation {
             .await
             .context(GetSubnetSnafu)?;
         let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
-            self.create_mgmt(settings, selected_subnet).await?
+            // Optimistically try the engine-operator path, falling back to the
+            // legacy management-canister path until we're sure the latter is no
+            // longer needed.
+            match self.create_on_cloud_engine(settings, selected_subnet).await {
+                Ok(cid) => cid,
+                Err(e) => {
+                    warn!(
+                        "engine-operator creation failed ({e}); \
+                         falling back to management-canister creation"
+                    );
+                    self.create_mgmt(settings, selected_subnet).await?
+                }
+            }
         } else {
             self.create_ledger(settings, selected_subnet).await?
         };
@@ -273,16 +303,100 @@ impl CreateOperation {
         Ok(cid)
     }
 
+    /// Creation on a `SubnetType::CloudEngine` subnet, via the subnet's
+    /// engine-operator canister (resolved through the engine-canister registry).
+    async fn create_on_cloud_engine(
+        &self,
+        settings: &CanisterSettings,
+        subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let operator = self.resolve_engine_operator(subnet).await?;
+        self.create_via_operator(settings, operator).await
+    }
+
+    /// Ask the engine-canister registry which engine-operator serves `subnet`.
+    async fn resolve_engine_operator(
+        &self,
+        subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let engine_registry =
+            engine_canister_id().map_err(|message| CreateOperationError::EngineCanisterId {
+                message,
+            })?;
+
+        let arg = GetEngineOperatorBySubnetArgs {
+            subnet_id: Some(subnet),
+        };
+        let resp = self
+            .inner
+            .agent
+            .query(&engine_registry, GET_ENGINE_OPERATOR_BY_SUBNET_METHOD)
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
+            .call()
+            .await
+            .context(EngineCanisterQuerySnafu)?;
+        let resp =
+            Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
+
+        resp.engine_operator_id.context(NoEngineOperatorSnafu {
+            subnet,
+            engine_registry,
+        })
+    }
+
+    /// Delegate creation to a subnet's engine-operator canister. The operator's
+    /// `create_canister` is byte-compatible with the cycles ledger, so we reuse
+    /// the same request/response types and simply target the operator principal.
+    async fn create_via_operator(
+        &self,
+        settings: &CanisterSettings,
+        operator: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let creation_args = CreationArgs {
+            // CloudEngine subnets only create on themselves; the operator
+            // ignores subnet selection, so leave it unset.
+            subnet_selection: None,
+            settings: Some(settings.clone()),
+        };
+        let arg = CreateCanisterArgs {
+            from_subaccount: None,
+            created_at_time: None,
+            amount: Nat::from(self.cycles()),
+            creation_args: Some(creation_args),
+        };
+
+        let resp = self
+            .inner
+            .agent
+            .update(&operator, "create_canister")
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
+            .call_and_wait()
+            .await
+            .context(AgentSnafu)?;
+        let resp: CreateCanisterResponse =
+            Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
+        let cid = match resp {
+            CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+            CreateCanisterResponse::Err(err) => {
+                return CreateCanisterSnafu {
+                    message: err.format_error(self.cycles()),
+                }
+                .fail();
+            }
+        };
+        Ok(cid)
+    }
+
+    /// Legacy CloudEngine creation: call the management canister's
+    /// `create_canister`, routing to the target subnet by its id (subnet-scoped,
+    /// so no canister on that subnet is needed to derive an effective canister
+    /// id). Requires subnet-administrator permissions. Kept as a fallback for
+    /// the engine-operator path.
     async fn create_mgmt(
         &self,
         settings: &CanisterSettings,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        // Call the management canister's create_canister, routing the request to
-        // the target subnet by its id (subnet-scoped, so no canister on that
-        // subnet is needed to derive an effective canister id) and forwarding the
-        // settings as a whole via `with_canister_settings`. Subnet-scoped routing
-        // requires subnet-administrator permissions, which the CloudEngine path has.
         let mgmt = ManagementCanister::create(&self.inner.agent);
         let (canister_id,) = mgmt
             .create_canister()

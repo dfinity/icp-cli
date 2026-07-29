@@ -377,8 +377,11 @@ export default function agentDocs() {
         }
 
         // 2. Generate llms.txt
+        // Prepend a UTF-8 BOM (as with the .md endpoints): llms.txt is served as
+        // text/plain without a charset, so without the BOM clients fall back to a
+        // legacy 8-bit encoding and mangle multibyte characters (e.g. — → â€").
         const llmsTxt = generateLlmsTxt(pages, siteUrl, basePath, cliSubPages);
-        fs.writeFileSync(path.join(outDir, "llms.txt"), llmsTxt);
+        fs.writeFileSync(path.join(outDir, "llms.txt"), BOM + llmsTxt);
         logger.info(
           `Generated llms.txt (${llmsTxt.length} chars, ${pages.length} pages)`
         );
@@ -389,7 +392,8 @@ export default function agentDocs() {
           const mdContent = fs.readFileSync(path.join(outDir, page.file), "utf-8").replace(/^\uFEFF/, "");
           fullParts.push("\n---\n", mdContent);
         }
-        fs.writeFileSync(path.join(outDir, "llms-full.txt"), fullParts.join("\n"));
+        // BOM for the same reason as llms.txt above (text/plain, no charset).
+        fs.writeFileSync(path.join(outDir, "llms-full.txt"), BOM + fullParts.join("\n"));
         logger.info(`Generated llms-full.txt (${pages.length} pages)`);
 
         // 4. Generate RSS feed

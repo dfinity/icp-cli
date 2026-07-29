@@ -7,16 +7,20 @@ import mermaid from 'astro-mermaid';
 
 const SITE = (process.env.PUBLIC_SITE || 'https://cli.internetcomputer.org').replace(/\/$/, '');
 
+// For versioned deployments: /0.1/, /0.2/, etc.
+// PUBLIC_BASE_PATH is set per-version in CI (e.g., /0.2/, /main/).
+// Single source of truth: used both as Astro's `base` and by rehypeRewriteLinks
+// so in-content links always carry the same version prefix as the deployment.
+const BASE_PATH = process.env.PUBLIC_BASE_PATH || '/';
+
 // https://astro.build/config
 export default defineConfig({
   site: SITE,
-  // For versioned deployments: /0.1/, /0.2/, etc.
-  // PUBLIC_BASE_PATH is set per-version in CI (e.g., /0.2/, /main/)
-  base: process.env.PUBLIC_BASE_PATH || '/',
+  base: BASE_PATH,
   markdown: {
     rehypePlugins: [
-      // Rewrite relative .md links for Astro's directory-based output
-      rehypeRewriteLinks,
+      // Rewrite relative .md links to absolute, base-prefixed URLs
+      [rehypeRewriteLinks, { base: BASE_PATH }],
       // Open external links in new tab
       [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
     ],

@@ -3,7 +3,11 @@
 canisters:
   - name: docs
     recipe:
-      type: "@dfinity/asset-canister@v2.2.1"
+      # certified-assets: certified static hosting with automatic clean URLs
+      # (trailing-slash canonicalization) and `_headers`/`_redirects` support.
+      # The recipe pins a matched canister + sync-plugin pair, so there is no
+      # separate canister version to select.
+      type: "@dfinity/static-site@v0.3.1"
       configuration:
-        version: asset-canister-404-support
+        # The whole assembled docs-deployment branch (all versions + root files).
         dir: .

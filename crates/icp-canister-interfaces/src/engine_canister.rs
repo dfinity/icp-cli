@@ -11,7 +11,7 @@
 //! (`…Args` / `…Result`), mirroring the control-panel convention so the
 //! interface can grow fields on either side without breaking the wire format.
 
-use std::env;
+use std::env::{self, VarError};
 
 use candid::{CandidType, Principal};
 use serde::Deserialize;
@@ -32,13 +32,21 @@ pub const GET_ENGINE_OPERATOR_BY_SUBNET_METHOD: &str = "getEngineOperatorBySubne
 ///
 /// Uses the value of the `ENGINE_CANISTER_ID` environment variable when set and
 /// non-empty, otherwise falls back to [`ENGINE_CANISTER_CID`]. Returns an error
-/// only when the override is set but not a valid principal.
+/// when the override is set but invalid — either not a valid principal, or not
+/// valid Unicode. Only an absent or empty (whitespace-only) variable uses the
+/// default: a configured-but-invalid value must never silently route to the
+/// built-in registry (and thus a different environment).
 pub fn engine_canister_id() -> Result<Principal, String> {
     match env::var(ENGINE_CANISTER_ID_ENV) {
         Ok(value) if !value.trim().is_empty() => Principal::from_text(value.trim())
             .map_err(|e| format!("invalid {ENGINE_CANISTER_ID_ENV}: {e}")),
-        // Unset, empty, or non-UTF-8: use the built-in default.
-        _ => Ok(Principal::from_text(ENGINE_CANISTER_CID)
+        // Set but non-Unicode is still a configured override — reject it rather
+        // than silently using the default and targeting the wrong environment.
+        Err(VarError::NotUnicode(_)) => Err(format!(
+            "invalid {ENGINE_CANISTER_ID_ENV}: not valid Unicode"
+        )),
+        // Unset or empty/whitespace-only: use the built-in default.
+        Ok(_) | Err(VarError::NotPresent) => Ok(Principal::from_text(ENGINE_CANISTER_CID)
             .expect("ENGINE_CANISTER_CID is a valid principal")),
     }
 }

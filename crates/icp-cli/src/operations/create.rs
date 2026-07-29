@@ -18,13 +18,13 @@ use icp_canister_interfaces::{
         CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
         SubnetSelectionArg,
     },
-    engine_canister::{
-        GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
-        GetEngineOperatorBySubnetResult, engine_canister_id,
-    },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_CID, CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_CREATE_CANISTER,
         NotifyCreateCanisterArg, NotifyCreateCanisterResponse, NotifyError, SubnetSelection,
+    },
+    engine_canister::{
+        GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
+        GetEngineOperatorBySubnetResult, engine_canister_id,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
@@ -232,18 +232,24 @@ impl CreateOperation {
             .await
             .context(GetSubnetSnafu)?;
         let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
-            // Optimistically try the engine-operator path, falling back to the
-            // legacy management-canister path until we're sure the latter is no
-            // longer needed.
-            match self.create_on_cloud_engine(settings, selected_subnet).await {
-                Ok(cid) => cid,
-                Err(e) => {
+            // Resolve the subnet's engine-operator first. Only a definitive
+            // "no operator registered for this subnet" resolution failure falls
+            // back to the legacy management-canister path — every other
+            // resolution error (invalid registry id, query/decode failure) is
+            // propagated. Crucially, the fallback is decided *before* any
+            // operator `create_canister` update is submitted: once we hand off
+            // to the operator, a failure may mean the canister was already
+            // created, so retrying via the management canister could
+            // double-create and double-charge. Those errors propagate too.
+            match self.resolve_engine_operator(selected_subnet).await {
+                Ok(operator) => self.create_via_operator(settings, operator).await?,
+                Err(e @ CreateOperationError::NoEngineOperator { .. }) => {
                     warn!(
-                        "engine-operator creation failed ({e}); \
-                         falling back to management-canister creation"
+                        "{e}; falling back to management-canister creation on this CloudEngine subnet"
                     );
                     self.create_mgmt(settings, selected_subnet).await?
                 }
+                Err(e) => return Err(e),
             }
         } else {
             self.create_ledger(settings, selected_subnet).await?
@@ -303,26 +309,13 @@ impl CreateOperation {
         Ok(cid)
     }
 
-    /// Creation on a `SubnetType::CloudEngine` subnet, via the subnet's
-    /// engine-operator canister (resolved through the engine-canister registry).
-    async fn create_on_cloud_engine(
-        &self,
-        settings: &CanisterSettings,
-        subnet: Principal,
-    ) -> Result<Principal, CreateOperationError> {
-        let operator = self.resolve_engine_operator(subnet).await?;
-        self.create_via_operator(settings, operator).await
-    }
-
     /// Ask the engine-canister registry which engine-operator serves `subnet`.
     async fn resolve_engine_operator(
         &self,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let engine_registry =
-            engine_canister_id().map_err(|message| CreateOperationError::EngineCanisterId {
-                message,
-            })?;
+        let engine_registry = engine_canister_id()
+            .map_err(|message| CreateOperationError::EngineCanisterId { message })?;
 
         let arg = GetEngineOperatorBySubnetArgs {
             subnet_id: Some(subnet),
@@ -335,8 +328,7 @@ impl CreateOperation {
             .call()
             .await
             .context(EngineCanisterQuerySnafu)?;
-        let resp =
-            Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
+        let resp = Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
 
         resp.engine_operator_id.context(NoEngineOperatorSnafu {
             subnet,

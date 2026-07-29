@@ -43,7 +43,22 @@ jobs:
         env:
           ICP_IDENTITY: ${{ secrets.DFX_IDENTITY_DESIGN_TEAM }}
 
+      # No `--yes`: for an `auto`/`upgrade` deploy the Candid compatibility check is
+      # what aborts an asset-canister → certified-assets swap *before* install_code
+      # runs. Bypassing it would install over live state, and certified-assets'
+      # post_upgrade does not trap (its MemoryManager silently reinitializes over
+      # foreign stable memory), so the canister would come up empty rather than
+      # failing safe. `--mode reinstall` skips the check on its own.
       - name: Deploy to IC mainnet
         run: icp deploy -e ic docs --mode "${MODE}"
         env:
           MODE: ${{ inputs.mode || 'auto' }}
+          # certified-assets' sync plugin brotli-compresses (quality 11) every asset
+          # on each sync to compute the upload diff. The docs branch is ~52 MB of
+          # compressible text, well past the default 60s plugin compute budget — the
+          # same limit that broke dfinity/examples#1449 on a much smaller bundle.
+          # `icp deploy` installs before it syncs, so hitting this during the
+          # reinstall cutover would leave the canister with no assets and no rules
+          # (hard-down, not a 404). Raised generously: it is a runaway guard, not a
+          # budget. See #669.
+          ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS: 900

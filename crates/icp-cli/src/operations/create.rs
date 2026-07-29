@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{Agent, AgentError, agent::SubnetType};
+use ic_agent::{Agent, AgentError, agent::RejectCode, agent::SubnetType};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
@@ -60,7 +60,7 @@ pub enum CreateOperationError {
     EngineCanisterQuery { source: AgentError },
 
     #[snafu(display(
-        "no engine-operator registered for CloudEngine subnet {subnet} in engine-canister {engine_registry}"
+        "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
     ))]
     NoEngineOperator {
         subnet: Principal,
@@ -233,13 +233,16 @@ impl CreateOperation {
             .context(GetSubnetSnafu)?;
         let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
             // Resolve the subnet's engine-operator first. Only a definitive
-            // "no operator registered for this subnet" resolution failure falls
-            // back to the legacy management-canister path — every other
-            // resolution error (invalid registry id, query/decode failure) is
-            // propagated. Crucially, the fallback is decided *before* any
-            // operator `create_canister` update is submitted: once we hand off
-            // to the operator, a failure may mean the canister was already
-            // created, so retrying via the management canister could
+            // "could not resolve an operator" resolution failure falls back to
+            // the legacy management-canister path — this covers both no operator
+            // being registered for the subnet and the engine-canister registry
+            // not being deployed on this network (a `DestinationInvalid` reject,
+            // mapped to `NoEngineOperator` in `resolve_engine_operator`). Every
+            // other resolution error (invalid registry id, other query/decode
+            // failures) is propagated. Crucially, the fallback is decided
+            // *before* any operator `create_canister` update is submitted: once
+            // we hand off to the operator, a failure may mean the canister was
+            // already created, so retrying via the management canister could
             // double-create and double-charge. Those errors propagate too.
             match self.resolve_engine_operator(selected_subnet).await {
                 Ok(operator) => self.create_via_operator(settings, operator).await?,
@@ -320,14 +323,30 @@ impl CreateOperation {
         let arg = GetEngineOperatorBySubnetArgs {
             subnet_id: Some(subnet),
         };
-        let resp = self
+        let resp = match self
             .inner
             .agent
             .query(&engine_registry, GET_ENGINE_OPERATOR_BY_SUBNET_METHOD)
             .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
             .call()
             .await
-            .context(EngineCanisterQuerySnafu)?;
+        {
+            Ok(resp) => resp,
+            // The engine-canister registry itself is not deployed on this
+            // network (e.g. a local/test env). The replica rejects the query
+            // with `DestinationInvalid` ("Canister ... not found", IC0301).
+            // Treat a missing registry the same as "no operator registered":
+            // this happens before any operator update is submitted, so the
+            // legacy management-canister fallback is safe.
+            Err(e) if is_canister_not_found(&e) => {
+                return NoEngineOperatorSnafu {
+                    subnet,
+                    engine_registry,
+                }
+                .fail();
+            }
+            Err(e) => return Err(e).context(EngineCanisterQuerySnafu),
+        };
         let resp = Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
 
         resp.engine_operator_id.context(NoEngineOperatorSnafu {
@@ -647,6 +666,18 @@ pub(crate) fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// Whether `err` is a replica rejection meaning the target canister does not
+/// exist on this network — reject code `DestinationInvalid` (IC0301,
+/// "Canister ... not found"). Used to treat a missing engine-canister registry
+/// as "no operator registered" so the CloudEngine path can fall back safely.
+fn is_canister_not_found(err: &AgentError) -> bool {
+    matches!(
+        err,
+        AgentError::CertifiedReject { reject, .. } | AgentError::UncertifiedReject { reject, .. }
+            if reject.reject_code == RejectCode::DestinationInvalid
+    )
+}
+
 async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
     let bs = agent
         .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
@@ -712,5 +743,48 @@ mod tests {
         assert_eq!(shell_quote("plain"), "'plain'");
         // An embedded single quote is closed, escaped, and reopened via `'\''`.
         assert_eq!(shell_quote("a'b"), r"'a'\''b'");
+    }
+
+    #[test]
+    fn detects_canister_not_found_rejections() {
+        use ic_agent::agent::RejectResponse;
+
+        let not_found = |certified: bool| {
+            let reject = RejectResponse {
+                reject_code: RejectCode::DestinationInvalid,
+                reject_message: "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found".to_string(),
+                error_code: Some("IC0301".to_string()),
+            };
+            if certified {
+                AgentError::CertifiedReject {
+                    reject,
+                    operation: None,
+                }
+            } else {
+                AgentError::UncertifiedReject {
+                    reject,
+                    operation: None,
+                }
+            }
+        };
+
+        // A `DestinationInvalid` rejection means the registry canister is not
+        // deployed — both the certified and uncertified spellings count.
+        assert!(is_canister_not_found(&not_found(true)));
+        assert!(is_canister_not_found(&not_found(false)));
+
+        // Other reject codes (e.g. a canister trap) must NOT be treated as
+        // "not found" — they should propagate rather than fall back.
+        assert!(!is_canister_not_found(&AgentError::CertifiedReject {
+            reject: RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                reject_message: "trapped".to_string(),
+                error_code: None,
+            },
+            operation: None,
+        }));
+
+        // A non-reject error is never "not found".
+        assert!(!is_canister_not_found(&AgentError::InvalidReplicaStatus));
     }
 }

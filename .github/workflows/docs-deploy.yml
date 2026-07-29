@@ -2,7 +2,17 @@ name: Deploy Docs to Internet Computer
 
 on:
   workflow_call:
+    inputs:
+      mode:
+        description: 'Canister install mode passed to `icp deploy --mode`.'
+        type: string
+        default: auto
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Canister install mode. Use "reinstall" once for the asset-canister → certified-assets cutover (an in-place upgrade would trap across incompatible state). Steady-state deploys use "auto".'
+        type: string
+        default: auto
 
 concurrency:
   group: ic-docs-deploy
@@ -34,4 +44,6 @@ jobs:
           ICP_IDENTITY: ${{ secrets.DFX_IDENTITY_DESIGN_TEAM }}
 
       - name: Deploy to IC mainnet
-        run: icp deploy -e ic docs
+        run: icp deploy -e ic docs --mode "${MODE}"
+        env:
+          MODE: ${{ inputs.mode || 'auto' }}

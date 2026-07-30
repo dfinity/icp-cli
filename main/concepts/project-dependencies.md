@@ -123,6 +123,12 @@ If two projects in a workspace depend on the same directory — for example two 
 
 A vendored project must remain a complete `icp` project: it never references its parent, and you can copy or clone it elsewhere and it still works on its own. Vendoring may require [aligning environment names](#environments-across-a-workspace), but never changes to how the dependency finds its own canisters.
 
+## Bundling a workspace
+
+`icp project bundle` packages a workspace by mirroring it: the root project's `icp.yaml` sits at the archive root, each dependency instance gets its own `icp.yaml` at the directory it occupies in the workspace, and the `dependencies:` declarations are preserved, each pointing at the directory its dependency occupies in the archive. For a plainly vendored layout that is the path the manifest already used; a path that does not describe the dependency's location relative to the workspace root — an absolute path, or one that traverses a symlink — is rewritten so the extracted bundle stays self-contained. Canister names stay as each project wrote them, a shared dependency remains a single instance, and canister discovery works from the extracted bundle exactly as it did in the source workspace. Extracting the archive gives you the same workspace with every build step replaced by its built wasm.
+
+Every dependency must resolve to a directory **inside** the workspace root, so that the archive can contain it. A dependency that resolves outside the root — `../elsewhere` declared by the root project, or a directory that is a symlink pointing out of the workspace — is rejected. For the same reason a vendored member that depends on a sibling cannot be bundled on its own (e.g. with `ICP_PROJECT_ROOT` pointing at the member): the sibling would fall outside the bundle. Bundle the workspace root instead.
+
 ## Limitations
 
 - icp-cli deploys a parent-owned copy of each dependency; binding directly to an already-deployed on-chain canister is not yet supported.

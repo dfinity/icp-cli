@@ -446,7 +446,7 @@ fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, an
     writeln!(
         &mut buf,
         "  Module hash: {}",
-        &result.module_hash.clone().unwrap_or("<none>".to_string())
+        result.module_hash.clone().unwrap_or("<none>".to_string())
     )?;
 
     Ok(buf)
@@ -460,7 +460,7 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         writeln!(&mut buf, "Canister Name: {}", name)?;
     }
     writeln!(&mut buf, "Canister Status Report:")?;
-    writeln!(&mut buf, "  Status: {}", &result.status)?;
+    writeln!(&mut buf, "  Status: {}", result.status)?;
 
     let settings = &result.settings;
     writeln!(
@@ -533,7 +533,7 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     writeln!(
         &mut buf,
         "  Module hash: {}",
-        &result.module_hash.clone().unwrap_or("<none>".to_string())
+        result.module_hash.clone().unwrap_or("<none>".to_string())
     )?;
 
     writeln!(&mut buf, "  Memory size: {}", result.memory_size)?;

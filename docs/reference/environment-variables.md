@@ -246,6 +246,18 @@ canisters:
         DEBUG: "false"
 ```
 
+A value can also be read from a file, relative to the directory of the manifest
+declaring it:
+
+```yaml
+canisters:
+  - name: backend
+    settings:
+      environment_variables:
+        API_KEY:
+          path: ./secrets/api-key
+```
+
 Override per environment:
 
 ```yaml

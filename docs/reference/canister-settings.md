@@ -165,7 +165,7 @@ Runtime environment variables accessible to the canister.
 
 | Property | Value |
 |----------|-------|
-| Type | Object (string keys, string values) |
+| Type | Object (string keys; values are strings or `{ path: <file> }`) |
 | Default | None |
 
 ```yaml
@@ -177,6 +177,31 @@ settings:
 ```
 
 Environment variables allow the same WASM to run with different configurations.
+
+#### Values from a file
+
+A value can be read from a file instead of being written inline, which keeps
+values you would rather not commit — or that another tool generates — out of the
+manifest:
+
+```yaml
+settings:
+  environment_variables:
+    API_URL: "https://api.example.com"
+    API_KEY:
+      path: ./secrets/api-key
+```
+
+The path is relative to the directory of the manifest that declares it: the
+canister's own directory for a `canister.yaml`, and the project or environment
+manifest's directory for an [environment override](#environment-overrides).
+Surrounding whitespace is trimmed off the file's contents, so a trailing newline
+does not become part of the value.
+
+The file is read when the project is loaded, so a missing or unreadable file
+fails the command before anything is deployed. `icp project bundle` reads the file
+and writes the value into the bundled manifest inline — the file itself does not
+travel with the bundle.
 
 ## Full Example
 
@@ -223,6 +248,8 @@ environments:
         freezing_threshold: 90d
         environment_variables:
           ENV: "production"
+          API_KEY:
+            path: ./secrets/production-api-key
 ```
 
 ## CLI Commands

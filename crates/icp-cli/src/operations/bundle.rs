@@ -11,7 +11,7 @@ use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
 use icp::{
     Canister, InitArgs,
-    canister::{ControllerRef, Settings, build::Build, wasm},
+    canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
     fs,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
@@ -22,7 +22,9 @@ use icp::{
     },
     package::PackageCache,
     prelude::*,
-    project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
+    project::{
+        WorkspaceInstance, WorkspaceInstancesError, environment_override_dir, workspace_instances,
+    },
     store_artifact,
 };
 use snafu::{OptionExt, ResultExt, Snafu};
@@ -115,6 +117,15 @@ pub enum BundleError {
 
     #[snafu(display("failed to read init_args file '{path}'"))]
     ReadInitArgs { path: PathBuf, source: fs::IoError },
+
+    #[snafu(display(
+        "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
+    ))]
+    ReadEnvVar {
+        canister: String,
+        variable: String,
+        source: fs::IoError,
+    },
 
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
@@ -646,7 +657,7 @@ async fn prepare_canister(
 
     Ok(Item::Manifest(CanisterManifest {
         name: local.to_owned(),
-        settings: localize_controllers(canister.settings.clone(), local_names),
+        settings: localize_controllers(canister.settings.clone().into(), local_names),
         init_args: canister.init_args.as_ref().map(convert_init_args),
         instructions: Instructions::BuildSync {
             build: BuildSteps {
@@ -670,7 +681,10 @@ async fn prepare_canister(
 /// that are not one of this instance's store keys are left alone: they are
 /// already plain names that resolved against the workspace, and they resolve the
 /// same way from the bundle.
-fn localize_controllers(mut settings: Settings, local_names: &HashMap<&str, &str>) -> Settings {
+fn localize_controllers<EnvVar>(
+    mut settings: Settings<EnvVar>,
+    local_names: &HashMap<&str, &str>,
+) -> Settings<EnvVar> {
     if let Some(controllers) = &mut settings.controllers {
         for cref in controllers.iter_mut() {
             if let ControllerRef::CanisterName(name) = cref
@@ -869,6 +883,32 @@ async fn inline_environments(
                         path: manifest_path,
                         format: fmt.clone(),
                     };
+                }
+            }
+        }
+
+        // File-backed environment variable values are read and written into the
+        // bundled manifest inline, the same as the ones a canister manifest
+        // declares (consolidation resolves those before bundling), so the file
+        // itself does not travel with the bundle.
+        if let Item::Manifest(ref mut env) = inlined
+            && let Some(ref mut overrides) = env.settings
+        {
+            let override_dir = environment_override_dir(instance_dir, item);
+            for (canister_name, settings) in overrides.iter_mut() {
+                let Some(vars) = settings.environment_variables.as_mut() else {
+                    continue;
+                };
+                for (variable, var) in vars.iter_mut() {
+                    if let ManifestEnvVar::Path { path } = &*var {
+                        let value = fs::read_to_string(&override_dir.join(path)).context(
+                            ReadEnvVarSnafu {
+                                canister: canister_name,
+                                variable,
+                            },
+                        )?;
+                        *var = ManifestEnvVar::Value(value.trim().to_owned());
+                    }
                 }
             }
         }

@@ -387,6 +387,9 @@ settings:
   log_visibility: controllers
   environment_variables:
     KEY: "value"
+    # A value may also be read from a file, relative to the declaring manifest
+    KEY_FROM_FILE:
+      path: ./secrets/key
 ```
 
 Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).

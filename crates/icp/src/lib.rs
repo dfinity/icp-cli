@@ -27,6 +27,7 @@ use crate::{
 pub mod agent;
 pub mod canister;
 pub mod context;
+pub mod deploy;
 pub mod directories;
 pub mod fs;
 pub mod identity;

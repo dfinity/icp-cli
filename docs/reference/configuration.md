@@ -387,7 +387,7 @@ settings:
   log_visibility: controllers
   environment_variables:
     KEY: "value"
-    # A value may also be read from a file, relative to the declaring manifest
+    # A value may also be read from a file, relative to the canister directory
     KEY_FROM_FILE:
       path: ./secrets/key
 ```
@@ -420,7 +420,7 @@ init_args:
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | Yes* | Relative path to file containing init args |
+| `path` | string | Yes* | Path to a file containing init args, relative to the canister directory |
 | `value` | string | Yes* | Inline init args value |
 | `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
 

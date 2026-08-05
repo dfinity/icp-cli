@@ -218,16 +218,16 @@ impl schemars::JsonSchema for ControllerRef {
 ///   API_ENDPOINT: https://api.example.com
 /// ```
 ///
-/// The object form reads the value from a file, relative to the directory of the
-/// manifest declaring it — a canister's own directory for `canister.yaml`, and
-/// the project or environment manifest's directory for an environment override:
+/// The object form reads the value from a file, relative to the canister's own
+/// directory — including when an environment overrides the variable, matching how
+/// an `init_args` override resolves its path:
 /// ```yaml
 /// environment_variables:
 ///   API_KEY:
 ///     path: ./secrets/api-key
 /// ```
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema, Serialize)]
-#[serde(untagged)]
+#[serde(untagged, expecting = "a string, or `{ path: <file> }`")]
 pub enum ManifestEnvVar {
     /// The value, written inline.
     Value(String),
@@ -564,8 +564,25 @@ allowed_viewers:
               API_KEY:
                 file: ./secrets/api-key
         "#};
-        serde_yaml::from_str::<ManifestSettings>(yaml)
+        let err = serde_yaml::from_str::<ManifestSettings>(yaml)
             .expect_err("only the `path` object form is accepted");
+        assert!(
+            err.to_string().contains("a string, or `{ path: <file> }`"),
+            "unhelpful error: {err}"
+        );
+    }
+
+    /// A value of the wrong scalar type reports what is accepted, rather than
+    /// serde's default "did not match any variant" for an untagged enum.
+    #[test]
+    fn settings_environment_variable_rejects_non_string_scalar() {
+        let err =
+            serde_yaml::from_str::<ManifestSettings>("environment_variables:\n  PORT: 8080\n")
+                .expect_err("a bare integer is not a value");
+        assert!(
+            err.to_string().contains("a string, or `{ path: <file> }`"),
+            "unhelpful error: {err}"
+        );
     }
 
     #[test]

@@ -246,8 +246,7 @@ canisters:
         DEBUG: "false"
 ```
 
-A value can also be read from a file, relative to the directory of the manifest
-declaring it:
+A value can also be read from a file, relative to the canister's directory:
 
 ```yaml
 canisters:

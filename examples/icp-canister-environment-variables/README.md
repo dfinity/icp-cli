@@ -30,10 +30,10 @@ canister:
 ```
 
 `var-4` is read from [`var-4.txt`](var-4.txt) instead of being written inline. The
-path is relative to the directory of the manifest declaring it, and surrounding
-whitespace is trimmed off the file's contents, so a trailing newline does not
-become part of the value. This keeps values you would rather not commit — or that
-another tool generates — out of the manifest.
+path is relative to the canister's directory, and surrounding whitespace is
+trimmed off the file's contents, so a trailing newline does not become part of the
+value. This keeps values you would rather not commit — or that another tool
+generates — out of the manifest.
 
 ## Key Features
 

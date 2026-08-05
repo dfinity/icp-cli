@@ -715,7 +715,7 @@
           "type": "object"
         }
       ],
-      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the directory of the\nmanifest declaring it — a canister's own directory for `canister.yaml`, and\nthe project or environment manifest's directory for an environment override:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
+      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
     },
     "ManifestInitArgs": {
       "anyOf": [

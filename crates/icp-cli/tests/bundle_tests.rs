@@ -428,6 +428,91 @@ fn bundle_inlines_file_backed_env_vars() {
     );
 }
 
+/// A file backing an environment variable that lives outside the project must be
+/// rejected, in a canister's own settings as well as in an environment override —
+/// its contents would otherwise be inlined into an archive meant to be handed on.
+#[test]
+fn bundle_rejects_env_var_file_outside_project() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let outside = project_dir
+        .parent()
+        .expect("project dir has no parent")
+        .join("outside-secret.txt");
+    write_string(&outside, "s3cret\n").expect("failed to write the outside secret");
+
+    let canister_settings = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            settings:
+              environment_variables:
+                API_KEY:
+                  path: ../outside-secret.txt
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &canister_settings)
+        .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("API_KEY")
+                .and(contains("my-canister"))
+                .and(contains("outside the project directory")),
+        );
+
+    // Same file, reached through an environment override instead.
+    let env_override = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+
+        environments:
+          - name: random-environment
+            network: random-network
+            settings:
+              my-canister:
+                environment_variables:
+                  API_KEY:
+                    path: ../outside-secret.txt
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &env_override)
+        .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("API_KEY")
+                .and(contains("my-canister"))
+                .and(contains("outside the project directory")),
+        );
+}
+
 /// Bundle a canister whose environment override uses an external init_args file.
 /// The file must be copied into the archive at a normalized path and the manifest
 /// reference rewritten to match.

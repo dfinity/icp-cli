@@ -192,16 +192,21 @@ settings:
       path: ./secrets/api-key
 ```
 
-The path is relative to the directory of the manifest that declares it: the
-canister's own directory for a `canister.yaml`, and the project or environment
-manifest's directory for an [environment override](#environment-overrides).
+The path is relative to the canister's own directory — the directory holding its
+`canister.yaml`, or the project directory for a canister declared inline in
+`icp.yaml`. An [environment override](#environment-overrides) resolves against
+that same directory, not against the manifest declaring the override, so a path
+means the same thing wherever it is written. This matches how an `init_args`
+override resolves its path.
+
 Surrounding whitespace is trimmed off the file's contents, so a trailing newline
 does not become part of the value.
 
 The file is read when the project is loaded, so a missing or unreadable file
 fails the command before anything is deployed. `icp project bundle` reads the file
 and writes the value into the bundled manifest inline — the file itself does not
-travel with the bundle.
+travel with the bundle, and a file outside the project is rejected rather than
+bundled.
 
 ## Full Example
 
@@ -251,6 +256,12 @@ environments:
           API_KEY:
             path: ./secrets/production-api-key
 ```
+
+File references inside an override — `environment_variables` values and
+`init_args` alike — resolve against the *referenced canister's* directory, not the
+directory of the manifest declaring the override. For a canister that comes from a
+[dependency](../concepts/project-dependencies.md), that is the dependency's own
+directory.
 
 ## CLI Commands
 

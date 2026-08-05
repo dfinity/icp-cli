@@ -11,7 +11,7 @@ use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
 use icp::{
     Canister, InitArgs,
-    canister::{ControllerRef, Settings, build::Build, wasm},
+    canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
     fs,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
@@ -116,6 +116,15 @@ pub enum BundleError {
     #[snafu(display("failed to read init_args file '{path}'"))]
     ReadInitArgs { path: PathBuf, source: fs::IoError },
 
+    #[snafu(display(
+        "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
+    ))]
+    ReadEnvVar {
+        canister: String,
+        variable: String,
+        source: fs::IoError,
+    },
+
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
 
@@ -146,6 +155,18 @@ pub enum BundleError {
     ))]
     SourceEscapesProject {
         canister: String,
+        path: PathBuf,
+        root: PathBuf,
+    },
+
+    #[snafu(display(
+        "the file '{path}' backing environment variable '{variable}' of canister '{canister}' \
+         resolves outside the project directory '{root}'; bundles cannot reference files outside \
+         the project"
+    ))]
+    EnvVarEscapesProject {
+        canister: String,
+        variable: String,
         path: PathBuf,
         root: PathBuf,
     },
@@ -322,6 +343,7 @@ pub(crate) async fn create_bundle(
     let canonical_project_dir = canonicalize(project_dir)?;
     let canonical_sync_dirs =
         validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
+    validate_env_var_files(&canisters, &canonical_project_dir)?;
     validate_output_path(output, &canonical_sync_dirs)?;
 
     build_many_with_progress_bar(
@@ -646,7 +668,7 @@ async fn prepare_canister(
 
     Ok(Item::Manifest(CanisterManifest {
         name: local.to_owned(),
-        settings: localize_controllers(canister.settings.clone(), local_names),
+        settings: localize_controllers(canister.settings.clone().into(), local_names),
         init_args: canister.init_args.as_ref().map(convert_init_args),
         instructions: Instructions::BuildSync {
             build: BuildSteps {
@@ -670,7 +692,10 @@ async fn prepare_canister(
 /// that are not one of this instance's store keys are left alone: they are
 /// already plain names that resolved against the workspace, and they resolve the
 /// same way from the bundle.
-fn localize_controllers(mut settings: Settings, local_names: &HashMap<&str, &str>) -> Settings {
+fn localize_controllers<EnvVar>(
+    mut settings: Settings<EnvVar>,
+    local_names: &HashMap<&str, &str>,
+) -> Settings<EnvVar> {
     if let Some(controllers) = &mut settings.controllers {
         for cref in controllers.iter_mut() {
             if let ControllerRef::CanisterName(name) = cref
@@ -788,6 +813,33 @@ async fn inline_networks(
     Ok(out)
 }
 
+/// The store key an environment override's canister name refers to. A member's
+/// manifest names its own canisters locally (`registry`), while the root's names
+/// theirs by store key (`vendor/openemail:registry`); prefixing with the
+/// declaring instance turns either spelling into the store key the workspace-wide
+/// maps are keyed by.
+fn override_store_key(instance_prefix: &str, canister_name: &str) -> String {
+    match instance_prefix.is_empty() {
+        true => canister_name.to_owned(),
+        false => format!("{instance_prefix}:{canister_name}"),
+    }
+}
+
+/// The directory an environment override resolves its file references against —
+/// both `init_args` and the file backing an environment variable. It is the
+/// referenced canister's own directory, which for a dependency canister is its
+/// own project rather than the manifest declaring the override.
+fn override_base_dir<'a>(
+    store_key: &str,
+    canister_dirs: &HashMap<&str, &'a Path>,
+    instance_dir: &'a Path,
+) -> &'a Path {
+    canister_dirs
+        .get(store_key)
+        .copied()
+        .unwrap_or(instance_dir)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn inline_environments(
     items: &[Item<EnvironmentManifest>],
@@ -822,23 +874,8 @@ async fn inline_environments(
                     format: fmt,
                 } = &*mia
                 {
-                    // An override's path resolves against the referenced
-                    // canister's directory, which for a dependency canister is
-                    // its own project — not the manifest declaring the override.
-                    //
-                    // A member's manifest names its own canisters locally
-                    // (`registry`), while the root's names theirs by store key
-                    // (`vendor/openemail:registry`); prefixing with the declaring
-                    // instance turns either spelling into the store key the
-                    // workspace-wide maps are keyed by.
-                    let store_key = match instance_prefix.is_empty() {
-                        true => canister_name.clone(),
-                        false => format!("{instance_prefix}:{canister_name}"),
-                    };
-                    let base = canister_dirs
-                        .get(store_key.as_str())
-                        .copied()
-                        .unwrap_or(instance_dir);
+                    let store_key = override_store_key(instance_prefix, canister_name);
+                    let base = override_base_dir(&store_key, canister_dirs, instance_dir);
                     let src = base.join(orig_path);
                     // Same containment rule as asset/plugin sources — a malicious manifest
                     // could otherwise point init_args at host files outside the project, and
@@ -869,6 +906,45 @@ async fn inline_environments(
                         path: manifest_path,
                         format: fmt.clone(),
                     };
+                }
+            }
+        }
+
+        // File-backed environment variable values are read and written into the
+        // bundled manifest inline, the same as the ones a canister manifest
+        // declares (consolidation resolves those before bundling), so the file
+        // itself does not travel with the bundle.
+        if let Item::Manifest(ref mut env) = inlined
+            && let Some(ref mut overrides) = env.settings
+        {
+            for (canister_name, settings) in overrides.iter_mut() {
+                let Some(vars) = settings.environment_variables.as_mut() else {
+                    continue;
+                };
+                let store_key = override_store_key(instance_prefix, canister_name);
+                let base = override_base_dir(&store_key, canister_dirs, instance_dir);
+                for (variable, var) in vars.iter_mut() {
+                    if let ManifestEnvVar::Path { path } = &*var {
+                        let src = base.join(path);
+                        // Same containment rule as an init_args override above: a
+                        // manifest must not have the bundle carry off a file from
+                        // outside the project, inlined value or archived copy.
+                        let canon = canonicalize(&src)?;
+                        if !canon.starts_with(canonical_project_dir) {
+                            return EnvVarEscapesProjectSnafu {
+                                canister: canister_name.clone(),
+                                variable: variable.clone(),
+                                path: src,
+                                root: canonical_project_dir.to_path_buf(),
+                            }
+                            .fail();
+                        }
+                        let value = fs::read_to_string(&src).context(ReadEnvVarSnafu {
+                            canister: canister_name,
+                            variable,
+                        })?;
+                        *var = ManifestEnvVar::Value(value.trim().to_owned());
+                    }
                 }
             }
         }
@@ -1228,6 +1304,36 @@ fn validate_source_paths(
         }
     }
     Ok(canonical_sync_dirs)
+}
+
+/// Rejects a file backing an environment variable that lies outside the project.
+/// The value is inlined into the bundled manifest, so without this a manifest
+/// could name any file on the machine running `icp project bundle` and have its
+/// contents written into an archive meant to be handed on.
+///
+/// Consolidation has already read these files — it resolves a canister's own
+/// settings before `create_bundle` runs — so the paths come from the canister
+/// model rather than the manifest, and the environment overrides `create_bundle`
+/// rewrites itself are checked in [`inline_environments`].
+fn validate_env_var_files(
+    canisters: &[(PathBuf, Canister)],
+    canonical_project_dir: &Path,
+) -> Result<(), BundleError> {
+    for (_, canister) in canisters {
+        for (variable, file) in &canister.environment_variable_files {
+            let canon = canonicalize(file)?;
+            if !canon.starts_with(canonical_project_dir) {
+                return EnvVarEscapesProjectSnafu {
+                    canister: canister.name.clone(),
+                    variable: variable.clone(),
+                    path: file.clone(),
+                    root: canonical_project_dir.to_path_buf(),
+                }
+                .fail();
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolves a sync source path to its absolute location under the canonical

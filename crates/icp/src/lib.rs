@@ -129,6 +129,15 @@ pub struct Canister {
     /// consolidation, so it is never serialized.
     #[serde(skip)]
     pub friendly_names: Vec<String>,
+
+    /// For each environment variable whose value came from a file, the file it
+    /// was read from. `settings.environment_variables` already holds the
+    /// contents; the paths are kept so `icp project bundle` can hold a file
+    /// backing a variable to the same containment rule it applies to every other
+    /// file a manifest points at. Bookkeeping for that check rather than part of
+    /// the resolved configuration, so it is never serialized.
+    #[serde(skip)]
+    pub environment_variable_files: BTreeMap<String, PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -372,6 +381,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let local_network = Network {
@@ -458,6 +468,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let frontend_canister = Canister {
@@ -476,6 +487,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["frontend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let database_canister = Canister {
@@ -494,6 +506,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["database".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         // Create networks

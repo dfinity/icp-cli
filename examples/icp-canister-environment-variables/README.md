@@ -25,11 +25,20 @@ canister:
       var-1: value-1
       var-2: value-2
       var-3: value-3
+      var-4:
+        path: ./var-4.txt
 ```
+
+`var-4` is read from [`var-4.txt`](var-4.txt) instead of being written inline. The
+path is relative to the canister's directory, and surrounding whitespace is
+trimmed off the file's contents, so a trailing newline does not become part of the
+value. This keeps values you would rather not commit — or that another tool
+generates — out of the manifest.
 
 ## Key Features
 
 - **Environment Variables**: Define key-value pairs that will be available to your canister
+- **Values From Files**: Read a value from a file with `{ path: <file> }` instead of inlining it
 - **Flexible Configuration**: Set different values for different environments
 - **Runtime Access**: Environment variables can be accessed within your canister code
 

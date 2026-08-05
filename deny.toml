@@ -1,26 +1,53 @@
-# adapted from https://github.com/dfinity-lab/common/blob/master/pkgs/overlays/packages/cargo-deny/buildtime.toml
-# for context, see https://github.com/dfinity-lab/common/blob/master/pkgs/overlays/packages/cargo-deny/runtime.toml
-# we allow more licenses in the build-time check. all rust dependencies are statically linked,
-# so copyleft licenses like MPL which allow static linking are A-OK
+# Dependency policy for icp-cli, enforced by the Dependencies workflow. icp-cli
+# ships a linked binary, so these rules cover what we may distribute rather than
+# obligations passed to downstream crates (cf. dfinity/candid).
+
+[graph]
+# Dev-only deps never reach the released binary. Explicit so a changed default
+# cannot silently widen the graph.
+exclude-dev = true
+
+[advisories]
+# Vulnerabilities are always denied. Informational advisories are transitive
+# crates we do not pick, usually with no patched version, and GHSA omits them so
+# Dependabot never raises them either. Replaces the stale hand-maintained ignore
+# list in .cargo/audit.toml.
+unmaintained = "none"
+# Not a vulnerability, and usually clears on the next `cargo update`.
+yanked = "warn"
+
 [licenses]
+# Binary distribution, so: attribution-only terms, plus MPL-2.0, whose copyleft
+# is file-scoped and we modify none of those files. Strong copyleft would reach
+# the whole linked binary. Unlisted licenses are denied.
+#
+# ittapi (GPL-2.0-only) and r-efi (LGPL-2.1-or-later) are dual-licensed and
+# satisfied from an entry below.
 allow = [
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
-  "BlueOak-1.0.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
+  "BlueOak-1.0.0",
   "CC0-1.0",
   "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
   "MPL-2.0",
-  "Zlib",
-  "Unicode-DFS-2016",
   "Unicode-3.0",
-  "OpenSSL",
+  "Zlib",
 ]
 
-unused-allowed-license = "allow"
+# OpenSSL and Unicode-DFS-2016 sat here unused for years; warn on the next drift.
+unused-allowed-license = "warn"
+
+[bans]
+# ~60 shared crates differ across cargo-generate, wasmtime, ic-agent and reqwest
+# pins we do not control.
+multiple-versions = "allow"
 
 [sources]
-allow-git = ["https://github.com/dfinity/agent-rs.git"]
+# Everything resolves from crates.io, and a git revision is mutable enough to
+# make a tagged release non-reproducible. cargo-deny only warns by default.
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -384,6 +384,9 @@ settings:
   log_visibility: controllers
   environment_variables:
     KEY: "value"
+    # A value may also be read from a file, relative to the canister directory
+    KEY_FROM_FILE:
+      path: ./secrets/key
 ```
 
 Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).
@@ -414,7 +417,7 @@ init_args:
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | Yes* | Relative path to file containing init args |
+| `path` | string | Yes* | Path to a file containing init args, relative to the canister directory |
 | `value` | string | Yes* | Inline init args value |
 | `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
 

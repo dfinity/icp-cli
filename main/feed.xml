@@ -6,9 +6,33 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Tue, 04 Aug 2026 11:49:01 GMT</lastBuildDate>
-    <pubDate>Thu, 30 Jul 2026 21:11:12 GMT</pubDate>
+    <lastBuildDate>Wed, 05 Aug 2026 19:16:13 GMT</lastBuildDate>
+    <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Canister Settings Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/canister-settings/</link>
+      <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
+      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Configuration Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
+      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
+      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Project Dependencies</title>
       <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
@@ -23,14 +47,6 @@
       <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
       <pubDate>Tue, 28 Jul 2026 18:49:36 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/containerized-networks/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -79,14 +95,6 @@
       <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
       <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Configuration Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
-      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Tue, 14 Jul 2026 00:45:30 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -239,14 +247,6 @@
       <description>Learn what anonymous usage data icp-cli collects, how to opt out, and how the telemetry system works.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/telemetry/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Canister Settings Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/canister-settings/</link>
-      <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

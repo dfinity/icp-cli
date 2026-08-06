@@ -48,6 +48,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
 
     build_many_with_progress_bar(
         canisters_to_build,
+        environment_selection.name(),
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,

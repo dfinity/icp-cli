@@ -324,6 +324,7 @@ struct Instance {
 pub(crate) async fn create_bundle(
     project_dir: &Path,
     canisters: Vec<(PathBuf, Canister)>,
+    environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn store_artifact::Access>,
     pkg_cache: &PackageCache,
@@ -348,6 +349,7 @@ pub(crate) async fn create_bundle(
 
     build_many_with_progress_bar(
         canisters.clone(),
+        environment,
         builder,
         artifacts.clone(),
         pkg_cache,

@@ -14,7 +14,10 @@ pub(super) async fn build(
     execute(
         adapter,
         params.path.as_ref(),
-        &[("ICP_WASM_OUTPUT_PATH", params.output.as_ref())],
+        &[
+            ("ICP_WASM_OUTPUT_PATH", params.output.as_ref()),
+            ("ICP_CLI_ENVIRONMENT", &params.environment),
+        ],
         stdio,
     )
     .await
@@ -29,6 +32,7 @@ mod tests {
     use camino_tempfile::NamedUtf8TempFile;
 
     use crate::manifest::adapter::script::{Adapter, CommandField};
+    use crate::prelude::LOCAL;
 
     #[tokio::test]
     async fn single_command() {
@@ -49,6 +53,7 @@ mod tests {
             &Params {
                 path: "/".into(),
                 output: "/".into(),
+                environment: LOCAL.to_owned(),
             },
             None,
         )
@@ -84,6 +89,7 @@ mod tests {
             &Params {
                 path: "/".into(),
                 output: "/".into(),
+                environment: LOCAL.to_owned(),
             },
             None,
         )
@@ -100,6 +106,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn environment_variables() {
+        // Create temporary files, one to write the variables to and one to serve
+        // as the wasm output path
+        let mut f = NamedUtf8TempFile::new().expect("failed to create temporary file");
+        let out_wasm = NamedUtf8TempFile::new().expect("failed to create temporary file");
+
+        // Define adapter
+        let v = Adapter {
+            command: CommandField::Command(format!(
+                r#"echo "$ICP_CLI_ENVIRONMENT $ICP_WASM_OUTPUT_PATH" > '{}'"#,
+                f.path()
+            )),
+        };
+
+        build(
+            &v,
+            &Params {
+                path: "/".into(),
+                output: out_wasm.path().to_owned(),
+                environment: "staging".to_owned(),
+            },
+            None,
+        )
+        .await
+        .expect("failed to build script step");
+
+        // Verify the variables reached the command
+        let mut out = String::new();
+
+        f.read_to_string(&mut out)
+            .expect("failed to read temporary file");
+
+        assert_eq!(out, format!("staging {}\n", out_wasm.path()));
+    }
+
+    #[tokio::test]
     async fn invalid_command() {
         // Define adapter
         let v = Adapter {
@@ -111,6 +153,7 @@ mod tests {
             &Params {
                 path: "/".into(),
                 output: "/".into(),
+                environment: LOCAL.to_owned(),
             },
             None,
         )
@@ -134,6 +177,7 @@ mod tests {
             &Params {
                 path: "/".into(),
                 output: "/".into(),
+                environment: LOCAL.to_owned(),
             },
             None,
         )
@@ -157,6 +201,7 @@ mod tests {
             &Params {
                 path: "/".into(),
                 output: "/".into(),
+                environment: LOCAL.to_owned(),
             },
             None,
         )

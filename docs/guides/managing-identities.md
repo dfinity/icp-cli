@@ -150,7 +150,7 @@ The simplest form gives icp-cli its own account with the auth provider (id.ai us
 icp identity link web my-cli-identity
 ```
 
-This opens your browser at the auth provider's sign-in page. Once you complete sign-in, the browser hands the delegation back to icp-cli and the identity is stored locally under the chosen name.
+This prints the sign-in URL and waits for you to press Enter, then opens your browser at the auth provider's sign-in page. Once you complete sign-in, the browser hands the delegation back to icp-cli and the identity is stored locally under the chosen name.
 
 ### Signing In As a Specific App
 
@@ -170,7 +170,7 @@ icp identity link web nns-identity --app nns.ic0.app
 icp identity link web oisy-identity --app oisy.com
 ```
 
-Note that apps may use `alternativeOrigin` with II - the correct domain is `nns.ic0.app`, not `nns.internetcomputer.org`, which would give you a different principal.
+Some apps use II's `alternativeOrigin` mechanism, so the domain Internet Identity knows them by is not the one in your address bar — passing the wrong one links a different principal. `--app` needs the II origin. NNS is the common case: its II origin is `nns.ic0.app`, and icp-cli maps `nns.internetcomputer.org` onto it for you, so either spelling links the same identity.
 
 ### Using a Different Auth Provider
 

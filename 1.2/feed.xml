@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Tue, 04 Aug 2026 11:44:28 GMT</lastBuildDate>
-    <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
+    <lastBuildDate>Fri, 07 Aug 2026 08:49:55 GMT</lastBuildDate>
+    <pubDate>Thu, 06 Aug 2026 16:12:48 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Managing Identities</title>
+      <link>https://cli.internetcomputer.org/1.2/guides/managing-identities/</link>
+      <description>Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.</description>
+      <pubDate>Thu, 06 Aug 2026 16:12:48 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/1.2/guides/managing-identities/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Environment Variables Reference</title>
       <link>https://cli.internetcomputer.org/1.2/reference/environment-variables/</link>
@@ -135,14 +143,6 @@
       <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
       <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/1.2/guides/using-recipes/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Managing Identities</title>
-      <link>https://cli.internetcomputer.org/1.2/guides/managing-identities/</link>
-      <description>Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.</description>
-      <pubDate>Thu, 04 Jun 2026 20:47:28 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/1.2/guides/managing-identities/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

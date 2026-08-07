@@ -4,10 +4,7 @@ use icp::context::{Context, EnvironmentSelection};
 
 use tracing::info;
 
-use crate::{
-    operations::build::build_many_with_progress_bar,
-    options::{BuildEnvironmentOpt, EnvironmentOpt},
-};
+use crate::{operations::build::build_many_with_progress_bar, options::BuildEnvironmentOpt};
 
 /// Build canisters
 #[derive(Debug, Args)]

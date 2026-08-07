@@ -30,7 +30,7 @@ use crate::{
         settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
-    options::{EnvironmentOpt, IdentityOpt},
+    options::IdentityOpt,
     progress::{ProgressManager, ProgressManagerSettings},
 };
 

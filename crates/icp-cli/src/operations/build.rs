@@ -49,6 +49,7 @@ struct BuildFailure {
 pub(crate) async fn build(
     canister_path: &Path,
     canister: &Canister,
+    environment: &str,
     pb: &mut MultiStepProgressBar,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
@@ -69,6 +70,7 @@ pub(crate) async fn build(
                 &Params {
                     path: canister_path.to_owned(),
                     output: wasm_output_path.to_owned(),
+                    environment: environment.to_owned(),
                 },
                 Some(tx),
                 pkg_cache,
@@ -96,6 +98,7 @@ pub(crate) async fn build(
 
 pub(crate) async fn build_many_with_progress_bar(
     canisters: Vec<(PathBuf, Canister)>,
+    environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     pkg_cache: &PackageCache,
@@ -112,6 +115,7 @@ pub(crate) async fn build_many_with_progress_bar(
             let build_result = build(
                 &canister_path,
                 &canister,
+                environment,
                 &mut pb,
                 builder,
                 artifacts,

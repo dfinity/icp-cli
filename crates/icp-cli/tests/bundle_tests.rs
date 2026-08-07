@@ -6,7 +6,7 @@ use std::{
 use camino::Utf8Component;
 use flate2::bufread::GzDecoder;
 use icp::{
-    fs::{create_dir_all, write, write_string},
+    fs::{create_dir_all, read_to_string, write, write_string},
     prelude::*,
 };
 use indoc::formatdoc;
@@ -817,6 +817,60 @@ fn bundle_rejects_source_outside_project() {
 /// exist when bundling validates the sync sources, before the build. Validation
 /// must resolve sync paths lexically (no canonicalization) so a not-yet-built
 /// directory is accepted; the build then creates it before it is archived.
+/// The environment reaching build steps as `ICP_CLI_ENVIRONMENT` defaults to `ic`
+/// for a bundle, rather than the `local` the rest of the CLI defaults to.
+#[test]
+fn bundle_builds_for_ic_by_default() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+    let recorded = project_dir.join("environment.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  commands:
+                    - echo "$ICP_CLI_ENVIRONMENT" > '{recorded}'
+                    - cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read_to_string(&recorded).expect("failed to read recorded environment"),
+        "ic\n"
+    );
+
+    // An explicit --environment overrides the default.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "project",
+            "bundle",
+            "--output",
+            bundle_path.as_str(),
+            "--environment",
+            "staging",
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read_to_string(&recorded).expect("failed to read recorded environment"),
+        "staging\n"
+    );
+}
+
 #[test]
 fn bundle_accepts_synced_dir_created_by_build_step() {
     let ctx = TestContext::new();

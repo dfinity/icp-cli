@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* feat: `script` build steps now receive `ICP_CLI_ENVIRONMENT`, the name of the environment the canisters are being built for, so a build can vary by environment the way a sync step already could.
+
 # v1.3.0
 
 * feat: a canister environment variable's value can now be read from a file, by writing `var: { path: <file> }` in place of `var: value`. The path resolves against the canister's directory — including in an environment override, matching `init_args` — and surrounding whitespace is trimmed off the file's contents. The file is read when the project is loaded, so a missing file fails before anything is deployed. `icp project bundle` writes the value into the bundled manifest inline, rejecting a file outside the project as it does for other manifest file references.
@@ -16,6 +18,7 @@ bump. Currently experimental: project bundling, project dependencies
 
 ## Experimental
 
+* feat(bundle): `icp project bundle` takes `-e/--environment`, naming the environment its canisters are built for — it reaches build scripts as `ICP_CLI_ENVIRONMENT`. It defaults to `ic`, unlike the rest of the CLI, because a bundle is built to be deployed somewhere else; `ICP_ENVIRONMENT` overrides that default as it does elsewhere. Which canisters are bundled is unaffected.
 * feat(bundle): `icp project bundle` now works on projects that declare `dependencies:`, which it previously refused outright. The bundle mirrors the workspace instead of flattening it: the root project's `icp.yaml` sits at the archive root, each dependency instance gets its own `icp.yaml` at the directory it occupies in the workspace, and the `dependencies:` declarations are preserved, each pointing at the directory its dependency occupies in the archive (the same path a plainly vendored layout already used). A shared (diamond) dependency is still a single instance, canister names stay as each project wrote them, and canister discovery (`PUBLIC_CANISTER_ID:<alias>:<canister>`) works in the extracted bundle exactly as it did in the source workspace.
   * Every dependency must resolve to a directory inside the workspace root; one that resolves outside it (including through a symlink) is rejected, because the archive could not contain it. As a result, a vendored member that depends on a sibling cannot be bundled as a standalone project (e.g. via `ICP_PROJECT_ROOT`) — bundle the workspace root instead.
   * Projects with script sync steps still cannot be bundled, and the restriction now covers every project in the workspace.

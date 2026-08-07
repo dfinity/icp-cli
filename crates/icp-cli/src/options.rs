@@ -65,6 +65,39 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
     }
 }
 
+macro_rules! arg_struct_change_help {
+    ($orig_name:ident => $struct_name:ident, arg = $arg_name:literal, help = $new_help:literal) => {
+        #[derive(Debug)]
+        pub(crate) struct $struct_name(pub(crate) $orig_name);
+
+        impl clap::Args for $struct_name {
+            fn augment_args(cmd: clap::Command) -> clap::Command {
+                <$orig_name as clap::Args>::augment_args(cmd)
+                    .mut_arg($arg_name, |a| a.help($new_help))
+            }
+            fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+                <$orig_name as clap::Args>::augment_args_for_update(cmd)
+                    .mut_arg($arg_name, |a| a.help($new_help))
+            }
+        }
+
+        impl clap::FromArgMatches for $struct_name {
+            fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
+                let inner = <$orig_name as clap::FromArgMatches>::from_arg_matches(matches)?;
+                Ok($struct_name(inner))
+            }
+
+            fn update_from_arg_matches(
+                &mut self,
+                matches: &clap::ArgMatches,
+            ) -> Result<(), clap::Error> {
+                <$orig_name as clap::FromArgMatches>::update_from_arg_matches(&mut self.0, matches)
+            }
+        }
+    };
+}
+pub(crate) use arg_struct_change_help;
+
 fn parse_root_key(input: &str) -> Result<RootKeySpec, String> {
     RootKeySpec::try_from(input.to_string())
 }

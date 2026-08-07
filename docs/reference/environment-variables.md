@@ -7,7 +7,7 @@ Environment variables used by icp-cli.
 
 ## Build Script Variables
 
-During `script` build steps, icp-cli sets the following environment variable:
+During `script` build steps, icp-cli sets the following environment variables. The script runs with the **canister directory as the current working directory**, so relative paths in your build commands resolve from there.
 
 ### `ICP_WASM_OUTPUT_PATH`
 
@@ -25,15 +25,15 @@ build:
         - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
 ```
 
-The script also runs with the **canister directory as the current working directory**, so relative paths in your build commands resolve from there.
+### `ICP_CLI_ENVIRONMENT`
+
+The name of the environment being built for (e.g. `local`, `staging`, `production`). `icp build` and `icp deploy` take it from their `-e/--environment` argument, defaulting to `local`; `icp project bundle` takes it from its own `-e/--environment`, defaulting to `ic` because a bundle is built to be deployed elsewhere.
+
+Sync scripts receive this variable as well.
 
 ## Sync Script Variables
 
-During `script` sync steps, icp-cli sets the following environment variables:
-
-### `ICP_CLI_ENVIRONMENT`
-
-The name of the current environment (e.g. `local`, `staging`, `production`).
+During `script` sync steps, icp-cli sets [`ICP_CLI_ENVIRONMENT`](#icp_cli_environment) as described above, plus the following:
 
 ### `ICP_CLI_NETWORK`
 

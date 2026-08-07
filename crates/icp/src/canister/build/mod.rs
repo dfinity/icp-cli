@@ -13,6 +13,7 @@ mod script;
 pub struct Params {
     pub path: PathBuf,
     pub output: PathBuf,
+    pub environment: String,
 }
 
 #[derive(Debug, Snafu)]

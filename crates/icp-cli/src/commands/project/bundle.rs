@@ -18,6 +18,11 @@ pub(crate) struct BundleArgs {
     /// Output path for the bundle archive (e.g. bundle.tar.gz)
     #[arg(long, short)]
     pub(crate) output: PathBuf,
+
+    /// Environment the canisters are built for. Bundles are made to be deployed
+    /// elsewhere, so this defaults to `ic` rather than the usual `local`.
+    #[arg(long, short = 'e', env = "ICP_ENVIRONMENT", default_value = IC)]
+    pub(crate) environment: String,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow::Error> {
@@ -28,6 +33,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
     create_bundle(
         &project.dir,
         canisters,
+        &args.environment,
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,

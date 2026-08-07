@@ -65,6 +65,33 @@ impl From<EnvironmentOpt> for EnvironmentSelection {
     }
 }
 
+#[derive(Debug)]
+pub struct BuildEnvironmentOpt(pub EnvironmentOpt);
+
+const BUILD_ENV_HELP: &str =
+    "Override the environment to build for. By default, the local environment is used.";
+
+impl FromArgMatches for BuildEnvironmentOpt {
+    fn from_arg_matches(matches: &ArgMatches) -> Result<Self, clap::Error> {
+        let inner = EnvironmentOpt::from_arg_matches(matches)?;
+        Ok(BuildEnvironmentOpt(inner))
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &ArgMatches) -> Result<(), clap::Error> {
+        self.0.update_from_arg_matches(matches)
+    }
+}
+
+impl Args for BuildEnvironmentOpt {
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        EnvironmentOpt::augment_args(cmd).mut_arg("environment", |a| a.help(BUILD_ENV_HELP))
+    }
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        EnvironmentOpt::augment_args_for_update(cmd)
+            .mut_arg("environment", |a| a.help(BUILD_ENV_HELP))
+    }
+}
+
 fn parse_root_key(input: &str) -> Result<RootKeySpec, String> {
     RootKeySpec::try_from(input.to_string())
 }

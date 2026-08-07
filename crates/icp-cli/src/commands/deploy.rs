@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
 use tracing::info;
 
+use crate::options::BuildEnvironmentOpt;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
     operations::{
@@ -85,7 +86,7 @@ pub(crate) struct DeployArgs {
     pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) environment: BuildEnvironmentOpt,
 
     /// Output command results as JSON
     #[arg(long)]
@@ -98,7 +99,7 @@ pub(crate) struct DeployArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let environment_selection: EnvironmentSelection = args.environment.0.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
     let env = ctx.get_environment(&environment_selection).await?;

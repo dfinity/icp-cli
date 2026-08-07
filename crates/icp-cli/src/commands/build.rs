@@ -4,7 +4,10 @@ use icp::context::{Context, EnvironmentSelection};
 
 use tracing::info;
 
-use crate::{operations::build::build_many_with_progress_bar, options::EnvironmentOpt};
+use crate::{
+    operations::build::build_many_with_progress_bar,
+    options::{BuildEnvironmentOpt, EnvironmentOpt},
+};
 
 /// Build canisters
 #[derive(Debug, Args)]
@@ -13,12 +16,12 @@ pub(crate) struct BuildArgs {
     pub(crate) canisters: Vec<String>,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) environment: BuildEnvironmentOpt,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::Error> {
     // Get environment selection
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let environment_selection: EnvironmentSelection = args.environment.0.clone().into();
 
     // Load target environment
     let env = ctx.get_environment(&environment_selection).await?;

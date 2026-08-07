@@ -5,7 +5,10 @@ use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext,
     clients::{self, icp_cli},
 };
-use icp::{fs::write_string, prelude::*};
+use icp::{
+    fs::{create_dir_all, write_string},
+    prelude::*,
+};
 
 mod common;
 
@@ -799,6 +802,99 @@ async fn canister_settings_update_miscellaneous() {
                 .and(contains("Wasm memory threshold: 4_294_967_296"))
                 .and(contains("Log memory limit: 1_048_576")),
         );
+}
+
+/// An environment variable whose value is declared as `{ path: <file> }` is read
+/// from that file — relative to the canister's directory, with surrounding
+/// whitespace trimmed — and synced to the canister on deploy.
+#[tokio::test]
+async fn canister_settings_environment_variable_from_file() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            settings:
+              environment_variables:
+                API_KEY:
+                  path: ./secrets/api-key
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+    create_dir_all(&project_dir.join("secrets")).expect("failed to create the secrets directory");
+    write_string(&project_dir.join("secrets/api-key"), "s3cret\n")
+        .expect("failed to write the api key file");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("API_KEY: s3cret"));
+}
+
+/// A file the manifest points at but that does not exist is reported before
+/// anything is deployed, naming the variable and the canister.
+#[tokio::test]
+async fn canister_settings_environment_variable_file_missing() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            settings:
+              environment_variables:
+                API_KEY:
+                  path: ./secrets/api-key
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(contains("environment variable 'API_KEY'").and(contains("my-canister")));
 }
 
 #[tokio::test]

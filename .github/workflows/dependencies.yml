@@ -1,0 +1,31 @@
+name: Dependencies
+
+on:
+  # Unfiltered: a run skipped by a path filter reports no conclusion, which would
+  # leave `dependencies:required` pending forever on every unrelated PR.
+  pull_request:
+  # Backstop for weeks with no PRs. Advisories are the one finding here that can
+  # appear with no change on our side, so re-check against the RustSec database.
+  schedule:
+    - cron: "0 14 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # When getting Rust dependencies, retry on network error:
+  CARGO_NET_RETRY: 10
+
+jobs:
+  cargo-deny:
+    name: dependencies:required
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # rust-toolchain.toml is left in place so the graph is resolved by the same
+      # cargo that builds our releases. It costs ~30s of toolchain install, and
+      # buys us not depending on the action image's Rust being new enough.
+      - uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979 # v2.0.15
+        with:
+          command: check advisories bans licenses sources

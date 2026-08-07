@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{canister::Settings, prelude::LOCAL};
+use crate::{canister::ManifestSettings, prelude::LOCAL};
 
 use super::canister::ManifestInitArgs;
 
@@ -15,7 +15,7 @@ pub struct EnvironmentInner {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canisters: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub settings: Option<HashMap<String, Settings>>,
+    pub settings: Option<HashMap<String, ManifestSettings>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub init_args: Option<HashMap<String, ManifestInitArgs>>,
 }
@@ -51,7 +51,7 @@ pub struct EnvironmentManifest {
     pub canisters: CanisterSelection,
 
     /// Override the canister settings for this environment
-    pub settings: Option<HashMap<String, Settings>>,
+    pub settings: Option<HashMap<String, ManifestSettings>>,
 
     /// Override init args for specific canisters in this environment
     pub init_args: Option<HashMap<String, ManifestInitArgs>>,

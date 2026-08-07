@@ -140,7 +140,7 @@ async fn run_network_launcher(
             (LaunchMode::Image(options), fixed_ports)
         }
         ManagedMode::Launcher(launcher_config) if autocontainerize => {
-            let options = transform_native_launcher_to_container(launcher_config);
+            let options = transform_native_launcher_to_container(launcher_config, verbose);
             let fixed_ports = options.fixed_host_ports();
             (LaunchMode::Image(options), fixed_ports)
         }
@@ -182,7 +182,7 @@ async fn run_network_launcher(
             match launch_mode {
                 LaunchMode::Image(options) => {
                     let (guard, instance, locator, fixed) =
-                        spawn_docker_launcher(&options, status_dir.path()).await?;
+                        spawn_docker_launcher(&options, status_dir.path(), background).await?;
                     let gateway = NetworkDescriptorGatewayPort {
                         port: instance.gateway_port,
                         fixed,
@@ -314,7 +314,10 @@ async fn run_network_launcher(
     Ok(())
 }
 
-fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> ManagedImageOptions {
+fn transform_native_launcher_to_container(
+    config: &ManagedLauncherConfig,
+    verbose: bool,
+) -> ManagedImageOptions {
     use bollard::models::PortBinding;
     use std::collections::HashMap;
 
@@ -324,7 +327,14 @@ fn transform_native_launcher_to_container(config: &ManagedLauncherConfig) -> Man
         Port::Fixed(port) => port,
         Port::Random => 0,
     };
-    let args = launcher_settings_flags(config);
+    let mut args = launcher_settings_flags(config);
+    // `launcher_settings_flags` covers only the manifest-derived settings; the native path adds
+    // `--verbose` separately from the CLI's own debug flag, so an autocontainerized launcher would
+    // otherwise stay quiet under `-d`. Only done here, not for an explicit `image:` network, whose
+    // `args` are the user's to compose (and whose image need not understand the flag at all).
+    if verbose {
+        args.push("--verbose".to_string());
+    }
     let args = translate_launcher_args_for_docker(args);
 
     let all_addrs: Vec<String> = config
@@ -828,7 +838,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert_eq!(
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:latest"
@@ -844,6 +854,34 @@ mod tests {
             .as_ref()
             .unwrap();
         assert_eq!(binding[0].host_port.as_deref(), Some("8000"));
+    }
+
+    /// The native path adds `--verbose` from the CLI's debug flag rather than from the manifest,
+    /// so `launcher_settings_flags` alone would leave an autocontainerized launcher quiet under
+    /// `-d`. `transform_native_launcher_default_config` covers the off case by asserting the
+    /// full argument list.
+    #[test]
+    fn transform_native_launcher_passes_verbose_through() {
+        let config = ManagedLauncherConfig {
+            gateway: Gateway {
+                bind: "127.0.0.1".to_string(),
+                port: Port::Fixed(8000),
+                domains: vec!["localhost".to_string()],
+            },
+            artificial_delay_ms: None,
+            ii: false,
+            nns: false,
+            subnets: None,
+            bitcoind_addr: None,
+            dogecoind_addr: None,
+            version: None,
+        };
+        let opts = transform_native_launcher_to_container(&config, true);
+        assert!(
+            opts.args.iter().any(|a| a == "--verbose"),
+            "{:?}",
+            opts.args
+        );
     }
 
     #[test]
@@ -862,7 +900,7 @@ mod tests {
             dogecoind_addr: None,
             version: Some("v12.0.0-2026-04-16-04-20".to_string()),
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert_eq!(
             opts.image,
             "ghcr.io/dfinity/icp-cli-network-launcher:12.0.0-2026-04-16-04-20"
@@ -885,7 +923,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         let binding = opts
             .port_bindings
             .get("4943/tcp")
@@ -907,7 +945,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert!(opts.args.contains(&"--ii".to_string()));
         assert!(
             opts.args
@@ -931,7 +969,7 @@ mod tests {
             dogecoind_addr: Some(vec!["localhost:22556".to_string()]),
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert!(opts.args.contains(&"--nns".to_string()));
         assert!(opts.args.contains(&"--artificial-delay-ms=50".to_string()));
         assert!(
@@ -956,7 +994,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=192.168.1.5:18444".to_string())
@@ -976,7 +1014,7 @@ mod tests {
             dogecoind_addr: None,
             version: None,
         };
-        let opts = transform_native_launcher_to_container(&config);
+        let opts = transform_native_launcher_to_container(&config, false);
         assert!(
             opts.args
                 .contains(&"--bitcoind-addr=host.docker.internal:18444".to_string())

@@ -140,9 +140,11 @@ jobs:
           # Copy versions.json from repo
           cp docs-site/versions.json root/versions.json
 
-          # Copy IC asset canister config files
+          # Copy IC canister config files. `_headers` configures response headers
+          # for the certified-assets canister (replaces the old .ic-assets.json5);
+          # it must sit at the root of the deployed directory (dir: .).
           cp docs-site/icp.yaml root/icp.yaml
-          cp docs-site/.ic-assets.json5 root/.ic-assets.json5
+          cp docs-site/_headers root/_headers
           mkdir -p root/.icp/data/mappings
           cp docs-site/.icp/data/mappings/ic.ids.json root/.icp/data/mappings/ic.ids.json
 

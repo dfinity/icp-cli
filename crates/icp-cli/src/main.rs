@@ -122,6 +122,14 @@ async fn main() -> Result<(), Error> {
         }
     };
 
+    // Completion scripts are derived from the clap definition alone. Handle them
+    // before any other setup: they are generated at package-install time, where
+    // the telemetry notice and the update check have no business firing.
+    if let Command::Completions(args) = &command {
+        commands::completions::exec(args);
+        return Ok(());
+    }
+
     // Logging: --debug gets the detailed tracing layer; otherwise plain user-facing output
     let debug = cli.debug;
     let reg = Registry::default()
@@ -304,6 +312,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::canister::top_up::exec(ctx, &args).await?
             }
         },
+
+        // Completions: handled in `main` before the context exists
+        Command::Completions(_) => unreachable!(),
 
         // Cycles
         Command::Cycles(cmd) => match cmd {

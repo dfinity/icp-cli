@@ -7,6 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { installCompletions } = require('./completions');
+
 const platform = process.platform;
 const arch = process.arch;
 
@@ -52,6 +54,8 @@ try {
       // Ignore permission errors - might not have rights to chmod
     }
     
+    const completions = installCompletions(binaryPath);
+
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -64,6 +68,11 @@ try {
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `);
+
+    if (completions.length > 0) {
+      console.log(`Installed shell completions for: ${completions.join(', ')}. Restart your shell to use them.`);
+    }
+    console.log('Completions for other shells: see `icp completions --help`.');
   } else {
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗

@@ -4,7 +4,10 @@ use icp::context::{Context, EnvironmentSelection};
 
 use tracing::info;
 
-use crate::{operations::build::build_many_with_progress_bar, options::BuildEnvironmentOpt};
+use crate::{
+    operations::build::build_many_with_progress_bar,
+    options::{EnvironmentOpt, arg_struct_change_help},
+};
 
 /// Build canisters
 #[derive(Debug, Args)]
@@ -15,6 +18,12 @@ pub(crate) struct BuildArgs {
     #[command(flatten)]
     pub(crate) environment: BuildEnvironmentOpt,
 }
+
+arg_struct_change_help!(
+    EnvironmentOpt => BuildEnvironmentOpt,
+    arg = "environment",
+    help = "Override the environment to build for. By default, the local environment is used."
+);
 
 pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::Error> {
     // Get environment selection

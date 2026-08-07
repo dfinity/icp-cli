@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
 use tracing::info;
 
-use crate::options::BuildEnvironmentOpt;
+use crate::options::EnvironmentOpt;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
     operations::{
@@ -30,7 +30,7 @@ use crate::{
         settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
-    options::IdentityOpt,
+    options::{IdentityOpt, arg_struct_change_help},
     progress::{ProgressManager, ProgressManagerSettings},
 };
 
@@ -86,7 +86,7 @@ pub(crate) struct DeployArgs {
     pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub(crate) environment: BuildEnvironmentOpt,
+    pub(crate) environment: DeployEnvironmentOpt,
 
     /// Output command results as JSON
     #[arg(long)]
@@ -97,6 +97,12 @@ pub(crate) struct DeployArgs {
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,
 }
+
+arg_struct_change_help!(
+    EnvironmentOpt => DeployEnvironmentOpt,
+    arg = "environment",
+    help = "Override the environment to build for and deploy to. By default, the local environment is used."
+);
 
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
     let environment_selection: EnvironmentSelection = args.environment.0.clone().into();

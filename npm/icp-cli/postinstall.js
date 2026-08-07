@@ -54,7 +54,9 @@ try {
       // Ignore permission errors - might not have rights to chmod
     }
     
-    const completions = installCompletions(binaryPath);
+    const completions = process.env.npm_config_global === 'true'
+      ? installCompletions(binaryPath)
+      : [];
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗

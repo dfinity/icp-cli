@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{Agent, AgentError, agent::SubnetType};
+use ic_agent::{Agent, AgentError, agent::RejectCode, agent::SubnetType};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
@@ -22,12 +22,16 @@ use icp_canister_interfaces::{
         CYCLES_MINTING_CANISTER_CID, CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_CREATE_CANISTER,
         NotifyCreateCanisterArg, NotifyCreateCanisterResponse, NotifyError, SubnetSelection,
     },
+    engine_canister::{
+        GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
+        GetEngineOperatorBySubnetResult, engine_canister_id,
+    },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
 use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -48,6 +52,20 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to get subnet for canister: {source}"))]
     GetSubnet { source: AgentError },
+
+    #[snafu(display("invalid engine-canister id: {message}"))]
+    EngineCanisterId { message: String },
+
+    #[snafu(display("failed to query the engine-canister registry: {source}"))]
+    EngineCanisterQuery { source: AgentError },
+
+    #[snafu(display(
+        "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
+    ))]
+    NoEngineOperator {
+        subnet: Principal,
+        engine_registry: Principal,
+    },
 
     #[snafu(display("registry error: {message}"))]
     Registry { message: String },
@@ -214,7 +232,28 @@ impl CreateOperation {
             .await
             .context(GetSubnetSnafu)?;
         let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
-            self.create_mgmt(settings, selected_subnet).await?
+            // Resolve the subnet's engine-operator first. Only a definitive
+            // "could not resolve an operator" resolution failure falls back to
+            // the legacy management-canister path — this covers both no operator
+            // being registered for the subnet and the engine-canister registry
+            // not being deployed on this network (a `DestinationInvalid` reject,
+            // mapped to `NoEngineOperator` in `resolve_engine_operator`). Every
+            // other resolution error (invalid registry id, other query/decode
+            // failures) is propagated. Crucially, the fallback is decided
+            // *before* any operator `create_canister` update is submitted: once
+            // we hand off to the operator, a failure may mean the canister was
+            // already created, so retrying via the management canister could
+            // double-create and double-charge. Those errors propagate too.
+            match self.resolve_engine_operator(selected_subnet).await {
+                Ok(operator) => self.create_via_operator(settings, operator).await?,
+                Err(e @ CreateOperationError::NoEngineOperator { .. }) => {
+                    warn!(
+                        "{e}; falling back to management-canister creation on this CloudEngine subnet"
+                    );
+                    self.create_mgmt(settings, selected_subnet).await?
+                }
+                Err(e) => return Err(e),
+            }
         } else {
             self.create_ledger(settings, selected_subnet).await?
         };
@@ -273,16 +312,102 @@ impl CreateOperation {
         Ok(cid)
     }
 
+    /// Ask the engine-canister registry which engine-operator serves `subnet`.
+    async fn resolve_engine_operator(
+        &self,
+        subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let engine_registry = engine_canister_id()
+            .map_err(|message| CreateOperationError::EngineCanisterId { message })?;
+
+        let arg = GetEngineOperatorBySubnetArgs {
+            subnet_id: Some(subnet),
+        };
+        let resp = match self
+            .inner
+            .agent
+            .query(&engine_registry, GET_ENGINE_OPERATOR_BY_SUBNET_METHOD)
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
+            .call()
+            .await
+        {
+            Ok(resp) => resp,
+            // The engine-canister registry itself is not deployed on this
+            // network (e.g. a local/test env). The replica rejects the query
+            // with `DestinationInvalid` ("Canister ... not found", IC0301).
+            // Treat a missing registry the same as "no operator registered":
+            // this happens before any operator update is submitted, so the
+            // legacy management-canister fallback is safe.
+            Err(e) if is_canister_not_found(&e) => {
+                return NoEngineOperatorSnafu {
+                    subnet,
+                    engine_registry,
+                }
+                .fail();
+            }
+            Err(e) => return Err(e).context(EngineCanisterQuerySnafu),
+        };
+        let resp = Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
+
+        resp.engine_operator_id.context(NoEngineOperatorSnafu {
+            subnet,
+            engine_registry,
+        })
+    }
+
+    /// Delegate creation to a subnet's engine-operator canister. The operator's
+    /// `create_canister` is byte-compatible with the cycles ledger, so we reuse
+    /// the same request/response types and simply target the operator principal.
+    async fn create_via_operator(
+        &self,
+        settings: &CanisterSettings,
+        operator: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let creation_args = CreationArgs {
+            // CloudEngine subnets only create on themselves; the operator
+            // ignores subnet selection, so leave it unset.
+            subnet_selection: None,
+            settings: Some(settings.clone()),
+        };
+        let arg = CreateCanisterArgs {
+            from_subaccount: None,
+            created_at_time: None,
+            amount: Nat::from(self.cycles()),
+            creation_args: Some(creation_args),
+        };
+
+        let resp = self
+            .inner
+            .agent
+            .update(&operator, "create_canister")
+            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
+            .call_and_wait()
+            .await
+            .context(AgentSnafu)?;
+        let resp: CreateCanisterResponse =
+            Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
+        let cid = match resp {
+            CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+            CreateCanisterResponse::Err(err) => {
+                return CreateCanisterSnafu {
+                    message: err.format_error(self.cycles()),
+                }
+                .fail();
+            }
+        };
+        Ok(cid)
+    }
+
+    /// Legacy CloudEngine creation: call the management canister's
+    /// `create_canister`, routing to the target subnet by its id (subnet-scoped,
+    /// so no canister on that subnet is needed to derive an effective canister
+    /// id). Requires subnet-administrator permissions. Kept as a fallback for
+    /// the engine-operator path.
     async fn create_mgmt(
         &self,
         settings: &CanisterSettings,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        // Call the management canister's create_canister, routing the request to
-        // the target subnet by its id (subnet-scoped, so no canister on that
-        // subnet is needed to derive an effective canister id) and forwarding the
-        // settings as a whole via `with_canister_settings`. Subnet-scoped routing
-        // requires subnet-administrator permissions, which the CloudEngine path has.
         let mgmt = ManagementCanister::create(&self.inner.agent);
         let (canister_id,) = mgmt
             .create_canister()
@@ -541,6 +666,18 @@ pub(crate) fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// Whether `err` is a replica rejection meaning the target canister does not
+/// exist on this network — reject code `DestinationInvalid` (IC0301,
+/// "Canister ... not found"). Used to treat a missing engine-canister registry
+/// as "no operator registered" so the CloudEngine path can fall back safely.
+fn is_canister_not_found(err: &AgentError) -> bool {
+    matches!(
+        err,
+        AgentError::CertifiedReject { reject, .. } | AgentError::UncertifiedReject { reject, .. }
+            if reject.reject_code == RejectCode::DestinationInvalid
+    )
+}
+
 async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
     let bs = agent
         .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
@@ -606,5 +743,48 @@ mod tests {
         assert_eq!(shell_quote("plain"), "'plain'");
         // An embedded single quote is closed, escaped, and reopened via `'\''`.
         assert_eq!(shell_quote("a'b"), r"'a'\''b'");
+    }
+
+    #[test]
+    fn detects_canister_not_found_rejections() {
+        use ic_agent::agent::RejectResponse;
+
+        let not_found = |certified: bool| {
+            let reject = RejectResponse {
+                reject_code: RejectCode::DestinationInvalid,
+                reject_message: "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found".to_string(),
+                error_code: Some("IC0301".to_string()),
+            };
+            if certified {
+                AgentError::CertifiedReject {
+                    reject,
+                    operation: None,
+                }
+            } else {
+                AgentError::UncertifiedReject {
+                    reject,
+                    operation: None,
+                }
+            }
+        };
+
+        // A `DestinationInvalid` rejection means the registry canister is not
+        // deployed — both the certified and uncertified spellings count.
+        assert!(is_canister_not_found(&not_found(true)));
+        assert!(is_canister_not_found(&not_found(false)));
+
+        // Other reject codes (e.g. a canister trap) must NOT be treated as
+        // "not found" — they should propagate rather than fall back.
+        assert!(!is_canister_not_found(&AgentError::CertifiedReject {
+            reject: RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                reject_message: "trapped".to_string(),
+                error_code: None,
+            },
+            operation: None,
+        }));
+
+        // A non-reject error is never "not found".
+        assert!(!is_canister_not_found(&AgentError::InvalidReplicaStatus));
     }
 }

@@ -16,7 +16,14 @@ function completionTargets(home) {
     {
       shell: 'bash',
       // XDG user directory read by bash-completion v2.
-      dir: path.join(home, '.local', 'share', 'bash-completion', 'completions'),
+      dir: path.join(
+        process.env.BASH_COMPLETION_USER_DIR ||
+          path.join(
+            process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'),
+            'bash-completion'
+          ),
+        'completions'
+      ),
       file: 'icp'
     },
     {

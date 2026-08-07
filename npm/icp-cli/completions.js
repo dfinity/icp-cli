@@ -28,10 +28,17 @@ function completionTargets(home) {
     },
     {
       shell: 'fish',
-      dir: path.join(home, '.config', 'fish', 'completions'),
+      dir: path.join(
+        process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+        'fish',
+        'completions'
+      ),
       file: 'icp.fish',
       // Only if fish is actually configured; fish creates this itself otherwise.
-      requires: path.join(home, '.config', 'fish')
+      requires: path.join(
+        process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+        'fish'
+      )
     },
     {
       shell: 'zsh',

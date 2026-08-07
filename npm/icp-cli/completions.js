@@ -11,34 +11,40 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+/**
+ * The user location bash-completion v2 loads from. `BASH_COMPLETION_USER_DIR`
+ * is a colon-separated list searched in order, so its first entry is the one to
+ * write to.
+ */
+function bashCompletionUserDir(home) {
+  const configured = (process.env.BASH_COMPLETION_USER_DIR || '')
+    .split(':')
+    .find((dir) => dir !== '');
+  if (configured) {
+    return configured;
+  }
+  const dataHome = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+  return path.join(dataHome, 'bash-completion');
+}
+
 function completionTargets(home) {
+  const fishConfig = path.join(
+    process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+    'fish'
+  );
+
   return [
     {
       shell: 'bash',
-      // XDG user directory read by bash-completion v2.
-      dir: path.join(
-        process.env.BASH_COMPLETION_USER_DIR ||
-          path.join(
-            process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'),
-            'bash-completion'
-          ),
-        'completions'
-      ),
+      dir: path.join(bashCompletionUserDir(home), 'completions'),
       file: 'icp'
     },
     {
       shell: 'fish',
-      dir: path.join(
-        process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
-        'fish',
-        'completions'
-      ),
+      dir: path.join(fishConfig, 'completions'),
       file: 'icp.fish',
       // Only if fish is actually configured; fish creates this itself otherwise.
-      requires: path.join(
-        process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
-        'fish'
-      )
+      requires: fishConfig
     },
     {
       shell: 'zsh',

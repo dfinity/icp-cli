@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+# v1.3.0
+
 * feat: a canister environment variable's value can now be read from a file, by writing `var: { path: <file> }` in place of `var: value`. The path resolves against the canister's directory — including in an environment override, matching `init_args` — and surrounding whitespace is trimmed off the file's contents. The file is read when the project is loaded, so a missing file fails before anything is deployed. `icp project bundle` writes the value into the bundled manifest inline, rejecting a file outside the project as it does for other manifest file references.
 * fix: `icp network start` now explains why a Docker-based network failed to come up. A container that exited before the network was ready was reported as `failed to watch docker container <id> for exit` with an empty cause, discarding the actual reason (e.g. the gateway port already being taken); the container's output is now attached to the error.
 * feat: Docker-based networks now show the launcher's output like non-containerized ones do. In the foreground the container's stdout and stderr are streamed to your terminal as it runs; in background mode `icp network start` prints the `docker logs -f <container-id>` command to follow it. Previously container output was never shown at all — which on Windows, where the launcher always runs in a container, meant `icp network start` was silent.

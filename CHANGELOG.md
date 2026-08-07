@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* feat: `icp completions <SHELL>` prints a shell completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish` to stdout. See the [installation guide](docs/guides/installation.md#shell-completions) for where to put it.
+
 # v1.3.0
 
 * feat: a canister environment variable's value can now be read from a file, by writing `var: { path: <file> }` in place of `var: value`. The path resolves against the canister's directory — including in an environment override, matching `init_args` — and surrounding whitespace is trimmed off the file's contents. The file is read when the project is loaded, so a missing file fails before anything is deployed. `icp project bundle` writes the value into the bundled manifest inline, rejecting a file outside the project as it does for other manifest file references.

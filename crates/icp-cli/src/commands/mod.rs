@@ -3,6 +3,7 @@ use clap::Subcommand;
 pub(crate) mod args;
 pub(crate) mod build;
 pub(crate) mod canister;
+pub(crate) mod completions;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
@@ -21,6 +22,7 @@ pub(crate) enum Command {
     Build(build::BuildArgs),
     #[command(subcommand)]
     Canister(canister::Command),
+    Completions(completions::CompletionsArgs),
     #[command(subcommand)]
     Cycles(cycles::Command),
     Deploy(deploy::DeployArgs),

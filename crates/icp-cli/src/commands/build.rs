@@ -22,7 +22,7 @@ pub(crate) struct BuildArgs {
 arg_struct_change_help!(
     EnvironmentOpt => BuildEnvironmentOpt,
     arg = "environment",
-    help = "Override the environment to build for. By default, the local environment is used."
+    help = "Override the environment to build for. By default, the local environment is used"
 );
 
 pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::Error> {

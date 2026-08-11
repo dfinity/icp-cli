@@ -73,7 +73,7 @@ build:
 Scripts have access to:
 
 - `ICP_WASM_OUTPUT_PATH` — Where to place the final WASM
-- `ICP_CLI_ENVIRONMENT` — The environment being built for (e.g. `local`, `staging`)
+- `ICP_CLI_ENVIRONMENT` — The environment being built for (e.g. `local`, `staging`) (note that this is permitted to be different from the env it's installed to, with a manual `icp canister install`) 
 
 Scripts run with the canister directory as the current working directory.
 

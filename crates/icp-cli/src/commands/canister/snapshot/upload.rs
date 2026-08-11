@@ -2,7 +2,7 @@ use std::io::stdout;
 
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
-use clap::Args;
+use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 use serde::Serialize;
@@ -24,7 +24,7 @@ pub(crate) struct UploadArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// Input directory containing the snapshot files
-    #[arg(long, short = 'i')]
+    #[arg(long, short = 'i', value_hint = ValueHint::FilePath)]
     input: PathBuf,
 
     /// Replace an existing snapshot instead of creating a new one

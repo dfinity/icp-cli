@@ -2,7 +2,7 @@ use std::io::stdout;
 
 use anyhow::Context as _;
 use bip39::{Language, Mnemonic, MnemonicType};
-use clap::Args;
+use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::{
@@ -32,11 +32,11 @@ pub(crate) struct NewArgs {
     storage: StorageMode,
 
     /// Read the storage password from a file instead of prompting (for --storage password)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     storage_password_file: Option<PathBuf>,
 
     /// Write the seed phrase to a file instead of printing to stdout
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::AnyPath)]
     output_seed: Option<PathBuf>,
 
     /// Output command results as JSON

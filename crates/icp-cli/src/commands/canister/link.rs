@@ -1,6 +1,7 @@
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::context::{Context, EnvironmentSelection};
 use tracing::info;
 
@@ -15,6 +16,7 @@ use crate::options::EnvironmentOpt;
 pub(crate) struct LinkArgs {
     /// Name of the project canister to associate the ID with.
     /// Must be declared in the target environment.
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) name: String,
 
     /// Principal of the existing canister to link.

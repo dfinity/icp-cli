@@ -144,7 +144,7 @@ mkdir -p ~/.local/share/bash-completion/completions
 icp completions bash > ~/.local/share/bash-completion/completions/icp
 ```
 
-Restart your shell afterwards, and regenerate the script after upgrading `icp` so completions cover newly added commands and flags.
+Restart your shell afterwards. Regenerate the script if you move the `icp` binary.
 
 ## Troubleshooting
 

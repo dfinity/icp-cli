@@ -1,4 +1,4 @@
-use clap::Args;
+use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::{context::Context, fs::read_to_string, identity::key, prelude::*};
@@ -23,7 +23,7 @@ pub(crate) struct RequestArgs {
     storage: StorageMode,
 
     /// Read the storage password from a file instead of prompting (for --storage password)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     storage_password_file: Option<PathBuf>,
 }
 

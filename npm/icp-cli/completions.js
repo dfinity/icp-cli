@@ -4,6 +4,10 @@
  * Only directories that a shell reads on its own are written to; hooking up a
  * shell that needs a profile edit is left to the user, who can generate the
  * script with `icp completions <shell>`.
+ *
+ * The generated script does not list commands and flags itself — it loads a
+ * hook from the binary, which then answers as the user types. The binary is
+ * named by path, so these files are rewritten on every install to follow it.
  */
 
 const fs = require('fs');
@@ -78,6 +82,7 @@ function generate(binaryPath, shell) {
   }
   return result.stdout;
 }
+
 
 /**
  * Install completion scripts for the shells that can pick them up automatically.

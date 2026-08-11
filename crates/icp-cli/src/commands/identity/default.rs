@@ -1,4 +1,5 @@
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::context::Context;
 use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use tracing::info;
@@ -7,6 +8,7 @@ use tracing::info;
 #[derive(Debug, Args)]
 pub(crate) struct DefaultArgs {
     /// Identity to set as default. If omitted, prints the current default.
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     name: Option<String>,
 }
 

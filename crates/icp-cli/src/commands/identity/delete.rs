@@ -1,4 +1,5 @@
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::context::Context;
 use icp::identity::key::delete_identity;
 use tracing::info;
@@ -7,6 +8,7 @@ use tracing::info;
 #[derive(Debug, Args)]
 pub(crate) struct DeleteArgs {
     /// Name of the identity to delete
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     name: String,
 }
 

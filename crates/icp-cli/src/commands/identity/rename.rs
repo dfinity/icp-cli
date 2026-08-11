@@ -1,4 +1,5 @@
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::context::Context;
 use icp::identity::key::rename_identity;
 use tracing::info;
@@ -7,6 +8,7 @@ use tracing::info;
 #[derive(Debug, Args)]
 pub(crate) struct RenameArgs {
     /// Current name of the identity
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     old_name: String,
 
     /// New name for the identity

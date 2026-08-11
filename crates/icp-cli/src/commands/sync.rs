@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
 use icp::context::{CanisterSelection, Context, EnvironmentSelection};
@@ -17,6 +18,7 @@ use crate::{
 #[derive(Debug, Args)]
 pub(crate) struct SyncArgs {
     /// Canister names (if empty, sync all canisters in environment)
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) canisters: Vec<String>,
 
     /// Principal of a proxy canister to route sync plugin calls to the target canister through.

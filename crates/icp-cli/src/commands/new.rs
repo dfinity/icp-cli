@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs, generate};
-use clap::Args;
+use clap::{Args, ValueHint};
 use tracing::debug;
 
 mod heading {
@@ -72,12 +72,12 @@ pub struct IcpGenerateArgs {
 
     /// Use a different ssh identity
     #[allow(clippy::disallowed_types)]
-    #[arg(short = 'i', long = "identity", value_parser, value_name="IDENTITY", help_heading = heading::GIT_PARAMETERS)]
+    #[arg(short = 'i', long = "identity", value_parser, value_name="IDENTITY", help_heading = heading::GIT_PARAMETERS, value_hint = ValueHint::FilePath)]
     pub ssh_identity: Option<PathBuf>,
 
     /// Use a different gitconfig file, if omitted the usual $HOME/.gitconfig will be used
     #[allow(clippy::disallowed_types)]
-    #[arg(long = "gitconfig", value_parser, value_name="GITCONFIG_FILE", help_heading = heading::GIT_PARAMETERS)]
+    #[arg(long = "gitconfig", value_parser, value_name="GITCONFIG_FILE", help_heading = heading::GIT_PARAMETERS, value_hint = ValueHint::FilePath)]
     pub gitconfig: Option<PathBuf>,
 
     /// Set a template variable in KEY=VALUE format (e.g. --define project_name=my-app).
@@ -93,7 +93,7 @@ pub struct IcpGenerateArgs {
 
     /// Generate the template directly at the given path.
     #[allow(clippy::disallowed_types)]
-    #[arg(long, value_parser, value_name="PATH", help_heading = heading::OUTPUT_PARAMETERS)]
+    #[arg(long, value_parser, value_name="PATH", help_heading = heading::OUTPUT_PARAMETERS, value_hint = ValueHint::DirPath)]
     pub destination: Option<PathBuf>,
 
     /// Will enforce a fresh git init on the generated project

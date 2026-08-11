@@ -810,8 +810,6 @@ Generate a shell completion script
 
 The script is written to stdout. Save it where your shell loads completions from, or source it from your shell profile.
 
-Completion is dynamic: rather than listing this version's commands and flags, the script asks `icp` what to offer as you type, so it also covers the canisters, networks and environments of the project you are standing in, and the identities in your identity store.
-
 **Usage:** `icp completions <SHELL>`
 
 Examples:

@@ -194,6 +194,9 @@ async fn fetch_and_display_logs(
                     .collect(),
             },
         )?;
+        // Unlike the other `--json` sites in this module, terminate the document with a
+        // newline: it is the entirety of stdout, so without it the shell prompt lands
+        // mid-line. Covered by `canister_logs_single_fetch`.
         writeln!(out)?;
     } else {
         println!(

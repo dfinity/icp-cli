@@ -6,7 +6,12 @@ use serde::Deserialize;
 use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
-use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
+use tokio::{
+    process::Child,
+    select,
+    sync::mpsc::{Receiver, Sender},
+    time::Instant,
+};
 use tracing::{info, warn};
 
 use crate::{
@@ -343,11 +348,11 @@ pub fn wait_for_single_line_file(
 ) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
     let dir = path.parent().unwrap();
     // notify will get here faster
-    let (rec_tx, mut rec_rx) = tokio::sync::mpsc::channel(10);
+    let (rec_tx, rec_rx) = tokio::sync::mpsc::channel(10);
     let mut rec_watcher =
         notify::recommended_watcher(WatchRecv(rec_tx)).context(WatchSnafu { path: &dir })?;
     // poll is more reliable when dealing with vfs like 9p, notably in WSL2
-    let (poll_tx, mut poll_rx) = tokio::sync::mpsc::channel(10);
+    let (poll_tx, poll_rx) = tokio::sync::mpsc::channel(10);
     let mut poll_watcher = notify::PollWatcher::new(
         WatchRecv(poll_tx),
         notify::Config::default()
@@ -364,14 +369,15 @@ pub fn wait_for_single_line_file(
     _ = poll_watcher.poll();
     let path = path.to_path_buf();
     let dir = dir.to_path_buf();
+    let mut session = WatchSession {
+        rec_rx,
+        poll_rx,
+        _rec_watcher: rec_watcher,
+        _poll_watcher: poll_watcher,
+    };
     Ok(async move {
-        let _rec_watcher = rec_watcher;
-        let _poll_watcher = poll_watcher;
         loop {
-            let evt = select! {
-                rec = rec_rx.recv() => rec,
-                poll = poll_rx.recv() => poll,
-            };
+            let evt = session.next_event().await;
             let Some(res) = evt else {
                 unreachable!("watcher dropped while waiting for file");
             };
@@ -436,6 +442,32 @@ pub struct LauncherStatus {
 
 pub const CUSTOM_DOMAINS_FEATURE: &str = "custom-domains";
 
+/// Keeps each watcher together with its receiver, relying on struct fields being dropped in
+/// declaration order so the receivers always go first.
+///
+/// Both watchers hand events over with [`Sender::blocking_send`], and both stop by waiting for
+/// their callback thread to go idle - the FSEvents backend does so by busy-waiting. A callback
+/// parked on a full channel would therefore make that wait spin forever; closing the channels
+/// first releases it. Grouping the four into one value keeps that order whether the future is
+/// dropped part-way through or before it is ever polled.
+struct WatchSession {
+    rec_rx: Receiver<notify::Result<notify::Event>>,
+    poll_rx: Receiver<notify::Result<notify::Event>>,
+    _rec_watcher: notify::RecommendedWatcher,
+    _poll_watcher: notify::PollWatcher,
+}
+
+impl WatchSession {
+    /// Takes `&mut self` rather than the receivers, so that awaiting this keeps the whole session
+    /// - watchers included - alive.
+    async fn next_event(&mut self) -> Option<notify::Result<notify::Event>> {
+        select! {
+            rec = self.rec_rx.recv() => rec,
+            poll = self.poll_rx.recv() => poll,
+        }
+    }
+}
+
 struct WatchRecv(Sender<notify::Result<notify::Event>>);
 
 impl EventHandler for WatchRecv {
@@ -447,6 +479,52 @@ impl EventHandler for WatchRecv {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn resolves_once_the_file_has_a_full_line() {
+        let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+        let file = dir.path().join("status.json");
+        let fut = wait_for_single_line_file(&file).unwrap();
+
+        std::thread::spawn({
+            let file = file.clone();
+            move || {
+                std::thread::sleep(Duration::from_millis(200));
+                std::fs::write(&file, b"partial").unwrap();
+                std::thread::sleep(Duration::from_millis(200));
+                std::fs::write(&file, b"complete\n").unwrap();
+            }
+        });
+
+        let content = tokio::time::timeout(Duration::from_secs(20), fut)
+            .await
+            .expect("timed out waiting for the file")
+            .unwrap();
+        assert_eq!(content, "complete\n");
+    }
+
+    /// Saturates the channels without ever polling the future, then drops it. If the receivers
+    /// were not dropped ahead of the watchers, the callback thread would still be parked in
+    /// `blocking_send` and the watchers' shutdown would never finish.
+    #[test]
+    fn dropping_an_unpolled_watcher_does_not_wedge() {
+        let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+        let dir = dir.path().to_path_buf();
+        let fut = wait_for_single_line_file(&dir.join("status.json")).unwrap();
+
+        for i in 0..500 {
+            std::fs::write(dir.join(format!("churn{i}")), b"x").unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(1500));
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            drop(fut);
+            let _ = tx.send(());
+        });
+        rx.recv_timeout(Duration::from_secs(20))
+            .expect("dropping the future wedged");
+    }
 
     #[test]
     fn output_tail_keeps_short_content_verbatim() {

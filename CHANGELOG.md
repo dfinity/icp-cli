@@ -8,6 +8,7 @@ bump. Currently experimental: project bundling, project dependencies
 # Unreleased
 
 * fix: `icp canister logs` no longer has its output formats swapped. `--json` emitted the human-readable lines and the default emitted JSON; now `--json` emits machine-readable JSON (terminated by a newline) and the default emits the human-readable lines. `--follow` was already correct and is unchanged. Scripts that relied on the inverted behavior — parsing the default output as JSON, or omitting `--json` to get JSON — must now pass `--json`.
+* fix: `icp canister logs --follow --json` now emits newline-delimited JSON (one record per line) and each record reaches stdout as it arrives. Previously the records were concatenated with no separator (`{...}{...}`) and, with no newline ever written, stayed in the line-buffered stdout buffer — so a live tail produced no output until the buffer filled or the process ended. Anything parsing the old concatenated output must now read one JSON object per line.
 
 # v1.3.0
 

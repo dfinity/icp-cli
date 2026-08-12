@@ -205,6 +205,106 @@ async fn canister_logs_follow_mode() {
 
 #[cfg(unix)] // moc
 #[tokio::test]
+async fn canister_logs_follow_mode_json() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    // Copy the logger canister assets
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Deploy canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "logger", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Trigger repeated logging (will log 5 times over 5 seconds)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "logger",
+            "log_repeated",
+            "(\"Repeated\")",
+        ])
+        .assert()
+        .success();
+
+    // Follow with --json until the timeout kills the process. Because the process is
+    // killed rather than exiting normally, nothing buffered in stdout is flushed on the
+    // way out: any output we observe here must have been flushed as the records arrived.
+    let stdout = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .timeout(Duration::from_secs(7))
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--follow",
+            "--json",
+            "--interval",
+            "1",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure() // Will timeout/be interrupted
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(stdout).expect("stdout is not valid UTF-8");
+
+    // Newline-delimited JSON: every line is one complete, parseable record.
+    let mut contents = Vec::new();
+    for line in stdout.lines() {
+        let record: serde_json::Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("--follow --json line {line:?} is not valid JSON: {e}"));
+        assert!(record["timestamp"].is_u64());
+        assert!(record["index"].is_u64());
+        contents.push(
+            record["content"]
+                .as_str()
+                .expect("--follow --json record should contain a content string")
+                .to_string(),
+        );
+    }
+
+    for i in 1..=5 {
+        let message = format!("{i} Repeated");
+        assert!(
+            contents.iter().any(|c| c.contains(&message)),
+            "--follow --json output should contain {message:?}, got {contents:?}"
+        );
+    }
+}
+
+#[cfg(unix)] // moc
+#[tokio::test]
 async fn canister_logs_filter_by_index() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("canister_logs");

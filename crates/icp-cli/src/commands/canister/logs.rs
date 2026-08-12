@@ -194,9 +194,8 @@ async fn fetch_and_display_logs(
                     .collect(),
             },
         )?;
-        // Unlike the other `--json` sites in this module, terminate the document with a
-        // newline: it is the entirety of stdout, so without it the shell prompt lands
-        // mid-line. Covered by `canister_logs_single_fetch`.
+        // Terminate the document with a newline: it is the entirety of stdout, so without
+        // it the shell prompt lands mid-line. Covered by `canister_logs_single_fetch`.
         writeln!(out)?;
     } else {
         println!(
@@ -256,14 +255,20 @@ async fn follow_logs(
         if !new_logs.is_empty() {
             for log in &new_logs {
                 if args.json {
+                    let mut out = stdout().lock();
                     serde_json::to_writer(
-                        stdout(),
+                        &mut out,
                         &JsonFollowRecord {
                             timestamp: log.timestamp_nanos,
                             index: log.idx,
                             content: String::from_utf8_lossy(&log.content).into_owned(),
                         },
                     )?;
+                    // Emit newline-delimited JSON: the newline both separates records for
+                    // incremental consumers and, because Rust's stdout is a `LineWriter`
+                    // regardless of whether it is a terminal, flushes the record so that
+                    // `--follow` actually streams. Covered by `canister_logs_follow_mode_json`.
+                    writeln!(out)?;
                 } else {
                     println!("{}", format_log(log));
                 }

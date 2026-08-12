@@ -5,6 +5,8 @@ use {
     indoc::formatdoc,
     predicates::prelude::PredicateBooleanExt,
     predicates::str::contains,
+    std::io::{BufRead as _, BufReader},
+    std::process::Stdio,
     std::time::Duration,
 };
 
@@ -299,6 +301,112 @@ async fn canister_logs_follow_mode_json() {
         assert!(
             contents.iter().any(|c| c.contains(&message)),
             "--follow --json output should contain {message:?}, got {contents:?}"
+        );
+    }
+}
+
+/// A consumer that stops reading — `icp canister logs --follow | head -1` — must not make
+/// the command report a broken pipe. Runs both output modes: `--json` writes far more often
+/// now that it streams, so it reaches the closed pipe first, but the human-readable path
+/// closes over exactly the same write.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_logs_follow_broken_pipe() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    // Copy the logger canister assets
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    // Project manifest
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Deploy canister
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "logger", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    let log = |message: &str| {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                "call",
+                "--environment",
+                "random-environment",
+                "logger",
+                "log",
+                &format!("(\"{message}\")"),
+            ])
+            .assert()
+            .success();
+    };
+
+    for json in [true, false] {
+        // One log exists before the follow starts, so the first poll has exactly one record
+        // to emit and we are not racing the canister for it.
+        log(&format!("Before follow {json}"));
+
+        let mut args = vec![
+            "canister",
+            "logs",
+            "logger",
+            "--follow",
+            "--interval",
+            "1",
+            "--environment",
+            "random-environment",
+        ];
+        if json {
+            args.push("--json");
+        }
+        let mut child = ctx
+            .icp_std()
+            .current_dir(&project_dir)
+            .args(&args)
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("failed to spawn icp canister logs --follow");
+
+        // Read one record, then close the read end of the pipe, exactly as `head -1` does.
+        let mut reader = BufReader::new(child.stdout.take().expect("stdout is piped"));
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .expect("failed to read the first record");
+        assert!(
+            !line.is_empty(),
+            "expected a first record before the pipe closed"
+        );
+        drop(reader);
+
+        // Produce another record so the next poll must write to the now-closed pipe. Without
+        // this the loop could idle forever and never notice the pipe is gone.
+        log(&format!("After close {json}"));
+
+        let status = child.wait().expect("failed to wait for icp canister logs");
+        assert!(
+            status.success(),
+            "a closed stdout pipe should end `--follow` quietly (json: {json}), got {status}"
         );
     }
 }

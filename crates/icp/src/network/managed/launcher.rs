@@ -353,28 +353,32 @@ pub fn wait_for_single_line_file(
         notify::recommended_watcher(WatchRecv(rec_tx)).context(WatchSnafu { path: &dir })?;
     // poll is more reliable when dealing with vfs like 9p, notably in WSL2
     let (poll_tx, poll_rx) = tokio::sync::mpsc::channel(10);
-    let mut poll_watcher = notify::PollWatcher::new(
+    let poll_watcher = notify::PollWatcher::new(
         WatchRecv(poll_tx),
         notify::Config::default()
             .with_poll_interval(Duration::from_millis(100))
             .with_compare_contents(true),
     )
     .context(WatchSnafu { path: &dir })?;
-    rec_watcher
-        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
-        .context(WatchSnafu { path: &dir })?;
-    poll_watcher
-        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
-        .context(WatchSnafu { path: &dir })?;
-    _ = poll_watcher.poll();
-    let path = path.to_path_buf();
-    let dir = dir.to_path_buf();
+    // Assembled before either watcher is registered, so that every exit from here on unwinds
+    // through the session's field order rather than these locals'.
     let mut session = WatchSession {
         rec_rx,
         poll_rx,
-        _rec_watcher: rec_watcher,
-        _poll_watcher: poll_watcher,
+        rec_watcher,
+        poll_watcher,
     };
+    session
+        .rec_watcher
+        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
+        .context(WatchSnafu { path: &dir })?;
+    session
+        .poll_watcher
+        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
+        .context(WatchSnafu { path: &dir })?;
+    _ = session.poll_watcher.poll();
+    let path = path.to_path_buf();
+    let dir = dir.to_path_buf();
     Ok(async move {
         loop {
             let evt = session.next_event().await;
@@ -453,8 +457,8 @@ pub const CUSTOM_DOMAINS_FEATURE: &str = "custom-domains";
 struct WatchSession {
     rec_rx: Receiver<notify::Result<notify::Event>>,
     poll_rx: Receiver<notify::Result<notify::Event>>,
-    _rec_watcher: notify::RecommendedWatcher,
-    _poll_watcher: notify::PollWatcher,
+    rec_watcher: notify::RecommendedWatcher,
+    poll_watcher: notify::PollWatcher,
 }
 
 impl WatchSession {

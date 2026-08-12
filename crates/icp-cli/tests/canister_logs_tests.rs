@@ -130,6 +130,10 @@ async fn canister_logs_single_fetch() {
     }
 }
 
+/// Every `--follow` behaviour, in one network start and one `moc` deploy: each phase would
+/// otherwise pay for its own, which dominates the wall clock. Covers (1) polling for logs
+/// that do not exist yet, (2) `--json` streaming newline-delimited records as they arrive,
+/// and (3) a consumer that stops reading ending the command quietly.
 #[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_logs_follow_mode() {
@@ -166,186 +170,7 @@ async fn canister_logs_follow_mode() {
         .assert()
         .success();
 
-    // Trigger repeated logging (will log 5 times over 5 seconds)
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "call",
-            "--environment",
-            "random-environment",
-            "logger",
-            "log_repeated",
-            "(\"Repeated\")",
-        ])
-        .assert()
-        .success();
-
-    // Start following logs with a timeout of 7 seconds (enough to see several logs)
-    // The logs are not present yet, so if e.g. "5 Repeated" is present in stdout after the timeout, then we correctly polled for new logs
-    ctx.icp()
-        .current_dir(&project_dir)
-        .timeout(Duration::from_secs(7))
-        .args([
-            "canister",
-            "logs",
-            "logger",
-            "--follow",
-            "--interval",
-            "1",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .failure() // Will timeout/be interrupted
-        .stdout(contains("1 Repeated"))
-        .stdout(contains("2 Repeated"))
-        .stdout(contains("3 Repeated"))
-        .stdout(contains("4 Repeated"))
-        .stdout(contains("5 Repeated"));
-}
-
-#[cfg(unix)] // moc
-#[tokio::test]
-async fn canister_logs_follow_mode_json() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("canister_logs");
-
-    // Copy the logger canister assets
-    ctx.copy_asset_dir("canister_logs", &project_dir);
-
-    // Project manifest
-    let pm = formatdoc! {r#"
-        canisters:
-          - name: logger
-            recipe:
-              type: "@dfinity/motoko@v4.0.0"
-              configuration:
-                main: main.mo
-                args: ""
-
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
-    "#};
-
-    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network").await;
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    // Deploy canister
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["deploy", "logger", "--environment", "random-environment"])
-        .assert()
-        .success();
-
-    // Trigger repeated logging (will log 5 times over 5 seconds)
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "call",
-            "--environment",
-            "random-environment",
-            "logger",
-            "log_repeated",
-            "(\"Repeated\")",
-        ])
-        .assert()
-        .success();
-
-    // Follow with --json until the timeout kills the process. Because the process is
-    // killed rather than exiting normally, nothing buffered in stdout is flushed on the
-    // way out: any output we observe here must have been flushed as the records arrived.
-    let stdout = ctx
-        .icp()
-        .current_dir(&project_dir)
-        .timeout(Duration::from_secs(7))
-        .args([
-            "canister",
-            "logs",
-            "logger",
-            "--follow",
-            "--json",
-            "--interval",
-            "1",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .failure() // Will timeout/be interrupted
-        .get_output()
-        .stdout
-        .clone();
-    let stdout = String::from_utf8(stdout).expect("stdout is not valid UTF-8");
-
-    // Newline-delimited JSON: every line is one complete, parseable record.
-    let mut contents = Vec::new();
-    for line in stdout.lines() {
-        let record: serde_json::Value = serde_json::from_str(line)
-            .unwrap_or_else(|e| panic!("--follow --json line {line:?} is not valid JSON: {e}"));
-        assert!(record["timestamp"].is_u64());
-        assert!(record["index"].is_u64());
-        contents.push(
-            record["content"]
-                .as_str()
-                .expect("--follow --json record should contain a content string")
-                .to_string(),
-        );
-    }
-
-    for i in 1..=5 {
-        let message = format!("{i} Repeated");
-        assert!(
-            contents.iter().any(|c| c.contains(&message)),
-            "--follow --json output should contain {message:?}, got {contents:?}"
-        );
-    }
-}
-
-/// A consumer that stops reading — `icp canister logs --follow | head -1` — must not make
-/// the command report a broken pipe. Runs both output modes: `--json` writes far more often
-/// now that it streams, so it reaches the closed pipe first, but the human-readable path
-/// closes over exactly the same write.
-#[cfg(unix)] // moc
-#[tokio::test]
-async fn canister_logs_follow_broken_pipe() {
-    let ctx = TestContext::new();
-    let project_dir = ctx.create_project_dir("canister_logs");
-
-    // Copy the logger canister assets
-    ctx.copy_asset_dir("canister_logs", &project_dir);
-
-    // Project manifest
-    let pm = formatdoc! {r#"
-        canisters:
-          - name: logger
-            recipe:
-              type: "@dfinity/motoko@v4.0.0"
-              configuration:
-                main: main.mo
-                args: ""
-
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
-    "#};
-
-    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
-
-    // Start network
-    let _g = ctx.start_network_in(&project_dir, "random-network").await;
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    // Deploy canister
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["deploy", "logger", "--environment", "random-environment"])
-        .assert()
-        .success();
-
-    let log = |message: &str| {
+    let call = |method: &str, message: &str| {
         ctx.icp()
             .current_dir(&project_dir)
             .args([
@@ -354,18 +179,13 @@ async fn canister_logs_follow_broken_pipe() {
                 "--environment",
                 "random-environment",
                 "logger",
-                "log",
+                method,
                 &format!("(\"{message}\")"),
             ])
             .assert()
             .success();
     };
-
-    for json in [true, false] {
-        // One log exists before the follow starts, so the first poll has exactly one record
-        // to emit and we are not racing the canister for it.
-        log(&format!("Before follow {json}"));
-
+    let follow_args = |json: bool| {
         let mut args = vec![
             "canister",
             "logs",
@@ -379,10 +199,72 @@ async fn canister_logs_follow_broken_pipe() {
         if json {
             args.push("--json");
         }
+        args
+    };
+
+    // Phase 1: the human-readable output polls for new logs. `log_repeated` returns
+    // immediately and logs 5 times over 5 seconds from a recurring timer, so none of these
+    // records exist when the follow starts — seeing "5 Repeated" within the 7s window means
+    // we really polled rather than replaying the 1-hour lookback.
+    call("log_repeated", "Repeated");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .timeout(Duration::from_secs(7))
+        .args(follow_args(false))
+        .assert()
+        .failure() // Will timeout/be interrupted
+        .stdout(contains("1 Repeated"))
+        .stdout(contains("2 Repeated"))
+        .stdout(contains("3 Repeated"))
+        .stdout(contains("4 Repeated"))
+        .stdout(contains("5 Repeated"));
+
+    // Phase 2: `--json` streams newline-delimited records. Same fresh-logs setup, and
+    // because the timeout SIGKILLs the process rather than letting it exit, nothing buffered
+    // in stdout is flushed on the way out: any output we observe must have been flushed as
+    // the records arrived. Parsing each line on its own also pins the delimiting, since
+    // `serde_json::from_str` rejects the trailing content of a concatenated `{...}{...}`.
+    call("log_repeated", "Streamed");
+    let stdout = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .timeout(Duration::from_secs(7))
+        .args(follow_args(true))
+        .assert()
+        .failure() // Will timeout/be interrupted
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(stdout).expect("stdout is not valid UTF-8");
+    let mut contents = Vec::new();
+    for line in stdout.lines() {
+        let record: serde_json::Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("--follow --json line {line:?} is not valid JSON: {e}"));
+        assert!(record["timestamp"].is_u64());
+        assert!(record["index"].is_u64());
+        contents.push(
+            record["content"]
+                .as_str()
+                .expect("--follow --json record should contain a content string")
+                .to_string(),
+        );
+    }
+    for i in 1..=5 {
+        let message = format!("{i} Streamed");
+        assert!(
+            contents.iter().any(|c| c.contains(&message)),
+            "--follow --json output should contain {message:?}, got {contents:?}"
+        );
+    }
+
+    // Phase 3: a consumer that stops reading — `icp canister logs --follow | head -1` — must
+    // not make the command report a broken pipe. `--json` writes far more often now that it
+    // streams, so it reaches the closed pipe first, but both modes share the same write.
+    for json in [true, false] {
         let mut child = ctx
             .icp_std()
             .current_dir(&project_dir)
-            .args(&args)
+            .args(follow_args(json))
             .stdout(Stdio::piped())
             .spawn()
             .expect("failed to spawn icp canister logs --follow");
@@ -395,13 +277,14 @@ async fn canister_logs_follow_broken_pipe() {
             .expect("failed to read the first record");
         assert!(
             !line.is_empty(),
-            "expected a first record before the pipe closed"
+            "expected a first record before the pipe closed (json: {json})"
         );
         drop(reader);
 
-        // Produce another record so the next poll must write to the now-closed pipe. Without
-        // this the loop could idle forever and never notice the pipe is gone.
-        log(&format!("After close {json}"));
+        // Produce another record so the next poll must write to the now-closed pipe. The
+        // earlier phases left plenty for the first poll to emit, but this makes the write
+        // independent of how much the lookback happens to return.
+        call("log", &format!("After close {json}"));
 
         let status = child.wait().expect("failed to wait for icp canister logs");
         assert!(

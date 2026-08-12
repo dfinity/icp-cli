@@ -74,7 +74,8 @@ async fn canister_logs_single_fetch() {
         .assert()
         .success();
 
-    // Fetch logs
+    // Fetch logs: the default emits the human-readable "[idx. timestamp]: content" lines,
+    // not JSON. (Regression: this orientation was once swapped with `--json`.)
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -86,8 +87,45 @@ async fn canister_logs_single_fetch() {
         ])
         .assert()
         .success()
-        .stdout(contains("Test message 1"))
-        .stdout(contains("Test message 2"));
+        .stdout(contains("]: Test message 1"))
+        .stdout(contains("]: Test message 2"))
+        .stdout(contains("log_records").not());
+
+    // With --json: parseable JSON in the JsonListRecord shape, terminated by a newline.
+    let json_stdout = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let json_stdout = String::from_utf8(json_stdout).expect("stdout is not valid UTF-8");
+    assert!(
+        json_stdout.ends_with('\n'),
+        "--json output should end with a newline, got {json_stdout:?}"
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(json_stdout.trim()).expect("--json output should be valid JSON");
+    let records = parsed["log_records"]
+        .as_array()
+        .expect("--json output should contain a log_records array");
+    for message in ["Test message 1", "Test message 2"] {
+        let record = records
+            .iter()
+            .find(|r| r["content"].as_str() == Some(message))
+            .unwrap_or_else(|| panic!("--json output should contain {message:?}"));
+        assert!(record["timestamp"].is_u64());
+        assert!(record["index"].is_u64());
+    }
 }
 
 #[cfg(unix)] // moc

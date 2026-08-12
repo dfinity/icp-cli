@@ -90,6 +90,104 @@ async fn canister_logs_single_fetch() {
         .stdout(contains("Test message 2"));
 }
 
+/// Regression test: `--json` must emit machine-readable JSON and the default must emit the
+/// human-readable formatted lines. These were once swapped.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn canister_logs_single_fetch_json_orientation() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("canister_logs");
+
+    ctx.copy_asset_dir("canister_logs", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: logger
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "logger", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "logger",
+            "log",
+            "(\"Orientation message\")",
+        ])
+        .assert()
+        .success();
+
+    // With --json: parseable JSON in the JsonListRecord shape, terminated by a newline.
+    let json_stdout = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let json_stdout = String::from_utf8(json_stdout).expect("stdout is not valid UTF-8");
+    assert!(
+        json_stdout.ends_with('\n'),
+        "--json output should end with a newline, got {json_stdout:?}"
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(json_stdout.trim()).expect("--json output should be valid JSON");
+    let records = parsed["log_records"]
+        .as_array()
+        .expect("--json output should contain a log_records array");
+    let record = records
+        .iter()
+        .find(|r| r["content"].as_str() == Some("Orientation message"))
+        .expect("--json output should contain the logged message");
+    assert!(record["timestamp"].is_u64());
+    assert!(record["index"].is_u64());
+
+    // Without --json: human-readable "[idx. timestamp]: content" lines, not JSON.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "logs",
+            "logger",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("]: Orientation message"))
+        .stdout(contains("log_records").not());
+}
+
 #[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_logs_follow_mode() {

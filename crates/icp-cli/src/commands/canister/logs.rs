@@ -1,4 +1,4 @@
-use std::io::stdout;
+use std::io::{Write as _, stdout};
 
 use anyhow::{Context as _, anyhow};
 use candid::Principal;
@@ -179,17 +179,9 @@ async fn fetch_and_display_logs(
         .context("Failed to fetch canister logs")?;
 
     if args.json {
-        println!(
-            "{}",
-            result
-                .canister_log_records
-                .iter()
-                .map(format_log)
-                .format("\n")
-        );
-    } else {
+        let mut out = stdout();
         serde_json::to_writer(
-            stdout(),
+            &mut out,
             &JsonListRecord {
                 log_records: result
                     .canister_log_records
@@ -202,6 +194,19 @@ async fn fetch_and_display_logs(
                     .collect(),
             },
         )?;
+        // Unlike the other `--json` sites in this module, terminate the document with a
+        // newline: it is the entirety of stdout, so without it the shell prompt lands
+        // mid-line. Covered by `canister_logs_single_fetch`.
+        writeln!(out)?;
+    } else {
+        println!(
+            "{}",
+            result
+                .canister_log_records
+                .iter()
+                .map(format_log)
+                .format("\n")
+        );
     }
 
     Ok(())

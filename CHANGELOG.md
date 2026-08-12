@@ -7,6 +7,8 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* fix: `icp canister logs` no longer has its output formats swapped. `--json` emitted the human-readable lines and the default emitted JSON; now `--json` emits machine-readable JSON (terminated by a newline) and the default emits the human-readable lines. `--follow` was already correct and is unchanged. Scripts that relied on the inverted behavior — parsing the default output as JSON, or omitting `--json` to get JSON — must now pass `--json`.
+
 # v1.3.0
 
 * feat: a canister environment variable's value can now be read from a file, by writing `var: { path: <file> }` in place of `var: value`. The path resolves against the canister's directory — including in an environment override, matching `init_args` — and surrounding whitespace is trimmed off the file's contents. The file is read when the project is loaded, so a missing file fails before anything is deployed. `icp project bundle` writes the value into the bundled manifest inline, rejecting a file outside the project as it does for other manifest file references.

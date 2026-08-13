@@ -29,6 +29,8 @@ build:
 
 The name of the environment being built for (e.g. `local`, `staging`, `production`). `icp build` and `icp deploy` take it from their `-e/--environment` argument, defaulting to `local`; `icp project bundle` takes it from its own `-e/--environment`, defaulting to `ic` because a bundle is built to be deployed elsewhere.
 
+The artifact a build produces is stored per canister, not per environment, so the most recent build wins. `icp build` and `icp deploy` always rebuild, but `icp canister install` without `--wasm` installs whatever is stored — including the `ic` build left behind by `icp project bundle` — regardless of its own `-e/--environment`.
+
 Sync scripts receive this variable as well.
 
 ## Sync Script Variables

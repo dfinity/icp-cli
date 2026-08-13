@@ -1,12 +1,14 @@
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::{context::Context, fs::read_to_string, identity::key, prelude::*};
+use icp::{fs::read_to_string, prelude::*};
 use pem::Pem;
 use snafu::{ResultExt, Snafu};
 use tracing::warn;
 
 use crate::commands::identity::StorageMode;
+use crate::context::Context;
+use crate::identity::key;
 
 /// Create a pending delegation identity with a new P256 session key
 ///
@@ -51,8 +53,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RequestArgs) -> Result<(), Reques
     };
 
     let der_public_key = ctx
-        .dirs
-        .identity()?
+        .identity_dirs()?
         .with_write(async |dirs| key::create_pending_delegation(dirs, &args.name, create_format))
         .await?
         .context(CreateSnafu)?;

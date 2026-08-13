@@ -1,13 +1,13 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use crate::identity::IdentitySelection;
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
 use ic_ledger_types::AccountIdentifier;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
 use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
 use icp::{InitArgs, fs};

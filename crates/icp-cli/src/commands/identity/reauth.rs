@@ -2,18 +2,17 @@ use std::time::Duration;
 
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::{
-    context::Context,
-    identity::{
-        key,
-        manifest::{IdentityList, IdentitySpec, PemFormat},
-    },
-    settings::Settings,
+use icp::settings::Settings;
+
+use crate::identity::{
+    key,
+    manifest::{IdentityList, IdentitySpec, PemFormat},
 };
 use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
 use crate::commands::identity::{delegation::sign::DurationArg, link::web};
+use crate::context::Context;
 
 /// Re-authenticate an Internet Identity delegation or create a PEM session delegation
 #[derive(Debug, Args)]
@@ -32,8 +31,7 @@ pub(crate) struct ReauthArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginError> {
     let spec = ctx
-        .dirs
-        .identity()?
+        .identity_dirs()?
         .with_read(async |dirs| {
             let list = IdentityList::load_from(dirs)?;
             list.identities
@@ -58,8 +56,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
 
             let password_func = ctx.password_func.clone();
             let der_public_key = ctx
-                .dirs
-                .identity()?
+                .identity_dirs()?
                 .with_read(async |dirs| {
                     key::load_webauth_session_public_key(
                         dirs,
@@ -79,8 +76,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
                     .await
                     .context(PollSnafu)?;
 
-            ctx.dirs
-                .identity()?
+            ctx.identity_dirs()?
                 .with_write(async |dirs| key::update_webauth_delegation(dirs, &args.name, &chain))
                 .await?
                 .context(UpdateDelegationSnafu)?;
@@ -109,8 +105,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
             };
 
             let password_func = ctx.password_func.clone();
-            ctx.dirs
-                .identity()?
+            ctx.identity_dirs()?
                 .with_write(async |dirs| {
                     key::create_explicit_pem_session(
                         dirs,
@@ -140,7 +135,7 @@ pub(crate) enum LoginError {
 
     #[snafu(transparent)]
     LoadManifest {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: crate::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(transparent)]

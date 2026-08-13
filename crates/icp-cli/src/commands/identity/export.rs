@@ -3,10 +3,11 @@ use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::context::Context;
 use icp::fs::read_to_string;
-use icp::identity::key::{ExportFormat, export_identity};
 use icp::prelude::*;
+
+use crate::context::Context;
+use crate::identity::key::{ExportFormat, export_identity};
 
 /// Print the PEM file for the identity
 #[derive(Debug, Args)]
@@ -29,7 +30,7 @@ pub(crate) struct ExportArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ExportArgs) -> Result<(), anyhow::Error> {
-    let dirs = ctx.dirs.identity()?;
+    let dirs = ctx.identity_dirs()?;
 
     // Read password if necessary
     let export_format = if args.encrypt {

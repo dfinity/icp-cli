@@ -1,17 +1,16 @@
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use icp::{
-    context::Context,
-    fs::json,
-    identity::{
-        delegation::DelegationChain,
-        key,
-        manifest::{DelegationKeyStorage, PemFormat},
-    },
-    prelude::*,
+use icp::{fs::json, prelude::*};
+
+use crate::identity::{
+    delegation::DelegationChain,
+    key,
+    manifest::{DelegationKeyStorage, PemFormat},
 };
 use snafu::{ResultExt, Snafu};
 use tracing::{info, warn};
+
+use crate::context::Context;
 
 /// Complete a pending delegation identity by providing a signed delegation chain
 ///
@@ -32,8 +31,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UseArgs) -> Result<(), UseError> 
     let chain: DelegationChain = json::load(&args.from_json)?;
 
     let storage = ctx
-        .dirs
-        .identity()?
+        .identity_dirs()?
         .with_write(async |dirs| key::complete_delegation(dirs, &args.name, &chain))
         .await?
         .context(CompleteSnafu)?;

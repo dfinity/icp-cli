@@ -9,28 +9,22 @@ publish.workspace = true
 async-dropper = { workspace = true }
 async-trait = { workspace = true }
 bigdecimal = { workspace = true }
-bip32 = { workspace = true }
 bollard = { workspace = true }
 camino = { workspace = true }
 camino-tempfile = { workspace = true }
 candid = { workspace = true }
-crypto-bigint = { workspace = true }
 candid_parser = { workspace = true }
 clap = { workspace = true, optional = true }
 directories = { workspace = true }
 dunce = { workspace = true }
 ed25519-consensus = { workspace = true }
-elliptic-curve = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
 handlebars = { workspace = true }
 hex = { workspace = true }
-hmac = { workspace = true }
 hybrid-array = { workspace = true }
 ic-agent = { workspace = true }
-ic-ed25519 = { workspace = true }
-ic-identity-hsm = { workspace = true }
 ic-ledger-types = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-utils = { workspace = true }
@@ -40,22 +34,14 @@ icrc-ledger-types = { workspace = true }
 indexmap = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
-k256 = { workspace = true }
-keyring = { workspace = true }
 notify = { workspace = true }
 num-bigint = { workspace = true }
 num-integer = { workspace = true }
 num-traits = { workspace = true }
-p256 = { workspace = true }
 pathdiff = { workspace = true }
-pem = { workspace = true }
-pkcs8 = { workspace = true }
-rand = { workspace = true }
 reqwest = { workspace = true }
 schemars = { workspace = true }
-scrypt = { workspace = true }
 semver = { workspace = true }
-sec1 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -66,7 +52,6 @@ strum = { workspace = true }
 sysinfo = { workspace = true }
 tar = { workspace = true }
 time = { workspace = true }
-tiny-bip39 = { workspace = true }
 # `io-std` is listed for `tokio::io::stdout`/`stderr`; feature unification with other
 # crates supplies it anyway, so dropping it would not fail the build. `rt-multi-thread`
 # is needed by `block_in_place` in `canister::sync::plugin` and arrives via the
@@ -76,7 +61,11 @@ tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 wslpath2 = { workspace = true }
-zeroize = { workspace = true }
+
+[features]
+# Exposes the in-crate port mocks (`Context::mocked`, `MockProjectLoader`, ...)
+# so downstream crates can test against the library's ports.
+mocks = []
 
 [target.'cfg(windows)'.dependencies]
 winreg = { workspace = true }

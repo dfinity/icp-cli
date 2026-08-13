@@ -4,10 +4,10 @@ use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, LoadCanisterSnapshotArgs,
 };
-use icp::context::Context;
 use tracing::info;
 
 use super::SnapshotId;
+use crate::context::Context;
 use crate::{commands::args, operations::proxy_management};
 
 /// Restore a canister from a snapshot

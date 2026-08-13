@@ -2,7 +2,6 @@ use anyhow::{Context as _, bail};
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Args;
-use icp::context::Context;
 use icp::parsers::CyclesAmount;
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
@@ -10,6 +9,7 @@ use icp_canister_interfaces::cycles_ledger::{
 use tracing::info;
 
 use crate::commands::args;
+use crate::context::Context;
 use crate::operations::token::TokenAmount;
 
 /// Top up a canister with cycles

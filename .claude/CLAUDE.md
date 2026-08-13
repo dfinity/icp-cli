@@ -20,15 +20,23 @@ cargo fmt && cargo clippy            # Run after changes pass tests
 
 ### Workspace Structure
 
-- **`crates/icp-cli`**: Main CLI binary (`icp`) with command implementations
-- **`crates/icp`**: Core library with project model, manifest loading, canister management, network configuration
+- **`crates/icp-cli`**: Main CLI binary (`icp`): the frontend/UX. Command implementations, identity
+  loading (`src/identity/`) and manifest parsing (`src/manifest.rs`, `src/project.rs`)
+- **`crates/icp`**: Core library with the project model, canister management and network
+  configuration. It works with an **agent**: the frontend loads identities and parses manifests and
+  hands the library the result through the ports on `Context`
 - **`crates/icp-canister-interfaces`**: Canister interface definitions for ICP system canisters
 - **`crates/icp-events`**: Progress and user-facing notices as data (`Event`, `Reporter`, `Task`, `EventSink`), so operations can report without depending on the terminal. serde + futures only
 - **`crates/schema-gen`**: JSON schema generation for manifest validation
 
 ### Command Structure
 
-Commands are in `crates/icp-cli/src/commands/`, each as a module with an `exec()` function receiving a `Context` (from `crates/icp/src/context/`). Dispatched via `clap` in `main.rs`. Traits like `ProjectLoad` and `ProjectRootLocate` enable dependency injection for testing.
+Commands are in `crates/icp-cli/src/commands/`, each as a module with an `exec()` function receiving
+a `Context` (from `crates/icp-cli/src/context/`, which wraps and derefs to the library's
+`icp::context::Context`). Dispatched via `clap` in `main.rs`. Traits like `ProjectLoad` and
+`ProjectRootLocate` are ports on the library context: the library declares them, the CLI implements
+the filesystem-backed versions, and mocks (behind the `icp` crate's `mocks` feature) stand in for
+them in tests.
 
 See `.claude/architecture.md` for detailed subsystem documentation (manifests, build adapters, recipes, networks, identity).
 

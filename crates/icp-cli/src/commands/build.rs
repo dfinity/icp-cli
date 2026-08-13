@@ -1,10 +1,11 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::EnvironmentSelection;
 
 use tracing::info;
 
+use crate::context::Context;
 use crate::{
     operations::build::build_many_with_progress_bar,
     options::{EnvironmentOpt, arg_struct_change_help},

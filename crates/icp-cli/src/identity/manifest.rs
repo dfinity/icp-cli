@@ -6,14 +6,16 @@ use snafu::{Snafu, ensure};
 use strum::{Display, EnumString};
 use url::Url;
 
-use crate::{
+use icp::{
     fs::{
         json,
         lock::{LRead, LWrite},
     },
-    identity::IdentityPaths,
     prelude::*,
+    telemetry_data::IdentityStorageType,
 };
+
+use crate::identity::IdentityPaths;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -177,6 +179,21 @@ impl IdentitySpec {
     }
 }
 
+/// How this identity is reported in telemetry.
+impl From<&IdentitySpec> for IdentityStorageType {
+    fn from(spec: &IdentitySpec) -> Self {
+        match spec {
+            IdentitySpec::Pem { .. } => Self::Pem,
+            IdentitySpec::Keyring { .. } => Self::Keyring,
+            IdentitySpec::Hsm { .. } => Self::Hsm,
+            IdentitySpec::Anonymous => Self::Anonymous,
+            IdentitySpec::WebAuth { .. } => Self::InternetIdentity,
+            IdentitySpec::PendingDelegation { .. } => Self::PendingDelegation,
+            IdentitySpec::Delegation { .. } => Self::Delegation,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PemFormat {
@@ -191,16 +208,15 @@ pub enum DelegationKeyStorage {
     Pem { format: PemFormat },
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display)]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[derive(Deserialize, Serialize, Clone, Debug, EnumString, Display, clap::ValueEnum)]
 pub enum IdentityKeyAlgorithm {
     #[serde(rename = "secp256k1", alias = "k256")]
     #[strum(serialize = "secp256k1", serialize = "k256")]
-    #[cfg_attr(feature = "clap", value(alias = "k256"))]
+    #[value(alias = "k256")]
     Secp256k1,
     #[serde(rename = "prime256v1", alias = "p256", alias = "secp256r1")]
     #[strum(serialize = "prime256v1", serialize = "p256", serialize = "secp256r1")]
-    #[cfg_attr(feature = "clap", value(alias = "p256", alias = "secp256r1"))]
+    #[value(alias = "p256", alias = "secp256r1")]
     Prime256v1,
     #[serde(rename = "ed25519")]
     #[strum(serialize = "ed25519")]
@@ -213,10 +229,10 @@ pub enum WriteIdentityManifestError {
     WriteJsonError { source: json::Error },
 
     #[snafu(transparent)]
-    CreateDirectoryError { source: crate::fs::IoError },
+    CreateDirectoryError { source: icp::fs::IoError },
 
     #[snafu(transparent)]
-    DirectoryLockError { source: crate::fs::lock::LockError },
+    DirectoryLockError { source: icp::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]
@@ -228,7 +244,7 @@ pub enum LoadIdentityManifestError {
     BadVersion { path: PathBuf },
 
     #[snafu(transparent)]
-    DirectoryLockError { source: crate::fs::lock::LockError },
+    DirectoryLockError { source: icp::fs::lock::LockError },
 }
 
 #[derive(Debug, Snafu)]

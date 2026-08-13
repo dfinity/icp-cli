@@ -1,13 +1,14 @@
 use anyhow::bail;
 use clap::Args;
 use ic_agent::{Agent, agent::status::Status};
-use icp::{context::Context, identity::IdentitySelection};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::info;
 use url::Url;
 
 use super::args::NetworkOrEnvironmentArgs;
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Try to connect to a network, and print out its status.
 #[derive(Args, Debug)]

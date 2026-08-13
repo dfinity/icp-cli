@@ -1,12 +1,10 @@
 use std::{fmt, str::FromStr};
 
 use clap::{Args, Subcommand};
-use icp::{
-    context::Context,
-    settings::{Settings, UpdateCheck},
-};
+use icp::settings::{Settings, UpdateCheck};
 use tracing::{info, warn};
 
+use crate::context::Context;
 use crate::dist::dist_supports_betas;
 
 /// Configure user settings

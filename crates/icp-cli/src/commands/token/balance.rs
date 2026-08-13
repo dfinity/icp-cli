@@ -1,8 +1,8 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;

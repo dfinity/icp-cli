@@ -1,6 +1,6 @@
 use clap::Args;
-use icp::context::Context;
 
+use crate::context::Context;
 use crate::options::IdentityOpt;
 
 /// Display the principal for the current identity

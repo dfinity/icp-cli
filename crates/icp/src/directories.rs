@@ -6,7 +6,6 @@
 
 use crate::{
     fs::lock::LockError,
-    identity::{IdentityDirectories, IdentityPaths},
     package::PackageCache,
     prelude::*,
     settings::{SettingsDirectories, SettingsPaths},
@@ -17,7 +16,10 @@ use snafu::prelude::*;
 /// Trait for accessing global ICP CLI directories.
 pub trait Access: Sync + Send {
     /// Returns the path to the identity directory.
-    fn identity(&self) -> Result<IdentityDirectories, LockError>;
+    ///
+    /// Unlocked: identities are loaded and edited by the frontend, which owns
+    /// the directory structure inside it (and its lock).
+    fn identity_dir(&self) -> PathBuf;
 
     /// Returns the path to the global port descriptors directory.
     fn port_descriptor(&self) -> PathBuf;
@@ -177,8 +179,8 @@ impl Access for Directories {
     /// Returns the path to the identity directory.
     ///
     /// This directory stores user identity files, keys, and related data.
-    fn identity(&self) -> Result<IdentityDirectories, LockError> {
-        IdentityPaths::new(self.data().join("identity"))
+    fn identity_dir(&self) -> PathBuf {
+        self.data().join("identity")
     }
 
     /// Returns the path to the global port descriptors directory.
@@ -207,7 +209,7 @@ impl Access for Directories {
     ///
     /// This directory stores telemetry events and state files.
     ///
-    /// Unlike [`Self::settings`] or [`Self::identity`], this intentionally
+    /// Unlike [`Self::settings`], this intentionally
     /// returns a plain path without a directory lock. Telemetry files are
     /// append-only or write-once, so concurrent access is harmless and
     /// locking would risk blocking the CLI on a best-effort subsystem.
@@ -220,16 +222,16 @@ impl Access for Directories {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 /// Unimplemented mock implementation of `Access`.
 /// All methods panic with `unimplemented!()` when called.
 #[derive(Debug, Clone)]
 pub struct UnimplementedMockDirs;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl Access for UnimplementedMockDirs {
-    fn identity(&self) -> Result<IdentityDirectories, LockError> {
-        unimplemented!("UnimplementedMockDirs::identity")
+    fn identity_dir(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::identity_dir")
     }
 
     fn port_descriptor(&self) -> PathBuf {

@@ -16,12 +16,16 @@ use crate::{
 mod artifacts;
 mod commands;
 mod complete;
+mod context;
 mod dist;
 mod events;
+mod identity;
 mod logging;
+mod manifest;
 pub(crate) mod operations;
 mod options;
 mod progress;
+mod project;
 mod telemetry;
 mod version;
 
@@ -162,7 +166,7 @@ async fn run() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let password_func: icp::identity::PasswordFunc = match cli.identity_password_file {
+    let password_func: identity::PasswordFunc = match cli.identity_password_file {
         Some(path) => Arc::new(move || {
             icp::fs::read_to_string(&path)
                 .map(|s| s.trim().to_string())
@@ -185,7 +189,7 @@ async fn run() -> Result<(), Error> {
             .session_length
             .map(|m| std::time::Duration::from_secs((u64::from(m) + 2) * 60))
     };
-    let ctx = icp::context::initialize(
+    let ctx = context::initialize(
         cli.project_root_override,
         cli.debug,
         password_func,
@@ -224,7 +228,7 @@ async fn run() -> Result<(), Error> {
 }
 
 /// Dispatch the command to its handler.
-async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), Error> {
+async fn dispatch(ctx: &crate::context::Context, command: Command) -> Result<(), Error> {
     match command {
         // Build
         Command::Build(args) => commands::build::exec(ctx, &args).await?,

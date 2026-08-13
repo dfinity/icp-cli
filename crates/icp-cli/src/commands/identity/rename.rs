@@ -1,8 +1,9 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::Context;
-use icp::identity::key::rename_identity;
 use tracing::info;
+
+use crate::context::Context;
+use crate::identity::key::rename_identity;
 
 /// Rename an identity
 #[derive(Debug, Args)]
@@ -16,7 +17,7 @@ pub(crate) struct RenameArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &RenameArgs) -> Result<(), anyhow::Error> {
-    let dirs = ctx.dirs.identity()?;
+    let dirs = ctx.identity_dirs()?;
 
     dirs.with_write(async |dirs| {
         rename_identity(dirs, &args.old_name, &args.new_name)?;

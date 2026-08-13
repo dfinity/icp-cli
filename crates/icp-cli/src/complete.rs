@@ -14,11 +14,12 @@ use std::time::Duration;
 use clap::CommandFactory as _;
 use clap_complete::CompleteEnv;
 use clap_complete::engine::CompletionCandidate;
-use icp::context::Context;
-use icp::identity::manifest::IdentityList;
 use icp::network::Configuration;
 use icp::prelude::*;
 use icp::{Environment, Network, Project};
+
+use crate::context::Context;
+use crate::identity::manifest::IdentityList;
 
 /// Answer a completion request and exit, if this invocation is one.
 ///
@@ -61,7 +62,7 @@ fn context() -> Option<&'static Context> {
 
     CONTEXT
         .get_or_init(|| {
-            icp::context::initialize(
+            crate::context::initialize(
                 std::env::var("ICP_PROJECT_ROOT").ok().map(PathBuf::from),
                 false,
                 Arc::new(|| Err("cannot prompt while completing".to_string())),
@@ -86,7 +87,7 @@ fn identities() -> &'static [(String, String)] {
     static IDENTITIES: OnceLock<Vec<(String, String)>> = OnceLock::new();
 
     IDENTITIES.get_or_init(|| {
-        let Some(dirs) = context().and_then(|ctx| ctx.dirs.identity().ok()) else {
+        let Some(dirs) = context().and_then(|ctx| ctx.identity_dirs().ok()) else {
             return Vec::new();
         };
         let Some(Ok(Ok(list))) =

@@ -1,13 +1,13 @@
-use bip39::{Language, Mnemonic};
-use clap::{ArgGroup, Args, ValueHint};
-use dialoguer::Password;
-use elliptic_curve::zeroize::Zeroizing;
-use icp::identity::{
+use crate::identity::{
     delegation::DelegationChain,
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_key_from_seed_slip10,
 };
+use bip39::{Language, Mnemonic};
+use clap::{ArgGroup, Args, ValueHint};
+use dialoguer::Password;
+use elliptic_curve::zeroize::Zeroizing;
 use icp::{
     fs::{json, read_to_string},
     prelude::*,
@@ -24,7 +24,7 @@ use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tracing::{info, warn};
 
-use icp::context::Context;
+use crate::context::Context;
 
 use crate::commands::identity::StorageMode;
 
@@ -215,8 +215,7 @@ async fn import_from_pem(
         _ => unreachable!(),
     };
 
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_write(async move |dirs| create_identity(dirs, name, key, format, delegation))
         .await??;
 
@@ -418,8 +417,7 @@ async fn import_from_seed_phrase(
 ) -> Result<(), DeriveKeyError> {
     let mnemonic = Mnemonic::from_phrase(phrase, Language::English).context(ParseMnemonicSnafu)?;
     let key = derive_key_from_seed_slip10(&mnemonic, &algorithm);
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_write(async move |dirs| create_identity(dirs, name, key, format, delegation))
         .await??;
     Ok(())

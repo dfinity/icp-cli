@@ -2,9 +2,10 @@ use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::EnvironmentSelection;
 use tracing::info;
 
+use crate::context::Context;
 use crate::options::EnvironmentOpt;
 
 /// Link an existing canister to the project by recording its ID in the canister ID store.

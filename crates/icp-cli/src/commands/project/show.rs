@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
 
-use icp::context::Context;
+use crate::context::Context;
 
 /// Outputs the project's effective yaml configuration.
 ///

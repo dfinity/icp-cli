@@ -5,7 +5,7 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::context::{CanisterSelection, Context};
+use icp::context::CanisterSelection;
 use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};
@@ -20,6 +20,8 @@ use crate::{
         },
     },
 };
+
+use crate::context::Context;
 
 /// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]

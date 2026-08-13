@@ -6,7 +6,6 @@ use clap::Args;
 use icp::network::ManagedMode;
 use icp::prelude::*;
 use icp::{
-    identity::manifest::IdentityList,
     network::{
         Configuration,
         managed::{
@@ -25,7 +24,8 @@ use tracing::{debug, info, warn};
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
+use crate::context::Context;
+use crate::identity::manifest::IdentityList;
 
 /// Run a given network.
 ///
@@ -131,11 +131,10 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
 
     // Identities
     let (ids, defaults) = ctx
-        .dirs
-        .identity()?
+        .identity_dirs()?
         .with_read(async |dirs| {
             let ids = IdentityList::load_from(dirs)?;
-            let defaults = icp::identity::manifest::IdentityDefaults::load_from(dirs)?;
+            let defaults = crate::identity::manifest::IdentityDefaults::load_from(dirs)?;
             Ok::<_, anyhow::Error>((ids, defaults))
         })
         .await??;

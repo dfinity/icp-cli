@@ -15,17 +15,20 @@ use icp::{
     fs,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
-        EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
-        ManifestInitArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
-        SyncSteps, load_manifest_from_path, plugin, prebuilt,
+        EnvironmentManifest, Instructions, Item, ManagedMode, ManifestInitArgs, Mode,
+        NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep, SyncSteps, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
     prelude::*,
-    project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
     store_artifact,
 };
 use snafu::{OptionExt, ResultExt, Snafu};
+
+use crate::{
+    manifest::{LoadManifestFromPathError, load_manifest_from_path},
+    project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
+};
 use tar::Builder;
 
 use crate::operations::build::{BuildManyError, build_many_with_progress_bar};

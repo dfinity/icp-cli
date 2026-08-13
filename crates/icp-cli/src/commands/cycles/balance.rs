@@ -1,9 +1,9 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use bigdecimal::BigDecimal;
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use serde::Serialize;
 

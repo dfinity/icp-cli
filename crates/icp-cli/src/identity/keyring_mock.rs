@@ -5,7 +5,7 @@ use keyring::{
     credential::{CredentialApi, CredentialBuilderApi, CredentialPersistence},
 };
 
-use crate::prelude::*;
+use icp::prelude::*;
 
 pub struct MockKeyring {
     pub dir: PathBuf,

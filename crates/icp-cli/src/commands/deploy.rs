@@ -7,8 +7,7 @@ use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord};
 use icp::parsers::CyclesAmount;
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection},
-    identity::IdentitySelection,
+    context::{CanisterSelection, EnvironmentSelection},
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
@@ -35,6 +34,9 @@ use crate::{
     options::{IdentityOpt, arg_struct_change_help},
     progress::{ProgressManager, ProgressManagerSettings},
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Deploy a project to an environment
 #[derive(Args, Debug)]
@@ -121,7 +123,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         // project load.)
         let project = ctx.project.load().await?;
         let member_dir = ctx.project.member_dir();
-        match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
+        match crate::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
             Some(scoped) => {
                 member_scoped = true;
                 scoped

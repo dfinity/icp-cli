@@ -1,8 +1,9 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::Context;
-use icp::identity::key::delete_identity;
 use tracing::info;
+
+use crate::context::Context;
+use crate::identity::key::delete_identity;
 
 /// Delete an identity
 #[derive(Debug, Args)]
@@ -13,7 +14,7 @@ pub(crate) struct DeleteArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow::Error> {
-    let dirs = ctx.dirs.identity()?;
+    let dirs = ctx.identity_dirs()?;
 
     dirs.with_write(async |dirs| {
         delete_identity(dirs, &args.name)?;

@@ -7,7 +7,6 @@ use candid_parser::utils::CandidSource;
 use clap::{Args, ValueEnum, ValueHint};
 use dialoguer::console::Term;
 use ic_agent::Agent;
-use icp::context::Context;
 use icp::manifest::ArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;
@@ -20,6 +19,8 @@ use crate::{
     operations::misc::fetch_canister_metadata,
     operations::proxy::update_or_proxy_raw,
 };
+
+use crate::context::Context;
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

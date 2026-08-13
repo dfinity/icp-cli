@@ -272,8 +272,8 @@ impl AccessImpl {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod mock {
+#[cfg(any(test, feature = "mocks"))]
+pub mod mock {
     use super::*;
     /// In-memory mock implementation of `Access`.
     ///

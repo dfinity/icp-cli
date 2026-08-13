@@ -4,8 +4,7 @@ use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
-use icp::context::{CanisterSelection, Context, EnvironmentSelection};
-use icp::identity::IdentitySelection;
+use icp::context::{CanisterSelection, EnvironmentSelection};
 use std::collections::BTreeMap;
 use tracing::info;
 
@@ -13,6 +12,9 @@ use crate::{
     operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Synchronize canisters
 #[derive(Debug, Args)]

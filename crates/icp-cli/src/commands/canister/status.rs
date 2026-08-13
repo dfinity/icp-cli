@@ -5,10 +5,7 @@ use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
 };
-use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
-    identity::IdentitySelection,
-};
+use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
@@ -18,6 +15,9 @@ use crate::{
     operations::{proxy::UpdateOrProxyError, proxy_management},
     options,
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";

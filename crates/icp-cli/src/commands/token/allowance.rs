@@ -1,8 +1,8 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 

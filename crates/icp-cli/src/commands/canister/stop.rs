@@ -1,8 +1,8 @@
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::Context;
 
+use crate::context::Context;
 use crate::{commands::args, operations::proxy_management};
 
 /// Stop a canister on a network

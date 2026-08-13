@@ -1,10 +1,10 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::Context;
 use itertools::Itertools;
 use serde::Serialize;
 

@@ -9,14 +9,15 @@ use snafu::prelude::*;
 
 use std::collections::HashMap;
 
-use crate::{
+use icp::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
-    identity::{
-        key::{LoadIdentityError, LoadIdentityInContextError, load_identity},
-        manifest::{IdentityList, LoadIdentityManifestError},
-    },
     prelude::*,
     telemetry_data::{IdentityStorageType, TelemetryData},
+};
+
+use crate::identity::{
+    key::{LoadIdentityError, LoadIdentityInContextError, load_identity},
+    manifest::{IdentityList, LoadIdentityManifestError},
 };
 
 pub mod delegation;
@@ -44,26 +45,16 @@ impl IdentityPaths {
         self.dir.join(IDENTITY_DEFAULTS)
     }
 
-    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, crate::fs::IoError> {
-        crate::fs::create_dir_all(&self.dir)?;
-        Ok(self.dir.join(IDENTITY_DEFAULTS))
-    }
-
     pub fn identity_list_path(&self) -> PathBuf {
         self.dir.join(IDENTITIES_LIST)
-    }
-
-    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, crate::fs::IoError> {
-        crate::fs::create_dir_all(&self.dir)?;
-        Ok(self.dir.join(IDENTITIES_LIST))
     }
 
     pub fn key_pem_path(&self, name: &str) -> PathBuf {
         self.dir.join(format!("keys/{name}.pem"))
     }
 
-    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, crate::fs::IoError> {
-        crate::fs::create_dir_all(&self.dir.join("keys"))?;
+    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir.join("keys"))?;
         Ok(self.dir.join(format!("keys/{name}.pem")))
     }
 
@@ -71,8 +62,8 @@ impl IdentityPaths {
         self.dir.join(format!("delegations/{name}.json"))
     }
 
-    pub fn ensure_delegation_chain_path(&self, name: &str) -> Result<PathBuf, crate::fs::IoError> {
-        crate::fs::create_dir_all(&self.dir.join("delegations"))?;
+    pub fn ensure_delegation_chain_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir.join("delegations"))?;
         Ok(self.dir.join(format!("delegations/{name}.json")))
     }
 }
@@ -264,12 +255,6 @@ impl MockIdentityLoader {
     /// Adds a named identity to the loader.
     pub fn with_identity(mut self, name: impl Into<String>, identity: Arc<dyn Identity>) -> Self {
         self.named.insert(name.into(), identity);
-        self
-    }
-
-    /// Sets the default identity.
-    pub fn with_default(mut self, identity: Arc<dyn Identity>) -> Self {
-        self.default = identity;
         self
     }
 }

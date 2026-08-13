@@ -23,8 +23,13 @@ use crate::{
         get_managed_network_access,
     },
     prelude::*,
-    project::DEFAULT_LOCAL_NETWORK_PORT,
 };
+
+/// Bind address of the injected default `local` network.
+pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
+
+/// Port of the injected default `local` network.
+pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 
 pub mod access;
 pub mod config;
@@ -391,16 +396,16 @@ impl Access for Accessor {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 use std::collections::HashMap;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 pub struct MockNetworkAccessor {
     /// Network-specific access configurations by network name
     networks: HashMap<String, NetworkAccess>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl MockNetworkAccessor {
     /// Creates a new empty mock network accessor.
     pub fn new() -> Self {
@@ -416,14 +421,14 @@ impl MockNetworkAccessor {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl Default for MockNetworkAccessor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 #[async_trait]
 impl Access for MockNetworkAccessor {
     fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {

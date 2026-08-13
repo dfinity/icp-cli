@@ -1,4 +1,5 @@
-use clap::Args;
+use clap::{Args, ValueHint};
+use clap_complete::ArgValueCandidates;
 use icp::{
     context::Context,
     fs::json,
@@ -19,10 +20,11 @@ use tracing::{info, warn};
 #[derive(Debug, Args)]
 pub(crate) struct UseArgs {
     /// Name of the pending delegation identity to complete
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     name: String,
 
     /// Path to the delegation chain JSON file (output of `icp identity delegation sign`)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     from_json: PathBuf,
 }
 

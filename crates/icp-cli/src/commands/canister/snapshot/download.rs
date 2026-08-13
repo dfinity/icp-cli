@@ -1,6 +1,6 @@
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
-use clap::Args;
+use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 use tracing::info;
@@ -24,7 +24,7 @@ pub(crate) struct DownloadArgs {
     snapshot_id: SnapshotId,
 
     /// Output directory for the snapshot files
-    #[arg(long, short = 'o')]
+    #[arg(long, short = 'o', value_hint = ValueHint::AnyPath)]
     output: PathBuf,
 
     /// Resume a previously interrupted download

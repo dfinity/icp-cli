@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use clap::Args;
+use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 
@@ -16,7 +16,7 @@ use crate::operations::bundle::create_bundle;
 #[derive(Args, Debug)]
 pub(crate) struct BundleArgs {
     /// Output path for the bundle archive (e.g. bundle.tar.gz)
-    #[arg(long, short)]
+    #[arg(long, short, value_hint = ValueHint::AnyPath)]
     pub(crate) output: PathBuf,
 
     /// Environment the canisters are built for. Bundles are made to be deployed

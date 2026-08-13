@@ -1,4 +1,4 @@
-use clap::Args;
+use clap::{Args, ValueHint};
 use dialoguer::Password;
 use icp::{
     context::Context,
@@ -15,7 +15,7 @@ pub(crate) struct HsmArgs {
     name: String,
 
     /// Path to the PKCS#11 module (shared library) for the HSM
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pkcs11_module: PathBuf,
 
     /// Slot index on the HSM device
@@ -27,7 +27,7 @@ pub(crate) struct HsmArgs {
     key_id: String,
 
     /// Read HSM PIN from a file instead of prompting
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pin_file: Option<PathBuf>,
 }
 

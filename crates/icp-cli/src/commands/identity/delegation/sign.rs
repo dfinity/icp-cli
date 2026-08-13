@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use clap::Args;
+use clap::{Args, ValueHint};
 use ic_agent::{Identity as _, export::Principal, identity::Delegation as AgentDelegation};
 use icp::{
     context::{Context, GetIdentityError},
@@ -22,7 +22,7 @@ use crate::options::IdentityOpt;
 #[derive(Debug, Args)]
 pub(crate) struct SignArgs {
     /// Public key PEM file of the key to delegate to
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     key_pem: PathBuf,
 
     /// Delegation validity duration (e.g. "30d", "24h", "3600s", or plain seconds)

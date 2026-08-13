@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
@@ -48,6 +49,7 @@ pub(crate) struct StatusArgs {
     /// An optional canister name or principal to target.
     /// When using a name, an environment must be specified.
     /// If omitted, shows status for all canisters in the environment.
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) canister: Option<args::Canister>,
 
     #[command(flatten)]

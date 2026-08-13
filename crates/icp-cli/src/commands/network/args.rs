@@ -1,4 +1,5 @@
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::{context::NetworkOrEnvironmentSelection, prelude::LOCAL};
 
 #[derive(Args, Clone, Debug)]
@@ -8,7 +9,8 @@ pub(crate) struct NetworkOrEnvironmentArgs {
         help = "Name of the network to use. Overrides ICP_ENVIRONMENT if set.",
         long_help = "Name of the network to use.\n\n\
                      Takes precedence over -e/--environment and the ICP_ENVIRONMENT \
-                     environment variable when specified explicitly."
+                     environment variable when specified explicitly.",
+        add = ArgValueCandidates::new(crate::complete::networks),
     )]
     pub(crate) name: Option<String>,
 
@@ -20,7 +22,8 @@ pub(crate) struct NetworkOrEnvironmentArgs {
         long_help = "Use the network configured in the specified environment.\n\n\
                      Cannot be used together with an explicit network name argument.\n\
                      The ICP_ENVIRONMENT environment variable is also checked when \
-                     neither network name nor -e flag is specified."
+                     neither network name nor -e flag is specified.",
+        add = ArgValueCandidates::new(crate::complete::environments),
     )]
     pub(crate) environment: Option<String>,
 }

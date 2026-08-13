@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::bail;
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use dialoguer::Confirm;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusType, UpdateSettingsArgs,
@@ -33,7 +34,7 @@ pub(crate) struct MigrateIdArgs {
     pub(crate) cmd_args: args::CanisterCommandArgs,
 
     /// The canister to replace with the source canister's ID
-    #[arg(long)]
+    #[arg(long, add = ArgValueCandidates::new(crate::complete::canisters))]
     replace: String,
 
     /// Skip confirmation prompts

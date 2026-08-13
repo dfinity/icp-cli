@@ -34,8 +34,9 @@ cargo-generate = "0.23.7"
 camino-tempfile = "1"
 candid = "0.10.19"
 candid_parser = "0.3.0"
-clap = { version = "4.5.3", features = ["derive", "env"] }
+clap = { version = "4.5.3", features = ["derive", "env", "unstable-ext"] }
 clap-markdown = "0.1.5"
+clap_complete = { version = "4.5.3", features = ["unstable-dynamic"] }
 cryptoki = "0.12.0"
 console = "0.16.3"
 dialoguer = "0.12.0"
@@ -44,7 +45,6 @@ dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
 crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
-fd-lock = "4.0.4"
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
 futures = "0.3.31"
 glob = "0.3.2"

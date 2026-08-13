@@ -1,5 +1,6 @@
 use clap::error::ErrorKind;
 use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
+use clap_complete::ArgValueCandidates;
 use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::network::RootKeySpec;
@@ -14,7 +15,12 @@ mod heading {
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct IdentityOpt {
     /// The user identity to run this command as.
-    #[arg(long, global = true, help_heading = heading::IDENITTY_PARAMETERS)]
+    #[arg(
+        long,
+        global = true,
+        help_heading = heading::IDENITTY_PARAMETERS,
+        add = ArgValueCandidates::new(crate::complete::identity_names),
+    )]
     identity: Option<String>,
 }
 
@@ -45,6 +51,7 @@ pub(crate) struct EnvironmentOpt {
         group = "environment-select",
         group = "network-select",
         help_heading = heading::NETWORK_PARAMETERS,
+        add = ArgValueCandidates::new(crate::complete::environments),
     )]
     environment: Option<String>,
 }
@@ -119,7 +126,7 @@ fn parse_network_target(input: &str) -> Result<NetworkTarget, String> {
 #[clap(group(ArgGroup::new("network-select").multiple(false)))]
 pub(crate) struct NetworkOptInner {
     /// Name or URL of the network to target, conflicts with environment argument
-    #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target)]
+    #[arg(long, short = 'n', env = "ICP_NETWORK", group = "network-select", help_heading = heading::NETWORK_PARAMETERS, value_parser = parse_network_target, add = ArgValueCandidates::new(crate::complete::networks))]
     network: Option<NetworkTarget>,
 
     /// The root key to use if connecting to a network by URL.

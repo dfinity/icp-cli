@@ -1,31 +1,177 @@
-use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
+    sync::Arc,
+};
 
+use async_trait::async_trait;
 use indexmap::{IndexMap, map::Entry as IndexEntry};
-
 use snafu::prelude::*;
+use tokio::sync::Mutex;
+use tracing::debug;
 
-use crate::{
-    Canister, Environment, InitArgs, Network, Project,
-    canister::{ControllerRef, ManifestEnvVar, ManifestSettings, Settings, recipe},
+use icp::{
+    Canister, Environment, InitArgs, Network, Project, ProjectLoad, ProjectLoadError,
+    canister::{
+        ControllerRef, ManifestEnvVar, ManifestSettings, Settings,
+        recipe::{self, Resolve},
+    },
     fs,
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
-        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
-        ProjectManifest, ProjectRootLocateError,
+        Item, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST, ProjectManifest,
+        ProjectRootLocate, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
-        load_manifest_from_path,
         network::RootKeySpec,
         recipe::RecipeType,
     },
     network::{
-        Configuration, Connected, Gateway, Managed, ManagedLauncherConfig, ManagedMode, Port,
+        Configuration, Connected, DEFAULT_LOCAL_NETWORK_BIND, DEFAULT_LOCAL_NETWORK_PORT, Gateway,
+        Managed, ManagedLauncherConfig, ManagedMode, Port,
     },
     prelude::*,
 };
 
-pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
-pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
+use crate::manifest::{LoadManifestFromPathError, load_manifest_from_path};
+
+/// The native, filesystem-backed [`ProjectLoad`] implementation: locate the
+/// project root, read its manifest, consolidate it into a [`Project`].
+pub struct ProjectLoadImpl {
+    pub project_root_locate: Arc<dyn ProjectRootLocate>,
+    pub recipe: Arc<dyn Resolve>,
+}
+
+/// Errors from [`ProjectLoadImpl`]. Reported as the cause of
+/// [`ProjectLoadError::Load`].
+#[derive(Debug, Snafu)]
+pub enum NativeProjectLoadError {
+    #[snafu(display("failed to load project manifest"))]
+    ProjectManifest { source: LoadManifestFromPathError },
+
+    #[snafu(display("failed to load project"))]
+    Project { source: ConsolidateManifestError },
+}
+
+/// Wraps a [`NativeProjectLoadError`] into the library's loader-agnostic error.
+fn loader_failed(e: NativeProjectLoadError) -> ProjectLoadError {
+    ProjectLoadError::Load {
+        source: Box::new(e),
+    }
+}
+
+/// Ensures the "operating on a workspace root above your sub-project" notice is
+/// printed at most once per process (one CLI invocation), no matter how many
+/// times the project is loaded.
+static WORKSPACE_ROOT_ANNOUNCED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Warn once when the resolved workspace root differs from the sub-project the
+/// command is run in, so the upward resolution (§workspace model) is visible for
+/// every command, not just deploy.
+fn announce_workspace_root_once(member: &Path, root: &Path) {
+    let differs = match (
+        dunce::canonicalize(member.as_std_path()),
+        dunce::canonicalize(root.as_std_path()),
+    ) {
+        (Ok(m), Ok(r)) => m != r,
+        _ => member != root,
+    };
+    if differs && !WORKSPACE_ROOT_ANNOUNCED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            "Running inside sub-project '{member}'; resolved workspace root '{root}'. \
+             Commands operate on the workspace root's network, environments, and canister IDs."
+        );
+    }
+}
+
+#[async_trait]
+impl ProjectLoad for ProjectLoadImpl {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
+        debug!("Loading project");
+        // Locate project root
+        let pdir = self
+            .project_root_locate
+            .locate()
+            .map_err(|source| ProjectLoadError::Locate { source })?;
+
+        debug!("Located icp project in {pdir}");
+
+        // Announce (once) when we resolved up to a workspace root above the
+        // sub-project the command is run in, so this is visible for every command.
+        if let Ok(member) = self.project_root_locate.locate_member() {
+            announce_workspace_root_once(&member, &pdir);
+        }
+
+        // Load project manifest
+        let m = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
+            .await
+            .context(ProjectManifestSnafu)
+            .map_err(loader_failed)?;
+
+        debug!("Loaded project manifest: {m:#?}");
+
+        // Consolidate manifest into project
+        let p = consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
+            .await
+            .context(ProjectSnafu)
+            .map_err(loader_failed)?;
+
+        debug!("Rendered project definition: {p:#?}");
+
+        Ok(p)
+    }
+
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
+        match self.project_root_locate.locate() {
+            Ok(_) => Ok(true),
+            Err(ProjectRootLocateError::NotFound { .. }) => Ok(false),
+        }
+    }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.project_root_locate.locate_member().ok()
+    }
+}
+
+/// Loads at most once per process, then serves the cached [`Project`].
+pub struct Lazy<T, V>(T, Arc<Mutex<Option<V>>>);
+
+impl<T, V> Lazy<T, V> {
+    pub fn new(v: T) -> Self {
+        Self(v, Arc::new(Mutex::new(None)))
+    }
+}
+
+#[async_trait]
+impl<T: ProjectLoad> ProjectLoad for Lazy<T, Project> {
+    async fn load(&self) -> Result<Project, ProjectLoadError> {
+        if let Some(v) = self.1.lock().await.as_ref() {
+            return Ok(v.to_owned());
+        }
+
+        let v = self.0.load().await?;
+
+        let mut g = self.1.lock().await;
+        if g.is_none() {
+            *g = Some(v.to_owned());
+        }
+
+        Ok(v)
+    }
+
+    async fn exists(&self) -> Result<bool, ProjectLoadError> {
+        if self.1.lock().await.as_ref().is_some() {
+            return Ok(true);
+        }
+
+        let v = self.0.exists().await?;
+        Ok(v)
+    }
+
+    fn member_dir(&self) -> Option<PathBuf> {
+        self.0.member_dir()
+    }
+}
 
 #[derive(Debug, Snafu)]
 pub enum EnvironmentError {
@@ -44,9 +190,6 @@ pub enum EnvironmentError {
 
 #[derive(Debug, Snafu)]
 pub enum ConsolidateManifestError {
-    #[snafu(display("failed to locate project directory"))]
-    Locate { source: ProjectRootLocateError },
-
     #[snafu(display("failed to perform glob parsing"))]
     GlobParse { source: glob::PatternError },
 
@@ -1444,12 +1587,183 @@ pub async fn consolidate_manifest(
 }
 
 #[cfg(test)]
+mod loader_tests {
+    use super::*;
+    use camino_tempfile::Utf8TempDir;
+    use icp::canister::recipe::{RecipeContext, ResolveError};
+    use icp::manifest::{canister::BuildSteps, recipe::Recipe};
+    use indoc::indoc;
+
+    struct MockProjectRootLocate {
+        path: PathBuf,
+    }
+
+    impl MockProjectRootLocate {
+        fn new(path: PathBuf) -> Self {
+            Self { path }
+        }
+    }
+
+    impl ProjectRootLocate for MockProjectRootLocate {
+        fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.path.clone())
+        }
+
+        fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.path.clone())
+        }
+    }
+
+    struct MockRecipeResolver;
+
+    #[async_trait]
+    impl Resolve for MockRecipeResolver {
+        async fn resolve(
+            &self,
+            _recipe: &Recipe,
+            _context: &RecipeContext,
+        ) -> Result<(BuildSteps, SyncSteps), ResolveError> {
+            use icp::manifest::adapter::prebuilt::{
+                Adapter as PrebuiltAdapter, LocalSource, SourceField,
+            };
+            use icp::manifest::canister::BuildStep;
+
+            // Create a minimal BuildSteps with a dummy prebuilt step
+            let build_steps = BuildSteps {
+                steps: vec![BuildStep::Prebuilt(PrebuiltAdapter {
+                    source: SourceField::Local(LocalSource {
+                        path: "dummy.wasm".into(),
+                    }),
+                    sha256: None,
+                })],
+            };
+
+            Ok((build_steps, SyncSteps::default()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_minimal_project() {
+        // Create temp directory with icp.yaml
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let project_dir = temp_dir.path();
+
+        // Write a minimal icp.yaml
+        let manifest_content = indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#};
+        std::fs::write(project_dir.join("icp.yaml"), manifest_content).unwrap();
+
+        // Create ProjectLoadImpl with mocks
+        let loader = ProjectLoadImpl {
+            project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
+            recipe: Arc::new(MockRecipeResolver),
+        };
+
+        // Call load
+        let result = loader.load().await;
+
+        // Assert success and check project contents
+        assert!(result.is_ok());
+        let project = result.unwrap();
+        assert_eq!(project.dir, project_dir);
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_project_local_override() {
+        // Create temp directory with icp.yaml
+        let temp_dir = Utf8TempDir::new().unwrap();
+        let project_dir = temp_dir.path();
+
+        // Write a minimal icp.yaml
+        let manifest_content = indoc! {r#"
+            networks:
+              - name: test-network
+                mode: connected
+                url: https://somenetwork.icp
+                root-key: mainnet
+            environments:
+              - name: local
+                network: test-network
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#};
+        std::fs::write(project_dir.join("icp.yaml"), manifest_content).unwrap();
+
+        // Create ProjectLoadImpl with mocks
+        let loader = ProjectLoadImpl {
+            project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
+            recipe: Arc::new(MockRecipeResolver),
+        };
+
+        // Call load
+        let result = loader.load().await;
+
+        // Assert success and check project contents
+        assert!(result.is_ok(), "The project did not load: {:?}", result);
+        let project = result.unwrap();
+        assert_eq!(project.dir, project_dir);
+        assert!(
+            project.canisters.contains_key("backend"),
+            "The backend canister was not found"
+        );
+        assert!(
+            project.environments.contains_key("local"),
+            "The default `local` environment was not injected"
+        );
+        let e = project.environments.get("local").unwrap();
+        assert_eq!(e.network.name, "test-network");
+        assert!(
+            project.environments.contains_key("ic"),
+            "The default `ic` environment was not injected"
+        );
+        assert!(
+            project.networks.contains_key("local"),
+            "The default `local` network was not injected"
+        );
+        assert!(
+            project.networks.contains_key("ic"),
+            "The default `ic` network was not injected"
+        );
+    }
+}
+
+#[cfg(test)]
 mod dependency_tests {
     use super::*;
-    use crate::canister::recipe::{RecipeContext, Resolve, ResolveError};
-    use crate::manifest::canister::{BuildSteps, SyncSteps};
-    use crate::manifest::recipe::Recipe;
     use camino_tempfile::Utf8TempDir;
+    use icp::canister::recipe::{RecipeContext, Resolve, ResolveError};
+    use icp::manifest::canister::{BuildSteps, SyncSteps};
+    use icp::manifest::recipe::Recipe;
 
     /// Recipes are never used in these tests; every canister is pre-built.
     struct PanicResolver;

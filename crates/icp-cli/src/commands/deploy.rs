@@ -122,7 +122,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         // project load.)
         let project = ctx.project.load().await?;
         let member_dir = ctx.project.member_dir();
-        match icp::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
+        match crate::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
             Some(scoped) => {
                 member_scoped = true;
                 scoped

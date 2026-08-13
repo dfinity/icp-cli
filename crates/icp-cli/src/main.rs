@@ -20,9 +20,11 @@ mod context;
 mod dist;
 mod events;
 mod logging;
+mod manifest;
 pub(crate) mod operations;
 mod options;
 mod progress;
+mod project;
 mod telemetry;
 mod version;
 

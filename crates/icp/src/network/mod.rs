@@ -23,8 +23,13 @@ use crate::{
         get_managed_network_access,
     },
     prelude::*,
-    project::DEFAULT_LOCAL_NETWORK_PORT,
 };
+
+/// Bind address of the injected default `local` network.
+pub const DEFAULT_LOCAL_NETWORK_BIND: &str = "127.0.0.1";
+
+/// Port of the injected default `local` network.
+pub const DEFAULT_LOCAL_NETWORK_PORT: u16 = 8000;
 
 pub mod access;
 pub mod config;

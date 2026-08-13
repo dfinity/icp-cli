@@ -1,3 +1,7 @@
+//! Manifest consolidation: turning the manifests a project declares into the
+//! library's [`Project`] model, and the [`ProjectLoad`] implementation that
+//! drives it.
+
 use std::{
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     sync::Arc,

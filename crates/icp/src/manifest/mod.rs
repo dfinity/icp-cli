@@ -1,3 +1,9 @@
+//! The manifest format: the serde shapes of `icp.yaml` and `canister.yaml`.
+//!
+//! These types describe what a user may write; reading them off disk is the
+//! frontend's job (see `icp_cli::manifest`). The canonical, defaults-filled
+//! forms the rest of the library works with live outside this module.
+
 use std::marker::PhantomData;
 
 use schemars::JsonSchema;

@@ -251,7 +251,7 @@ mod rendering_equivalence {
 
     /// A terminal that remembers what was written to it.
     #[derive(Debug, Clone, Default)]
-    struct RecordingTerm {
+    pub(super) struct RecordingTerm {
         writes: Arc<Mutex<Vec<String>>>,
     }
 
@@ -268,7 +268,7 @@ mod rendering_equivalence {
         /// dropped on the way: the blank line indicatif writes to pad out the rest of
         /// the terminal row, which is a function of the frame it follows, and the
         /// animation glyph, which advances on a timer and so differs run to run.
-        fn frames(&self) -> Vec<String> {
+        pub(super) fn frames(&self) -> Vec<String> {
             let mut frames: Vec<String> = self
                 .writes
                 .lock()
@@ -339,7 +339,7 @@ mod rendering_equivalence {
         }
     }
 
-    fn recording_target(term: &RecordingTerm) -> ProgressDrawTarget {
+    pub(super) fn recording_target(term: &RecordingTerm) -> ProgressDrawTarget {
         ProgressDrawTarget::term_like(Box::new(term.clone()))
     }
 
@@ -470,7 +470,10 @@ mod rendering_equivalence {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        rendering_equivalence::{RecordingTerm, recording_target},
+        *,
+    };
 
     /// Hidden bars still track state, so the sink can be exercised without a tty.
     fn sink() -> IndicatifSink {
@@ -632,9 +635,13 @@ mod tests {
         assert_eq!(bars[&TaskId(0)].bar.message(), "second\n│ new\n└\n\n");
     }
 
+    /// The bar is gone from the map by the time `finish` returns, so the message has
+    /// to be observed where it actually lands: on the terminal.
     #[test]
-    fn a_neutral_finish_keeps_its_message() {
-        let sink = sink();
+    fn a_neutral_finish_draws_its_message_before_closing_the_bar_out() {
+        let term = RecordingTerm::default();
+        let sink = IndicatifSink::with_draw_target(recording_target(&term));
+
         sink.emit(Event::TaskStarted {
             id: TaskId(0),
             kind: TaskKind::Spinner,
@@ -647,6 +654,15 @@ mod tests {
         });
 
         assert_eq!(live_bars(&sink), 0);
+
+        let frames = term.frames();
+        assert!(
+            frames
+                .iter()
+                .any(|frame| frame.contains("[backend]")
+                    && frame.contains("Skipped (not an upgrade)")),
+            "frames: {frames:?}"
+        );
     }
 
     #[test]

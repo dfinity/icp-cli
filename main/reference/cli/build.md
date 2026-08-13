@@ -10,7 +10,7 @@ Build canisters
 
 ###### **Options:**
 
-* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for. By default, the local environment is used
 
 
 

@@ -121,7 +121,7 @@ Build canisters
 
 ###### **Options:**
 
-* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for. By default, the local environment is used
 
 
 
@@ -955,7 +955,7 @@ using --args or --args-file:
 * `--no-create` — If any canisters do not exist, error instead of creating them
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for and deploy to. By default, the local environment is used
 * `--json` — Output command results as JSON
 * `--args <ARGS>` — Inline arguments, interpreted per `--args-format` (Candid by default)
 * `--args-file <ARGS_FILE>` — Path to a file containing arguments

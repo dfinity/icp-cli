@@ -128,7 +128,6 @@
 <h3 id="key-points">Key Points</h3>
 <ul>
 <li>icp-cli <strong>delegates</strong> compilation to your language toolchain (Cargo for rust, mops for Motoko, etc.)</li>
-<li>Build output should be <strong>reproducible</strong> — no environment specific values should be baked in.</li>
 <li>The toolchain decides whether rebuilding is necessary.</li>
 <li>As part of the build phase you might build assets to be synchronized to the canister after the WASM is installed. For example, bundled web assets to serve a frontend.</li>
 </ul>
@@ -143,6 +142,7 @@
 <p>Scripts have access to:</p>
 <ul>
 <li><code>ICP_WASM_OUTPUT_PATH</code> — Where to place the final WASM</li>
+<li><code>ICP_CLI_ENVIRONMENT</code> — The environment being built for (e.g. <code>local</code>, <code>staging</code>). It may differ from the environment the wasm is installed to: <code>icp canister install</code> without <code>--wasm</code> reuses the most recent build, which <code>icp project bundle</code> overwrites with an <code>ic</code> build by default.</li>
 </ul>
 <p>Scripts run with the canister directory as the current working directory.</p>
 <p>See <a href="/main/reference/environment-variables/">Environment Variables Reference</a> for all available variables.</p>

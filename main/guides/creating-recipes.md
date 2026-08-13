@@ -182,6 +182,7 @@ Recipe scripts have access to runtime environment variables set by icp-cli.
 **Build script steps** receive:
 
 - `ICP_WASM_OUTPUT_PATH` — Where to write the compiled WASM file
+- `ICP_CLI_ENVIRONMENT` — The environment being built for (e.g. `local`, `staging`)
 
 **Sync script steps** receive:
 

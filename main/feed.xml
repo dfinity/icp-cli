@@ -6,15 +6,47 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 13 Aug 2026 15:14:23 GMT</lastBuildDate>
-    <pubDate>Thu, 13 Aug 2026 15:13:22 GMT</pubDate>
+    <lastBuildDate>Thu, 13 Aug 2026 18:20:02 GMT</lastBuildDate>
+    <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Thu, 13 Aug 2026 15:13:22 GMT</pubDate>
+      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Configuration Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
+      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
+      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Creating Recipes</title>
+      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
+      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
+      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Build, Deploy, Sync</title>
+      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
+      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
+      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -39,22 +71,6 @@
       <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
       <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Configuration Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
-      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -199,22 +215,6 @@
       <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
       <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Build, Deploy, Sync</title>
-      <link>https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</link>
-      <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
-      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Creating Recipes</title>
-      <link>https://cli.internetcomputer.org/main/guides/creating-recipes/</link>
-      <description>Author custom Handlebars-based recipe templates to encode build conventions and share them across projects.</description>
-      <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/creating-recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

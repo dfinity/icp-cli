@@ -21,7 +21,6 @@ directories = { workspace = true }
 dunce = { workspace = true }
 ed25519-consensus = { workspace = true }
 elliptic-curve = { workspace = true }
-fd-lock = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }

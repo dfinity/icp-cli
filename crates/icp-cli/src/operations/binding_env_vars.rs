@@ -7,7 +7,7 @@ use icp::Canister;
 use snafu::Snafu;
 use tracing::error;
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use icp_events::{Reporter, TaskKind};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -84,7 +84,7 @@ pub(crate) async fn set_binding_env_vars_many(
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), SetBindingEnvVarsManyError> {
     // Check that all the canisters in this environment have an id
     // We need to have all the ids to generate environment variables
@@ -117,10 +117,11 @@ pub(crate) async fn set_binding_env_vars_many(
     }
 
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (cid, info) in target_canisters {
-        let pb = progress_manager.create_progress_bar(&info.name);
+        // Started up front so the tasks appear in the order the canisters were given,
+        // regardless of the order the futures below are first polled in.
+        let task = reporter.task(TaskKind::Spinner, info.name.as_str());
         let canister_name = info.name.clone();
 
         // Each canister receives only the ids it is wired to (its own project's
@@ -143,22 +144,20 @@ pub(crate) async fn set_binding_env_vars_many(
 
         let settings_fn = {
             let agent = agent.clone();
-            let pb = pb.clone();
 
-            async move {
-                pb.set_message("Updating environment variables...");
-                set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await
-            }
+            async move { set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await }
         };
 
         futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                settings_fn,
-                || "Environment variables updated successfully".to_string(),
-                |err| format!("Failed to update environment variables: {err}"),
-            )
-            .await;
+            task.message("Updating environment variables...");
+
+            let result = task
+                .run(
+                    settings_fn,
+                    || "Environment variables updated successfully".to_string(),
+                    |err| format!("Failed to update environment variables: {err}"),
+                )
+                .await;
 
             // Map error to include canister context for deferred printing
             result.map_err(|error| BindingEnvVarsFailure {
@@ -197,4 +196,111 @@ pub(crate) async fn set_binding_env_vars_many(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::test_support::{
+        bare_canister, outcome_of, recording_reporter, task_labels, unreachable_agent,
+    };
+    use icp_events::{Event, Outcome, TaskId, TaskKind};
+
+    fn canister_id() -> Principal {
+        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap()
+    }
+
+    fn ids(names: &[&str]) -> BTreeMap<String, Principal> {
+        names
+            .iter()
+            .map(|name| (name.to_string(), canister_id()))
+            .collect()
+    }
+
+    /// The agent cannot be reached, so this pins the reporting shape — start,
+    /// message, failure verdict — rather than the wording of the transport error.
+    #[tokio::test]
+    async fn an_unreachable_canister_is_reported_as_a_failure() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = set_binding_env_vars_many(
+            unreachable_agent(),
+            None,
+            "default",
+            vec![(canister_id(), bare_canister("backend"))],
+            ids(&["backend"]),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_err());
+
+        let events = sink.events();
+        assert_eq!(
+            events[..2],
+            [
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Spinner,
+                    label: Some("backend".into()),
+                },
+                Event::TaskMessage {
+                    id: TaskId(0),
+                    message: "Updating environment variables...".into(),
+                },
+            ]
+        );
+
+        let (outcome, message) = outcome_of(&events, TaskId(0));
+        assert_eq!(outcome, Outcome::Failure);
+        assert!(
+            message
+                .as_deref()
+                .is_some_and(|m| m.starts_with("Failed to update environment variables: ")),
+            "unexpected message: {message:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn one_task_per_canister_in_the_given_order() {
+        let (reporter, sink) = recording_reporter();
+
+        let _ = set_binding_env_vars_many(
+            unreachable_agent(),
+            None,
+            "default",
+            vec![
+                (canister_id(), bare_canister("frontend")),
+                (canister_id(), bare_canister("backend")),
+            ],
+            ids(&["frontend", "backend"]),
+            &reporter,
+        )
+        .await;
+
+        assert_eq!(
+            task_labels(&sink.events()),
+            vec![Some("frontend".to_string()), Some("backend".to_string())]
+        );
+    }
+
+    /// Canisters without ids are rejected before any work starts, so there is
+    /// nothing to report progress about.
+    #[tokio::test]
+    async fn a_canister_without_an_id_aborts_before_any_task_starts() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = set_binding_env_vars_many(
+            unreachable_agent(),
+            None,
+            "default",
+            vec![(canister_id(), bare_canister("backend"))],
+            ids(&[]),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(sink.events().is_empty());
+    }
 }

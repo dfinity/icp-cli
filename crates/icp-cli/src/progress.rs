@@ -22,6 +22,24 @@ const COLOR_REGULAR: &str = "blue";
 const COLOR_SUCCESS: &str = "green";
 const COLOR_FAILURE: &str = "red";
 
+/// The style a spinner carries while it is still running.
+pub(crate) fn running_style() -> ProgressStyle {
+    make_style(TICK_EMPTY, COLOR_REGULAR)
+}
+
+/// The style a spinner carries once it has succeeded.
+pub(crate) fn success_style() -> ProgressStyle {
+    make_style(TICK_SUCCESS, COLOR_SUCCESS)
+}
+
+/// The style a spinner carries once it has failed.
+pub(crate) fn failure_style() -> ProgressStyle {
+    make_style(TICK_FAILURE, COLOR_FAILURE)
+}
+
+/// How often a running spinner redraws itself.
+pub(crate) const STEADY_TICK: Duration = Duration::from_millis(120);
+
 // Creates a progress bar style with a spinner that transitions to a final tick symbol
 // - end_tick: the symbol to display when the progress completes (success, failure, etc.)
 // - color: the color theme for the spinner and text
@@ -101,13 +119,10 @@ impl ProgressManager {
     pub(crate) fn create_independent_progress_bar(&self) -> SimpleProgressBar {
         let pb = self
             .multi_progress
-            .add(SimpleProgressBar::new_spinner().with_style(make_style(
-                TICK_EMPTY,    // end_tick
-                COLOR_REGULAR, // color
-            )));
+            .add(SimpleProgressBar::new_spinner().with_style(running_style()));
 
         // Auto-tick spinner
-        pb.enable_steady_tick(Duration::from_millis(120));
+        pb.enable_steady_tick(STEADY_TICK);
 
         pb
     }
@@ -166,11 +181,9 @@ impl ProgressManager {
 
         // Update the progress bar style and message based on result
         let (style, message) = match &result {
-            Ok(_) => (make_style(TICK_SUCCESS, COLOR_SUCCESS), success_message()),
-            Err(err) if is_success_error(err) => {
-                (make_style(TICK_SUCCESS, COLOR_SUCCESS), error_message(err))
-            }
-            Err(err) => (make_style(TICK_FAILURE, COLOR_FAILURE), error_message(err)),
+            Ok(_) => (success_style(), success_message()),
+            Err(err) if is_success_error(err) => (success_style(), error_message(err)),
+            Err(err) => (failure_style(), error_message(err)),
         };
 
         progress_bar.set_style(style);

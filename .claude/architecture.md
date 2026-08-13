@@ -77,6 +77,32 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
 
 Store management is in `crates/icp/src/store_id.rs`.
 
+## Progress & User-Facing Output
+
+Operations in `crates/icp-cli/src/operations/` report progress as data, not as terminal
+calls. `crates/icp-events` defines the vocabulary (`Event`, `Reporter`, `Task`,
+`EventSink`, `CancelToken`) and depends only on serde and futures — never on `icp`, an
+async runtime, or anything terminal-shaped. `crates/icp-cli/src/events.rs` holds
+`IndicatifSink`, the only place that maps events onto `indicatif` bars.
+
+- New or converted operations take a `&Reporter`, never a `debug: bool` and never
+  `crate::progress` directly. Callers build one per operation with
+  `events::indicatif_reporter(ctx.debug)`.
+- `crates/icp-cli/src/progress.rs` is the pre-inversion renderer, kept only while
+  `build.rs`, `sync.rs`, and `snapshot_transfer.rs` still use it. Do not add users.
+- The event model is deliberately not semver-stable: `publish = false`, `0.x`, all enums
+  `#[non_exhaustive]`, `TaskKind` closed.
+- Events do not drive `--json`. `--json` means the command's final result; progress never
+  appears in it.
+- `tracing` at INFO level is product output here, not logging — `logging.rs` installs a
+  `UserLayer` that prints `Level::INFO` to stderr unprefixed. `Event::Notice` is the event
+  model's equivalent; the `info!`/`warn!`/`error!` calls inside `operations/` have not been
+  converted yet.
+
+Operations are unit-tested by running them against `RecordingSink` and asserting on the
+resulting `Vec<Event>`; see `operations/test_support.rs`. `events.rs` additionally compares
+`IndicatifSink`'s rendered frames against `ProgressManager`'s to catch output regressions.
+
 ## Telemetry
 
 Anonymous usage telemetry implementation. User-facing documentation is in `docs/telemetry.md`.

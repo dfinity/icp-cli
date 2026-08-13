@@ -11,10 +11,9 @@ use ic_management_canister_types::CanisterInstallMode;
 use snafu::Snafu;
 use tracing::{debug, error};
 
-use crate::{
-    operations::{misc::fetch_canister_metadata, wasm::extract_candid_service},
-    progress::{ProgressManager, ProgressManagerSettings},
-};
+use icp_events::{Reporter, TaskKind};
+
+use crate::operations::{misc::fetch_canister_metadata, wasm::extract_candid_service};
 
 /// Checks Candid interface compatibility for all canisters that would be
 /// upgraded. Aborts if any canister has an incompatible interface.
@@ -22,27 +21,27 @@ pub(crate) async fn check_candid_compatibility_many(
     agent: Agent,
     canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), CandidCheckManyError> {
     let mut check_futs = FuturesOrdered::new();
-    let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode) in canisters {
-        let pb = check_progress.create_progress_bar(name);
+        // Started up front so the tasks appear in the order the canisters were given,
+        // regardless of the order the futures below are first polled in.
+        let task = reporter.task(TaskKind::Spinner, name);
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
 
         check_futs.push_back(async move {
             if !is_upgrade {
-                pb.finish_with_message("Skipped (not an upgrade)");
+                task.skip("Skipped (not an upgrade)");
                 return Ok::<_, CandidCheckFailure>(());
             }
 
-            pb.set_message("Checking compatibility...");
+            task.message("Checking compatibility...");
 
-            ProgressManager::execute_with_progress(
-                &pb,
+            task.run(
                 check_canister_candid_compat(&agent, &cid, name, &*artifacts),
                 || "Compatible".to_string(),
                 |_| "Incompatible".to_string(),
@@ -205,4 +204,100 @@ pub(crate) enum CandidCompatibility {
 #[snafu(display("Candid compatibility check failed for canister(s) {names:?}."))]
 pub struct CandidCheckManyError {
     names: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::test_support::{
+        EmptyArtifacts, outcome_of, recording_reporter, task_labels, unreachable_agent,
+    };
+    use icp_events::{Event, Outcome, TaskId, TaskKind};
+
+    fn canister_id() -> Principal {
+        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap()
+    }
+
+    /// A fresh install has no deployed interface to be compatible with, so the check
+    /// is skipped — and a skip is neither a success nor a failure.
+    #[tokio::test]
+    async fn a_non_upgrade_is_skipped_without_a_verdict() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = check_candid_compatibility_many(
+            unreachable_agent(),
+            vec![("backend", canister_id(), CanisterInstallMode::Install)],
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            sink.events(),
+            vec![
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Spinner,
+                    label: Some("backend".into()),
+                },
+                Event::TaskFinished {
+                    id: TaskId(0),
+                    outcome: Outcome::Neutral,
+                    message: Some("Skipped (not an upgrade)".into()),
+                },
+            ]
+        );
+    }
+
+    /// A missing artifact cannot be checked, so the upgrade is waved through and the
+    /// install path reports the missing artifact instead.
+    #[tokio::test]
+    async fn an_upgrade_with_no_artifact_is_reported_compatible() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = check_candid_compatibility_many(
+            unreachable_agent(),
+            vec![("backend", canister_id(), CanisterInstallMode::Upgrade(None))],
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let events = sink.events();
+        assert_eq!(
+            events[1],
+            Event::TaskMessage {
+                id: TaskId(0),
+                message: "Checking compatibility...".into(),
+            }
+        );
+        assert_eq!(
+            outcome_of(&events, TaskId(0)),
+            (Outcome::Success, Some("Compatible".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn each_canister_gets_its_own_task_in_order() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = check_candid_compatibility_many(
+            unreachable_agent(),
+            vec![
+                ("frontend", canister_id(), CanisterInstallMode::Install),
+                ("backend", canister_id(), CanisterInstallMode::Install),
+            ],
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            task_labels(&sink.events()),
+            vec![Some("frontend".to_string()), Some("backend".to_string())]
+        );
+    }
 }

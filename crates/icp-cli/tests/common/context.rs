@@ -99,7 +99,14 @@ impl TestContext {
     }
 
     pub(crate) fn icp(&self) -> Command {
-        let mut cmd = Command::new(icp_bin_path());
+        Command::from_std(self.icp_std())
+    }
+
+    /// The same isolated `icp` invocation as [`TestContext::icp`], as a raw
+    /// [`std::process::Command`] so a caller can wire up stdio itself — e.g. to spawn a
+    /// long-running command and close its stdout pipe part-way through.
+    pub(crate) fn icp_std(&self) -> std::process::Command {
+        let mut cmd = std::process::Command::new(icp_bin_path());
 
         // Isolate the command
         cmd.current_dir(self.home_path());

@@ -1,4 +1,4 @@
-use std::io::{Write as _, stdout};
+use std::io::{ErrorKind, Write as _, stdout};
 
 use anyhow::{Context as _, anyhow};
 use candid::Principal;
@@ -194,9 +194,8 @@ async fn fetch_and_display_logs(
                     .collect(),
             },
         )?;
-        // Unlike the other `--json` sites in this module, terminate the document with a
-        // newline: it is the entirety of stdout, so without it the shell prompt lands
-        // mid-line. Covered by `canister_logs_single_fetch`.
+        // Terminate the document with a newline: it is the entirety of stdout, so without
+        // it the shell prompt lands mid-line. Covered by `canister_logs_single_fetch`.
         writeln!(out)?;
     } else {
         println!(
@@ -224,7 +223,7 @@ async fn follow_logs(
     let mut last_idx: Option<u64> = None;
     let interval = std::time::Duration::from_secs(interval_seconds);
 
-    loop {
+    'follow: loop {
         let filter = match last_idx {
             Some(idx) => Some(CanisterLogFilter::ByIdx {
                 start: idx + 1, // Start from the next log index after the last one we displayed
@@ -255,17 +254,26 @@ async fn follow_logs(
 
         if !new_logs.is_empty() {
             for log in &new_logs {
-                if args.json {
-                    serde_json::to_writer(
-                        stdout(),
-                        &JsonFollowRecord {
-                            timestamp: log.timestamp_nanos,
-                            index: log.idx,
-                            content: String::from_utf8_lossy(&log.content).into_owned(),
-                        },
-                    )?;
+                let line = if args.json {
+                    serde_json::to_string(&JsonFollowRecord {
+                        timestamp: log.timestamp_nanos,
+                        index: log.idx,
+                        content: String::from_utf8_lossy(&log.content).into_owned(),
+                    })?
                 } else {
-                    println!("{}", format_log(log));
+                    format_log(log)
+                };
+                // Under `--json` this makes the output newline-delimited: the newline both
+                // separates records for incremental consumers and, because Rust's stdout is a
+                // `LineWriter` regardless of whether it is a terminal, flushes the record so
+                // that `--follow` actually streams. Covered by `canister_logs_follow_mode_json`.
+                match writeln!(stdout().lock(), "{line}") {
+                    Ok(()) => {}
+                    // The consumer closed the pipe (`... --follow --json | head -1`). That is
+                    // an ordinary way to stop a tail, so stop quietly rather than reporting a
+                    // broken pipe. Covered by `canister_logs_follow_broken_pipe`.
+                    Err(e) if e.kind() == ErrorKind::BrokenPipe => break 'follow,
+                    Err(e) => return Err(e.into()),
                 }
             }
             // Update last_idx to the highest idx we've displayed

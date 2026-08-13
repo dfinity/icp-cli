@@ -79,6 +79,7 @@ build:
 
 **Environment variables:**
 - `ICP_WASM_OUTPUT_PATH` — Target path for WASM output
+- `ICP_CLI_ENVIRONMENT` — Name of the environment being built for
 
 See [Environment Variables Reference](environment-variables.md) for all available variables.
 

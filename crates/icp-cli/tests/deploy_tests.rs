@@ -11,7 +11,7 @@ use crate::common::{
     TestContext, build_sync_plugin_example, clients,
 };
 use icp::{
-    fs::{create_dir_all, write_string},
+    fs::{create_dir_all, read_to_string, write_string},
     prelude::*,
     store_id::IdMapping,
 };
@@ -83,6 +83,9 @@ async fn deploy() {
     // Use vendored WASM
     let wasm = ctx.make_asset("example_icp_mo.wasm");
 
+    // The build step records the environment deploy built it for
+    let recorded = project_dir.join("environment.txt");
+
     // Project manifest
     let pm = formatdoc! {r#"
         canisters:
@@ -90,7 +93,9 @@ async fn deploy() {
             build:
               steps:
                 - type: script
-                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+                  commands:
+                    - echo "$ICP_CLI_ENVIRONMENT" > '{recorded}'
+                    - cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -115,6 +120,12 @@ async fn deploy() {
         .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success();
+
+    // The deployed environment reached the build step
+    assert_eq!(
+        read_to_string(&recorded).expect("failed to read recorded environment"),
+        "random-environment\n"
+    );
 
     // Query canister
     ctx.icp()

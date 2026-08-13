@@ -5,7 +5,7 @@ use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::TestContext;
-use icp::fs::write_string;
+use icp::fs::{read_to_string, write_string};
 
 mod common;
 
@@ -81,6 +81,62 @@ fn build_adapter_script_multiple() {
         .args(["build", "my-canister"])
         .assert()
         .success();
+}
+
+#[test]
+fn build_exposes_environment_name() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+    let recorded = project_dir.join("environment.txt");
+
+    // Project manifest: the build step records the environment it was built for
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  commands:
+                    - echo "$ICP_CLI_ENVIRONMENT" > '{recorded}'
+                    - touch "$ICP_WASM_OUTPUT_PATH"
+
+        environments:
+          - name: test-env
+            canisters:
+              - my-canister
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    // No --environment: the default environment's name
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "my-canister"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read_to_string(&recorded).expect("failed to read recorded environment"),
+        "local\n"
+    );
+
+    // Explicit --environment
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--environment", "test-env"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read_to_string(&recorded).expect("failed to read recorded environment"),
+        "test-env\n"
+    );
 }
 
 #[test]

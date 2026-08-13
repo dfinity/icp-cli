@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Duration;
 use tracing::info;
 
+use crate::options::EnvironmentOpt;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
     operations::{
@@ -30,7 +31,7 @@ use crate::{
         settings::{sync_controller_dependents, sync_settings_many},
         sync::sync_many,
     },
-    options::{EnvironmentOpt, IdentityOpt},
+    options::{IdentityOpt, arg_struct_change_help},
     progress::{ProgressManager, ProgressManagerSettings},
 };
 
@@ -87,7 +88,7 @@ pub(crate) struct DeployArgs {
     pub(crate) identity: IdentityOpt,
 
     #[command(flatten)]
-    pub(crate) environment: EnvironmentOpt,
+    pub(crate) environment: DeployEnvironmentOpt,
 
     /// Output command results as JSON
     #[arg(long)]
@@ -99,8 +100,14 @@ pub(crate) struct DeployArgs {
     pub(crate) args_opt: ArgsOpt,
 }
 
+arg_struct_change_help!(
+    EnvironmentOpt => DeployEnvironmentOpt,
+    arg = "environment",
+    help = "Override the environment to build for and deploy to. By default, the local environment is used"
+);
+
 pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow::Error> {
-    let environment_selection: EnvironmentSelection = args.environment.clone().into();
+    let environment_selection: EnvironmentSelection = args.environment.0.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
     let env = ctx.get_environment(&environment_selection).await?;
@@ -177,6 +184,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     build_many_with_progress_bar(
         canisters_to_build,
+        environment_selection.name(),
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,

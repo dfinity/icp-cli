@@ -82,6 +82,13 @@ pub enum ConsolidateManifestError {
         recipe_type: RecipeType,
     },
 
+    #[snafu(display("failed to cache canister recipe: {recipe_type:?}"))]
+    CacheRecipe {
+        #[snafu(source(from(recipe::ResolveError, Box::new)))]
+        source: Box<recipe::ResolveError>,
+        recipe_type: RecipeType,
+    },
+
     #[snafu(display("project contains two similarly named {kind}s: '{name}'"))]
     Duplicate { kind: String, name: String },
 
@@ -387,7 +394,7 @@ async fn build_manifest_canisters(
 
                 // Recipe
                 Instructions::Recipe { recipe } => {
-                    let template =
+                    let fetched =
                         recipe_resolver
                             .resolve(recipe)
                             .await
@@ -397,9 +404,25 @@ async fn build_manifest_canisters(
                     let ctx = recipe::RecipeContext {
                         canister_name: m.name.clone(),
                     };
-                    recipe::render_recipe(&template, recipe, &ctx).context(RenderRecipeSnafu {
-                        recipe_type: recipe.recipe_type.clone(),
-                    })?
+                    let steps = recipe::render_recipe(&fetched.template, recipe, &ctx).context(
+                        RenderRecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        },
+                    )?;
+
+                    // The template rendered, so an unpinned download is now known
+                    // good and safe to cache. Committing only here is what keeps a
+                    // bad remote response from becoming sticky.
+                    if let Some(pending) = fetched.pending_cache {
+                        recipe_resolver
+                            .commit(pending)
+                            .await
+                            .context(CacheRecipeSnafu {
+                                recipe_type: recipe.recipe_type.clone(),
+                            })?;
+                    }
+
+                    steps
                 }
             };
 
@@ -1457,7 +1480,7 @@ pub async fn consolidate_manifest(
 #[cfg(test)]
 mod dependency_tests {
     use super::*;
-    use crate::canister::recipe::{Resolve, ResolveError};
+    use crate::canister::recipe::{Fetched, Resolve, ResolveError};
     use crate::manifest::recipe::Recipe;
     use camino_tempfile::Utf8TempDir;
 
@@ -1466,7 +1489,7 @@ mod dependency_tests {
 
     #[async_trait::async_trait]
     impl Resolve for PanicResolver {
-        async fn resolve(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
+        async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
             panic!("recipe resolver should not be called in dependency tests");
         }
     }

@@ -12,7 +12,11 @@ use crate::manifest::{
     recipe::{Recipe, RecipeType},
 };
 
-/// Context passed to a recipe resolver, describing the canister being built.
+/// Describes the canister being built, for the render stage.
+///
+/// Belongs to rendering alone: [`Resolve::resolve`](super::Resolve::resolve) no
+/// longer takes it, since fetching a template does not depend on which canister
+/// the template is for. Only [`render_recipe`] consumes it.
 ///
 /// Serializes to the shape injected into recipe templates under the `_` namespace:
 ///

@@ -695,7 +695,7 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{Resolve, ResolveError};
+    use crate::canister::recipe::{Fetched, Resolve, ResolveError};
     use crate::manifest::{ProjectRootLocate, ProjectRootLocateError, recipe::Recipe};
     use camino_tempfile::Utf8TempDir;
     use indoc::indoc;
@@ -724,15 +724,19 @@ mod tests {
 
     #[async_trait]
     impl Resolve for MockRecipeResolver {
-        /// A minimal template rendering to a single dummy pre-built step.
-        async fn resolve(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
-            Ok(indoc! {r#"
-                build:
-                  steps:
-                    - type: pre-built
-                      path: dummy.wasm
-            "#}
-            .to_owned())
+        /// A minimal template rendering to a single dummy pre-built step. Nothing
+        /// is fetched, so there is no cache write to hold back.
+        async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
+            Ok(Fetched {
+                template: indoc! {r#"
+                    build:
+                      steps:
+                        - type: pre-built
+                          path: dummy.wasm
+                "#}
+                .to_owned(),
+                pending_cache: None,
+            })
         }
     }
 

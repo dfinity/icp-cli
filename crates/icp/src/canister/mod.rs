@@ -10,7 +10,8 @@ use icp_deploy_canister::sync_exec::StepProgress;
 use tokio::sync::mpsc::Sender;
 
 pub use icp_deploy_canister::canister::{
-    ControllerRef, LogVisibilityDef, LogVisibilitySimple, Settings, resolve_controllers,
+    ControllerRef, LogVisibilityDef, LogVisibilitySimple, ManifestEnvVar, ManifestSettings,
+    Settings, resolve_controllers,
 };
 
 pub mod build;

@@ -135,6 +135,15 @@ pub struct Canister {
     /// consolidation, so it is never serialized.
     #[serde(skip)]
     pub friendly_names: Vec<String>,
+
+    /// For each environment variable whose value came from a file, the file it
+    /// was read from. `settings.environment_variables` already holds the
+    /// contents; the paths are kept so `icp project bundle` can hold a file
+    /// backing a variable to the same containment rule it applies to every other
+    /// file a manifest points at. Bookkeeping for that check rather than part of
+    /// the resolved configuration, so it is never serialized.
+    #[serde(skip)]
+    pub environment_variable_files: BTreeMap<String, PathBuf>,
 }
 
 #[derive(Debug, Snafu)]
@@ -261,6 +270,7 @@ mod bundle_tests {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec![],
+            environment_variable_files: BTreeMap::new(),
         }
     }
 

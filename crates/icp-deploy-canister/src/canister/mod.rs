@@ -5,7 +5,10 @@ use ic_management_canister_types::{CanisterSettings, LogVisibility};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
+use crate::{
+    parsers::{CyclesAmount, DurationAmount, MemoryAmount},
+    prelude::*,
+};
 
 pub mod recipe;
 
@@ -202,9 +205,48 @@ impl schemars::JsonSchema for ControllerRef {
     }
 }
 
+/// An environment variable value as written in a manifest.
+///
+/// A plain scalar is the value itself:
+/// ```yaml
+/// environment_variables:
+///   API_ENDPOINT: https://api.example.com
+/// ```
+///
+/// The object form reads the value from a file, relative to the canister's own
+/// directory — including when an environment overrides the variable, matching how
+/// an `init_args` override resolves its path:
+/// ```yaml
+/// environment_variables:
+///   API_KEY:
+///     path: ./secrets/api-key
+/// ```
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema, Serialize)]
+#[serde(untagged, expecting = "a string, or `{ path: <file> }`")]
+pub enum ManifestEnvVar {
+    /// The value, written inline.
+    Value(String),
+    /// A file holding the value. Surrounding whitespace is trimmed off the
+    /// file's contents, so a trailing newline does not become part of the value.
+    Path {
+        #[schemars(with = "String")]
+        path: PathBuf,
+    },
+}
+
+impl Default for ManifestEnvVar {
+    fn default() -> Self {
+        Self::Value(String::new())
+    }
+}
+
+/// Canister settings loaded from a manifest, before file-backed environment
+/// variable values have been read. See [`Settings`] for the resolved form.
+pub type ManifestSettings = Settings<ManifestEnvVar>;
+
 /// Canister settings, such as compute and memory allocation.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema, Serialize)]
-pub struct Settings {
+pub struct Settings<EnvVar = String> {
     /// Controls who can read canister logs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_visibility: Option<LogVisibilityDef>,
@@ -247,14 +289,49 @@ pub struct Settings {
     /// Environment variables for the canister as key-value pairs.
     /// These variables are accessible within the canister and can be used to configure
     /// behavior without hardcoding values in the WASM module.
+    /// A value may also be read from a file with `{ path: <file> }`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub environment_variables: Option<HashMap<String, String>>,
+    pub environment_variables: Option<HashMap<String, EnvVar>>,
 
     /// Controllers for this canister. Each entry is either a principal text
     /// (e.g. "2vxsx-fae") or the name of another canister in this project.
     /// Named canisters that do not yet exist will be set as controllers once created.
     #[serde(default)]
     pub controllers: Option<Vec<ControllerRef>>,
+}
+
+impl From<Settings> for ManifestSettings {
+    fn from(settings: Settings) -> Self {
+        let Settings {
+            log_visibility,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            log_memory_limit,
+            environment_variables,
+            controllers,
+        } = settings;
+
+        Self {
+            log_visibility,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            log_memory_limit,
+            environment_variables: environment_variables.map(|vars| {
+                vars.into_iter()
+                    .map(|(name, value)| (name, ManifestEnvVar::Value(value)))
+                    .collect()
+            }),
+            controllers,
+        }
+    }
 }
 
 impl From<Settings> for CanisterSettings {
@@ -273,6 +350,8 @@ impl From<Settings> for CanisterSettings {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
@@ -444,6 +523,76 @@ allowed_viewers:
         assert_eq!(
             settings.log_memory_limit.as_ref().map(|m| m.get()),
             Some(2 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn settings_environment_variables_take_values_or_files() {
+        let yaml = indoc! {r#"
+            environment_variables:
+              API_ENDPOINT: https://api.example.com
+              API_KEY:
+                path: ./secrets/api-key
+        "#};
+        let settings: ManifestSettings = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            settings.environment_variables,
+            Some(HashMap::from([
+                (
+                    "API_ENDPOINT".to_owned(),
+                    ManifestEnvVar::Value("https://api.example.com".to_owned()),
+                ),
+                (
+                    "API_KEY".to_owned(),
+                    ManifestEnvVar::Path {
+                        path: "./secrets/api-key".into(),
+                    },
+                ),
+            ])),
+        );
+    }
+
+    #[test]
+    fn settings_environment_variable_rejects_unknown_object_form() {
+        let yaml = indoc! {r#"
+            environment_variables:
+              API_KEY:
+                file: ./secrets/api-key
+        "#};
+        let err = serde_yaml::from_str::<ManifestSettings>(yaml)
+            .expect_err("only the `path` object form is accepted");
+        assert!(
+            err.to_string().contains("a string, or `{ path: <file> }`"),
+            "unhelpful error: {err}"
+        );
+    }
+
+    /// A value of the wrong scalar type reports what is accepted, rather than
+    /// serde's default "did not match any variant" for an untagged enum.
+    #[test]
+    fn settings_environment_variable_rejects_non_string_scalar() {
+        let err =
+            serde_yaml::from_str::<ManifestSettings>("environment_variables:\n  PORT: 8080\n")
+                .expect_err("a bare integer is not a value");
+        assert!(
+            err.to_string().contains("a string, or `{ path: <file> }`"),
+            "unhelpful error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolved_settings_serialize_environment_variables_inline() {
+        let settings = Settings {
+            environment_variables: Some(HashMap::from([(
+                "API_KEY".to_owned(),
+                "s3cret".to_owned(),
+            )])),
+            ..Default::default()
+        };
+        let yaml = serde_yaml::to_string(&ManifestSettings::from(settings)).unwrap();
+        assert!(
+            yaml.contains("environment_variables:\n  API_KEY: s3cret\n"),
+            "unexpected yaml: {yaml}"
         );
     }
 

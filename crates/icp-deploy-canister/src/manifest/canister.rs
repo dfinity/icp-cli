@@ -3,7 +3,7 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::canister::Settings;
+use crate::canister::ManifestSettings;
 
 use super::{adapter, recipe::Recipe, serde_helpers::non_empty_vec};
 
@@ -68,7 +68,7 @@ pub struct CanisterManifest {
 
     /// The configuration specifying the various settings when creating the canister.
     #[serde(default)]
-    pub settings: Settings,
+    pub settings: ManifestSettings,
 
     /// Initialization arguments passed to the canister during installation.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,7 +122,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     .to_string();
 
                 // Extract settings (optional, with default)
-                let settings: Settings =
+                let settings: ManifestSettings =
                     if let Some(settings_value) = temp_map.remove(&settings_key) {
                         serde_yaml::from_value(settings_value).map_err(|e| {
                             Error::custom(format!(
@@ -131,7 +131,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             ))
                         })?
                     } else {
-                        Settings::default()
+                        ManifestSettings::default()
                     };
 
                 // Extract init_args (optional)
@@ -598,7 +598,7 @@ mod tests {
                 "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
@@ -624,7 +624,7 @@ mod tests {
                 "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
@@ -651,7 +651,7 @@ mod tests {
                 "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
@@ -684,7 +684,7 @@ mod tests {
                 "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings {
+                settings: ManifestSettings {
                     compute_allocation: Some(3),
                     memory_allocation: Some(MemoryAmount::from(4294967296)),
                     ..Default::default()
@@ -714,7 +714,7 @@ mod tests {
                 "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
@@ -776,7 +776,7 @@ mod tests {
             "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
@@ -818,7 +818,7 @@ mod tests {
             "#}),
             CanisterManifest {
                 name: "my-canister".to_string(),
-                settings: Settings::default(),
+                settings: ManifestSettings::default(),
                 init_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {

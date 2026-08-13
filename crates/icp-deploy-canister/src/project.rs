@@ -6,7 +6,7 @@ use snafu::prelude::*;
 
 use crate::{
     Canister, Environment, InitArgs, Network, Project,
-    canister::{ControllerRef, Settings, recipe},
+    canister::{ControllerRef, ManifestEnvVar, ManifestSettings, Settings, recipe},
     files::{FileAccess, FileAccessError},
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
@@ -87,6 +87,15 @@ pub enum ConsolidateManifestError {
     ReadInitArgs {
         source: FileAccessError,
         canister: String,
+    },
+
+    #[snafu(display(
+        "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
+    ))]
+    ReadEnvironmentVariable {
+        source: FileAccessError,
+        canister: String,
+        variable: String,
     },
 
     #[snafu(display(
@@ -191,6 +200,68 @@ async fn resolve_manifest_init_args(
             }),
         },
     }
+}
+
+/// Resolve a manifest's [`ManifestSettings`] into the model's [`Settings`] by
+/// reading any file-backed environment variable values relative to `base_path`.
+/// Also returns the file each such value came from, for
+/// [`Canister::environment_variable_files`].
+async fn resolve_manifest_settings(
+    files: &dyn FileAccess,
+    manifest_settings: &ManifestSettings,
+    base_path: &Path,
+    canister: &str,
+) -> Result<(Settings, BTreeMap<String, PathBuf>), ConsolidateManifestError> {
+    let ManifestSettings {
+        log_visibility,
+        compute_allocation,
+        memory_allocation,
+        freezing_threshold,
+        reserved_cycles_limit,
+        wasm_memory_limit,
+        wasm_memory_threshold,
+        log_memory_limit,
+        environment_variables,
+        controllers,
+    } = manifest_settings;
+
+    let mut env_files = BTreeMap::new();
+    let mut resolved_vars = None;
+    if let Some(vars) = environment_variables {
+        let mut resolved = HashMap::with_capacity(vars.len());
+        for (name, var) in vars {
+            let value = match var {
+                ManifestEnvVar::Value(value) => value.to_owned(),
+                ManifestEnvVar::Path { path } => {
+                    let file = base_path.join(path);
+                    let contents = files.read_to_string(&file).await.context(
+                        ReadEnvironmentVariableSnafu {
+                            canister,
+                            variable: name,
+                        },
+                    )?;
+                    env_files.insert(name.to_owned(), file);
+                    contents.trim().to_owned()
+                }
+            };
+            resolved.insert(name.to_owned(), value);
+        }
+        resolved_vars = Some(resolved);
+    }
+
+    let settings = Settings {
+        log_visibility: log_visibility.clone(),
+        compute_allocation: *compute_allocation,
+        memory_allocation: memory_allocation.clone(),
+        freezing_threshold: freezing_threshold.clone(),
+        reserved_cycles_limit: reserved_cycles_limit.clone(),
+        wasm_memory_limit: wasm_memory_limit.clone(),
+        wasm_memory_threshold: wasm_memory_threshold.clone(),
+        log_memory_limit: log_memory_limit.clone(),
+        environment_variables: resolved_vars,
+        controllers: controllers.clone(),
+    };
+    Ok((settings, env_files))
 }
 
 fn is_glob(s: &str) -> bool {
@@ -386,6 +457,9 @@ async fn build_manifest_canisters(
                 }
             };
 
+            let (settings, environment_variable_files) =
+                resolve_manifest_settings(files, &m.settings, &cdir, &m.name).await?;
+
             let init_args = match m.init_args.as_ref() {
                 Some(mia) => Some(resolve_manifest_init_args(files, mia, &cdir, &m.name).await?),
                 None => None,
@@ -396,7 +470,7 @@ async fn build_manifest_canisters(
                 cdir,
                 Canister {
                     name: m.name.clone(),
-                    settings: m.settings.clone(),
+                    settings,
                     build,
                     sync,
                     init_args,
@@ -406,6 +480,7 @@ async fn build_manifest_canisters(
                     // dot-nested alias form when the canister is imported as a
                     // dependency (see `import_dependency`).
                     friendly_names: vec![m.name.clone()],
+                    environment_variable_files,
                 },
             ));
         }
@@ -434,7 +509,7 @@ struct ImportedInstance {
 /// same-named environment beneath any root overrides.
 #[derive(Default, Clone)]
 struct MemberCanisterOverride {
-    settings: Option<Settings>,
+    settings: Option<ManifestSettings>,
     init_args: Option<ManifestInitArgs>,
 }
 
@@ -468,7 +543,7 @@ async fn canonicalize_dep(
 /// Store-key prefix for a dependency instance: its canonical directory relative
 /// to the canonical app root, forward-slash separated so keys are stable across
 /// platforms and independent of how each edge spells the path.
-fn relative_prefix(app_root_canonical: &Path, dep_canonical: &Path) -> String {
+pub fn relative_prefix(app_root_canonical: &Path, dep_canonical: &Path) -> String {
     let rel = pathdiff::diff_utf8_paths(dep_canonical, app_root_canonical)
         .unwrap_or_else(|| dep_canonical.to_owned());
     rel.as_str().replace('\\', "/")
@@ -495,8 +570,8 @@ fn translate_controllers(canister: &mut Canister, local_to_key: &BTreeMap<String
 
 /// Rewrite `CanisterName` controller references in a `Settings` from a
 /// dependency's local canister names to their store keys.
-fn translate_settings_controllers(
-    settings: &mut Settings,
+fn translate_settings_controllers<EnvVar>(
+    settings: &mut Settings<EnvVar>,
     local_to_key: &BTreeMap<String, String>,
 ) {
     if let Some(controllers) = &mut settings.controllers {
@@ -823,7 +898,7 @@ async fn build_environment_canisters(
     env_name: &str,
     selection: &CanisterSelection,
     member_overrides: Option<&HashMap<String, MemberCanisterOverride>>,
-    root_settings: Option<&HashMap<String, Settings>>,
+    root_settings: Option<&HashMap<String, ManifestSettings>>,
     root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
 ) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
     let mut cs = match selection {
@@ -850,7 +925,8 @@ async fn build_environment_canisters(
         for (key, ov) in overrides {
             if let Some((cpath, canister)) = cs.get_mut(key) {
                 if let Some(s) = &ov.settings {
-                    canister.settings = s.clone();
+                    (canister.settings, canister.environment_variable_files) =
+                        resolve_manifest_settings(files, s, cpath, key).await?;
                 }
                 if let Some(ia) = &ov.init_args {
                     canister.init_args =
@@ -863,8 +939,9 @@ async fn build_environment_canisters(
     // Root overrides last (highest precedence).
     if let Some(settings) = root_settings {
         for (name, s) in settings {
-            if let Some((_p, canister)) = cs.get_mut(name) {
-                canister.settings = s.clone();
+            if let Some((cpath, canister)) = cs.get_mut(name) {
+                (canister.settings, canister.environment_variable_files) =
+                    resolve_manifest_settings(files, s, cpath, name).await?;
             }
         }
     }
@@ -1823,6 +1900,210 @@ environments:
             vec![ControllerRef::CanisterName(
                 "openemail:frontend".to_string()
             )]
+        );
+    }
+
+    fn env_vars_of<'a>(
+        canisters: &'a IndexMap<String, (PathBuf, Canister)>,
+        key: &str,
+    ) -> &'a HashMap<String, String> {
+        canisters
+            .get(key)
+            .unwrap_or_else(|| {
+                panic!(
+                    "canister '{key}' not found; have {:?}",
+                    canisters.keys().collect::<Vec<_>>()
+                )
+            })
+            .1
+            .settings
+            .environment_variables
+            .as_ref()
+            .expect("environment variables set")
+    }
+
+    /// A canister manifest's file-backed environment variable resolves against
+    /// the canister's own directory, and the file's trailing newline is not part
+    /// of the value.
+    #[tokio::test]
+    async fn env_var_file_resolves_against_canister_dir() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "canisters/backend/canister.yaml",
+            r#"
+name: backend
+settings:
+  environment_variables:
+    API_KEY:
+      path: secrets/api-key
+build:
+  steps:
+    - type: pre-built
+      path: backend.wasm
+"#,
+        );
+        write(tmp.path(), "canisters/backend/secrets/api-key", "s3cret\n");
+        write(
+            tmp.path(),
+            "icp.yaml",
+            "canisters:\n  - ./canisters/backend\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            env_vars_of(&p.canisters, "backend"),
+            &HashMap::from([("API_KEY".to_string(), "s3cret".to_string())]),
+        );
+    }
+
+    /// A canister declared in its own directory, for the override tests below:
+    /// its directory is neither the project's nor an environment manifest's, so
+    /// the base a path resolves against is unambiguous.
+    fn write_backend_canister(dir: &Path, at: &str) {
+        write(
+            dir,
+            &format!("{at}/canister.yaml"),
+            r#"
+name: backend
+build:
+  steps:
+    - type: pre-built
+      path: backend.wasm
+"#,
+        );
+    }
+
+    /// An environment override resolves a path against the *canister's* directory
+    /// — the same base an `init_args` override uses — not against the manifest
+    /// declaring the override, even when that is an environment manifest of its
+    /// own.
+    #[tokio::test]
+    async fn env_var_file_in_environment_override_resolves_against_canister_dir() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_backend_canister(tmp.path(), "canisters/backend");
+        write(
+            tmp.path(),
+            "icp.yaml",
+            "canisters:\n  - ./canisters/backend\nenvironments:\n  - ./environments/staging.yaml\n",
+        );
+        write(
+            tmp.path(),
+            "environments/staging.yaml",
+            r#"
+name: staging
+settings:
+  backend:
+    environment_variables:
+      API_KEY:
+        path: secrets/api-key
+"#,
+        );
+        write(
+            tmp.path(),
+            "canisters/backend/secrets/api-key",
+            "staging-key\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            env_vars_of(&staging.canisters, "backend"),
+            &HashMap::from([("API_KEY".to_string(), "staging-key".to_string())]),
+        );
+        // The override applies to the environment only; the canister's own
+        // settings are untouched.
+        assert_eq!(
+            p.canisters
+                .get("backend")
+                .unwrap()
+                .1
+                .settings
+                .environment_variables,
+            None,
+        );
+    }
+
+    /// A member's own environment override resolves against the member's
+    /// canister, not against the member's or the root's project directory.
+    #[tokio::test]
+    async fn env_var_file_in_member_environment_resolves_against_member_canister_dir() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write_backend_canister(tmp.path(), "openemail/canisters/backend");
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - ./canisters/backend
+environments:
+  - name: staging
+    settings:
+      backend:
+        environment_variables:
+          API_KEY:
+            path: secrets/api-key
+"#,
+        );
+        write(
+            tmp.path(),
+            "openemail/canisters/backend/secrets/api-key",
+            "member-key\n",
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &format!(
+                "{}environments:\n  - name: staging\n",
+                manifest(
+                    &["app"],
+                    "dependencies:\n  - name: openemail\n    path: ./openemail\n"
+                )
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            env_vars_of(&staging.canisters, "openemail:backend"),
+            &HashMap::from([("API_KEY".to_string(), "member-key".to_string())]),
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_env_var_file_is_reported_with_the_variable_and_canister() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    settings:
+      environment_variables:
+        API_KEY:
+          path: secrets/api-key
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+"#,
+        );
+
+        let err = consolidate(tmp.path())
+            .await
+            .expect_err("the environment variable's file does not exist");
+
+        assert!(
+            matches!(
+                &err,
+                ConsolidateManifestError::ReadEnvironmentVariable { canister, variable, .. }
+                    if canister == "backend" && variable == "API_KEY"
+            ),
+            "unexpected error: {err}"
         );
     }
 

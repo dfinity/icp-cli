@@ -178,8 +178,10 @@ async fn deploy_prints_alias_namespaced_url_for_dependency_frontend() {
         .stdout(contains(
             "http://frontend.openemail.random-environment.localhost:",
         ))
-        // The dependency's compute backend falls back to a Candid UI URL.
-        .stdout(contains("vendor/openemail:backend (Candid UI):"));
+        // The dependency's compute backend falls back to a Candid UI URL, listed
+        // under the grouped "Backends (Candid UI)" header.
+        .stdout(contains("Backends (Candid UI):"))
+        .stdout(contains("vendor/openemail:backend:"));
 }
 
 /// Running `icp deploy` from *inside* a vendored member resolves up to the

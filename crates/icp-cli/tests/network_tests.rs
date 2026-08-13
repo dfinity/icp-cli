@@ -482,6 +482,75 @@ async fn network_run_and_stop_background() {
     );
 }
 
+/// Regression test for #597: when the native launcher exits prematurely in background mode
+/// (here because its fixed gateway port is already taken), the error must surface the
+/// launcher's captured stderr instead of only the bare exit status.
+///
+/// Unix-only: on Windows `network start` uses the Docker launcher, which does not go through
+/// `spawn_network_launcher`'s stderr-capture path.
+#[cfg(unix)]
+#[tokio::test]
+async fn background_start_port_conflict_surfaces_launcher_output() {
+    use std::net::TcpListener;
+
+    // The launcher spawns pocket-ic before it fails to bind the gateway, and on this error
+    // path pocket-ic is left orphaned (no descriptor is written to stop it later). Reap any
+    // process whose binary lives under this test's isolated temp home so we don't leak it;
+    // the home is unique per test, so this can't touch other tests or real networks.
+    //
+    // This runs on `Drop` (not inline after the assertion) so it still fires if an assertion
+    // below panics — the failure path is exactly the one that orphans pocket-ic.
+    struct Reaper(PathBuf);
+    impl Drop for Reaper {
+        fn drop(&mut self) {
+            use sysinfo::{ProcessesToUpdate, System};
+            let mut system = System::new();
+            system.refresh_processes(ProcessesToUpdate::All, true);
+            for process in system.processes().values() {
+                if process
+                    .exe()
+                    .is_some_and(|exe| exe.starts_with(self.0.as_std_path()))
+                {
+                    process.kill();
+                }
+            }
+        }
+    }
+
+    let ctx = TestContext::new();
+    let _reaper = Reaper(ctx.home_path().to_path_buf());
+    let project_dir = ctx.create_project_dir("portconflict");
+
+    // Occupy a port with a plain TCP listener. icp-cli's own port check only looks for a live
+    // network descriptor, so it passes; the launcher then fails to bind the gateway and exits.
+    // Binding to :0 lets the OS choose a free port, avoiding collisions with other tests.
+    let blocker = TcpListener::bind("127.0.0.1:0").expect("failed to bind blocker socket");
+    let port = blocker.local_addr().unwrap().port();
+
+    let pm = formatdoc! {r#"
+        networks:
+          - name: portconflict-network
+            mode: managed
+            gateway:
+              bind: 127.0.0.1
+              port: {port}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "portconflict-network", "--background"])
+        .assert()
+        .failure()
+        // Require the captured-output header (our own string, not PocketIC's wording): this
+        // proves the real launcher's stderr was read and wired into the error. Accepting the
+        // empty/unreadable fallback here would let a wiring regression pass unnoticed.
+        .stderr(contains("exited prematurely").and(contains("Launcher error output")));
+
+    // Hold the socket open until after the launcher has tried (and failed) to bind.
+    drop(blocker);
+}
+
 #[tokio::test]
 async fn network_starts_with_canisters_preset() {
     let ctx = TestContext::new();
@@ -567,6 +636,98 @@ async fn network_docker() {
         .balance_of(Principal::anonymous(), None)
         .await;
     assert!(balance > 0_u128);
+}
+
+/// A docker-mode manifest whose container writes a known line to stderr and exits nonzero without
+/// ever writing status.json — exactly the premature-exit path.
+///
+/// Overriding the entrypoint is far more deterministic than trying to make the real launcher fail
+/// from outside the container: it tolerates unrecognized arguments, and its ports live in the
+/// container's namespace so they can't be made to conflict. What is under test is icp-cli's log
+/// plumbing, not the launcher — whatever the container printed has to reach the user.
+///
+/// `rm-on-exit` also makes the container clean itself up, which additionally pins the ordering:
+/// the logs must be read before the drop guard removes the container.
+const FAILING_CONTAINER_MARKER: &str = "simulated-launcher-startup-failure";
+
+fn failing_docker_manifest() -> String {
+    formatdoc! {r#"
+        {NETWORK_DOCKER}
+            rm-on-exit: true
+            entrypoint:
+              - /bin/sh
+              - -c
+            args:
+              - "echo {FAILING_CONTAINER_MARKER} >&2; exit 3"
+    "#}
+}
+
+/// Regression test for #677: when the container exits prematurely in **background** mode, the
+/// error must surface the container's log tail instead of only the bare exit status. This is the
+/// Docker counterpart of `background_start_port_conflict_surfaces_launcher_output` — the
+/// container's stdio belongs to the daemon, so the cause comes back over `docker logs` rather than
+/// from a local file.
+#[tag(docker)]
+#[tokio::test]
+async fn docker_background_start_surfaces_container_output_on_premature_exit() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("docker-premature-exit");
+    write_string(&project_dir.join("icp.yaml"), &failing_docker_manifest())
+        .expect("failed to write project manifest");
+
+    ctx.docker_pull_network();
+
+    // `--background` bounds the test: were the container to stay up, the command returns
+    // instead of blocking, and the `failure()` assertion fails fast.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "docker-network", "--background"])
+        .assert()
+        .failure()
+        // The header is our own string, and the marker is the container's actual bytes: together
+        // they prove the log was fetched and folded into the error. Accepting the no-output
+        // fallback here would let a wiring regression pass unnoticed.
+        .stderr(
+            contains("exited prematurely with status 3")
+                .and(contains("Container output"))
+                .and(contains(FAILING_CONTAINER_MARKER))
+                // The `docker logs` hint is deferred until the network is up, so a start that
+                // failed must not advertise it — this manifest sets `rm-on-exit`, so the
+                // container is already gone by the time anyone could run it.
+                .and(contains("docker logs").not()),
+        );
+}
+
+/// In **foreground** mode the container's output must be streamed live, the way the native
+/// launcher's inherited stdio is. Asserting the absence of the `Container output` header is the
+/// point: it proves the marker arrived over the live stream rather than the premature-exit tail,
+/// and that the two don't both fire and print the cause twice.
+#[tag(docker)]
+#[tokio::test]
+async fn docker_foreground_streams_container_output() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("docker-foreground-logs");
+    write_string(&project_dir.join("icp.yaml"), &failing_docker_manifest())
+        .expect("failed to write project manifest");
+
+    ctx.docker_pull_network();
+
+    // No `--background`, and the container exits on its own, so this terminates without needing
+    // to interrupt a healthy network.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "docker-network"])
+        .assert()
+        .failure()
+        .stderr(
+            contains(FAILING_CONTAINER_MARKER)
+                .and(contains("exited prematurely with status 3"))
+                .and(contains("Container output").not())
+                // Streaming replaces the retrieval hint; it is background-only.
+                .and(contains("docker logs").not()),
+        );
 }
 
 #[tokio::test]
@@ -987,4 +1148,100 @@ async fn network_recovers_from_stale_descriptor() {
         matches!(&status.replica_health_status, Some(health) if health == "healthy"),
         "Network should be healthy"
     );
+}
+
+/// A launcher can outlive the replica it supervises, in which case its PID stays alive while the
+/// gateway refuses connections. Process liveness alone then reports the network as running and
+/// `network start` refuses to do anything (dfinity/icp-cli#577). A plain long-lived process stands
+/// in for such a launcher: unambiguously alive, unambiguously not serving a gateway.
+#[cfg(unix)] // spawns `sleep` as the stand-in launcher process
+#[tokio::test]
+async fn network_replaces_defunct_launcher() {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("defunct-launcher");
+
+    // Project manifest
+    write_string(&project_dir.join("icp.yaml"), NETWORK_RANDOM_PORT)
+        .expect("failed to write project manifest");
+
+    let network_dir = project_dir.join(".icp/cache/networks/random-network");
+    std::fs::create_dir_all(&network_dir).expect("failed to create network directory");
+
+    // Reserve and release a port so the descriptor names one nothing is listening on, making the
+    // gateway probe fail by refusal rather than by timeout.
+    let dead_port = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .expect("failed to reserve a port")
+        .local_addr()
+        .expect("failed to read reserved port")
+        .port();
+
+    let mut stand_in = std::process::Command::new("sleep")
+        .arg("300")
+        .spawn()
+        .expect("failed to spawn stand-in launcher");
+    let stand_in_pid = stand_in.id();
+    let start_time = {
+        let pid = Pid::from_u32(stand_in_pid);
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        system
+            .process(pid)
+            .expect("stand-in launcher is not visible to sysinfo")
+            .start_time()
+    };
+    // Reap in the background so the stand-in leaves the process table as soon as it is signalled,
+    // instead of lingering as a zombie that still looks alive.
+    let reaper = std::thread::spawn(move || {
+        stand_in
+            .wait()
+            .expect("failed to wait for stand-in launcher")
+    });
+
+    let defunct_descriptor = serde_json::json!({
+        "v": "1",
+        "id": "22222222-2222-2222-2222-222222222222",
+        "project-dir": project_dir.to_string(),
+        "network": "random-network",
+        "network-dir": network_dir.to_string(),
+        "gateway": {
+            "fixed": false,
+            "port": dead_port,
+            "host": "127.0.0.1",
+            "ip": "127.0.0.1"
+        },
+        "child-locator": {
+            "type": "pid",
+            "pid": stand_in_pid,
+            "start-time": start_time
+        },
+        "root-key": "308182301c300d06092a864886f70d0101010500030b008081007f",
+        "pocketic-config-port": null,
+        "pocketic-instance-id": null,
+        "candid-ui-canister-id": null,
+        "proxy-canister-id": null,
+        "status-dir": null,
+        "use-friendly-domains": false
+    });
+    let descriptor_bytes =
+        serde_json::to_vec(&defunct_descriptor).expect("failed to serialize descriptor");
+    ctx.write_network_descriptor(&project_dir, "random-network", &descriptor_bytes);
+
+    // Start network - should stop the defunct launcher and start fresh rather than refuse
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["network", "start", "random-network", "--background"])
+        .assert()
+        .success()
+        .stderr(contains("no longer serving requests"));
+
+    let exit = reaper.join().expect("reaper thread panicked");
+    assert!(
+        !exit.success(),
+        "defunct launcher should have been signalled, exited with {exit}"
+    );
+
+    ctx.wait_for_network_descriptor(&project_dir, "random-network");
+    ctx.ping_until_healthy(&project_dir, "random-network");
 }

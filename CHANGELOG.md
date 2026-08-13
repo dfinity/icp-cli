@@ -7,9 +7,28 @@ bump. Currently experimental: project bundling, project dependencies
 
 # Unreleased
 
+* fix: `icp canister logs` output formats are corrected. `--json` now emits machine-readable JSON and the default emits the human-readable lines (the two were swapped), and `--follow --json` emits newline-delimited JSON, one record per line, streamed as each record arrives. This is breaking for scripts: parsing the default output as JSON now requires `--json`, and consumers of `--follow --json` must read one JSON object per line.
+
+# v1.3.0
+
+* feat: a canister environment variable's value can now be read from a file, by writing `var: { path: <file> }` in place of `var: value`. The path resolves against the canister's directory — including in an environment override, matching `init_args` — and surrounding whitespace is trimmed off the file's contents. The file is read when the project is loaded, so a missing file fails before anything is deployed. `icp project bundle` writes the value into the bundled manifest inline, rejecting a file outside the project as it does for other manifest file references.
+* fix: `icp network start` now explains why a Docker-based network failed to come up. A container that exited before the network was ready was reported as `failed to watch docker container <id> for exit` with an empty cause, discarding the actual reason (e.g. the gateway port already being taken); the container's output is now attached to the error.
+* feat: Docker-based networks now show the launcher's output like non-containerized ones do. In the foreground the container's stdout and stderr are streamed to your terminal as it runs; in background mode `icp network start` prints the `docker logs -f <container-id>` command to follow it. Previously container output was never shown at all — which on Windows, where the launcher always runs in a container, meant `icp network start` was silent.
+* fix: a network launcher running in a container (`icp settings autocontainerize true`, and always on Windows) now receives `--verbose` when `icp -d` is used, matching the non-containerized launcher.
+
+## Experimental
+
+* feat(bundle): `icp project bundle` now works on projects that declare `dependencies:`, which it previously refused outright. The bundle mirrors the workspace instead of flattening it: the root project's `icp.yaml` sits at the archive root, each dependency instance gets its own `icp.yaml` at the directory it occupies in the workspace, and the `dependencies:` declarations are preserved, each pointing at the directory its dependency occupies in the archive (the same path a plainly vendored layout already used). A shared (diamond) dependency is still a single instance, canister names stay as each project wrote them, and canister discovery (`PUBLIC_CANISTER_ID:<alias>:<canister>`) works in the extracted bundle exactly as it did in the source workspace.
+  * Every dependency must resolve to a directory inside the workspace root; one that resolves outside it (including through a symlink) is rejected, because the archive could not contain it. As a result, a vendored member that depends on a sibling cannot be bundled as a standalone project (e.g. via `ICP_PROJECT_ROOT`) — bundle the workspace root instead.
+  * Projects with script sync steps still cannot be bundled, and the restriction now covers every project in the workspace.
+
+# v1.2.0
+
+* feat(sync-plugin): the compute-time limit for `plugin` sync steps is now configurable via the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable (default `60`). Raise it for compute-heavy plugins (e.g. brotli-compressing a large asset bundle) that legitimately exceed the default, especially on slower CI runners. The limit-exceeded error now names the variable and the current limit, and a malformed value is rejected rather than silently ignored.
 * feat: `icp canister link` assigns an existing canister principal to a project canister
 * feat: `icp canister create --with-icp` (not supported in `icp deploy`) uses the CMC to create canisters. Only needed for deploying to restricted system subnets.
 * feat: `icp deploy --no-create` will error if any canisters do not exist, rather than creating them.
+* fix: `icp deploy` now prints the frontend URL for any canister that exposes an `http_request` endpoint. Previously a canister whose `http_request` signature differed from a hard-coded shape (e.g. some certified-asset canisters) was misdetected and shown a Candid UI URL instead of its site URL. Deploy URLs are also now grouped by kind (frontends vs. Candid UI) instead of interleaved.
 
 # v1.1.0
 

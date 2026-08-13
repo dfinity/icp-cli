@@ -933,6 +933,7 @@ mod tests {
             registry_recipe: None,
             bindings: BTreeMap::from([("backend".to_owned(), "backend".to_owned())]),
             friendly_names: vec![],
+            environment_variable_files: BTreeMap::new(),
         }
     }
 

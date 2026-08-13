@@ -1,0 +1,34 @@
+# Response headers for the ICP CLI docs site (certified-assets `_headers`,
+# Cloudflare/Netlify syntax). Ported from the former .ic-assets.json5.
+#
+# Patterns match asset keys (the file path inside the deployed directory), and a
+# single `*` matches any run of characters including `/`. Because the site is a
+# single canister serving every version under its own prefix (/1.2/, /main/, …),
+# `/*/_astro/*` covers that directory in every version at once. The blocks below
+# are mutually exclusive, so no file picks up two conflicting Cache-Control values.
+
+# Content-hashed build assets (Astro _astro/…) — immutable, cache forever.
+/*/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Pagefind search index — content-hashed, cache forever.
+/*/pagefind/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML pages — short cache so updates are visible quickly.
+/*.html
+  Cache-Control: public, max-age=300
+
+# Markdown endpoints, llms.txt / llms-full.txt, robots.txt — short cache.
+/*.md
+  Cache-Control: public, max-age=300
+/*.txt
+  Cache-Control: public, max-age=300
+
+# Version list — very short cache so the version switcher sees updates quickly.
+/versions.json
+  Cache-Control: public, max-age=60
+
+# Matomo analytics loader — short cache so site-ID changes are picked up quickly.
+/matomo.js
+  Cache-Control: public, max-age=300

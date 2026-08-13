@@ -583,7 +583,8 @@ async fn deploy_prints_canister_urls() {
         .assert()
         .success()
         .stdout(contains("Deployed canisters:"))
-        .stdout(contains("my-canister (Candid UI):"))
+        .stdout(contains("Backends (Candid UI):"))
+        .stdout(contains("my-canister:"))
         .stdout(contains(".localhost:"))
         .stdout(contains("?id="));
 }
@@ -625,6 +626,77 @@ async fn deploy_prints_friendly_url_for_asset_canister() {
         .assert()
         .success()
         .stdout(contains("Deployed canisters:"))
+        .stdout(contains("Frontends (serving http_request):"))
+        .stdout(contains(
+            "my-canister: http://my-canister.random-environment.localhost:",
+        ));
+}
+
+/// The probe classifies a canister by the *presence* of an `http_request`
+/// method, not by whether it conforms to the HTTP gateway protocol. A canister
+/// exposing a dummy `http_request` — here a zero-arg Motoko query that bears no
+/// resemblance to a real request handler — must still get a frontend URL. This
+/// is the false-positive-tolerant behavior, and it exercises the "call replied"
+/// branch of the probe (the empty argument decodes fine against a no-arg method).
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_prints_frontend_url_for_canister_with_dummy_http_request() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    write_string(
+        &project_dir.join("mops.toml"),
+        indoc! {r#"
+            [dependencies]
+            base = "0.16.0"
+
+            [toolchain]
+            moc = "0.16.3"
+        "#},
+    )
+    .expect("failed to write mops.toml");
+
+    // A dummy `http_request`: takes no arguments and returns text. It does not
+    // implement the gateway protocol at all — it only needs to *exist*.
+    write_string(
+        &project_dir.join("main.mo"),
+        indoc! {r#"
+            persistent actor {
+                public query func http_request() : async Text {
+                    return "ok";
+                };
+            };
+        "#},
+    )
+    .expect("failed to write main.mo");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // The dummy `http_request` is enough to earn a frontend URL, not Candid UI.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stdout(contains("Frontends (serving http_request):"))
         .stdout(contains(
             "my-canister: http://my-canister.random-environment.localhost:",
         ));

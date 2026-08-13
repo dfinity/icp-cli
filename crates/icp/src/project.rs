@@ -2,20 +2,199 @@
 //!
 //! Consolidation of manifests into a [`Project`] lives in
 //! `icp_deploy_canister::project` (over an injected `FileAccess`) and is
-//! re-exported here. Member-scoping resolves real filesystem paths against the
-//! current working directory, so it stays here.
+//! re-exported here. Walking a workspace's dependency edges on disk and
+//! member-scoping both resolve real filesystem paths against the current working
+//! directory, so they stay here.
+
+use std::collections::HashSet;
+
+use snafu::prelude::*;
 
 pub use icp_deploy_canister::project::{
     ConsolidateManifestError, EnvironmentError, LoadProjectError, VerifySandboxError,
-    consolidate_manifest, load_project, verify_sandbox,
+    consolidate_manifest, load_project, relative_prefix, verify_sandbox,
 };
 
-use crate::{Environment, prelude::*};
+use crate::{
+    Environment,
+    manifest::{
+        LoadManifestFromPathError, PROJECT_MANIFEST, ProjectManifest, load_manifest_from_path,
+    },
+    prelude::*,
+};
 
 /// Canonicalize into a UTF-8 path, or `None` if it does not exist / is not UTF-8.
 fn canonicalize_or(dir: &Path) -> Option<PathBuf> {
     let canon = dunce::canonicalize(dir.as_std_path()).ok()?;
     PathBuf::try_from(canon).ok()
+}
+
+/// One project in a workspace: the root project, or a dependency instance
+/// reachable from it. Returned by [`workspace_instances`].
+#[derive(Debug)]
+pub struct WorkspaceInstance {
+    /// Store-key prefix for this instance's canisters — its canonical directory
+    /// relative to the canonical workspace root, forward-slash separated. Empty
+    /// for the root project, whose canisters are keyed by their bare names.
+    pub prefix: String,
+
+    /// The instance's directory as reached from the workspace root, and the base
+    /// for resolving the relative paths inside [`Self::manifest`]. Not
+    /// canonicalized, so it keeps the spelling the declaring manifest used.
+    pub dir: PathBuf,
+
+    /// The instance's manifest, exactly as written on disk.
+    pub manifest: ProjectManifest,
+
+    /// The store-key prefix of the instance each of this instance's
+    /// `dependencies` entries resolves to, index-aligned with
+    /// `manifest.dependencies`.
+    ///
+    /// A declared `path:` need not agree with the instance's location relative to
+    /// the workspace root — it can be absolute, or traverse a symlink — so a
+    /// caller reproducing the workspace elsewhere cannot derive the target from
+    /// the spelling alone.
+    pub dependency_prefixes: Vec<String>,
+
+    /// The `(alias, path)` of the first dependency edge that reached this
+    /// instance, for error messages. `None` for the root project.
+    pub declared_as: Option<(String, String)>,
+}
+
+#[derive(Debug, Snafu)]
+pub enum WorkspaceInstancesError {
+    #[snafu(display("failed to load the project manifest at '{path}'"))]
+    LoadWorkspaceRoot {
+        path: PathBuf,
+        source: LoadManifestFromPathError,
+    },
+
+    #[snafu(display("could not find a project manifest for dependency '{alias}' at: '{path}'"))]
+    InstanceNotFound { alias: String, path: PathBuf },
+
+    #[snafu(display("failed to canonicalize path for dependency '{alias}' at: '{path}'"))]
+    InstanceCanonicalize { alias: String, path: PathBuf },
+
+    #[snafu(display("failed to load project manifest for dependency '{alias}' at '{path}'"))]
+    LoadInstance {
+        alias: String,
+        path: PathBuf,
+        source: LoadManifestFromPathError,
+    },
+}
+
+/// One dependency declaration resolved to the instance it points at.
+struct ResolvedEdge {
+    /// The instance's directory as the declaring manifest reaches it.
+    dir: PathBuf,
+    canonical: PathBuf,
+    /// Store-key prefix of the instance this edge resolves to.
+    prefix: String,
+    alias: String,
+    path: String,
+}
+
+/// Resolve one project's dependency declarations, in declaration order.
+fn resolve_edges(
+    dir: &Path,
+    manifest: &ProjectManifest,
+    app_root_canonical: &Path,
+) -> Result<Vec<ResolvedEdge>, WorkspaceInstancesError> {
+    let mut out = Vec::with_capacity(manifest.dependencies.len());
+    for dep in &manifest.dependencies {
+        let dep_root = dir.join(&dep.path);
+        if !dep_root.join(PROJECT_MANIFEST).is_file() {
+            return InstanceNotFoundSnafu {
+                alias: dep.name.clone(),
+                path: dep_root,
+            }
+            .fail();
+        }
+        let canonical = canonicalize_or(&dep_root).context(InstanceCanonicalizeSnafu {
+            alias: &dep.name,
+            path: &dep_root,
+        })?;
+        out.push(ResolvedEdge {
+            prefix: relative_prefix(app_root_canonical, &canonical),
+            dir: dep_root,
+            canonical,
+            alias: dep.name.clone(),
+            path: dep.path.clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// Walk the workspace rooted at `pdir`, returning the root project followed by
+/// every dependency instance reachable from it, in depth-first declaration
+/// order.
+///
+/// This retraces the same edges `import_dependency` follows — de-duplicating
+/// instances by canonical directory, so a diamond yields one entry whose
+/// `prefix` matches the store-key prefix its canisters were assigned — but keeps
+/// each instance's *raw* manifest instead of folding its canisters into the
+/// workspace. Callers that need to reproduce the workspace structure (notably
+/// `icp project bundle`) need the dependency edges and per-instance environments,
+/// which consolidation deliberately flattens away.
+///
+/// Cycles are rejected by [`consolidate_manifest`], which every caller runs
+/// first; the visited set here only keeps the walk finite.
+pub async fn workspace_instances(
+    pdir: &Path,
+) -> Result<Vec<WorkspaceInstance>, WorkspaceInstancesError> {
+    let root_manifest_path = pdir.join(PROJECT_MANIFEST);
+    let root_manifest: ProjectManifest = load_manifest_from_path(&root_manifest_path)
+        .await
+        .context(LoadWorkspaceRootSnafu {
+            path: &root_manifest_path,
+        })?;
+
+    // Same fallback as `consolidate_manifest`, so prefixes agree with the store
+    // keys even when the root directory cannot be canonicalized.
+    let app_root_canonical = canonicalize_or(pdir).unwrap_or_else(|| pdir.to_owned());
+
+    let root_edges = resolve_edges(pdir, &root_manifest, &app_root_canonical)?;
+
+    // Depth-first, declaration order: push each instance's dependencies reversed
+    // so the top of the stack is always the next edge in manifest order.
+    let mut visited: HashSet<PathBuf> = HashSet::from([app_root_canonical.clone()]);
+    let mut out = vec![WorkspaceInstance {
+        prefix: String::new(),
+        dir: pdir.to_owned(),
+        manifest: root_manifest,
+        dependency_prefixes: root_edges.iter().map(|e| e.prefix.clone()).collect(),
+        declared_as: None,
+    }];
+    let mut stack: Vec<ResolvedEdge> = root_edges.into_iter().rev().collect();
+
+    while let Some(edge) = stack.pop() {
+        if !visited.insert(edge.canonical.clone()) {
+            continue;
+        }
+
+        let manifest_path = edge.dir.join(PROJECT_MANIFEST);
+        let manifest: ProjectManifest =
+            load_manifest_from_path(&manifest_path)
+                .await
+                .context(LoadInstanceSnafu {
+                    alias: &edge.alias,
+                    path: &manifest_path,
+                })?;
+
+        let edges = resolve_edges(&edge.dir, &manifest, &app_root_canonical)?;
+        let dependency_prefixes = edges.iter().map(|e| e.prefix.clone()).collect();
+        stack.extend(edges.into_iter().rev());
+
+        out.push(WorkspaceInstance {
+            prefix: edge.prefix,
+            dir: edge.dir,
+            manifest,
+            dependency_prefixes,
+            declared_as: Some((edge.alias, edge.path)),
+        });
+    }
+
+    Ok(out)
 }
 
 /// The default set of target canisters when the user names none, honoring

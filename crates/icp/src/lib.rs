@@ -236,6 +236,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let local_network = Network {
@@ -322,6 +323,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let frontend_canister = Canister {
@@ -340,6 +342,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["frontend".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         let database_canister = Canister {
@@ -358,6 +361,7 @@ impl MockProjectLoader {
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["database".to_string()],
+            environment_variable_files: BTreeMap::new(),
         };
 
         // Create networks

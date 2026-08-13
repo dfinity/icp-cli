@@ -81,6 +81,27 @@
         }
       ]
     },
+    "ManifestEnvVar": {
+      "anyOf": [
+        {
+          "description": "The value, written inline.",
+          "type": "string"
+        },
+        {
+          "description": "A file holding the value. Surrounding whitespace is trimmed off the\nfile's contents, so a trailing newline does not become part of the value.",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
+    },
     "ManifestInitArgs": {
       "anyOf": [
         {
@@ -160,9 +181,9 @@
         },
         "environment_variables": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/ManifestEnvVar"
           },
-          "description": "Environment variables for the canister as key-value pairs.\nThese variables are accessible within the canister and can be used to configure\nbehavior without hardcoding values in the WASM module.",
+          "description": "Environment variables for the canister as key-value pairs.\nThese variables are accessible within the canister and can be used to configure\nbehavior without hardcoding values in the WASM module.\nA value may also be read from a file with `{ path: <file> }`.",
           "type": [
             "object",
             "null"

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use icp::{
     context::Context,
     identity::{
@@ -18,6 +19,7 @@ use crate::commands::identity::{delegation::sign::DurationArg, link::web};
 #[derive(Debug, Args)]
 pub(crate) struct ReauthArgs {
     /// Name of the identity to re-authenticate
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     name: String,
 
     /// Session delegation duration (e.g. "30m", "8h", "1d"). Note that 2m extra is

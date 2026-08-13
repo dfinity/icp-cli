@@ -34,6 +34,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp canister status`↴](#icp-canister-status)
 * [`icp canister stop`↴](#icp-canister-stop)
 * [`icp canister top-up`↴](#icp-canister-top-up)
+* [`icp completions`↴](#icp-completions)
 * [`icp cycles`↴](#icp-cycles)
 * [`icp cycles balance`↴](#icp-cycles-balance)
 * [`icp cycles mint`↴](#icp-cycles-mint)
@@ -89,6 +90,7 @@ This document contains the help content for the `icp` command-line program.
 
 * `build` — Build canisters
 * `canister` — Perform canister operations against a network
+* `completions` — Generate a shell completion script
 * `cycles` — Mint and manage cycles
 * `deploy` — Deploy a project to an environment
 * `environment` — Show information about the current project environments
@@ -799,6 +801,41 @@ Top up a canister with cycles
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+
+
+
+## `icp completions`
+
+Generate a shell completion script
+
+The script is written to stdout. Save it where your shell loads completions from, or source it from your shell profile.
+
+**Usage:** `icp completions <SHELL>`
+
+Examples:
+
+    # Bash
+    icp completions bash > ~/.local/share/bash-completion/completions/icp
+
+    # Zsh, into a directory on your $fpath
+    icp completions zsh > ~/.zfunc/_icp
+
+    # Fish
+    icp completions fish > ~/.config/fish/completions/icp.fish
+
+    # Elvish, appended to your profile
+    icp completions elvish >> ~/.elvish/rc.elv
+
+    # PowerShell, appended to your profile
+    icp completions powershell >> $PROFILE
+
+
+###### **Arguments:**
+
+* `<SHELL>` — The shell to generate a completion script for
+
+  Possible values: `bash`, `elvish`, `fish`, `powershell`, `zsh`
+
 
 
 

@@ -1,5 +1,5 @@
 use bip39::{Language, Mnemonic};
-use clap::{ArgGroup, Args};
+use clap::{ArgGroup, Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::identity::{
@@ -43,7 +43,7 @@ pub(crate) struct ImportArgs {
     storage: StorageMode,
 
     /// Import from a PEM file
-    #[arg(long, value_name = "FILE", group = "import-from")]
+    #[arg(long, value_name = "FILE", group = "import-from", value_hint = ValueHint::FilePath)]
     from_pem: Option<PathBuf>,
 
     /// Read seed phrase interactively from the terminal
@@ -51,15 +51,15 @@ pub(crate) struct ImportArgs {
     read_seed_phrase: bool,
 
     /// Read seed phrase from a file
-    #[arg(long, value_name = "FILE", group = "import-from", group = "seed")]
+    #[arg(long, value_name = "FILE", group = "import-from", group = "seed", value_hint = ValueHint::FilePath)]
     from_seed_file: Option<PathBuf>,
 
     /// Read the PEM decryption password from a file instead of prompting
-    #[arg(long, value_name = "FILE", requires = "from_pem")]
+    #[arg(long, value_name = "FILE", requires = "from_pem", value_hint = ValueHint::FilePath)]
     decryption_password_from_file: Option<PathBuf>,
 
     /// Read the storage password from a file instead of prompting (for --storage password)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     storage_password_file: Option<PathBuf>,
 
     /// Specify the key type when it cannot be detected from the PEM file (danger!)
@@ -73,7 +73,7 @@ pub(crate) struct ImportArgs {
     /// Attach a signed delegation chain JSON (same format as `icp identity delegation sign`).
     ///
     /// For security, in most cases it is better to use `icp identity delegation` instead.
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     delegation: Option<PathBuf>,
 }
 

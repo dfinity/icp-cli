@@ -1,5 +1,6 @@
 use anyhow::Context as _;
-use clap::Args;
+use clap::{Args, ValueHint};
+use clap_complete::ArgValueCandidates;
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::context::Context;
@@ -11,10 +12,11 @@ use icp::prelude::*;
 #[derive(Debug, Args)]
 pub(crate) struct ExportArgs {
     /// Name of the identity to export
+    #[arg(add = ArgValueCandidates::new(crate::complete::identity_names))]
     name: String,
 
     /// Read the password from a file instead of prompting (only required for identities created or imported with --storage password)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     password_file: Option<PathBuf>,
 
     /// Encrypt the exported PEM with a password
@@ -22,7 +24,7 @@ pub(crate) struct ExportArgs {
     encrypt: bool,
 
     /// Read the encryption password from a file instead of prompting
-    #[arg(long, value_name = "FILE", requires = "encrypt")]
+    #[arg(long, value_name = "FILE", requires = "encrypt", value_hint = ValueHint::FilePath)]
     encryption_password_file: Option<PathBuf>,
 }
 

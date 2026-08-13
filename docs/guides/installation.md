@@ -135,6 +135,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup target add wasm32-unknown-unknown
 ```
 
+## Shell Completions
+
+The npm and Homebrew distributions install shell completions automatically. Otherwise, `icp completions <SHELL>` writes a completion script to stdout — `bash`, `zsh`, `fish`, `powershell`, and `elvish` are supported. Redirect it to wherever your shell loads completions from:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+icp completions bash > ~/.local/share/bash-completion/completions/icp
+```
+
+Restart your shell afterwards. Regenerate the script if you move the `icp` binary.
 
 ## Troubleshooting
 

@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord};
@@ -50,6 +51,7 @@ using --args or --args-file:
 ")]
 pub(crate) struct DeployArgs {
     /// Canister names
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) names: Vec<String>,
 
     /// Specifies the mode of canister installation.

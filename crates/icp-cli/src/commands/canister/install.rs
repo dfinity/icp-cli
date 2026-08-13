@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use anyhow::{Context as _, anyhow, bail};
 use candid::Principal;
-use clap::Args;
+use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
 use icp::context::{CanisterSelection, Context};
@@ -42,7 +42,7 @@ pub(crate) struct InstallArgs {
     pub(crate) wasm_memory_persistence: Option<WasmMemoryPersistenceOpt>,
 
     /// Path to the WASM file to install. Uses the build output if not explicitly provided.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pub(crate) wasm: Option<PathBuf>,
 
     #[command(flatten)]

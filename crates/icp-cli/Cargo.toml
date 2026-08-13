@@ -28,6 +28,7 @@ candid.workspace = true
 cargo-generate.workspace = true
 clap-markdown.workspace = true
 clap.workspace = true
+clap_complete.workspace = true
 dialoguer.workspace = true
 dunce.workspace = true
 elliptic-curve.workspace = true
@@ -45,6 +46,7 @@ icp-canister-interfaces.workspace = true
 icp = { workspace = true, features = ["clap"] }
 icrc-ledger-types.workspace = true
 indicatif.workspace = true
+indoc.workspace = true
 itertools.workspace = true
 k256.workspace = true
 lazy_static.workspace = true
@@ -85,7 +87,6 @@ cargo-generate = { workspace = true, features = ["vendored-openssl"] }
 assert_cmd.workspace = true
 camino-tempfile.workspace = true
 cryptoki.workspace = true
-indoc.workspace = true
 predicates.workspace = true
 rand.workspace = true
 send_ctrlc.workspace = true

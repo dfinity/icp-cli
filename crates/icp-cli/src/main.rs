@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Error;
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, ValueHint};
 use commands::Command;
 use icp::{directories::Access, prelude::*};
 use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
@@ -15,6 +15,7 @@ use crate::{
 
 mod artifacts;
 mod commands;
+mod complete;
 mod dist;
 mod logging;
 pub(crate) mod operations;
@@ -70,7 +71,8 @@ struct Cli {
         long,
         env = "ICP_PROJECT_ROOT",
         global = true,
-        help_heading = heading::GLOBAL_PARAMETERS
+        help_heading = heading::GLOBAL_PARAMETERS,
+        value_hint = ValueHint::DirPath,
     )]
     project_root_override: Option<PathBuf>,
 
@@ -79,7 +81,7 @@ struct Cli {
     debug: bool,
 
     /// Read identity password from a file instead of prompting
-    #[arg(long, global = true, value_name = "FILE", help_heading = heading::GLOBAL_PARAMETERS)]
+    #[arg(long, global = true, value_name = "FILE", help_heading = heading::GLOBAL_PARAMETERS, value_hint = ValueHint::FilePath)]
     identity_password_file: Option<PathBuf>,
 
     /// Generate markdown documentation for all commands and exit
@@ -90,8 +92,17 @@ struct Cli {
     command: Option<Command>,
 }
 
+fn main() -> Result<(), Error> {
+    // A shell completing a command line re-invokes us to ask for candidates.
+    // Answer that before anything else: the reply is carried over stdout, and
+    // the candidate lookups start their own runtime.
+    complete::env();
+
+    run()
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn run() -> Result<(), Error> {
     // -----------------------------------------------------------------------
     // Background telemetry-send-batch mode: spawned as a detached child process.
     // Handle it before any other setup and exit immediately after.
@@ -120,6 +131,14 @@ async fn main() -> Result<(), Error> {
             return Ok(());
         }
     };
+
+    // Completion scripts are derived from the clap definition alone. Handle them
+    // before any other setup: they are generated at package-install time, where
+    // the telemetry notice and the update check have no business firing.
+    if let Command::Completions(args) = &command {
+        commands::completions::exec(args)?;
+        return Ok(());
+    }
 
     // Logging: --debug gets the detailed tracing layer; otherwise plain user-facing output
     let debug = cli.debug;
@@ -303,6 +322,9 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
                 commands::canister::top_up::exec(ctx, &args).await?
             }
         },
+
+        // Completions: handled in `main` before the context exists
+        Command::Completions(_) => unreachable!(),
 
         // Cycles
         Command::Cycles(cmd) => match cmd {

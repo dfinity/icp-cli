@@ -4,7 +4,7 @@ use candid::{IDLArgs, Principal, TypeEnv, types::Function};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use candid_parser::utils::CandidSource;
-use clap::{Args, ValueEnum};
+use clap::{Args, ValueEnum, ValueHint};
 use dialoguer::console::Term;
 use ic_agent::Agent;
 use icp::context::Context;
@@ -51,7 +51,7 @@ pub(crate) struct CallArgs {
     pub(crate) args: Option<String>,
 
     /// Path to a file containing call arguments.
-    #[arg(long, conflicts_with = "args")]
+    #[arg(long, conflicts_with = "args", value_hint = ValueHint::FilePath)]
     pub(crate) args_file: Option<PathBuf>,
 
     /// Format of the call arguments.
@@ -63,7 +63,7 @@ pub(crate) struct CallArgs {
     /// When set, this interface is used to assist method selection, build
     /// arguments, and decode the response, instead of fetching the canister's
     /// Candid interface from the network.
-    #[arg(long, value_name = "PATH")]
+    #[arg(long, value_name = "PATH", value_hint = ValueHint::FilePath)]
     pub(crate) candid: Option<PathBuf>,
 
     /// Principal of a proxy canister to route the call through.

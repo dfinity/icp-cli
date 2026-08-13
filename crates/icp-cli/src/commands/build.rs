@@ -1,4 +1,5 @@
 use clap::Args;
+use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use icp::context::{Context, EnvironmentSelection};
 
@@ -10,6 +11,7 @@ use crate::{operations::build::build_many_with_progress_bar, options::Environmen
 #[derive(Debug, Args)]
 pub(crate) struct BuildArgs {
     /// Canister names (if empty, build all canisters in environment)
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) canisters: Vec<String>,
 
     #[command(flatten)]

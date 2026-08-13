@@ -9,7 +9,7 @@ use axum::{
     routing::post,
 };
 use base64::engine::{Engine as _, general_purpose::URL_SAFE_NO_PAD};
-use clap::Args;
+use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
@@ -54,7 +54,7 @@ pub(crate) struct WebArgs {
     storage: StorageMode,
 
     /// Read the storage password from a file instead of prompting (for --storage password)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     storage_password_file: Option<PathBuf>,
 }
 

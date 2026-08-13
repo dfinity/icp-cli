@@ -3,7 +3,8 @@ use std::str::FromStr;
 
 use anyhow::{Context as _, bail};
 use candid::Principal;
-use clap::Args;
+use clap::{Args, ValueHint};
+use clap_complete::ArgValueCandidates;
 use ic_ledger_types::AccountIdentifier;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
@@ -27,6 +28,7 @@ pub(crate) struct CanisterCommandArgs {
     // Note: Could have flattened CanisterEnvironmentArg to avoid adding child field
     /// Name or principal of canister to target.
     /// When using a name an environment must be specified.
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) canister: Canister,
 
     #[command(flatten)]
@@ -87,6 +89,7 @@ impl OptionalCanisterCommandArgs {
 pub(crate) struct OptionalCanisterCommandArgs {
     /// Name or principal of canister to target.
     /// When using a name an environment must be specified.
+    #[arg(add = ArgValueCandidates::new(crate::complete::canisters))]
     pub(crate) canister: Option<Canister>,
 
     #[command(flatten)]
@@ -216,7 +219,7 @@ pub(crate) struct ArgsOpt {
     pub(crate) args: Option<String>,
 
     /// Path to a file containing arguments.
-    #[arg(long, conflicts_with = "args")]
+    #[arg(long, conflicts_with = "args", value_hint = ValueHint::FilePath)]
     pub(crate) args_file: Option<PathBuf>,
 
     /// Format of the arguments.

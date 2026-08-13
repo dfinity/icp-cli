@@ -88,14 +88,22 @@ async runtime, or anything terminal-shaped. `crates/icp-cli/src/events.rs` holds
 - New or converted operations take a `&Reporter`, never a `debug: bool` and never
   `crate::progress` directly. Callers build one per operation with
   `events::indicatif_reporter(ctx.debug)`.
-- `crates/icp-cli/src/progress.rs` is the pre-inversion renderer. Do not add users; it is
-  removable only once nothing imports it, which today includes commands as well as
-  operations — check with `rg 'crate::progress' crates/icp-cli/src` before assuming the
-  remaining users are only the unconverted operations. A few call sites (notably
-  `operations/snapshot_transfer.rs`) drive `indicatif` directly without going through
-  `progress.rs` at all, so `rg 'indicatif' crates/icp-cli/src` is the second half of that
-  inventory. Style definitions shared by both renderers (spinner styles, `STEADY_TICK`,
-  `byte_style`) live in `progress.rs` so the two cannot drift while both exist.
+- `crates/icp-cli/src/progress.rs` is the pre-inversion renderer. Do not add users. Whether
+  it is removable is a question for the compiler — delete it and run
+  `cargo check -p icp-cli --all-targets`; no grep is the gate. To survey the call sites,
+  search for the symbols, not the module path, because a nested `use crate::{ …,
+  progress::{…} }` never spells `crate::progress` (which is exactly how `commands/deploy.rs`
+  hides from that search):
+
+  ```bash
+  grep -rlE 'ProgressManager|MultiStepProgressBar|RollingLines|_style\(|indicatif' crates/icp-cli/src
+  ```
+
+  That covers commands as well as operations, and both kinds of user: those going through
+  `progress.rs` and those driving `indicatif` themselves. Styles shared by the two renderers
+  (spinner styles, `STEADY_TICK`, `byte_style`) live in `progress.rs` so they cannot drift
+  while both exist — `operations/snapshot_transfer.rs`, for one, takes `byte_style` from
+  there but still builds the bar with `indicatif` directly.
 - The event model is deliberately not semver-stable: `publish = false`, `0.x`, all enums
   `#[non_exhaustive]`, `TaskKind` closed.
 - Events do not drive `--json`. `--json` means the command's final result; progress never

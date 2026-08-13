@@ -80,10 +80,12 @@ Store management is in `crates/icp/src/store_id.rs`.
 ## Progress & User-Facing Output
 
 Operations in `crates/icp-cli/src/operations/` report progress as data, not as terminal
-calls. `crates/icp-events` defines the vocabulary (`Event`, `Reporter`, `Task`,
-`EventSink`, `CancelToken`) and depends only on serde and futures — never on `icp`, an
-async runtime, or anything terminal-shaped. `crates/icp-cli/src/events.rs` holds
-`IndicatifSink`, the only place that maps events onto `indicatif` bars.
+calls — an inversion that is partway done, so `build.rs`, `sync.rs` and
+`snapshot_transfer.rs` still render directly. `crates/icp-events` defines the vocabulary
+(`Event`, `Reporter`, `Task`, `EventSink`, `CancelToken`) and depends only on serde and
+futures — never on `icp`, an async runtime, or anything terminal-shaped.
+`crates/icp-cli/src/events.rs` holds `IndicatifSink`, the only place that maps events onto
+`indicatif` bars.
 
 - New or converted operations take a `&Reporter`, never a `debug: bool` and never
   `crate::progress` directly. Callers build one per operation with

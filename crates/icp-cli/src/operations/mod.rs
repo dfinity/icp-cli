@@ -15,3 +15,6 @@ pub(crate) mod token;
 
 pub(crate) mod misc;
 pub(crate) mod wasm;
+
+#[cfg(test)]
+pub(crate) mod test_support;

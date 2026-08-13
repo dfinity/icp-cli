@@ -20,7 +20,7 @@ use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 use tracing::{error, warn};
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use icp_events::{Reporter, TaskKind};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -226,23 +226,22 @@ pub(crate) async fn sync_settings_many(
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
     let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
-        let pb = progress_manager.create_progress_bar(&info.name);
+        // Started up front so the tasks appear in the order the canisters were given,
+        // regardless of the order the futures below are first polled in.
+        let task = reporter.task(TaskKind::Spinner, info.name.as_str());
         let canister_name = info.name.clone();
         let ids = ids.clone();
 
         let settings_fn = {
             let agent = agent.clone();
-            let pb = pb.clone();
 
             async move {
-                pb.set_message("Updating canister settings...");
                 let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
                 for name in &unresolved {
                     warn!(
@@ -256,13 +255,15 @@ pub(crate) async fn sync_settings_many(
         };
 
         futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                settings_fn,
-                || "Canister settings updated successfully".to_string(),
-                |err| format!("Failed to update canister settings: {err}"),
-            )
-            .await;
+            task.message("Updating canister settings...");
+
+            let result = task
+                .run(
+                    settings_fn,
+                    || "Canister settings updated successfully".to_string(),
+                    |err| format!("Failed to update canister settings: {err}"),
+                )
+                .await;
 
             // Map error to include canister context for deferred printing
             result.map_err(|error| SettingsFailure {
@@ -561,5 +562,100 @@ mod tests {
         let vars2: Vec<EnvironmentVariable> = vec![];
 
         assert!(environment_variables_eq(&vars1, &vars2));
+    }
+}
+
+#[cfg(test)]
+mod reporting_tests {
+    use super::*;
+    use crate::operations::test_support::{
+        bare_canister, outcome_of, recording_reporter, task_labels, unreachable_agent,
+    };
+    use icp_events::{Event, Outcome, TaskId, TaskKind};
+
+    fn canister_id() -> Principal {
+        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap()
+    }
+
+    /// The agent cannot be reached, so this pins the reporting shape — start,
+    /// message, failure verdict — rather than the wording of the transport error.
+    #[tokio::test]
+    async fn an_unreachable_canister_is_reported_as_a_failure() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = sync_settings_many(
+            unreachable_agent(),
+            None,
+            vec![(canister_id(), bare_canister("backend"))],
+            IdMapping::new(),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_err());
+
+        let events = sink.events();
+        assert_eq!(
+            events[..2],
+            [
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Spinner,
+                    label: Some("backend".into()),
+                },
+                Event::TaskMessage {
+                    id: TaskId(0),
+                    message: "Updating canister settings...".into(),
+                },
+            ]
+        );
+
+        let (outcome, message) = outcome_of(&events, TaskId(0));
+        assert_eq!(outcome, Outcome::Failure);
+        assert!(
+            message
+                .as_deref()
+                .is_some_and(|m| m.starts_with("Failed to update canister settings: ")),
+            "unexpected message: {message:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn one_task_per_canister_in_the_given_order() {
+        let (reporter, sink) = recording_reporter();
+
+        let _ = sync_settings_many(
+            unreachable_agent(),
+            None,
+            vec![
+                (canister_id(), bare_canister("frontend")),
+                (canister_id(), bare_canister("backend")),
+            ],
+            IdMapping::new(),
+            &reporter,
+        )
+        .await;
+
+        assert_eq!(
+            task_labels(&sink.events()),
+            vec![Some("frontend".to_string()), Some("backend".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn nothing_to_sync_reports_nothing() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = sync_settings_many(
+            unreachable_agent(),
+            None,
+            Vec::new(),
+            IdMapping::new(),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert!(sink.events().is_empty());
     }
 }

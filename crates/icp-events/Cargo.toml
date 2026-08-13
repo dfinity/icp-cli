@@ -1,0 +1,23 @@
+# The event model is deliberately NOT semver-stable: it ships at 0.x and moves in
+# lockstep with `icp-cli`. Nothing here is published.
+[package]
+name = "icp-events"
+version = "0.1.0"
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+# Dependencies are intentionally limited to serde and futures. `icp-events` must stay
+# free of `icp`, of any async runtime, and of anything terminal-shaped (indicatif,
+# dialoguer, clap, console) so that operations can depend on it without depending on
+# the CLI binary.
+[dependencies]
+futures = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

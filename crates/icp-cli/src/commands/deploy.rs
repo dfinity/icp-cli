@@ -21,6 +21,7 @@ use tracing::info;
 use crate::options::EnvironmentOpt;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
+    events::indicatif_reporter,
     operations::{
         binding_env_vars::set_binding_env_vars_many,
         build::build_many_with_progress_bar,
@@ -325,7 +326,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         &env.name,
         target_canisters.clone(),
         canister_list.clone(),
-        ctx.debug,
+        &indicatif_reporter(ctx.debug),
     )
     .await
     .map_err(|e| anyhow!(e))?;
@@ -335,7 +336,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.proxy,
         target_canisters,
         canister_list,
-        ctx.debug,
+        &indicatif_reporter(ctx.debug),
     )
     .await
     .map_err(|e| anyhow!(e))?;
@@ -385,7 +386,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
                 .iter()
                 .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
             ctx.artifacts.clone(),
-            ctx.debug,
+            &indicatif_reporter(ctx.debug),
         )
         .await
         .map_err(|e| anyhow!(e))?;
@@ -398,7 +399,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.proxy,
         canisters,
         ctx.artifacts.clone(),
-        ctx.debug,
+        &indicatif_reporter(ctx.debug),
     )
     .await?;
 

@@ -1,5 +1,14 @@
 # Architecture Details
 
+## Crate Boundary
+
+`icp-cli` is the frontend/UX; `icp` is the library, and it works with an `ic_agent::Agent`. Anything
+that reads the user's files or asks the user something belongs to the frontend: identity loading
+(`crates/icp-cli/src/identity/`) and manifest parsing (`crates/icp-cli/src/manifest.rs` for the
+`ProjectRootLocate` implementation and the YAML loader, `crates/icp-cli/src/project.rs` for manifest
+consolidation and the `ProjectLoad` implementation). The library declares those as ports on
+`icp::context::Context` (`Arc<dyn …>` throughout) and never prompts.
+
 ## Project Model
 
 The project model is built hierarchically through manifest consolidation:
@@ -22,11 +31,12 @@ Manifests are YAML files that define project structure. The system supports:
 - **Path references**: Reference external manifest files
 - **Glob patterns**: For canisters, use globs like `canisters/*` to auto-discover
 
-The `consolidate_manifest` function in `crates/icp/src/project.rs` transforms raw manifests into the final `Project` structure. The serde structs in the `icp::manifest` module represent the format that the user's YAML files can be written in, while the serde structs with identical meaning outside `icp::manifest` are instead the canonical form, with defaults filled in and normalizations applied. Code should always deal with the canonical form.
+The `consolidate_manifest` function in `crates/icp-cli/src/project.rs` transforms raw manifests into the final `Project` structure. The serde structs in the `icp::manifest` module represent the format that the user's YAML files can be written in, while the serde structs with identical meaning outside `icp::manifest` are instead the canonical form, with defaults filled in and normalizations applied. Code should always deal with the canonical form.
 
 ## Build Adapters
 
-Canisters are built using adapter pipelines defined in `crates/icp/src/manifest/adapter/`:
+Canisters are built using adapter pipelines defined in `crates/icp/src/manifest/adapter/` (the
+manifest *shapes* stay in the library; only their loading lives in the CLI):
 
 - **Script Adapter**: Runs shell commands with environment variables (e.g., `$ICP_WASM_OUTPUT_PATH`)
 - **Prebuilt Adapter**: Uses pre-compiled WASM from local files, URLs, or registry
@@ -65,6 +75,9 @@ Corresponding implicit environments are also provided:
 These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` and are used throughout the codebase.
 
 ## Identity & Canister IDs
+
+Identity loading lives in `crates/icp-cli/src/identity/`; the library only ever receives an
+already-constructed identity or agent.
 
 - **Identities**: Stored in platform-specific directories as PEM files (Secp256k1 or Ed25519):
   - macOS: `~/Library/Application Support/org.dfinity.icp-cli/identity/`

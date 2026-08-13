@@ -16,3 +16,8 @@ Tests are split between unit tests (in modules) and integration tests:
 - `MockProjectLoader::minimal()`: Single canister, network, environment
 - `MockProjectLoader::complex()`: Multiple canisters, networks, environments
 - `NoProjectLoader`: Simulates missing project for error cases
+
+These, along with `Context::mocked()` and the other port mocks (`MockNetworkAccessor`,
+`MockInMemoryIdStore`, ...), are compiled under `#[cfg(any(test, feature = "mocks"))]`. `icp-cli`
+enables the `icp` crate's `mocks` feature as a dev-dependency so its own tests can build a mocked
+context; `crates/icp-cli/src/identity/mod.rs` adds `MockIdentityLoader` on top.

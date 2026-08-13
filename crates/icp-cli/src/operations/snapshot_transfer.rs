@@ -15,11 +15,12 @@ use ic_management_canister_types::{
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
+use crate::progress::byte_style;
 use icp::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::{
@@ -427,12 +428,7 @@ where
 /// Create a progress bar for byte transfers.
 pub fn create_transfer_progress_bar(total_bytes: u64, label: &str) -> ProgressBar {
     let pb = ProgressBar::new(total_bytes);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .expect("invalid progress bar template")
-            .progress_chars("#>-"),
-    );
+    pb.set_style(byte_style());
     pb.set_prefix(label.to_string());
     pb
 }

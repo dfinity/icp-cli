@@ -22,7 +22,6 @@ pub mod canister;
 pub mod context;
 pub mod directories;
 pub mod fs;
-pub mod identity;
 pub mod manifest;
 pub mod network;
 pub mod package;
@@ -218,14 +217,14 @@ pub trait ProjectLoad: Sync + Send {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 /// Mock project loader for testing.
 /// Returns a pre-configured `Project` when `load()` is called.
 pub struct MockProjectLoader {
     project: Project,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl MockProjectLoader {
     /// Creates a new mock project loader with the given project.
     pub fn new(project: Project) -> Self {
@@ -539,7 +538,7 @@ impl MockProjectLoader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 #[async_trait]
 impl ProjectLoad for MockProjectLoader {
     async fn load(&self) -> Result<Project, ProjectLoadError> {
@@ -551,12 +550,12 @@ impl ProjectLoad for MockProjectLoader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 /// Mock project loader that always fails with a Locate error.
 /// Useful for testing scenarios where no project exists.
 pub struct NoProjectLoader;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 #[async_trait]
 impl ProjectLoad for NoProjectLoader {
     async fn load(&self) -> Result<Project, ProjectLoadError> {

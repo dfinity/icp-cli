@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
@@ -6,10 +7,7 @@ use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
 };
-use icp::{
-    context::{CanisterSelection, EnvironmentSelection, NetworkSelection},
-    identity::IdentitySelection,
-};
+use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;

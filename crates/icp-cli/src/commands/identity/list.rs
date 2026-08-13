@@ -1,8 +1,8 @@
 use std::io::stdout;
 
+use crate::identity::manifest::{IdentityDefaults, IdentityList};
 use candid::Principal;
 use clap::Args;
-use icp::identity::manifest::{IdentityDefaults, IdentityList};
 use itertools::Itertools;
 use serde::Serialize;
 
@@ -21,7 +21,7 @@ pub(crate) struct ListArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
-    let dirs = ctx.dirs.identity()?.into_read().await?;
+    let dirs = ctx.identity_dirs()?.into_read().await?;
 
     let list = IdentityList::load_from(dirs.as_ref())?;
     let defaults = IdentityDefaults::load_from(dirs.as_ref())?;

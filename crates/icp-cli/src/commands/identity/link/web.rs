@@ -14,14 +14,12 @@ use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
-use icp::{
-    fs::read_to_string,
-    identity::{
-        delegation::DelegationChain,
-        key::{self, validate_password},
-        manifest::IdentityList,
-    },
-    prelude::*,
+use icp::{fs::read_to_string, prelude::*};
+
+use crate::identity::{
+    delegation::DelegationChain,
+    key::{self, validate_password},
+    manifest::IdentityList,
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::RngExt as _;
@@ -68,8 +66,7 @@ fn parse_auth(s: &str) -> Result<Url, String> {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthError> {
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_read(async |dirs| -> Result<(), WebAuthError> {
             let list = IdentityList::load_from(dirs).context(LoadIdentityListSnafu)?;
             ensure!(
@@ -127,8 +124,7 @@ pub(crate) async fn exec(ctx: &Context, args: &WebArgs) -> Result<(), WebAuthErr
     let remote_principal = Principal::self_authenticating(&from_key);
 
     let auth = args.auth.clone();
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_write(async |dirs| {
             key::link_webauth_identity(
                 dirs,
@@ -164,7 +160,7 @@ pub(crate) enum WebAuthError {
 
     #[snafu(display("failed to load identity list"))]
     LoadIdentityList {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: crate::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(display("failed to read storage password file"))]

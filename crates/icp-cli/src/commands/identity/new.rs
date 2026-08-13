@@ -5,14 +5,12 @@ use bip39::{Language, Mnemonic, MnemonicType};
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::{
-    fs::write_string,
-    identity::{
-        key::{CreateFormat, create_identity, validate_password},
-        manifest::{IdentityKeyAlgorithm, IdentityList},
-        seed::derive_key_from_seed_slip10,
-    },
-    prelude::*,
+use icp::{fs::write_string, prelude::*};
+
+use crate::identity::{
+    key::{CreateFormat, create_identity, validate_password},
+    manifest::{IdentityKeyAlgorithm, IdentityList},
+    seed::derive_key_from_seed_slip10,
 };
 
 use crate::context::Context;
@@ -49,8 +47,7 @@ pub(crate) struct NewArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Error> {
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_read(async |dirs| -> Result<(), anyhow::Error> {
             let list = IdentityList::load_from(dirs).context("failed to load identity list")?;
             anyhow::ensure!(
@@ -89,8 +86,7 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
         }
     };
 
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_write(async |dirs| {
             create_identity(
                 dirs,

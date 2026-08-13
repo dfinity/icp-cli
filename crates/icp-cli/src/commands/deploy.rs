@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -9,7 +10,6 @@ use ic_management_canister_types::{CanisterId, CanisterIdRecord};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, EnvironmentSelection},
-    identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;

@@ -1,7 +1,7 @@
 use crate::context::Context;
+use crate::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use tracing::info;
 
 /// Display or set the currently selected identity
@@ -14,7 +14,7 @@ pub(crate) struct DefaultArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &DefaultArgs) -> Result<(), anyhow::Error> {
     // Load project directories
-    let dirs = ctx.dirs.identity()?;
+    let dirs = ctx.identity_dirs()?;
 
     match &args.name {
         Some(name) => {

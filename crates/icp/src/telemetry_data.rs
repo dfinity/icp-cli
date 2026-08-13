@@ -8,8 +8,6 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-use crate::identity::manifest::IdentitySpec;
-
 /// Data collected during command execution for telemetry.
 ///
 /// Stored in [`crate::context::Context`] so any subsystem with access to
@@ -83,18 +81,4 @@ pub enum IdentityStorageType {
 pub enum NetworkType {
     Managed,
     Connected,
-}
-
-impl From<&IdentitySpec> for IdentityStorageType {
-    fn from(spec: &IdentitySpec) -> Self {
-        match spec {
-            IdentitySpec::Pem { .. } => Self::Pem,
-            IdentitySpec::Keyring { .. } => Self::Keyring,
-            IdentitySpec::Hsm { .. } => Self::Hsm,
-            IdentitySpec::Anonymous => Self::Anonymous,
-            IdentitySpec::WebAuth { .. } => Self::InternetIdentity,
-            IdentitySpec::PendingDelegation { .. } => Self::PendingDelegation,
-            IdentitySpec::Delegation { .. } => Self::Delegation,
-        }
-    }
 }

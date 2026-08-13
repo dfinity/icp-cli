@@ -27,21 +27,22 @@ use tracing::{debug, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
-use crate::{
+use icp::{
     context::IC_ROOT_KEY,
     fs::{
         self,
         lock::{LRead, LWrite},
     },
-    identity::{
-        IdentityPaths, PasswordFunc,
-        delegation::{self, SignedDelegation},
-        manifest::{
-            DelegationKeyStorage, IdentityDefaults, IdentityKeyAlgorithm, IdentityList,
-            IdentitySpec, LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
-        },
-    },
     prelude::*,
+};
+
+use crate::identity::{
+    IdentityPaths, PasswordFunc,
+    delegation::{self, SignedDelegation},
+    manifest::{
+        DelegationKeyStorage, IdentityDefaults, IdentityKeyAlgorithm, IdentityList, IdentitySpec,
+        LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -67,7 +68,7 @@ pub enum ExportFormat {
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: crate::fs::IoError },
+    ReadFileError { source: icp::fs::IoError },
 
     #[snafu(display("failed to load PEM from `{origin}`: failed to parse"))]
     ParsePemError {
@@ -100,7 +101,7 @@ pub enum LoadIdentityError {
     GetPasswordError { message: String },
 
     #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    LockError { source: icp::fs::lock::LockError },
 
     #[snafu(display("failed to load keyring entry"))]
     LoadEntryError { source: keyring::Error },
@@ -404,7 +405,7 @@ fn try_load_pem_session(dirs: LRead<&IdentityPaths>, name: &str) -> Option<Arc<d
 #[derive(Debug, Snafu)]
 pub enum CreateExplicitPemSessionError {
     #[snafu(transparent)]
-    ReadFile { source: crate::fs::IoError },
+    ReadFile { source: icp::fs::IoError },
 
     #[snafu(display("failed to parse PEM from `{path}`"))]
     ParsePemForSession {
@@ -426,7 +427,7 @@ pub enum CreateExplicitPemSessionError {
     SetSessionKeyringPassword { source: keyring::Error },
 
     #[snafu(display("failed to create session delegation directory"))]
-    EnsureSessionDelegationDir { source: crate::fs::IoError },
+    EnsureSessionDelegationDir { source: icp::fs::IoError },
 
     #[snafu(display("failed to save session delegation chain to `{path}`"))]
     SaveSessionDelegation {
@@ -848,23 +849,6 @@ pub enum LoadIdentityInContextError {
     LoadIdentityManifest { source: LoadIdentityManifestError },
 }
 
-pub async fn load_identity_in_context(
-    dirs: LWrite<&IdentityPaths>,
-    password_func: PasswordFunc,
-    pem_session_duration: Option<Duration>,
-) -> Result<Arc<dyn Identity>, LoadIdentityInContextError> {
-    let identity = load_identity(
-        dirs,
-        &IdentityList::load_from(dirs.read())?,
-        &(IdentityDefaults::load_from(dirs.read())?).default,
-        password_func,
-        None,
-        pem_session_duration,
-    )?;
-
-    Ok(identity)
-}
-
 pub const MIN_IDENTITY_PASSWORD_LEN: usize = 8;
 
 pub fn validate_password(password: &str) -> Result<(), String> {
@@ -916,7 +900,7 @@ pub enum CreateIdentityError {
     CreateIdentityDelegationExpired,
 
     #[snafu(display("failed to create delegation directory"))]
-    CreateIdentityDelegationDir { source: crate::fs::IoError },
+    CreateIdentityDelegationDir { source: icp::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     CreateIdentitySaveDelegation {
@@ -1112,13 +1096,10 @@ pub fn create_identity(
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
     #[snafu(display("failed to write file"))]
-    WriteFileError { source: crate::fs::IoError },
-
-    #[snafu(display("failed to create directory"))]
-    CreateDirectoryError { source: crate::fs::IoError },
+    WriteFileError { source: icp::fs::IoError },
 
     #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    LockError { source: icp::fs::lock::LockError },
 
     #[snafu(display("failed to create keyring entry"))]
     CreateEntryError { source: keyring::Error },
@@ -1639,11 +1620,11 @@ pub enum CreatePendingDelegationError {
     #[snafu(display("failed to write session key PEM file for `{name}`"))]
     DlgWritePemFile {
         name: String,
-        source: crate::fs::IoError,
+        source: icp::fs::IoError,
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    DlgCreateDelegationDir { source: crate::fs::IoError },
+    DlgCreateDelegationDir { source: icp::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     DlgSaveDelegation {
@@ -1820,7 +1801,7 @@ pub enum UpdateWebAuthDelegationError {
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    UpdateWebAuthCreateDir { source: crate::fs::IoError },
+    UpdateWebAuthCreateDir { source: icp::fs::IoError },
 }
 
 /// Updates the delegation chain for an existing web-based identity.
@@ -1944,7 +1925,7 @@ pub enum CompleteDelegationError {
     DecodeDelegationChainKey { source: hex::FromHexError },
 
     #[snafu(display("failed to create delegation directory"))]
-    CreateDelegationChainDir { source: crate::fs::IoError },
+    CreateDelegationChainDir { source: icp::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     SaveDelegationChain {

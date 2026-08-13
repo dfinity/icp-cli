@@ -1,10 +1,9 @@
 use crate::context::Context;
 use clap::{Args, ValueHint};
 use dialoguer::Password;
-use icp::{
-    identity::{key::link_hsm_identity, manifest::IdentityList},
-    prelude::*,
-};
+use icp::prelude::*;
+
+use crate::identity::{key::link_hsm_identity, manifest::IdentityList};
 use snafu::{ResultExt, Snafu, ensure};
 use tracing::info;
 
@@ -32,8 +31,7 @@ pub(crate) struct HsmArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> {
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_read(async |dirs| -> Result<(), HsmError> {
             let list = IdentityList::load_from(dirs).context(LoadIdentityListSnafu)?;
             ensure!(
@@ -61,8 +59,7 @@ pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> 
         }),
     };
 
-    ctx.dirs
-        .identity()?
+    ctx.identity_dirs()?
         .with_write(async |dirs| {
             link_hsm_identity(
                 dirs,
@@ -88,7 +85,7 @@ pub(crate) enum HsmError {
 
     #[snafu(display("failed to load identity list"))]
     LoadIdentityList {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: crate::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(transparent)]
@@ -96,6 +93,6 @@ pub(crate) enum HsmError {
 
     #[snafu(display("failed to link HSM identity"))]
     LinkHsm {
-        source: icp::identity::key::LinkHsmIdentityError,
+        source: crate::identity::key::LinkHsmIdentityError,
     },
 }

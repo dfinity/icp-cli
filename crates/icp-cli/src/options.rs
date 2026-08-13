@@ -1,8 +1,8 @@
+use crate::identity::IdentitySelection;
 use clap::error::ErrorKind;
 use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
 use clap_complete::ArgValueCandidates;
 use icp::context::{EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
 use icp::network::RootKeySpec;
 use icp::prelude::LOCAL;
 use url::Url;

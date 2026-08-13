@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -6,7 +7,6 @@ use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
 use icp::context::{CanisterSelection, EnvironmentSelection};
-use icp::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 

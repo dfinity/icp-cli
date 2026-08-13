@@ -1,5 +1,5 @@
 use std::sync::Arc;
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
@@ -177,30 +177,30 @@ impl Access for ArtifactStore {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 /// In-memory mock implementation of `Access`.
-pub(crate) struct MockInMemoryArtifactStore {
+pub struct MockInMemoryArtifactStore {
     store: Mutex<HashMap<String, Vec<u8>>>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl MockInMemoryArtifactStore {
     /// Creates a new empty in-memory artifact store.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             store: Mutex::new(HashMap::new()),
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 impl Default for MockInMemoryArtifactStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "mocks"))]
 #[async_trait]
 impl Access for MockInMemoryArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {

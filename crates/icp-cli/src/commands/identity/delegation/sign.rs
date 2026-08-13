@@ -1,4 +1,10 @@
 use crate::context::Context;
+use crate::{
+    context::GetIdentityError,
+    identity::delegation::{
+        Delegation as WireDelegation, DelegationChain, SignedDelegation as WireSignedDelegation,
+    },
+};
 use std::{
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
@@ -6,14 +12,7 @@ use std::{
 
 use clap::{Args, ValueHint};
 use ic_agent::{Identity as _, export::Principal, identity::Delegation as AgentDelegation};
-use icp::{
-    context::GetIdentityError,
-    fs::read_to_string,
-    identity::delegation::{
-        Delegation as WireDelegation, DelegationChain, SignedDelegation as WireSignedDelegation,
-    },
-    prelude::*,
-};
+use icp::{fs::read_to_string, prelude::*};
 use pem::Pem;
 use snafu::{OptionExt, ResultExt, Snafu};
 

@@ -67,6 +67,10 @@ sysinfo = { workspace = true }
 tar = { workspace = true }
 time = { workspace = true }
 tiny-bip39 = { workspace = true }
+# `io-std` is listed for `tokio::io::stdout`/`stderr`; feature unification with other
+# crates supplies it anyway, so dropping it would not fail the build. `rt-multi-thread`
+# is needed by `block_in_place` in `canister::sync::plugin` and arrives via the
+# workspace `tokio` entry.
 tokio = { workspace = true, features = ["sync", "macros", "rt", "time", "io-util", "io-std", "process", "signal"] }
 tracing = { workspace = true }
 url = { workspace = true }

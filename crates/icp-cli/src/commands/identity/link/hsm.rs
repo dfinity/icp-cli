@@ -1,4 +1,3 @@
-use crate::context::Context;
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use icp::prelude::*;
@@ -6,6 +5,8 @@ use icp::prelude::*;
 use crate::identity::{key::link_hsm_identity, manifest::IdentityList};
 use snafu::{ResultExt, Snafu, ensure};
 use tracing::info;
+
+use crate::context::Context;
 
 /// Link an HSM key to a new identity
 #[derive(Debug, Args)]

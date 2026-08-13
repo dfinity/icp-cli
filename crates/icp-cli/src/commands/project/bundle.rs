@@ -1,8 +1,8 @@
-use crate::context::Context;
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
 use icp::prelude::*;
 
+use crate::context::Context;
 use crate::operations::bundle::create_bundle;
 
 /// Bundle a project into a self-contained deployable archive.

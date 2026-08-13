@@ -1,4 +1,3 @@
-use crate::context::Context;
 use anyhow::bail;
 use candid::Nat;
 use clap::{ArgAction, Args};
@@ -15,6 +14,7 @@ use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
+use crate::context::Context;
 use crate::{commands::args, operations::proxy_management};
 
 #[derive(Clone, Debug, Default, Args)]

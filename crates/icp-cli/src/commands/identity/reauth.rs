@@ -1,4 +1,3 @@
-use crate::context::Context;
 use std::time::Duration;
 
 use clap::Args;
@@ -13,6 +12,7 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use tracing::info;
 
 use crate::commands::identity::{delegation::sign::DurationArg, link::web};
+use crate::context::Context;
 
 /// Re-authenticate an Internet Identity delegation or create a PEM session delegation
 #[derive(Debug, Args)]

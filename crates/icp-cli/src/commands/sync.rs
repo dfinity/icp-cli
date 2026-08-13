@@ -1,5 +1,3 @@
-use crate::context::Context;
-use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -14,6 +12,9 @@ use crate::{
     operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Synchronize canisters
 #[derive(Debug, Args)]

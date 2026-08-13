@@ -1,5 +1,6 @@
-use crate::context::Context;
 use clap::Args;
+
+use crate::context::Context;
 
 /// List all networks configured in the project
 #[derive(Args, Debug)]

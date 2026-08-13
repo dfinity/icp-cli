@@ -1,10 +1,10 @@
-use crate::context::Context;
 use candid::Principal;
 use clap::{Args, ValueEnum};
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 
 use crate::commands::parsers::parse_subaccount;
+use crate::context::Context;
 use crate::options::IdentityOpt;
 
 /// The account identifier format to display

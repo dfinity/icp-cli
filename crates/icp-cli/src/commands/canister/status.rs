@@ -1,5 +1,3 @@
-use crate::context::Context;
-use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
@@ -17,6 +15,9 @@ use crate::{
     operations::{proxy::UpdateOrProxyError, proxy_management},
     options,
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";

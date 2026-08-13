@@ -1,4 +1,3 @@
-use crate::context::Context;
 use std::io::stdout;
 
 use crate::identity::IdentitySelection;
@@ -19,6 +18,8 @@ use crate::{
     commands::args,
     operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote},
 };
+
+use crate::context::Context;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 

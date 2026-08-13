@@ -1,4 +1,3 @@
-use crate::identity::IdentitySelection;
 use clap::error::ErrorKind;
 use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
 use clap_complete::ArgValueCandidates;
@@ -6,6 +5,8 @@ use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::network::RootKeySpec;
 use icp::prelude::LOCAL;
 use url::Url;
+
+use crate::identity::IdentitySelection;
 
 mod heading {
     pub const NETWORK_PARAMETERS: &str = "Network Selection Parameters";

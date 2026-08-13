@@ -1,5 +1,3 @@
-use crate::context::Context;
-use crate::identity::key::{ExportFormat, export_identity};
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
@@ -7,6 +5,9 @@ use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use icp::fs::read_to_string;
 use icp::prelude::*;
+
+use crate::context::Context;
+use crate::identity::key::{ExportFormat, export_identity};
 
 /// Print the PEM file for the identity
 #[derive(Debug, Args)]

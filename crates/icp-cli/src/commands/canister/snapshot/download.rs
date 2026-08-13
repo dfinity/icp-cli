@@ -1,4 +1,3 @@
-use crate::context::Context;
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::{Args, ValueHint};
@@ -13,6 +12,8 @@ use crate::operations::snapshot_transfer::{
     delete_download_progress, download_blob_to_file, download_wasm_chunk, load_download_progress,
     load_metadata, read_snapshot_metadata, save_metadata,
 };
+
+use crate::context::Context;
 
 /// Download a snapshot to local disk
 #[derive(Debug, Args)]

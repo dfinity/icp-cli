@@ -1,4 +1,3 @@
-use crate::context::Context;
 use anyhow::{Context as _, anyhow, bail};
 use candid::types::{Type, TypeInner};
 use candid::{IDLArgs, Principal, TypeEnv, types::Function};
@@ -20,6 +19,8 @@ use crate::{
     operations::misc::fetch_canister_metadata,
     operations::proxy::update_or_proxy_raw,
 };
+
+use crate::context::Context;
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

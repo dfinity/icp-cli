@@ -1,10 +1,10 @@
-use crate::context::Context;
 use anyhow::Context as _;
 use clap::Args;
 use icp::network::{Configuration, RootKeySource};
 use serde::Serialize;
 
 use super::args::NetworkOrEnvironmentArgs;
+use crate::context::Context;
 
 /// Get status information about a running network
 #[derive(Args, Debug)]

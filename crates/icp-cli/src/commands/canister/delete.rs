@@ -1,4 +1,3 @@
-use crate::context::Context;
 use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
@@ -9,6 +8,8 @@ use crate::{
     commands::args,
     operations::{proxy_management, recover_cycles},
 };
+
+use crate::context::Context;
 
 /// Delete a canister from a network.
 ///

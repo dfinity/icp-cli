@@ -1,10 +1,10 @@
-use crate::context::Context;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::DeleteCanisterSnapshotArgs;
 use tracing::info;
 
 use super::SnapshotId;
+use crate::context::Context;
 use crate::{commands::args, operations::proxy_management};
 
 /// Delete a canister snapshot

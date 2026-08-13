@@ -1,9 +1,9 @@
-use crate::context::Context;
 use std::sync::{Arc, OnceLock};
 
 use clap::Parser;
 use icp::network::managed::cache::download_launcher_version;
 
+use crate::context::Context;
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 /// Update icp-cli-network-launcher to the latest version.

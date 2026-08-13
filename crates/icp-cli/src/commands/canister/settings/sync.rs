@@ -1,4 +1,3 @@
-use crate::context::Context;
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
@@ -6,6 +5,7 @@ use icp::context::CanisterSelection;
 use tracing::warn;
 
 use crate::commands::args::CanisterCommandArgs;
+use crate::context::Context;
 
 /// Synchronize a canister's settings with those defined in the project
 #[derive(Debug, Args)]

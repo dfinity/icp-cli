@@ -1,5 +1,3 @@
-use crate::context::Context;
-use crate::identity::IdentitySelection;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -36,6 +34,9 @@ use crate::{
     options::{IdentityOpt, arg_struct_change_help},
     progress::{ProgressManager, ProgressManagerSettings},
 };
+
+use crate::context::Context;
+use crate::identity::IdentitySelection;
 
 /// Deploy a project to an environment
 #[derive(Args, Debug)]

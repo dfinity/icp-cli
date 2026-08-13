@@ -1,5 +1,3 @@
-use crate::context::Context;
-use crate::identity::key;
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
@@ -9,6 +7,8 @@ use snafu::{ResultExt, Snafu};
 use tracing::warn;
 
 use crate::commands::identity::StorageMode;
+use crate::context::Context;
+use crate::identity::key;
 
 /// Create a pending delegation identity with a new P256 session key
 ///

@@ -1,4 +1,3 @@
-use crate::context::Context;
 use std::io::IsTerminal;
 
 use anyhow::{Context as _, anyhow, bail};
@@ -21,6 +20,8 @@ use crate::{
         },
     },
 };
+
+use crate::context::Context;
 
 /// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]

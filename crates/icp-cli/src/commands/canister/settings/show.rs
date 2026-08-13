@@ -1,9 +1,9 @@
-use crate::context::Context;
 use clap::Args;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings, LogVisibility};
 use std::fmt::Write;
 
+use crate::context::Context;
 use crate::{commands::args::CanisterCommandArgs, operations::proxy_management};
 
 /// Show the settings of a canister.

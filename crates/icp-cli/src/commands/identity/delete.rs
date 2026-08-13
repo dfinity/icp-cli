@@ -1,8 +1,9 @@
-use crate::context::Context;
-use crate::identity::key::delete_identity;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use tracing::info;
+
+use crate::context::Context;
+use crate::identity::key::delete_identity;
 
 /// Delete an identity
 #[derive(Debug, Args)]

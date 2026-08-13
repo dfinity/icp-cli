@@ -1,4 +1,3 @@
-use crate::context::Context;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
 use icp::{fs::json, prelude::*};
@@ -10,6 +9,8 @@ use crate::identity::{
 };
 use snafu::{ResultExt, Snafu};
 use tracing::{info, warn};
+
+use crate::context::Context;
 
 /// Complete a pending delegation identity by providing a signed delegation chain
 ///

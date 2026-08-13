@@ -1,4 +1,3 @@
-use crate::context::Context;
 use crate::{
     context::GetIdentityError,
     identity::delegation::{
@@ -16,6 +15,7 @@ use icp::{fs::read_to_string, prelude::*};
 use pem::Pem;
 use snafu::{OptionExt, ResultExt, Snafu};
 
+use crate::context::Context;
 use crate::options::IdentityOpt;
 
 /// Sign a delegation from the selected identity to a target key

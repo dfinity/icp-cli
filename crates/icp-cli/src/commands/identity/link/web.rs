@@ -1,4 +1,3 @@
-use crate::context::Context;
 use std::{io::IsTerminal, net::SocketAddr, time::Duration};
 
 use anstyle::{AnsiColor, Reset, Style};
@@ -30,6 +29,7 @@ use tracing::{info, warn};
 use url::Url;
 
 use crate::commands::identity::StorageMode;
+use crate::context::Context;
 
 /// Link a web-based identity (such as Internet Identity) to a new icp-cli identity
 #[derive(Debug, Args)]

@@ -1,8 +1,9 @@
-use crate::context::Context;
-use crate::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use tracing::info;
+
+use crate::context::Context;
+use crate::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 
 /// Display or set the currently selected identity
 #[derive(Debug, Args)]

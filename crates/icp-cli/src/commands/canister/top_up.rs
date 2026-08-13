@@ -1,4 +1,3 @@
-use crate::context::Context;
 use anyhow::{Context as _, bail};
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
@@ -10,6 +9,7 @@ use icp_canister_interfaces::cycles_ledger::{
 use tracing::info;
 
 use crate::commands::args;
+use crate::context::Context;
 use crate::operations::token::TokenAmount;
 
 /// Top up a canister with cycles

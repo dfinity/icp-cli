@@ -24,7 +24,7 @@ use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tracing::{info, warn};
 
-use icp::context::Context;
+use crate::context::Context;
 
 use crate::commands::identity::StorageMode;
 

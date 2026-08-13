@@ -197,7 +197,7 @@ fn resolve_name(args: &IcpGenerateArgs) -> Result<Option<String>, anyhow::Error>
 }
 
 pub(crate) async fn exec(
-    ctx: &icp::context::Context,
+    ctx: &crate::context::Context,
     args: &IcpGenerateArgs,
 ) -> Result<(), anyhow::Error> {
     // Check for conflicting flags: --quiet and --debug cannot be used together

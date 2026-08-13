@@ -1,10 +1,10 @@
+use crate::context::Context;
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, LoadCanisterSnapshotArgs,
 };
-use icp::context::Context;
 use tracing::info;
 
 use super::SnapshotId;

@@ -1,3 +1,4 @@
+use crate::context::Context;
 use std::io::stdout;
 
 use anyhow::anyhow;
@@ -6,7 +7,7 @@ use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::canister::resolve_controllers;
-use icp::context::{Context, EnvironmentSelection, NetworkSelection};
+use icp::context::{EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp::store_id::IdMapping;

@@ -7,7 +7,7 @@ use icp::{
 use tracing::info;
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
+use crate::context::Context;
 
 /// Stop a background network
 #[derive(Args, Debug)]

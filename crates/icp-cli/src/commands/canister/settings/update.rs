@@ -1,3 +1,4 @@
+use crate::context::Context;
 use anyhow::bail;
 use candid::Nat;
 use clap::{ArgAction, Args};
@@ -9,7 +10,7 @@ use ic_management_canister_types::{
     UpdateSettingsArgs,
 };
 use icp::ProjectLoadError;
-use icp::context::{CanisterSelection, Context};
+use icp::context::CanisterSelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;

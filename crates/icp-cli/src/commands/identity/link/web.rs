@@ -1,3 +1,4 @@
+use crate::context::Context;
 use std::{io::IsTerminal, net::SocketAddr, time::Duration};
 
 use anstyle::{AnsiColor, Reset, Style};
@@ -14,7 +15,6 @@ use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
 use icp::{
-    context::Context,
     fs::read_to_string,
     identity::{
         delegation::DelegationChain,

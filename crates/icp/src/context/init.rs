@@ -37,7 +37,6 @@ pub enum ContextInitError {
 
 pub fn initialize(
     project_root_override: Option<PathBuf>,
-    debug: bool,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
 ) -> Result<Context, ContextInitError> {
@@ -149,7 +148,6 @@ pub fn initialize(
         agent: agent_creator,
         builder,
         syncer,
-        debug,
         telemetry_data,
         password_func,
     })

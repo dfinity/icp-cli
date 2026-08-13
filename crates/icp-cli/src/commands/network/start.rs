@@ -25,7 +25,7 @@ use tracing::{debug, info, warn};
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
+use crate::context::Context;
 
 /// Run a given network.
 ///

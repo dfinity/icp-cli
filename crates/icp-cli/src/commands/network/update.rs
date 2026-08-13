@@ -1,7 +1,8 @@
+use crate::context::Context;
 use std::sync::{Arc, OnceLock};
 
 use clap::Parser;
-use icp::{context::Context, network::managed::cache::download_launcher_version};
+use icp::network::managed::cache::download_launcher_version;
 
 use crate::progress::{ProgressManager, ProgressManagerSettings};
 

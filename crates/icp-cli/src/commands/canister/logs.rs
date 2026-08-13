@@ -1,11 +1,11 @@
 use std::io::{ErrorKind, Write as _, stdout};
 
+use crate::context::Context;
 use anyhow::{Context as _, anyhow};
 use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
 use ic_management_canister_types::{CanisterLogFilter, CanisterLogRecord, FetchCanisterLogsArgs};
-use icp::context::Context;
 use icp::signal::stop_signal;
 use itertools::Itertools;
 use serde::Serialize;

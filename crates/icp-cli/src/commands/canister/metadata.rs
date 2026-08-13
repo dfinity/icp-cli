@@ -1,8 +1,8 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use anyhow::bail;
 use clap::Args;
-use icp::context::Context;
 use serde::Serialize;
 
 use crate::{commands::args, operations::misc::fetch_canister_metadata};

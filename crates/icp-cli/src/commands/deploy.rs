@@ -1,3 +1,4 @@
+use crate::context::Context;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -7,7 +8,7 @@ use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord};
 use icp::parsers::CyclesAmount;
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection},
+    context::{CanisterSelection, EnvironmentSelection},
     identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };

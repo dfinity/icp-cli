@@ -1,6 +1,6 @@
+use crate::context::Context;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::Context;
 use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use tracing::info;
 

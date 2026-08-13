@@ -1,7 +1,8 @@
+use crate::context::Context;
 use anyhow::bail;
 use clap::Args;
 use ic_agent::{Agent, agent::status::Status};
-use icp::{context::Context, identity::IdentitySelection};
+use icp::identity::IdentitySelection;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::info;

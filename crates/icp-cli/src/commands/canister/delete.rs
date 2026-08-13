@@ -1,8 +1,9 @@
+use crate::context::Context;
 use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::{CanisterSelection, Context};
+use icp::context::CanisterSelection;
 
 use crate::{
     commands::args,

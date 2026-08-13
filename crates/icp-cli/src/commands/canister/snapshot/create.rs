@@ -1,5 +1,6 @@
 use std::io::stdout;
 
+use crate::context::Context;
 use anyhow::bail;
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
@@ -7,7 +8,6 @@ use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, TakeCanisterSnapshotArgs,
 };
-use icp::context::Context;
 use serde::Serialize;
 
 use super::SnapshotId;

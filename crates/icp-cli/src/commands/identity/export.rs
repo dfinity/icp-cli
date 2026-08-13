@@ -1,9 +1,9 @@
+use crate::context::Context;
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::context::Context;
 use icp::fs::read_to_string;
 use icp::identity::key::{ExportFormat, export_identity};
 use icp::prelude::*;

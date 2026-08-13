@@ -1,3 +1,4 @@
+use crate::context::Context;
 use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
@@ -6,7 +7,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
 };
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
+    context::{CanisterSelection, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
 };
 use serde::Serialize;

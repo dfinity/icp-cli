@@ -1,7 +1,7 @@
+use crate::context::Context;
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use icp::{
-    context::Context,
     identity::{key::link_hsm_identity, manifest::IdentityList},
     prelude::*,
 };

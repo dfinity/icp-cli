@@ -6,7 +6,7 @@ use icp::identity::manifest::{IdentityDefaults, IdentityList};
 use itertools::Itertools;
 use serde::Serialize;
 
-use icp::context::Context;
+use crate::context::Context;
 
 /// List the identities
 #[derive(Debug, Args)]

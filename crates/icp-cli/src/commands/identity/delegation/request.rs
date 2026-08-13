@@ -1,7 +1,8 @@
+use crate::context::Context;
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::{context::Context, fs::read_to_string, identity::key, prelude::*};
+use icp::{fs::read_to_string, identity::key, prelude::*};
 use pem::Pem;
 use snafu::{ResultExt, Snafu};
 use tracing::warn;

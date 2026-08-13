@@ -1,3 +1,4 @@
+use crate::context::Context;
 use anyhow::{Context as _, anyhow, bail};
 use candid::types::{Type, TypeInner};
 use candid::{IDLArgs, Principal, TypeEnv, types::Function};
@@ -7,7 +8,6 @@ use candid_parser::utils::CandidSource;
 use clap::{Args, ValueEnum, ValueHint};
 use dialoguer::console::Term;
 use ic_agent::Agent;
-use icp::context::Context;
 use icp::manifest::ArgsFormat;
 use icp::parsers::CyclesAmount;
 use icp::prelude::*;

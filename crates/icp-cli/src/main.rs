@@ -16,6 +16,7 @@ use crate::{
 mod artifacts;
 mod commands;
 mod complete;
+mod context;
 mod dist;
 mod events;
 mod logging;
@@ -185,7 +186,7 @@ async fn run() -> Result<(), Error> {
             .session_length
             .map(|m| std::time::Duration::from_secs((u64::from(m) + 2) * 60))
     };
-    let ctx = icp::context::initialize(
+    let ctx = context::initialize(
         cli.project_root_override,
         cli.debug,
         password_func,
@@ -224,7 +225,7 @@ async fn run() -> Result<(), Error> {
 }
 
 /// Dispatch the command to its handler.
-async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), Error> {
+async fn dispatch(ctx: &crate::context::Context, command: Command) -> Result<(), Error> {
     match command {
         // Build
         Command::Build(args) => commands::build::exec(ctx, &args).await?,

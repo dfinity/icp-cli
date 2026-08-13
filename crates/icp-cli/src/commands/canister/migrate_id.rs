@@ -1,6 +1,7 @@
 use std::io::{IsTerminal, stdin};
 use std::time::{Duration, Instant};
 
+use crate::context::Context;
 use anyhow::bail;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
@@ -8,7 +9,6 @@ use dialoguer::Confirm;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusType, UpdateSettingsArgs,
 };
-use icp::context::Context;
 use icp_canister_interfaces::nns_migration::{MigrationStatus, NNS_MIGRATION_PRINCIPAL};
 use indicatif::{ProgressBar, ProgressStyle};
 use num_traits::ToPrimitive;

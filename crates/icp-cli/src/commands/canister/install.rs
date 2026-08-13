@@ -1,3 +1,4 @@
+use crate::context::Context;
 use std::io::IsTerminal;
 
 use anyhow::{Context as _, anyhow, bail};
@@ -5,7 +6,7 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::context::{CanisterSelection, Context};
+use icp::context::CanisterSelection;
 use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};

@@ -1,7 +1,7 @@
+use crate::context::Context;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::DeleteCanisterSnapshotArgs;
-use icp::context::Context;
 use tracing::info;
 
 use super::SnapshotId;

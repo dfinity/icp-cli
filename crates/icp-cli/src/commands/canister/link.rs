@@ -1,8 +1,9 @@
+use crate::context::Context;
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::EnvironmentSelection;
 use tracing::info;
 
 use crate::options::EnvironmentOpt;

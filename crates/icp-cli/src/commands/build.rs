@@ -1,7 +1,8 @@
+use crate::context::Context;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::EnvironmentSelection;
 
 use tracing::info;
 

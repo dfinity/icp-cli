@@ -293,3 +293,31 @@ fn redefine_ic_network_disallowed() {
         .failure()
         .stderr(contains("`ic` is a reserved network name"));
 }
+
+#[test]
+fn malformed_manifest_reports_the_whole_load_chain() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Deliberately malformed YAML: the flow sequence is never closed
+    write_string(
+        &project_dir.join("icp.yaml"),
+        indoc! {r#"
+            canisters:
+              - name: [oops
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    // Any command that loads the project should fail, reporting both the loader's
+    // own level and the parse failure underneath it
+    ctx.icp()
+        .current_dir(project_dir)
+        .args(["project", "show"])
+        .assert()
+        .failure()
+        .stderr(contains("failed to load project manifest"))
+        .stderr(contains("failed to parse manifest at"));
+}

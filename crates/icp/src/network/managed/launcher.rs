@@ -349,7 +349,7 @@ pub fn wait_for_single_line_file(
     let dir = path.parent().unwrap();
     // notify will get here faster
     let (rec_tx, rec_rx) = tokio::sync::mpsc::channel(10);
-    let mut rec_watcher =
+    let rec_watcher =
         notify::recommended_watcher(WatchRecv(rec_tx)).context(WatchSnafu { path: &dir })?;
     // poll is more reliable when dealing with vfs like 9p, notably in WSL2
     let (poll_tx, poll_rx) = tokio::sync::mpsc::channel(10);

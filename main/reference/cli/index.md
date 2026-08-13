@@ -6,6 +6,7 @@
 
 * [`build`](build.md) — Build canisters
 * [`canister`](canister.md) — Perform canister operations against a network
+* [`completions`](completions.md) — Generate a shell completion script
 * [`cycles`](cycles.md) — Mint and manage cycles
 * [`deploy`](deploy.md) — Deploy a project to an environment
 * [`environment`](environment.md) — Show information about the current project environments

@@ -40,6 +40,14 @@ pub(crate) fn failure_style() -> ProgressStyle {
 /// How often a running spinner redraws itself.
 pub(crate) const STEADY_TICK: Duration = Duration::from_millis(120);
 
+/// The style a byte-transfer bar carries.
+pub(crate) fn byte_style() -> ProgressStyle {
+    ProgressStyle::default_bar()
+        .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+        .expect("invalid progress bar template")
+        .progress_chars("#>-")
+}
+
 // Creates a progress bar style with a spinner that transitions to a final tick symbol
 // - end_tick: the symbol to display when the progress completes (success, failure, etc.)
 // - color: the color theme for the spinner and text

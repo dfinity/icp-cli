@@ -11,11 +11,13 @@ use std::{
 };
 
 use icp_events::{Event, EventSink, Outcome, Reporter, TaskId, TaskKind};
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget};
 use itertools::Itertools;
 use tracing::debug;
 
-use crate::progress::{RollingLines, STEADY_TICK, failure_style, running_style, success_style};
+use crate::progress::{
+    RollingLines, STEADY_TICK, byte_style, failure_style, running_style, success_style,
+};
 
 /// How many lines of a step's output stay on screen while it runs.
 const VISIBLE_STEP_LINES: usize = 4;
@@ -227,14 +229,6 @@ impl EventSink for IndicatifSink {
     }
 }
 
-/// The template byte-transfer bars use.
-fn byte_style() -> ProgressStyle {
-    ProgressStyle::default_bar()
-        .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-        .expect("invalid progress bar template")
-        .progress_chars("#>-")
-}
-
 /// Proof that the events path draws what `ProgressManager` drew.
 ///
 /// Both renderers are pointed at the same recording terminal and driven through the
@@ -244,7 +238,10 @@ fn byte_style() -> ProgressStyle {
 #[cfg(test)]
 mod rendering_equivalence {
     use super::*;
-    use crate::progress::{ProgressManager, ProgressManagerSettings};
+    use crate::{
+        operations::snapshot_transfer::create_transfer_progress_bar,
+        progress::{ProgressManager, ProgressManagerSettings},
+    };
     use futures::executor::block_on;
     use indicatif::TermLike;
     use std::io;
@@ -441,6 +438,105 @@ mod rendering_equivalence {
             "old frames: {old:?}"
         );
         assert_eq!(old, new);
+    }
+
+    /// Every frame `create_transfer_progress_bar` — the pre-inversion byte bar, still used
+    /// by `canister snapshot download`/`upload` — draws at `position`.
+    fn old_byte_frames(position: u64) -> Vec<String> {
+        let term = RecordingTerm::default();
+        let bar = create_transfer_progress_bar(100, "WASM module");
+        bar.set_draw_target(recording_target(&term));
+        bar.set_position(position);
+        bar.tick();
+
+        term.frames()
+    }
+
+    /// Every frame a `TaskKind::Bytes` task draws at the same position.
+    fn new_byte_frames(position: u64) -> Vec<String> {
+        let term = RecordingTerm::default();
+        let reporter = new_reporter(&term);
+
+        let task = reporter.task(TaskKind::Bytes { total: 100 }, "WASM module");
+        task.position(position);
+
+        term.frames()
+    }
+
+    /// The byte shape is still drawn the pre-inversion way by
+    /// `snapshot_transfer::create_transfer_progress_bar`. Both sides take their template
+    /// from `progress::byte_style`, and this pins that they stay interchangeable.
+    ///
+    /// Compared at rest, where the rate reads `0 B/s` on both sides: `{wide_bar}` is given
+    /// whatever width the rest of the line leaves over, so once a transfer is under way the
+    /// bar's own width is a function of how long the rate string happens to be.
+    #[test]
+    fn a_byte_task_draws_the_same_line_as_the_transfer_bar() {
+        let old = old_byte_frames(0);
+        let new = new_byte_frames(0);
+
+        assert!(
+            old.last()
+                .is_some_and(|frame| frame.contains("WASM module") && frame.contains("0 B/100 B")),
+            "old frames: {old:?}"
+        );
+        assert_eq!(
+            old.last().map(|frame| mask_timings(frame)),
+            new.last().map(|frame| mask_timings(frame)),
+            "old: {old:?}\nnew: {new:?}"
+        );
+    }
+
+    /// `progress_chars` is the part of the byte template the at-rest comparison above
+    /// cannot see, since nothing is filled in yet.
+    #[test]
+    fn both_byte_bars_fill_with_the_same_glyphs() {
+        for frames in [old_byte_frames(64), new_byte_frames(64)] {
+            let drawn = frames.last().expect("nothing was drawn");
+
+            assert!(
+                drawn.contains('#') && drawn.contains('>') && drawn.contains('-'),
+                "{drawn:?}"
+            );
+        }
+    }
+
+    /// Blank out the parts of a byte bar that are derived from wall-clock time: the
+    /// `[HH:MM:SS]` elapsed counter and the trailing `(rate, eta)`.
+    fn mask_timings(frame: &str) -> String {
+        let mut out = String::with_capacity(frame.len());
+        let mut rest = frame;
+
+        while let Some(open) = rest.find('[') {
+            out.push_str(&rest[..open]);
+            rest = &rest[open..];
+
+            if is_clock(&rest[1..]) {
+                out.push_str("[??:??:??]");
+                rest = &rest[10..];
+            } else {
+                out.push('[');
+                rest = &rest[1..];
+            }
+        }
+        out.push_str(rest);
+
+        if let Some(at) = out.rfind('(') {
+            out.truncate(at);
+        }
+        out
+    }
+
+    /// Whether `s` opens with `HH:MM:SS]`.
+    fn is_clock(s: &str) -> bool {
+        let b = s.as_bytes();
+
+        b.len() >= 9
+            && b[8] == b']'
+            && b[..8].iter().enumerate().all(|(i, c)| match i {
+                2 | 5 => *c == b':',
+                _ => c.is_ascii_digit(),
+            })
     }
 
     /// Several canisters share one `MultiProgress`, so their bars have to be added in

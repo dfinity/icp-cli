@@ -8,9 +8,8 @@ use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_spa
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 use crate::{
-    dist::dist_update_suggestion,
+    dist::{dist_update_suggestion, update_check},
     logging::{UserLayer, debug_layer},
-    operations::update_check::update_check,
     version::{git_sha, icp_cli_version_str},
 };
 

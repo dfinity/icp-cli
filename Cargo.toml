@@ -44,7 +44,6 @@ dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
 crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
 elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
-fd-lock = "4.0.4"
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
 futures = "0.3.31"
 glob = "0.3.2"

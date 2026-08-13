@@ -24,14 +24,18 @@ use super::Params;
 use super::super::script::execute_commands;
 
 /// A fully-resolved script sync step: the command(s), the working directory, and
-/// the complete environment the subprocess runs with (see [`system_env_vars`]).
+/// the environment variables to set for them (see [`system_env_vars`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScriptInvocation {
     /// Shell command(s) to run in order.
     pub commands: Vec<String>,
     /// Working directory (the canister directory).
     pub cwd: PathBuf,
-    /// Environment variables the subprocess inherits, in insertion order.
+    /// Environment variables a runner **adds to** its execution environment, in
+    /// insertion order — not the complete environment. [`HostScripts`] overlays
+    /// them onto the inherited process environment, so the script still sees
+    /// ambient variables such as `PATH` and `HOME`; entries here win on a name
+    /// collision. A runner is not expected to clear what it inherits.
     pub env: Vec<(String, String)>,
 }
 
@@ -121,10 +125,17 @@ impl ScriptRunner for HostScripts {
 mod tests {
     use std::collections::BTreeMap;
 
+    use tokio::sync::Mutex;
+
     use candid::Principal;
 
     use super::*;
     use crate::manifest::adapter::script::CommandField;
+
+    /// Serializes the tests here that mutate the process environment, since
+    /// cargo runs tests in parallel threads. Async-aware because the variable
+    /// has to stay set across the subprocess `await` that reads it.
+    static ENV_MUTEX: Mutex<()> = Mutex::const_new(());
 
     fn principal(byte: u8) -> Principal {
         Principal::from_slice(&[byte; 4])
@@ -200,6 +211,56 @@ mod tests {
         HostScripts.run_script(invocation, None).await.unwrap();
 
         assert_eq!(std::fs::read_to_string(out.path()).unwrap(), "ic\n");
+    }
+
+    /// `env` is an overlay, not the whole environment: the script still sees
+    /// variables the parent process had. Pins the contract documented on
+    /// [`ScriptInvocation::env`].
+    ///
+    /// Deliberately avoids two things that are not portable across the shells
+    /// this runs under. `printenv` accepts only one operand on BSD (macOS) and
+    /// so silently drops later names, hence one `echo` — a shell builtin
+    /// everywhere — per variable. And the inherited variable is one this test
+    /// sets rather than `PATH`, because Git-for-Windows bash rewrites `PATH`
+    /// into POSIX form, so its value there never equals the `PATH` the Rust side
+    /// reads.
+    #[tokio::test]
+    async fn host_runner_overlays_rather_than_replaces_the_environment() {
+        const AMBIENT: &str = "ICP_CLI_TEST_AMBIENT_VAR";
+        const AMBIENT_VALUE: &str = "inherited-from-parent";
+
+        let _guard = ENV_MUTEX.lock().await;
+        // SAFETY: ENV_MUTEX serializes the tests in this module that mutate the
+        // process environment, and the name is used by this test alone.
+        unsafe { std::env::set_var(AMBIENT, AMBIENT_VALUE) };
+
+        let overlaid = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let inherited = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let invocation = ScriptInvocation {
+            commands: vec![
+                format!("echo \"$ICP_CLI_NETWORK\" > '{}'", overlaid.path()),
+                format!("echo \"${AMBIENT}\" > '{}'", inherited.path()),
+            ],
+            cwd: "/".into(),
+            env: system_env_vars(&params(&[])),
+        };
+
+        let run = HostScripts.run_script(invocation, None).await;
+
+        // SAFETY: as above; the guard is still held.
+        unsafe { std::env::remove_var(AMBIENT) };
+        run.expect("script must run");
+
+        assert_eq!(
+            std::fs::read_to_string(overlaid.path()).unwrap().trim(),
+            "ic",
+            "the overlaid variable must be set"
+        );
+        assert_eq!(
+            std::fs::read_to_string(inherited.path()).unwrap().trim(),
+            AMBIENT_VALUE,
+            "a variable the parent process had must still reach the script"
+        );
     }
 
     /// A command that exits non-zero surfaces as a `ScriptRunError` whose source

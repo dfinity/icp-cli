@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# This crate is intentionally dependency-light so that its install/sync core and
+# project model can be compiled into a canister. All host-only IO (filesystem,
+# HTTP, the ICP API, sync-step execution, the canister-id store) is abstracted
+# behind trait objects; do NOT add ic-agent, reqwest, tokio, wasmtime, keyring,
+# bollard, sysinfo, or std::fs-driven crates here.
+
 [features]
 # Enables `clap::ValueEnum` derives on manifest enums used as CLI value types
 # (e.g. `ArgsFormat`). Enabled transitively by `icp/clap`.
@@ -17,15 +23,11 @@ camino.workspace = true
 candid.workspace = true
 clap = { workspace = true, optional = true }
 candid_parser.workspace = true
-dunce.workspace = true
 futures.workspace = true
 glob.workspace = true
 handlebars.workspace = true
 hex.workspace = true
-ic-agent.workspace = true
 ic-management-canister-types.workspace = true
-icp-canister-interfaces.workspace = true
-icp-sync-plugin.workspace = true
 indexmap.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true
@@ -39,7 +41,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 snafu.workspace = true
 strum.workspace = true
-tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 url.workspace = true
 
@@ -47,3 +48,4 @@ url.workspace = true
 camino-tempfile.workspace = true
 indoc.workspace = true
 jsonschema.workspace = true
+tokio.workspace = true

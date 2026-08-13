@@ -4,7 +4,7 @@ use url::Url;
 use crate::{
     Canister,
     agent::CreateAgentError,
-    canister::build::Build,
+    canister::{build::Build, sync::Synchronize},
     directories,
     identity::IdentitySelection,
     manifest::network::RootKeySpec,
@@ -95,6 +95,9 @@ pub struct Context {
 
     /// Canister builder
     pub builder: Arc<dyn Build>,
+
+    /// Canister synchronizer
+    pub syncer: Arc<dyn Synchronize>,
 
     /// Whether debug is enabled
     pub debug: bool,
@@ -621,6 +624,7 @@ impl Context {
             network: Arc::new(crate::network::MockNetworkAccessor::new()),
             agent: Arc::new(crate::agent::Creator),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
+            syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
             telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
             password_func: Arc::new(|| Err("no password available in mock context".to_string())),

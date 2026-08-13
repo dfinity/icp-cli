@@ -1,9 +1,9 @@
 //! Host-side project facade.
 //!
 //! Consolidation of manifests into a [`Project`] lives in
-//! `icp_deploy_canister::project` and is re-exported here. Member-scoping
-//! resolves real filesystem paths against the current working directory, so it
-//! stays here.
+//! `icp_deploy_canister::project` (over an injected `FileAccess`) and is
+//! re-exported here. Member-scoping resolves real filesystem paths against the
+//! current working directory, so it stays here.
 
 pub use icp_deploy_canister::project::{
     ConsolidateManifestError, EnvironmentError, LoadProjectError, VerifySandboxError,
@@ -58,12 +58,13 @@ pub fn member_scoped_canisters(
 mod tests {
     use super::*;
     use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
+    use crate::host_files::HostFileAccess;
     use crate::manifest::adapter::prebuilt::SourceField;
     use crate::manifest::recipe::Recipe;
     use crate::manifest::{PROJECT_MANIFEST, ProjectManifest, load_manifest_from_path};
     use crate::prelude::LOCAL;
     use camino_tempfile::Utf8TempDir;
-    use tokio::sync::mpsc::Sender;
+    use icp_deploy_canister::sync_exec::StepProgress;
 
     /// Recipes and plugins are never used in this test; every canister is pre-built.
     struct PanicResolver;
@@ -79,7 +80,7 @@ mod tests {
             _source: &SourceField,
             _base_dir: &Path,
             _sha256: Option<&str>,
-            _stdio: Option<Sender<String>>,
+            _progress: Option<&dyn StepProgress>,
         ) -> Result<PathBuf, ResolveError> {
             panic!("wasm resolver should not be called in this test");
         }
@@ -127,7 +128,7 @@ mod tests {
         let m: ProjectManifest = load_manifest_from_path(&tmp.path().join(PROJECT_MANIFEST))
             .await
             .unwrap();
-        let p = consolidate_manifest(tmp.path(), &PanicResolver, &m)
+        let p = consolidate_manifest(&HostFileAccess, tmp.path(), &PanicResolver, &m)
             .await
             .unwrap();
         let env = p.environments.get(LOCAL).expect("local environment");

@@ -143,8 +143,9 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
 
     let resolver = ctx.resource_resolver()?;
     sync_many(
-        agent,
+        ctx.syncer.clone(),
         resolver,
+        agent,
         sync_canisters,
         environment_selection.name().to_owned(),
         env.network.name.clone(),

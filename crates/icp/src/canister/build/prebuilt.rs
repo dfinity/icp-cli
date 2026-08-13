@@ -1,7 +1,12 @@
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{canister::wasm, fs, manifest::adapter::prebuilt::Adapter, package::PackageCache};
+use crate::{
+    canister::{ChannelProgress, wasm},
+    fs,
+    manifest::adapter::prebuilt::Adapter,
+    package::PackageCache,
+};
 
 use super::Params;
 
@@ -20,11 +25,12 @@ pub(super) async fn build(
     stdio: Option<Sender<String>>,
     pkg_cache: &PackageCache,
 ) -> Result<(), PrebuiltError> {
+    let progress = ChannelProgress::wrap(stdio.as_ref());
     let src = wasm::resolve(
         &adapter.source,
         &params.path,
         adapter.sha256.as_deref(),
-        stdio.as_ref(),
+        ChannelProgress::as_dyn(progress.as_ref()),
         pkg_cache,
     )
     .await?;

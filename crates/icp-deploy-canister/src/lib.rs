@@ -1,10 +1,8 @@
-//! The project model plus canister installation, syncing, and deploy
-//! orchestration over an `ic-agent` `Agent`.
+//! Canister installation, syncing, and the project model, with all host IO
+//! abstracted behind trait objects so the core can run inside a canister.
 //!
-//! Subprocess script execution and remote-resource resolution (recipe templates
-//! and plugin wasms, which use the host's package cache) are provided by the
-//! host through the [`sync_exec::ScriptRunner`] and
-//! [`canister::recipe::RemoteResourceResolve`] traits.
+//! See the module-level docs on the IO traits ([`files`], [`icp_access`],
+//! [`ids`]) for the abstraction boundary.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -26,7 +24,8 @@ use crate::{
 
 pub mod canister;
 pub mod deploy;
-pub mod fs;
+pub mod files;
+pub mod icp_access;
 pub mod ids;
 pub mod manifest;
 pub mod network;
@@ -35,16 +34,22 @@ pub mod prelude;
 pub mod project;
 pub mod sync_exec;
 
+#[cfg(test)]
+mod testutil;
+
 pub use deploy::{
     DeployCanisterError, DeployError, InstallCanisterError, InstallMode, SyncCanisterError,
-    SyncStepError, UpdateOrProxyError, apply_binding_env_vars, binding_env_vars, deploy,
-    deploy_canister, install_canister, install_canister_resolved, resolve_install_mode_and_status,
-    run_sync_steps, start_canister, sync_canister,
+    SyncStepError, apply_binding_env_vars, binding_env_vars, deploy, deploy_canister,
+    install_canister, install_canister_resolved, resolve_install_mode_and_status, run_sync_steps,
+    start_canister, sync_canister,
 };
+pub use files::{FileAccess, FileAccessError};
+pub use icp_access::{IcpAccess, IcpAccessError};
 pub use ids::{IdMapping, IdStore, IdStoreError};
 pub use project::{consolidate_manifest, load_project, verify_sandbox};
 pub use sync_exec::{
-    ScriptInvocation, ScriptRunError, ScriptRunner, StepProgress, SyncStepContext, system_env_vars,
+    PluginExecutor, PluginExecutorError, PluginInvocation, ScriptInvocation, ScriptRunError,
+    ScriptRunner, StepProgress, SyncStepContext, system_env_vars,
 };
 
 /// Resolved initialization arguments, with any file references already loaded.

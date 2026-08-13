@@ -481,8 +481,9 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
         let resolver = ctx.resource_resolver()?;
         sync_many(
-            agent.clone(),
+            ctx.syncer.clone(),
             resolver,
+            agent.clone(),
             sync_canisters,
             environment_selection.name().to_owned(),
             env.network.name.clone(),

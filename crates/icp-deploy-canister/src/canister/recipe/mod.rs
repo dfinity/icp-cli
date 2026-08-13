@@ -4,14 +4,15 @@ use async_trait::async_trait;
 use handlebars::{Context, Handlebars, Helper, HelperDef, HelperResult, Output, RenderContext};
 use serde::Deserialize;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
+use crate::files::FileAccess;
 use crate::manifest::{
     adapter::prebuilt::SourceField,
     canister::{BuildSteps, SyncSteps},
     recipe::{Recipe, RecipeType},
 };
 use crate::prelude::*;
+use crate::sync_exec::StepProgress;
 
 /// Context passed to a recipe resolver, describing the canister being built.
 ///
@@ -42,27 +43,29 @@ impl RecipeContext {
 }
 
 /// Fetches the remote resources a project references — recipe templates and
-/// plugin wasms — retrieving them over HTTP and caching on disk as needed.
+/// plugin wasms — retrieving them over HTTP and caching as needed.
 ///
 /// The concrete resolver (which owns the HTTP client and the package cache)
 /// lives in the host `icp` crate; this crate defines the interface, and renders
-/// fetched recipe templates itself (see [`render_recipe`]), so that consolidation
-/// and sync can call an injected resolver.
-#[async_trait]
+/// fetched recipe templates itself (see [`render_recipe`]), so that
+/// consolidation and sync can call an injected resolver.
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
 pub trait RemoteResourceResolve: Sync + Send {
     /// Fetch a recipe's Handlebars template, returning its raw source. Callers
     /// render it into build/sync steps with [`render_recipe`].
     async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError>;
 
-    /// Resolve a plugin wasm `source` (relative to `base_dir`) to a local path,
-    /// verifying `sha256` and caching a remote download. `stdio` receives
-    /// progress lines.
+    /// Resolve a plugin wasm `source` (relative to `base_dir`) to a location the
+    /// host's [`PluginExecutor`](crate::sync_exec::PluginExecutor) can load,
+    /// verifying `sha256` and caching a remote download. `progress` receives
+    /// status lines.
     async fn resolve_wasm(
         &self,
         source: &SourceField,
         base_dir: &Path,
         sha256: Option<&str>,
-        stdio: Option<Sender<String>>,
+        progress: Option<&dyn StepProgress>,
     ) -> Result<PathBuf, ResolveError>;
 }
 
@@ -82,9 +85,11 @@ pub enum ResolveError {
     },
 }
 
-/// A [`RemoteResourceResolve`] that always fails, for environments that don't
-/// support remote recipe templates or plugin wasms.
-pub struct NoResolve;
+/// A [`RemoteResourceResolve`] that serves only local resources — recipe files
+/// read through the injected [`FileAccess`], and plugin wasms already on hand —
+/// rejecting anything that would have to be fetched. For environments with no
+/// HTTP access.
+pub struct NoResolve<F>(pub F);
 
 #[derive(Debug, Snafu)]
 #[snafu(display("remote recipes are not allowed"))]
@@ -94,14 +99,18 @@ pub struct NoResolveError;
 #[snafu(display("remote modules are not allowed"))]
 pub struct NoResolveModuleError;
 
-#[async_trait]
-impl RemoteResourceResolve for NoResolve {
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
+impl<F: FileAccess> RemoteResourceResolve for NoResolve<F> {
     async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError> {
         match &recipe.recipe_type {
             RecipeType::File(path) => {
-                crate::fs::read_to_string(path.as_ref()).map_err(|e| ResolveError::Resolve {
-                    source: Box::new(e),
-                })
+                self.0
+                    .read_to_string(path.as_ref())
+                    .await
+                    .map_err(|e| ResolveError::Resolve {
+                        source: Box::new(e),
+                    })
             }
             _ => Err(ResolveError::Resolve {
                 source: Box::new(NoResolveError),
@@ -114,7 +123,7 @@ impl RemoteResourceResolve for NoResolve {
         source: &SourceField,
         _base_dir: &Path,
         _sha256: Option<&str>,
-        _stdio: Option<Sender<String>>,
+        _progress: Option<&dyn StepProgress>,
     ) -> Result<PathBuf, ResolveError> {
         match source {
             SourceField::Local(source) => Ok(source.path.clone()),

@@ -4,6 +4,7 @@ use snafu::prelude::*;
 
 use crate::canister::build::Builder;
 use crate::canister::recipe::resolver::ResourceResolver;
+use crate::canister::sync::Syncer;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::prelude::*;
@@ -97,6 +98,9 @@ pub fn initialize(
     // Canister builder
     let builder = Arc::new(Builder);
 
+    // Canister syncer
+    let syncer = Arc::new(Syncer);
+
     // Project loader
     let pload = ProjectLoadImpl {
         project_root_locate: project_root_locate.clone(),
@@ -144,6 +148,7 @@ pub fn initialize(
         network: netaccess,
         agent: agent_creator,
         builder,
+        syncer,
         debug,
         telemetry_data,
         password_func,

@@ -6,7 +6,7 @@
 //! here.
 
 pub use icp_deploy_canister::canister::recipe::{
-    RecipeContext, RemoteResourceResolve, ResolveError,
+    NoResolve, RecipeContext, RemoteResourceResolve, ResolveError,
 };
 
 pub mod resolver;

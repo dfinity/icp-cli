@@ -29,6 +29,7 @@ pub mod canister;
 pub mod context;
 pub mod directories;
 pub mod fs;
+pub mod host_files;
 pub mod identity;
 pub mod manifest;
 pub mod network;
@@ -127,9 +128,14 @@ impl ProjectLoad for ProjectLoadImpl {
         debug!("Loaded project manifest: {m:#?}");
 
         // Consolidate manifest into project, reading files from the host filesystem.
-        let p = project::consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
-            .await
-            .context(ProjectSnafu)?;
+        let p = project::consolidate_manifest(
+            &crate::host_files::HostFileAccess,
+            &pdir,
+            self.recipe.as_ref(),
+            &m,
+        )
+        .await
+        .context(ProjectSnafu)?;
 
         debug!("Rendered project definition: {p:#?}");
 
@@ -545,8 +551,8 @@ mod tests {
         ProjectRootLocate, ProjectRootLocateError, adapter::prebuilt::SourceField, recipe::Recipe,
     };
     use camino_tempfile::Utf8TempDir;
+    use icp_deploy_canister::sync_exec::StepProgress;
     use indoc::indoc;
-    use tokio::sync::mpsc::Sender;
 
     struct MockProjectRootLocate {
         path: PathBuf,
@@ -588,7 +594,7 @@ mod tests {
             _source: &SourceField,
             _base_dir: &Path,
             _sha256: Option<&str>,
-            _stdio: Option<Sender<String>>,
+            _progress: Option<&dyn StepProgress>,
         ) -> Result<PathBuf, ResolveError> {
             unimplemented!("MockRecipeResolver::resolve_wasm")
         }

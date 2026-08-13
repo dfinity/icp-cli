@@ -1,10 +1,10 @@
 use std::{str::FromStr, string::FromUtf8Error};
 
 use async_trait::async_trait;
+use icp_deploy_canister::sync_exec::StepProgress;
 use reqwest::{Method, Request, Url};
 use sha2::{Digest, Sha256};
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 use tracing::debug;
 use url::ParseError;
 
@@ -229,9 +229,9 @@ impl RemoteResourceResolve for ResourceResolver {
         source: &SourceField,
         base_dir: &Path,
         sha256: Option<&str>,
-        stdio: Option<Sender<String>>,
+        progress: Option<&dyn StepProgress>,
     ) -> Result<PathBuf, ResolveError> {
-        crate::canister::wasm::resolve(source, base_dir, sha256, stdio.as_ref(), &self.pkg_cache)
+        crate::canister::wasm::resolve(source, base_dir, sha256, progress, &self.pkg_cache)
             .await
             .map_err(|source| ResolveError::ResolveWasm {
                 source: Box::new(source),

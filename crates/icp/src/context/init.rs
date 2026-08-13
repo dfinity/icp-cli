@@ -99,7 +99,7 @@ pub fn initialize(
     let builder = Arc::new(Builder);
 
     // Canister syncer
-    let syncer = Arc::new(Syncer);
+    let syncer = Arc::new(Syncer::host());
 
     // Project loader
     let pload = ProjectLoadImpl {

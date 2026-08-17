@@ -82,4 +82,5 @@ zeroize = { workspace = true }
 winreg = { workspace = true }
 
 [dev-dependencies]
+httptest = { workspace = true }
 jsonschema = { workspace = true }

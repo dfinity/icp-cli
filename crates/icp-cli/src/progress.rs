@@ -119,15 +119,24 @@ impl ProgressManager {
 
     /// Create a new progress bar with standard configuration
     pub(crate) fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
-        let pb = self.create_independent_progress_bar();
-        pb.set_prefix(format!("[{canister_name}]"));
-        pb
+        self.start_spinner(
+            SimpleProgressBar::new_spinner()
+                .with_style(running_style())
+                .with_prefix(format!("[{canister_name}]")),
+        )
     }
 
     pub(crate) fn create_independent_progress_bar(&self) -> SimpleProgressBar {
-        let pb = self
-            .multi_progress
-            .add(SimpleProgressBar::new_spinner().with_style(running_style()));
+        self.start_spinner(SimpleProgressBar::new_spinner().with_style(running_style()))
+    }
+
+    /// Show `pb` and start animating it.
+    ///
+    /// The bar must arrive fully configured: the ticker thread `enable_steady_tick`
+    /// spawns draws a frame immediately, so a prefix set afterwards races that first
+    /// tick and can lose, leaving a stray unprefixed frame on screen.
+    fn start_spinner(&self, pb: SimpleProgressBar) -> SimpleProgressBar {
+        let pb = self.multi_progress.add(pb);
 
         // Auto-tick spinner
         pb.enable_steady_tick(STEADY_TICK);

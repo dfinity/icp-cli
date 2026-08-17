@@ -87,18 +87,24 @@ impl IndicatifSink {
     }
 
     fn start(&self, id: TaskId, kind: TaskKind, label: Option<String>) {
+        // Every bar is fully styled and labelled *before* it can draw anything: only
+        // then is it added to the `MultiProgress` and, for spinners, given a ticker.
+        // `Ticker::new` ticks immediately on the thread it spawns, so a prefix set
+        // after `enable_steady_tick` races that first tick and can lose — which is
+        // what drew a stray unprefixed spinner frame. See
+        // `tests::a_spinner_is_labelled_before_its_first_tick`.
         let state = match kind {
             TaskKind::Bytes { total } => {
-                let bar = self.multi.add(ProgressBar::new(total));
-                bar.set_style(byte_style());
                 // Byte bars label themselves undecorated; spinners wrap the name in
                 // brackets. Both match what the code being replaced did.
-                if let Some(label) = label {
-                    bar.set_prefix(label);
-                }
+                let bar = ProgressBar::new(total).with_style(byte_style());
+                let bar = match label {
+                    Some(label) => bar.with_prefix(label),
+                    None => bar,
+                };
 
                 BarState {
-                    bar,
+                    bar: self.multi.add(bar),
                     styled_spinner: false,
                     step_title: None,
                     visible: RollingLines::new(VISIBLE_STEP_LINES),
@@ -107,13 +113,14 @@ impl IndicatifSink {
             // Spinners and multi-step bars are the same bar; only the message
             // differs, and steps build a richer one.
             _ => {
-                let bar = self
-                    .multi
-                    .add(ProgressBar::new_spinner().with_style(running_style()));
+                let bar = ProgressBar::new_spinner().with_style(running_style());
+                let bar = match label {
+                    Some(label) => bar.with_prefix(format!("[{label}]")),
+                    None => bar,
+                };
+
+                let bar = self.multi.add(bar);
                 bar.enable_steady_tick(STEADY_TICK);
-                if let Some(label) = label {
-                    bar.set_prefix(format!("[{label}]"));
-                }
 
                 BarState {
                     bar,
@@ -757,6 +764,31 @@ mod tests {
                 .iter()
                 .any(|frame| frame.contains("[backend]")
                     && frame.contains("Skipped (not an upgrade)")),
+            "frames: {frames:?}"
+        );
+    }
+
+    /// `enable_steady_tick` spawns a thread that draws a frame straight away, so a
+    /// bar labelled after that call races its own first tick — and a slow enough
+    /// machine loses, drawing a bare spinner before the label appears. Waiting out
+    /// several tick intervals here means the ticker has certainly drawn: every frame
+    /// it produced has to carry the prefix.
+    #[test]
+    fn a_spinner_is_labelled_before_its_first_tick() {
+        let term = RecordingTerm::default();
+        let sink = IndicatifSink::with_draw_target(recording_target(&term));
+
+        sink.emit(Event::TaskStarted {
+            id: TaskId(0),
+            kind: TaskKind::Spinner,
+            label: Some("backend".into()),
+        });
+        std::thread::sleep(STEADY_TICK * 3);
+
+        let frames = term.frames();
+        assert!(!frames.is_empty(), "the ticker never drew anything");
+        assert!(
+            frames.iter().all(|frame| frame.contains("[backend]")),
             "frames: {frames:?}"
         );
     }

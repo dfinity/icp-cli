@@ -5,16 +5,18 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
+use icp_events::TaskKind;
 use serde::Serialize;
 use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
+use crate::events::indicatif_reporter;
 use crate::operations::misc::format_timestamp;
 use crate::operations::snapshot_transfer::{
-    BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, create_transfer_progress_bar,
-    delete_upload_progress, load_metadata, load_upload_progress, save_upload_progress,
-    upload_blob_from_file, upload_snapshot_metadata, upload_wasm_chunk,
+    BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, delete_upload_progress,
+    load_metadata, load_upload_progress, save_upload_progress, upload_blob_from_file,
+    upload_snapshot_metadata, upload_wasm_chunk,
 };
 
 /// Upload a snapshot from local disk
@@ -67,6 +69,11 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
         .await?;
 
     let name = &args.cmd_args.canister;
+
+    // Transfer bars are drawn even under `--debug`, which is how they have always
+    // behaved: unlike the spinners, they carry the only indication that a long
+    // transfer is moving.
+    let transfers = indicatif_reporter(false);
 
     // Open the snapshot directory with a lock
     let snapshot_dir = SnapshotPaths::new(args.input.clone())?;
@@ -126,7 +133,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload WASM module
             if metadata.wasm_module_size > 0 {
                 if progress.wasm_module_offset < metadata.wasm_module_size {
-                    let pb = create_transfer_progress_bar(metadata.wasm_module_size, "WASM module");
+                    let task = transfers.task(
+                        TaskKind::Bytes {
+                            total: metadata.wasm_module_size,
+                        },
+                        "WASM module",
+                    );
                     upload_blob_from_file(
                         &agent,
                         args.proxy,
@@ -135,10 +147,10 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         BlobType::WasmModule,
                         paths,
                         &mut progress,
-                        &pb,
+                        &task,
                     )
                     .await?;
-                    pb.finish_with_message("done");
+                    task.succeed("done");
                 } else {
                     info!("WASM module: already complete");
                 }
@@ -147,7 +159,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload WASM memory
             if metadata.wasm_memory_size > 0 {
                 if progress.wasm_memory_offset < metadata.wasm_memory_size {
-                    let pb = create_transfer_progress_bar(metadata.wasm_memory_size, "WASM memory");
+                    let task = transfers.task(
+                        TaskKind::Bytes {
+                            total: metadata.wasm_memory_size,
+                        },
+                        "WASM memory",
+                    );
                     upload_blob_from_file(
                         &agent,
                         args.proxy,
@@ -156,10 +173,10 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         BlobType::WasmMemory,
                         paths,
                         &mut progress,
-                        &pb,
+                        &task,
                     )
                     .await?;
-                    pb.finish_with_message("done");
+                    task.succeed("done");
                 } else {
                     info!("WASM memory: already complete");
                 }
@@ -168,8 +185,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload stable memory
             if metadata.stable_memory_size > 0 {
                 if progress.stable_memory_offset < metadata.stable_memory_size {
-                    let pb =
-                        create_transfer_progress_bar(metadata.stable_memory_size, "Stable memory");
+                    let task = transfers.task(
+                        TaskKind::Bytes {
+                            total: metadata.stable_memory_size,
+                        },
+                        "Stable memory",
+                    );
                     upload_blob_from_file(
                         &agent,
                         args.proxy,
@@ -178,10 +199,10 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         BlobType::StableMemory,
                         paths,
                         &mut progress,
-                        &pb,
+                        &task,
                     )
                     .await?;
-                    pb.finish_with_message("done");
+                    task.succeed("done");
                 } else {
                     info!("Stable memory: already complete");
                 }

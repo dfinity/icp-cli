@@ -10,6 +10,7 @@ use std::{
 use crate::{
     cancel::CancelToken,
     event::{Event, NoticeLevel, Outcome, TaskId, TaskKind},
+    output::{OutputWriter, RecordedStep, StepLog},
     sink::{DiscardSink, EventSink},
 };
 
@@ -107,6 +108,7 @@ impl Reporter {
             next_step: 0,
             open_step: None,
             finished: false,
+            log: Arc::new(StepLog::default()),
         }
     }
 }
@@ -124,6 +126,7 @@ pub struct Task {
     next_step: usize,
     open_step: Option<usize>,
     finished: bool,
+    log: Arc<StepLog>,
 }
 
 impl Task {
@@ -165,19 +168,36 @@ impl Task {
         self.next_step += 1;
         self.open_step = Some(index);
 
+        let title = title.into();
+        self.log.begin(title.clone());
+
         self.reporter.emit(Event::StepStarted {
             id: self.id,
             index,
-            title: title.into(),
+            title,
         });
     }
 
     /// Report a line of output from the step in progress.
     pub fn step_output(&self, line: impl Into<String>) {
-        self.reporter.emit(Event::StepOutput {
-            id: self.id,
-            line: line.into(),
-        });
+        self.output().line(line);
+    }
+
+    /// A handle for reporting the output of the step in progress.
+    ///
+    /// This is what gets handed to whatever actually produces the output — a
+    /// subprocess reader, a plugin runtime — so it can report lines without
+    /// depending on this task, or on anything that renders it.
+    pub fn output(&self) -> OutputWriter {
+        OutputWriter::new(self.reporter.clone(), self.id, self.log.clone())
+    }
+
+    /// Every step of this task, with the output it produced.
+    ///
+    /// Progress is transient, so an operation that has to explain a failure after
+    /// the fact reads the step back from here.
+    pub fn recorded_steps(&self) -> Vec<RecordedStep> {
+        self.log.recorded()
     }
 
     /// End the step in progress.
@@ -403,6 +423,95 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// The rolling view a sink draws is transient, so a task also keeps its steps'
+    /// output for an operation that has to print the failing step afterwards.
+    #[test]
+    fn a_task_keeps_the_output_of_every_step() {
+        let (reporter, _sink) = recorder();
+
+        let mut task = reporter.task(
+            TaskKind::Steps {
+                output_label: "Build".into(),
+            },
+            "backend",
+        );
+        task.begin_step("step 1");
+        task.step_output("compiling");
+        task.end_step();
+        task.begin_step("step 2");
+        task.output().line("optimizing");
+        task.end_step();
+
+        assert_eq!(
+            task.recorded_steps(),
+            vec![
+                crate::RecordedStep {
+                    title: "step 1".into(),
+                    lines: vec!["compiling".into()],
+                },
+                crate::RecordedStep {
+                    title: "step 2".into(),
+                    lines: vec!["optimizing".into()],
+                },
+            ]
+        );
+    }
+
+    /// A command has as many output streams as it has streams to read, so the
+    /// writer is handed out by clone.
+    #[test]
+    fn every_clone_of_a_writer_reports_to_the_same_task() {
+        let (reporter, sink) = recorder();
+
+        let mut task = reporter.task(
+            TaskKind::Steps {
+                output_label: "Build".into(),
+            },
+            "backend",
+        );
+        task.begin_step("step 1");
+
+        let stdout = task.output();
+        let stderr = stdout.clone();
+        stdout.line("out");
+        stderr.line("err");
+
+        let lines: Vec<String> = sink
+            .events()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StepOutput { id, line } if id == task.id() => Some(line),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lines, vec!["out".to_owned(), "err".to_owned()]);
+    }
+
+    /// The writer outlives the borrow of the task, since it is handed to code that
+    /// keeps reporting while the operation moves on.
+    #[test]
+    fn a_writer_can_be_sent_to_another_thread() {
+        let (reporter, sink) = recorder();
+
+        let mut task = reporter.task(
+            TaskKind::Steps {
+                output_label: "Build".into(),
+            },
+            "backend",
+        );
+        task.begin_step("step 1");
+
+        let writer = task.output();
+        std::thread::spawn(move || writer.line("from a thread"))
+            .join()
+            .unwrap();
+
+        assert!(sink.events().contains(&Event::StepOutput {
+            id: task.id(),
+            line: "from a thread".into(),
+        }));
     }
 
     #[test]

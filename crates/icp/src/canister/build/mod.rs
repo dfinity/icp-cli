@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
+use icp_events::OutputWriter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::BuildStep;
 use crate::package::PackageCache;
@@ -30,7 +30,7 @@ pub trait Build: Sync + Send {
         &self,
         step: &BuildStep,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
         pkg_cache: &PackageCache,
     ) -> Result<(), BuildError>;
 }
@@ -43,7 +43,7 @@ impl Build for Builder {
         &self,
         step: &BuildStep,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
         pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         match step {
@@ -67,7 +67,7 @@ impl Build for UnimplementedMockBuilder {
         &self,
         _step: &BuildStep,
         _params: &Params,
-        _stdio: Option<Sender<String>>,
+        _stdio: Option<OutputWriter>,
         _pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         unimplemented!("UnimplementedMockBuilder::build")

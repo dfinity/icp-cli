@@ -48,10 +48,12 @@
 
 mod cancel;
 mod event;
+mod output;
 mod reporter;
 mod sink;
 
 pub use cancel::{CancelToken, Cancelled};
 pub use event::{Event, NoticeLevel, Outcome, TaskId, TaskKind};
+pub use output::{MAX_RECORDED_LINES_PER_STEP, OutputWriter, RecordedStep};
 pub use reporter::{Reporter, Task};
 pub use sink::{DiscardSink, EventSink, RecordingSink};

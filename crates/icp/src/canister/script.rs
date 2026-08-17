@@ -1,11 +1,11 @@
 use std::process::Stdio;
 
+use icp_events::OutputWriter;
 use snafu::prelude::*;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     join,
     process::Command,
-    sync::mpsc::Sender,
 };
 
 use crate::manifest::adapter::script::Adapter;
@@ -53,7 +53,7 @@ pub(super) async fn execute(
     adapter: &Adapter,
     cwd: &Path,
     envs: &[(&str, &str)],
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
 ) -> Result<(), ScriptError> {
     // Normalize `command` field based on whether it's a single command or multiple.
     execute_commands(&adapter.command.as_vec(), cwd, envs, stdio).await
@@ -71,7 +71,7 @@ pub(super) async fn execute_commands(
     cmds: &[String],
     cwd: &Path,
     envs: &[(&str, &str)],
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
 ) -> Result<(), ScriptError> {
     // Iterate over configured commands
     for input_cmd in cmds {
@@ -118,8 +118,8 @@ pub(super) async fn execute_commands(
 
                 async move {
                     while let Ok(Some(line)) = stdout.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
+                        if let Some(out) = &stdio {
+                            out.line(line);
                         }
                     }
                     Ok::<(), ScriptError>(())
@@ -133,8 +133,8 @@ pub(super) async fn execute_commands(
 
                 async move {
                     while let Ok(Some(line)) = stderr.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
+                        if let Some(out) = &stdio {
+                            out.line(line);
                         }
                     }
                     Ok::<(), ScriptError>(())

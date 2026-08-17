@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::Sender;
+use icp_events::OutputWriter;
 
 use crate::manifest::adapter::script::Adapter;
 
@@ -9,7 +9,7 @@ use super::super::script::{ScriptError, execute};
 pub(super) async fn build(
     adapter: &Adapter,
     params: &Params,
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
 ) -> Result<(), ScriptError> {
     execute(
         adapter,
@@ -67,6 +67,57 @@ mod tests {
             .expect("failed to read temporary file");
 
         assert_eq!(out, "test\n".to_string());
+    }
+
+    /// A build step streams its output through an [`OutputWriter`], so what the
+    /// subprocess printed can be observed as events without a terminal anywhere in
+    /// the picture.
+    #[tokio::test]
+    async fn command_output_is_reported_through_the_writer() {
+        use std::sync::Arc;
+
+        use icp_events::{Event, RecordingSink, Reporter, TaskKind};
+
+        let sink = Arc::new(RecordingSink::new());
+        let mut task = Reporter::new(sink.clone()).task(
+            TaskKind::Steps {
+                output_label: "Build".to_owned(),
+            },
+            "backend",
+        );
+        task.begin_step("step 1 of 1");
+
+        let adapter = Adapter {
+            command: CommandField::Command("echo streamed-line".to_owned()),
+        };
+
+        build(
+            &adapter,
+            &Params {
+                path: "/".into(),
+                output: "/".into(),
+                environment: LOCAL.to_owned(),
+            },
+            Some(task.output()),
+        )
+        .await
+        .expect("failed to build script step");
+
+        let lines: Vec<String> = sink
+            .events()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StepOutput { line, .. } => Some(line),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lines, vec!["streamed-line".to_owned()]);
+
+        // The same lines are kept for replay if the step turns out to have failed.
+        assert_eq!(
+            task.recorded_steps()[0].lines,
+            vec!["streamed-line".to_owned()]
+        );
     }
 
     #[tokio::test]

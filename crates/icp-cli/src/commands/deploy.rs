@@ -12,6 +12,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use icp_events::TaskKind;
 use itertools::Itertools;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -24,7 +25,7 @@ use crate::{
     events::indicatif_reporter,
     operations::{
         binding_env_vars::set_binding_env_vars_many,
-        build::build_many_with_progress_bar,
+        build::build_many,
         candid_compat::check_candid_compatibility_many,
         create::{CreateFunding, CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
@@ -33,7 +34,6 @@ use crate::{
         sync::sync_many,
     },
     options::{IdentityOpt, arg_struct_change_help},
-    progress::{ProgressManager, ProgressManagerSettings},
 };
 
 /// Deploy a project to an environment
@@ -183,12 +183,13 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // Build the selected canisters
     info!("Building canisters:");
 
-    build_many_with_progress_bar(
+    build_many(
         canisters_to_build,
         environment_selection.name(),
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
+        &indicatif_reporter(ctx.debug),
         ctx.debug,
     )
     .await?;
@@ -232,19 +233,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             existing_canisters.into_values().collect(),
         );
         let mut futs = FuturesOrdered::new();
-        let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
+        let reporter = indicatif_reporter(ctx.debug);
         for name in canisters_to_create.iter() {
-            let pb = progress_manager.create_progress_bar(name);
-            pb.set_message("Creating...");
+            let task = reporter.task(TaskKind::Spinner, name.as_str());
+            task.message("Creating...");
             let create_op = create_operation.clone();
             let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
             futs.push_back(async move {
-                ProgressManager::execute_with_custom_progress(
-                    &pb,
+                task.run(
                     create_op.create(&canister_info.settings.into()),
                     || "Created successfully".to_string(),
                     |err: &_| err.to_string(),
-                    |_| false,
                 )
                 .await
             });
@@ -499,6 +498,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             env.network.name.clone(),
             canister_ids,
             args.proxy,
+            &indicatif_reporter(ctx.debug),
             ctx.debug,
             &pkg_cache,
         )

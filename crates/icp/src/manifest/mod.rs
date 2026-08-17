@@ -20,6 +20,7 @@ pub(crate) mod serde_helpers;
 pub use {
     adapter::plugin,
     adapter::prebuilt,
+    adapter::script,
     canister::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestInitArgs,
         SyncStep, SyncSteps,

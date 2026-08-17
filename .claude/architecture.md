@@ -80,32 +80,29 @@ Store management is in `crates/icp/src/store_id.rs`.
 ## Progress & User-Facing Output
 
 Operations in `crates/icp-cli/src/operations/` report progress as data, not as terminal
-calls — an inversion that is partway done, so `build.rs`, `sync.rs` and
-`snapshot_transfer.rs` still render directly. `crates/icp-events` defines the vocabulary
-(`Event`, `Reporter`, `Task`, `EventSink`, `CancelToken`) and depends only on serde and
-futures — never on `icp`, an async runtime, or anything terminal-shaped.
-`crates/icp-cli/src/events.rs` holds `IndicatifSink`, the only place that maps events onto
-`indicatif` bars.
+calls. `crates/icp-events` defines the vocabulary (`Event`, `Reporter`, `Task`,
+`OutputWriter`, `EventSink`, `CancelToken`) and depends only on serde and futures — never on
+`icp`, an async runtime, or anything terminal-shaped. `crates/icp-cli/src/events.rs` holds
+`IndicatifSink`, the only place that maps events onto `indicatif` bars, and the styles they
+are drawn in.
 
-- New or converted operations take a `&Reporter`, never a `debug: bool` and never
-  `crate::progress` directly. Callers build one per operation with
+- Operations take a `&Reporter`, never a `debug: bool`. Callers build one per operation with
   `events::indicatif_reporter(ctx.debug)`.
-- `crates/icp-cli/src/progress.rs` is the pre-inversion renderer. Do not add users. Whether
-  it is removable is a question for the compiler — delete it and run
-  `cargo check -p icp-cli --all-targets`; no grep is the gate. To survey the call sites,
-  search for the symbols, not the module path, because a nested `use crate::{ …,
-  progress::{…} }` never spells `crate::progress` (which is exactly how `commands/deploy.rs`
-  hides from that search):
+- Nothing outside `events.rs` imports `indicatif`, with two exceptions that never went
+  through the shared renderer and build their own one-off spinners:
+  `commands/canister/migrate_id.rs` and `commands/identity/link/web.rs`. Everything else
+  reports events. To check that this still holds:
 
   ```bash
-  grep -rlE 'ProgressManager|MultiStepProgressBar|RollingLines|_style\(|indicatif' crates/icp-cli/src
+  grep -rl indicatif crates/icp-cli/src crates/icp/src
   ```
 
-  That covers commands as well as operations, and both kinds of user: those going through
-  `progress.rs` and those driving `indicatif` themselves. Styles shared by the two renderers
-  (spinner styles, `STEADY_TICK`, `byte_style`) live in `progress.rs` so they cannot drift
-  while both exist — `operations/snapshot_transfer.rs`, for one, takes `byte_style` from
-  there but still builds the bar with `indicatif` directly.
+- A library that produces output lines — a subprocess, a sync plugin — is handed an
+  `OutputWriter` rather than a channel. Each line becomes an `Event::StepOutput` and is kept
+  in the task's step log, capped at `MAX_RECORDED_LINES_PER_STEP`, so an operation can replay
+  the failing step after the bars are down. `operations/step_replay.rs` formats that replay;
+  read the steps back with `Task::recorded_steps` *before* finishing the task, since
+  finishing consumes it.
 - The event model is deliberately not semver-stable: `publish = false`, `0.x`, all enums
   `#[non_exhaustive]`, `TaskKind` closed.
 - Events do not drive `--json`. `--json` means the command's final result; progress never
@@ -114,10 +111,14 @@ futures — never on `icp`, an async runtime, or anything terminal-shaped.
   `UserLayer` that prints `Level::INFO` to stderr unprefixed. `Event::Notice` is the event
   model's equivalent; the `info!`/`warn!`/`error!` calls inside `operations/` have not been
   converted yet.
+- A bar has to be fully styled and labelled before it is shown, and a spinner before
+  `enable_steady_tick`: that call spawns a thread which draws immediately, so anything set
+  afterwards races the first frame.
 
 Operations are unit-tested by running them against `RecordingSink` and asserting on the
-resulting `Vec<Event>`; see `operations/test_support.rs`. `events.rs` additionally compares
-`IndicatifSink`'s rendered frames against `ProgressManager`'s to catch output regressions.
+resulting `Vec<Event>`; see `operations/test_support.rs`. `events.rs::rendering`
+additionally pins the frames `IndicatifSink` draws against the literal output of the
+renderer it replaced, captured before that renderer was deleted.
 
 ## Telemetry
 

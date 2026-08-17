@@ -13,6 +13,11 @@
 //! `warn!` / `error!` calls that this CLI prints as product output rather than as
 //! logging.
 //!
+//! Code that produces the output of a step — a subprocess reader, a plugin runtime —
+//! is handed an [`OutputWriter`] rather than a channel. Each line it reports becomes
+//! an [`Event::StepOutput`] and is also kept in the task's step log, so an operation
+//! that fails can replay the whole failing step once the progress it drew is gone.
+//!
 //! # Stability
 //!
 //! The event model is **not** semver-stable. It ships at `0.x`, moves in lockstep

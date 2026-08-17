@@ -193,25 +193,24 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                 } else {
                     // The version is not fresh or not cached, download it
                     debug!("Downloading icp-cli-network-launcher version `{version}`");
-                    let task =
-                        indicatif_reporter(debug).unlabelled_task(TaskKind::Spinner);
+                    let task = indicatif_reporter(debug).unlabelled_task(TaskKind::Spinner);
                     task.message(format!("Downloading icp-cli-network-launcher {version}..."));
                     let version_slot: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
                     let version_capture = version_slot.clone();
                     let path = task
                         .run(
-                        async {
-                            let (ver, path) =
-                                download_launcher_version(pkg, version, &client).await?;
-                            let _ = version_capture.set(ver);
-                            anyhow::Ok(path)
-                        },
-                        move || {
-                            let ver = version_slot.get().map(String::as_str).unwrap();
-                            format!("Downloaded icp-cli-network-launcher {ver}")
-                        },
-                        |err| format!("Failed to download icp-cli-network-launcher: {err}"),
-                    )
+                            async {
+                                let (ver, path) =
+                                    download_launcher_version(pkg, version, &client).await?;
+                                let _ = version_capture.set(ver);
+                                anyhow::Ok(path)
+                            },
+                            move || {
+                                let ver = version_slot.get().map(String::as_str).unwrap();
+                                format!("Downloaded icp-cli-network-launcher {ver}")
+                            },
+                            |err| format!("Failed to download icp-cli-network-launcher: {err}"),
+                        )
                         .await?;
                     Ok(Some(path))
                 }

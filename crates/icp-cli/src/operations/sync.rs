@@ -33,7 +33,6 @@ struct SyncFailure {
 }
 
 /// Synchronizes a single canister using its configured sync steps
-#[allow(clippy::too_many_arguments)]
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
@@ -85,7 +84,6 @@ async fn sync_canister(
 ///
 /// `all_step_output` replays every step of a failed sync rather than just the one
 /// that failed, which is what `--debug` asks for.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,

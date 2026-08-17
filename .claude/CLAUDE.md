@@ -23,7 +23,7 @@ cargo fmt && cargo clippy            # Run after changes pass tests
 - **`crates/icp-cli`**: Main CLI binary (`icp`) with command implementations
 - **`crates/icp`**: Core library with project model, manifest loading, canister management, network configuration
 - **`crates/icp-canister-interfaces`**: Canister interface definitions for ICP system canisters
-- **`crates/icp-events`**: Progress and user-facing notices as data (`Event`, `Reporter`, `Task`, `EventSink`), so operations can report without depending on the terminal. serde + futures only
+- **`crates/icp-events`**: Progress and user-facing notices as data (`Event`, `Reporter`, `Task`, `OutputWriter`, `EventSink`), so operations can report without depending on the terminal. serde + futures only
 - **`crates/schema-gen`**: JSON schema generation for manifest validation
 
 ### Command Structure

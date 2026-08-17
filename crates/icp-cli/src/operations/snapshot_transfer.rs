@@ -890,3 +890,78 @@ pub fn load_metadata(
     }
     Ok(icp::fs::json::load(&metadata_path)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::test_support::{recording_reporter, unreachable_agent};
+    use icp_events::{Event, TaskId, TaskKind};
+
+    /// A transfer that resumes reports the offset it recovered before anything else,
+    /// so the bar opens where the last attempt stopped rather than at zero.
+    ///
+    /// Nothing is uploaded here: the recorded offset already covers the whole blob,
+    /// which is the boundary case that leaves the chunk loop with no work and needs no
+    /// network. The reported position is the interesting part either way.
+    #[tokio::test]
+    async fn a_resumed_upload_reports_the_offset_it_starts_from() {
+        let (reporter, sink) = recording_reporter();
+        let dir = camino_tempfile::Utf8TempDir::new().expect("temp dir");
+
+        let snapshot = SnapshotPaths::new(dir.path().to_owned()).expect("snapshot dir");
+        let blob = vec![7u8; 4096];
+        let uploaded = snapshot
+            .with_write(async |paths| {
+                paths.ensure_dirs()?;
+                icp::fs::write(&paths.blob_path(BlobType::WasmModule), &blob)?;
+
+                let mut progress = UploadProgress::new("aa".to_owned());
+                progress.wasm_module_offset = blob.len() as u64;
+
+                let task = reporter.task(
+                    TaskKind::Bytes {
+                        total: blob.len() as u64,
+                    },
+                    "WASM module",
+                );
+                let uploaded = upload_blob_from_file(
+                    &unreachable_agent(),
+                    None,
+                    Principal::from_slice(&[7; 4]),
+                    &[0xaa],
+                    BlobType::WasmModule,
+                    paths,
+                    &mut progress,
+                    &task,
+                )
+                .await?;
+                task.succeed("done");
+
+                Ok::<_, SnapshotTransferError>(uploaded)
+            })
+            .await
+            .expect("lock")
+            .expect("nothing left to upload");
+
+        assert_eq!(uploaded, blob.len() as u64);
+        assert_eq!(
+            sink.events(),
+            vec![
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Bytes { total: 4096 },
+                    label: Some("WASM module".to_owned()),
+                },
+                Event::TaskPosition {
+                    id: TaskId(0),
+                    position: 4096,
+                },
+                Event::TaskFinished {
+                    id: TaskId(0),
+                    outcome: icp_events::Outcome::Success,
+                    message: Some("done".to_owned()),
+                },
+            ]
+        );
+    }
+}

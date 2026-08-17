@@ -18,13 +18,14 @@ use crate::{
     prelude::*,
 };
 
-use super::{RemoteResourceResolve, ResolveError};
+use super::{FetchedRecipe, RemoteResourceResolve, ResolveError};
 use crate::manifest::adapter::prebuilt::SourceField;
 
 /// Fetches recipe templates and plugin wasms over HTTP, caching downloads in the
 /// package cache. Template *rendering* is the library's job
 /// ([`icp_deploy_canister::canister::recipe::render_recipe`]); this only produces
-/// the raw template text.
+/// the raw template text, and defers caching a download until the caller reports
+/// that it rendered (see [`FetchedRecipe`]).
 pub struct ResourceResolver {
     /// Http client for fetching remote recipe templates
     pub http_client: reqwest::Client,
@@ -77,22 +78,13 @@ pub enum RecipeFetchError {
 }
 
 impl ResourceResolver {
-    /// Fetch a recipe's Handlebars template text: read a local file, or fetch
-    /// (and cache) a remote URL or registry recipe. Verifies `sha256` when set.
-    async fn fetch_recipe(&self, recipe: &Recipe) -> Result<String, RecipeFetchError> {
-        // Determine the template source
-        let tmpl_source = match &recipe.recipe_type {
-            RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
-            RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
-            RecipeType::Registry {
-                name,
-                recipe,
-                version,
-            } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
-        };
-
+    /// Fetch a recipe's Handlebars template text: read a local file, or fetch a
+    /// remote URL or registry recipe (serving it from the package cache when
+    /// possible). Verifies `sha256` when set. A fresh download is *not* cached
+    /// here — [`Self::cache_recipe`] does that once the caller has rendered it.
+    async fn fetch_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, RecipeFetchError> {
         // Retrieve the template, using cache for remote/registry sources
-        let (tmpl, should_cache) = match &tmpl_source {
+        let (tmpl, deferred) = match &template_source(&recipe.recipe_type) {
             TemplateSource::LocalPath(path) => {
                 let bytes = read(path).context(ReadFileSnafu)?;
                 (parse_bytes_to_string(bytes)?, false)
@@ -150,45 +142,43 @@ impl ResourceResolver {
             }
         };
 
-        let hash = if let Some(sha256) = &recipe.sha256 {
-            verify_checksum(tmpl.as_bytes(), sha256)?
-        } else {
-            Sha256::digest(tmpl.as_bytes()).into()
-        };
+        if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?;
+        }
 
-        // Cache the fetched template if it was remote.
-        if should_cache {
-            match tmpl_source {
-                TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
-                TemplateSource::RemoteUrl(u) => {
-                    self.pkg_cache
-                        .with_write(async |w| {
-                            cache_uri_recipe(w, &u, &hex::encode(hash), tmpl.as_bytes())
-                                .context(CacheRecipeSnafu)?;
-                            Ok(())
-                        })
-                        .await
-                        .context(LockCacheSnafu)??;
-                }
-                TemplateSource::Registry(registry, recipe_name, version) => {
-                    let package = format!("@{registry}/{recipe_name}");
-                    self.pkg_cache
-                        .with_write(async |w| {
-                            cache_registry_recipe(
-                                w,
-                                &package,
-                                &version,
-                                &hex::encode(hash),
-                                tmpl.as_bytes(),
-                            )
+        Ok(FetchedRecipe {
+            template: tmpl,
+            deferred,
+        })
+    }
+
+    /// Cache a template downloaded by [`Self::fetch_recipe`]. Called only after
+    /// the caller has rendered it, so a malformed response never becomes the
+    /// entry that later project loads reuse.
+    async fn cache_recipe(&self, recipe: &Recipe, tmpl: &str) -> Result<(), RecipeFetchError> {
+        let hash = hex::encode(Sha256::digest(tmpl.as_bytes()));
+        match template_source(&recipe.recipe_type) {
+            TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
+            TemplateSource::RemoteUrl(u) => {
+                self.pkg_cache
+                    .with_write(async |w| {
+                        cache_uri_recipe(w, &u, &hash, tmpl.as_bytes()).context(CacheRecipeSnafu)
+                    })
+                    .await
+                    .context(LockCacheSnafu)??;
+            }
+            TemplateSource::Registry(registry, recipe_name, version) => {
+                let package = format!("@{registry}/{recipe_name}");
+                self.pkg_cache
+                    .with_write(async |w| {
+                        cache_registry_recipe(w, &package, &version, &hash, tmpl.as_bytes())
                             .context(CacheRecipeSnafu)
-                        })
-                        .await
-                        .context(LockCacheSnafu)??;
-                }
+                    })
+                    .await
+                    .context(LockCacheSnafu)??;
             }
         }
-        Ok(tmpl)
+        Ok(())
     }
 
     /// Fetch raw bytes from a remote URL.
@@ -216,8 +206,23 @@ impl ResourceResolver {
 
 #[async_trait]
 impl RemoteResourceResolve for ResourceResolver {
-    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError> {
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
         self.fetch_recipe(recipe)
+            .await
+            .map_err(|source| ResolveError::Resolve {
+                source: Box::new(source),
+            })
+    }
+
+    async fn commit_recipe(
+        &self,
+        recipe: &Recipe,
+        fetched: &FetchedRecipe,
+    ) -> Result<(), ResolveError> {
+        if !fetched.deferred {
+            return Ok(());
+        }
+        self.cache_recipe(recipe, &fetched.template)
             .await
             .map_err(|source| ResolveError::Resolve {
                 source: Box::new(source),
@@ -239,14 +244,22 @@ impl RemoteResourceResolve for ResourceResolver {
     }
 }
 
+/// Classify where a recipe's template comes from.
+fn template_source(recipe_type: &RecipeType) -> TemplateSource {
+    match recipe_type {
+        RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
+        RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
+        RecipeType::Registry {
+            name,
+            recipe,
+            version,
+        } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
+    }
+}
+
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], RecipeFetchError> {
-    let actual_hash = {
-        let mut h = Sha256::new();
-        h.update(bytes);
-        h.finalize()
-    };
-    let actual = hex::encode(actual_hash);
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), RecipeFetchError> {
+    let actual = hex::encode(Sha256::digest(bytes));
     if actual != expected {
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
@@ -254,7 +267,7 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], RecipeFetch
         }
         .fail();
     }
-    Ok(actual_hash.into())
+    Ok(())
 }
 
 /// Helper function to parse bytes into a UTF-8 string
@@ -290,7 +303,9 @@ mod tests {
             sha256: None,
         };
 
-        assert_eq!(resolver.fetch_recipe(&recipe).await.unwrap(), body);
+        let fetched = resolver.fetch_recipe(&recipe).await.unwrap();
+        assert_eq!(fetched.template, body);
+        assert!(!fetched.deferred, "a local file has nothing to cache");
     }
 
     /// A sha256 that does not match the file contents is rejected.

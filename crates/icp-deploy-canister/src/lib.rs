@@ -40,8 +40,8 @@ mod testutil;
 pub use deploy::{
     DeployCanisterError, DeployError, InstallCanisterError, InstallMode, SyncCanisterError,
     SyncStepError, apply_binding_env_vars, binding_env_vars, deploy, deploy_canister,
-    install_canister, install_canister_resolved, resolve_install_mode_and_status, run_sync_steps,
-    start_canister, sync_canister,
+    install_canister, install_canister_resolved, install_canister_wasm,
+    resolve_install_mode_and_status, run_sync_steps, start_canister, sync_canister,
 };
 pub use files::{FileAccess, FileAccessError};
 pub use icp_access::{IcpAccess, IcpAccessError};

@@ -444,16 +444,27 @@ async fn build_manifest_canisters(
                     let ctx = recipe::RecipeContext {
                         canister_name: m.name.clone(),
                     };
-                    let template =
+                    let fetched =
                         recipe_resolver
                             .resolve_recipe(recipe)
                             .await
                             .context(RecipeSnafu {
                                 recipe_type: recipe.recipe_type.clone(),
                             })?;
-                    recipe::render_recipe(&template, recipe, &ctx).context(RenderRecipeSnafu {
-                        recipe_type: recipe.recipe_type.clone(),
-                    })?
+                    let steps = recipe::render_recipe(&fetched.template, recipe, &ctx).context(
+                        RenderRecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        },
+                    )?;
+                    // The template is known good; only now may the resolver
+                    // cache it.
+                    recipe_resolver
+                        .commit_recipe(recipe, &fetched)
+                        .await
+                        .context(RecipeSnafu {
+                            recipe_type: recipe.recipe_type.clone(),
+                        })?;
+                    steps
                 }
             };
 
@@ -1387,7 +1398,7 @@ pub fn verify_sandbox(project: &Project) -> Result<(), VerifySandboxError> {
 #[cfg(test)]
 mod dependency_tests {
     use super::*;
-    use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
+    use crate::canister::recipe::{FetchedRecipe, RemoteResourceResolve, ResolveError};
     use crate::manifest::adapter::prebuilt::SourceField;
     use crate::manifest::recipe::Recipe;
     use crate::sync_exec::StepProgress;
@@ -1399,7 +1410,15 @@ mod dependency_tests {
 
     #[async_trait::async_trait]
     impl RemoteResourceResolve for PanicResolver {
-        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
+            panic!("recipe resolver should not be called in dependency tests");
+        }
+
+        async fn commit_recipe(
+            &self,
+            _recipe: &Recipe,
+            _fetched: &FetchedRecipe,
+        ) -> Result<(), ResolveError> {
             panic!("recipe resolver should not be called in dependency tests");
         }
 

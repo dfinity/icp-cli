@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use handlebars::{Context, Handlebars, Helper, HelperDef, HelperResult, Output, RenderContext};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use snafu::prelude::*;
 
 use crate::files::FileAccess;
@@ -53,8 +54,20 @@ impl RecipeContext {
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 pub trait RemoteResourceResolve: Sync + Send {
     /// Fetch a recipe's Handlebars template, returning its raw source. Callers
-    /// render it into build/sync steps with [`render_recipe`].
-    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError>;
+    /// render it into build/sync steps with [`render_recipe`], then hand the
+    /// result back to [`commit_recipe`](Self::commit_recipe).
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, ResolveError>;
+
+    /// Accept a template from [`resolve_recipe`](Self::resolve_recipe) once it
+    /// has rendered successfully, letting the resolver commit whatever it held
+    /// back — for the host resolver, writing a fresh download to the package
+    /// cache. A resolver that never sets [`FetchedRecipe::deferred`] has nothing
+    /// to commit and implements this as `Ok(())`.
+    async fn commit_recipe(
+        &self,
+        recipe: &Recipe,
+        fetched: &FetchedRecipe,
+    ) -> Result<(), ResolveError>;
 
     /// Resolve a plugin wasm `source` (relative to `base_dir`) to a location the
     /// host's [`PluginExecutor`](crate::sync_exec::PluginExecutor) can load,
@@ -67,6 +80,22 @@ pub trait RemoteResourceResolve: Sync + Send {
         sha256: Option<&str>,
         progress: Option<&dyn StepProgress>,
     ) -> Result<PathBuf, ResolveError>;
+}
+
+/// A recipe template retrieved by a [`RemoteResourceResolve`].
+///
+/// A resolver that caches downloads must not commit one before the template is
+/// known to render: for an unpinned URL a single malformed response would
+/// otherwise become the cached entry that every later project load reuses. Such
+/// a resolver returns the template with `deferred` set and waits for
+/// [`RemoteResourceResolve::commit_recipe`].
+pub struct FetchedRecipe {
+    /// Raw Handlebars template source.
+    pub template: String,
+
+    /// Whether the resolver is holding work back until the caller confirms the
+    /// template renders.
+    pub deferred: bool,
 }
 
 #[derive(Debug, Snafu)]
@@ -99,18 +128,31 @@ pub struct NoResolveError;
 #[snafu(display("remote modules are not allowed"))]
 pub struct NoResolveModuleError;
 
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "sha256 checksum mismatch for plugin wasm '{path}': expected {expected}, actual {actual}"
+))]
+pub struct WasmChecksumMismatchError {
+    path: PathBuf,
+    expected: String,
+    actual: String,
+}
+
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 impl<F: FileAccess> RemoteResourceResolve for NoResolve<F> {
-    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<String, ResolveError> {
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
         match &recipe.recipe_type {
             RecipeType::File(path) => {
-                self.0
-                    .read_to_string(path.as_ref())
-                    .await
-                    .map_err(|e| ResolveError::Resolve {
+                let template = self.0.read_to_string(path.as_ref()).await.map_err(|e| {
+                    ResolveError::Resolve {
                         source: Box::new(e),
-                    })
+                    }
+                })?;
+                Ok(FetchedRecipe {
+                    template,
+                    deferred: false,
+                })
             }
             _ => Err(ResolveError::Resolve {
                 source: Box::new(NoResolveError),
@@ -118,19 +160,58 @@ impl<F: FileAccess> RemoteResourceResolve for NoResolve<F> {
         }
     }
 
+    /// Local reads defer nothing.
+    async fn commit_recipe(
+        &self,
+        _recipe: &Recipe,
+        _fetched: &FetchedRecipe,
+    ) -> Result<(), ResolveError> {
+        Ok(())
+    }
+
     async fn resolve_wasm(
         &self,
         source: &SourceField,
-        _base_dir: &Path,
-        _sha256: Option<&str>,
-        _progress: Option<&dyn StepProgress>,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        progress: Option<&dyn StepProgress>,
     ) -> Result<PathBuf, ResolveError> {
-        match source {
-            SourceField::Local(source) => Ok(source.path.clone()),
-            _ => Err(ResolveError::ResolveWasm {
+        let SourceField::Local(source) = source else {
+            return Err(ResolveError::ResolveWasm {
                 source: Box::new(NoResolveModuleError),
-            }),
+            });
+        };
+        let path = base_dir.join(&source.path);
+
+        if let Some(expected) = sha256 {
+            if let Some(p) = progress {
+                p.line(format!("Reading wasm: {path}"));
+            }
+            let bytes = self
+                .0
+                .read_file(&path)
+                .await
+                .map_err(|e| ResolveError::ResolveWasm {
+                    source: Box::new(e),
+                })?;
+            if let Some(p) = progress {
+                p.line("Verifying checksum".to_string());
+            }
+            let actual = hex::encode(Sha256::digest(&bytes));
+            if actual != expected {
+                return Err(ResolveError::ResolveWasm {
+                    source: Box::new(
+                        WasmChecksumMismatchSnafu {
+                            path,
+                            expected,
+                            actual,
+                        }
+                        .build(),
+                    ),
+                });
+            }
         }
+        Ok(path)
     }
 }
 
@@ -216,7 +297,9 @@ impl HelperDef for ReplaceHelper {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::adapter::prebuilt::LocalSource;
     use crate::manifest::canister::BuildStep;
+    use crate::testutil::HostFiles;
 
     fn recipe(config: &[(&str, &str)]) -> Recipe {
         Recipe {
@@ -320,5 +403,33 @@ mod tests {
             render_recipe(template, &recipe(&[]), &ctx("c")),
             Err(RenderRecipeError::Parse { .. })
         ));
+    }
+
+    /// A plugin wasm resolved locally is still checked against a configured
+    /// `sha256`, and the path is taken relative to `base_dir`.
+    #[tokio::test]
+    async fn no_resolve_verifies_local_wasm_checksum() {
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("plugin.wasm"), b"plugin bytes").unwrap();
+
+        let resolver = NoResolve(HostFiles);
+        let source = SourceField::Local(LocalSource {
+            path: "plugin.wasm".into(),
+        });
+        let good = hex::encode(Sha256::digest(b"plugin bytes"));
+
+        assert_eq!(
+            resolver
+                .resolve_wasm(&source, tmp.path(), Some(&good), None)
+                .await
+                .unwrap(),
+            tmp.path().join("plugin.wasm")
+        );
+        assert!(
+            resolver
+                .resolve_wasm(&source, tmp.path(), Some(&"00".repeat(32)), None)
+                .await
+                .is_err()
+        );
     }
 }

@@ -255,7 +255,34 @@ pub async fn install_canister_resolved(
         .context(ReadArtifactSnafu {
             canister: canister_name,
         })?;
+    install_canister_wasm(
+        canister_name,
+        canister_id,
+        &wasm,
+        mode,
+        status,
+        init_args,
+        wasm_memory_persistence,
+        icp,
+    )
+    .await
+}
 
+/// Like [`install_canister_resolved`], but for a caller that already holds the
+/// wasm bytes. Callers that inspect the module before installing (e.g. the
+/// Candid-compatibility gate) pass those same bytes here, so the code that is
+/// installed is exactly the code that was checked.
+#[allow(clippy::too_many_arguments)]
+pub async fn install_canister_wasm(
+    canister_name: &str,
+    canister_id: Principal,
+    wasm: &[u8],
+    mode: CanisterInstallMode,
+    status: CanisterStatusType,
+    init_args: Option<&[u8]>,
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
+    icp: &dyn IcpAccess,
+) -> Result<(), InstallCanisterError> {
     // For EOP Motoko canisters an upgrade must set `wasm_memory_persistence`.
     // Trust an explicit caller override; otherwise auto-detect and default to Keep.
     let mode = match mode {
@@ -285,7 +312,7 @@ pub async fn install_canister_resolved(
         icp,
         canister_name,
         canister_id,
-        &wasm,
+        wasm,
         mode,
         status,
         init_args,

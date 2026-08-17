@@ -550,7 +550,7 @@ impl ProjectLoad for NoProjectLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister::recipe::{RemoteResourceResolve, ResolveError};
+    use crate::canister::recipe::{FetchedRecipe, RemoteResourceResolve, ResolveError};
     use crate::manifest::{
         ProjectRootLocate, ProjectRootLocateError, adapter::prebuilt::SourceField, recipe::Recipe,
     };
@@ -582,15 +582,26 @@ mod tests {
 
     #[async_trait]
     impl RemoteResourceResolve for MockRecipeResolver {
-        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<String, ResolveError> {
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
             // A minimal recipe template rendering to a single prebuilt build step.
-            Ok(indoc! {r#"
-                build:
-                  steps:
-                    - type: pre-built
-                      path: dummy.wasm
-            "#}
-            .to_owned())
+            Ok(FetchedRecipe {
+                template: indoc! {r#"
+                    build:
+                      steps:
+                        - type: pre-built
+                          path: dummy.wasm
+                "#}
+                .to_owned(),
+                deferred: false,
+            })
+        }
+
+        async fn commit_recipe(
+            &self,
+            _recipe: &Recipe,
+            _fetched: &FetchedRecipe,
+        ) -> Result<(), ResolveError> {
+            Ok(())
         }
 
         async fn resolve_wasm(

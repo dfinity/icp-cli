@@ -1,20 +1,19 @@
 use camino::Utf8PathBuf;
-use candid::Principal;
 use ic_agent::Agent;
+use icp_deploy_canister::canister::recipe::{RemoteResourceResolve, ResolveError};
+use icp_deploy_canister::sync_exec::PluginInvocation;
 use icp_sync_plugin::{
     DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, RunPluginError, run_plugin,
 };
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
-
-use super::Params;
+use crate::canister::ChannelProgress;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
-    #[snafu(transparent)]
-    Wasm { source: wasm::WasmError },
+    #[snafu(display("failed to resolve plugin wasm"))]
+    ResolveWasm { source: ResolveError },
 
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },
@@ -56,14 +55,15 @@ fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
     }
 }
 
-pub(super) async fn sync(
-    adapter: &Adapter,
-    params: &Params,
+/// Fetch and run a WASI plugin against a canister for a fully-resolved
+/// [`PluginInvocation`]. Dispatch and input derivation happen in
+/// `icp-deploy-canister`; this only performs the host-only wasm resolution and
+/// wasmtime execution.
+pub(super) async fn run(
+    invocation: &PluginInvocation,
     agent: &Agent,
-    environment: &str,
-    proxy: Option<Principal>,
     stdio: Option<Sender<String>>,
-    pkg_cache: &PackageCache,
+    resolver: &dyn RemoteResourceResolve,
 ) -> Result<Vec<String>, PluginError> {
     // 0. Resolve the compute-time limit up front so a malformed
     //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
@@ -74,22 +74,21 @@ pub(super) async fn sync(
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
     //      stable cache path is returned — no temp file needed.
-    let wasm_path = wasm::resolve(
-        &adapter.source,
-        &params.path,
-        adapter.sha256.as_deref(),
-        stdio.as_ref(),
-        pkg_cache,
-    )
-    .await?;
+    let progress = ChannelProgress::wrap(stdio.as_ref());
+    let wasm_path = resolver
+        .resolve_wasm(
+            &invocation.source,
+            &invocation.base_dir,
+            invocation.sha256.as_deref(),
+            ChannelProgress::as_dyn(progress.as_ref()),
+        )
+        .await
+        .context(ResolveWasmSnafu)?;
 
-    // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
-    //    and reads the `files` itself — both anchored at `base_dir`, and both
-    //    subject to the runtime's path-safety checks (no escaping or symlinked
-    //    paths).
-    let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
-    let files: Vec<String> = adapter.files.clone().unwrap_or_default();
+    // 2. `run_plugin` preopens the `dirs` and reads the `files` itself — both
+    //    anchored at `base_dir`, and both subject to the runtime's path-safety
+    //    checks (no escaping or symlinked paths).
+    let base_dir = Utf8PathBuf::from(invocation.base_dir.as_str());
 
     // 3. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent
@@ -97,7 +96,11 @@ pub(super) async fn sync(
         .map_err(|err| PluginError::GetIdentityPrincipal { err })?;
 
     let agent_clone = agent.clone();
-    let environment_owned = environment.to_owned();
+    let dirs = invocation.dirs.clone();
+    let files = invocation.files.clone();
+    let cid = invocation.canister_id;
+    let proxy = invocation.proxy;
+    let environment_owned = invocation.environment.clone();
     let stdio_clone = stdio.clone();
 
     tokio::task::block_in_place(|| {
@@ -106,7 +109,7 @@ pub(super) async fn sync(
             base_dir,
             dirs,
             files,
-            params.cid,
+            cid,
             agent_clone,
             proxy,
             identity_principal,

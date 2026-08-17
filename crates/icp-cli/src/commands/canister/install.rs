@@ -10,14 +10,14 @@ use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};
 
+use icp_deploy_canister::install_canister_wasm;
+
 use crate::{
     commands::args::{self, ArgsOpt},
     operations::{
+        access::AgentIcpAccess,
         candid_compat::{CandidCompatibility, check_candid_compatibility},
-        install::{
-            WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
-            resolve_install_mode_and_status,
-        },
+        install::{WasmMemoryPersistenceOpt, is_eop_canister, resolve_install_mode_and_status},
     },
 };
 
@@ -184,16 +184,21 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         }
     }
 
-    install_canister(
-        &agent,
-        args.proxy,
-        &canister_id,
+    let icp = AgentIcpAccess::new(agent.clone(), args.proxy);
+    let wmp = args
+        .wasm_memory_persistence
+        .map(WasmMemoryPersistenceOpt::to_ic);
+    // Install the bytes read above, not a fresh read of the same source, so the
+    // module installed is the one the Candid check ran against.
+    install_canister_wasm(
         &canister_display,
+        canister_id,
         &wasm,
         install_mode,
         status,
         init_args_bytes.as_deref(),
-        args.wasm_memory_persistence,
+        wmp,
+        &icp,
     )
     .await?;
 

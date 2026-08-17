@@ -56,11 +56,24 @@ pub(super) async fn execute(
     stdio: Option<Sender<String>>,
 ) -> Result<(), ScriptError> {
     // Normalize `command` field based on whether it's a single command or multiple.
-    let cmds = adapter.command.as_vec();
+    execute_commands(&adapter.command.as_vec(), cwd, envs, stdio).await
+}
 
+/// Run each command in order under a shell, with `envs` set and `cwd` as the
+/// working directory, streaming stdout/stderr lines to `stdio`.
+///
+/// The sync path resolves its `commands` (and the `ICP_CLI_*` environment) in
+/// `icp-deploy-canister`; the build path calls [`execute`] with its adapter.
+pub(super) async fn execute_commands(
+    cmds: &[String],
+    cwd: &Path,
+    envs: &[(&str, &str)],
+    stdio: Option<Sender<String>>,
+) -> Result<(), ScriptError> {
     // Iterate over configured commands
     for input_cmd in cmds {
-        let mut cmd = shell_command(&input_cmd, cwd)?;
+        let input_cmd = input_cmd.as_str();
+        let mut cmd = shell_command(input_cmd, cwd)?;
 
         // Environment Variables
         for env in envs {

@@ -214,6 +214,12 @@ Make a canister call
     Print raw response as hex
 
 * `--json` — Output command results as JSON
+* `--sign-only <FILE>` — Sign the call and write it to FILE instead of submitting it, so it can be submitted later from a machine that has network access but not your key. `-` writes to stdout.
+
+   Nothing is sent, and nothing is fetched: the interface comes from `--candid` or the local build artifact rather than from the canister, so this works with no network at all. `--root-key` must name a key rather than `fetch`, and `--proxy` is not supported.
+* `--valid-from <WHEN>` — When the signed message's five-minute submission window opens: a duration from now (`55m`, `2h`) or an RFC 3339 timestamp (`2026-08-17T10:07:00Z`). Defaults to now.
+
+   The window is always five minutes wide — the IC will not accept an ingress message expiring further ahead than that — so this places it rather than sizing it.
 
 
 

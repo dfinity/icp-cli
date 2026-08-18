@@ -383,6 +383,35 @@ fn rejects_proxy() {
         .stderr(contains("--proxy").and(contains("--sign-only")));
 }
 
+/// A duration the parser accepts can still reach past the last representable
+/// instant. That has to be a CLI error, not a panic.
+#[test]
+fn rejects_an_unrepresentable_valid_from() {
+    let ctx = TestContext::new();
+    let out = ctx.home_path().join("message.json");
+
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            UNREACHABLE,
+            "--root-key",
+            "mainnet",
+            "--sign-only",
+            out.as_str(),
+            "--valid-from",
+            "999999999999d",
+            TARGET,
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("too far from now").and(contains("--valid-from")))
+        .stderr(contains("panicked").not());
+}
+
 /// `--valid-from` only means something for a message that is being signed.
 #[test]
 fn valid_from_requires_sign_only() {

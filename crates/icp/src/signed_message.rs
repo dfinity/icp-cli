@@ -172,8 +172,9 @@ impl Destination {
 }
 
 /// A human-readable echo of the envelope, for eyeballing the raw file. Never
-/// acted upon — the submitting machine re-derives all of it and refuses the file
-/// if the two disagree.
+/// acted upon: [`SignedMessage::validate`] re-derives each field from the
+/// envelope and refuses a file whose summary disagrees — with the one exception
+/// of [`Summary::signed_at`], which the envelope does not carry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Summary {
     pub sender: Principal,
@@ -183,6 +184,10 @@ pub struct Summary {
     #[serde(with = "base64_bytes")]
     pub arg: Vec<u8>,
 
+    /// When the signer says it signed this. An ingress envelope records no
+    /// signing time, so this is the one field here that nothing can corroborate:
+    /// a courier can change it and the file still validates. Show it as a note
+    /// from the signer, never as a verified time.
     pub signed_at: String,
 
     /// Both ends of the window are recorded so the file answers "when can I send

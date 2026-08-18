@@ -13,7 +13,9 @@ use icp::manifest::ArgsFormat;
 use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
 use icp::parsers::{CyclesAmount, DurationAmount};
 use icp::prelude::*;
-use icp::signed_message::{self, CallType, Destination, Request, SignedMessage, Summary};
+use icp::signed_message::{
+    self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
+};
 use serde::Serialize;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -119,7 +121,9 @@ pub(crate) struct CallArgs {
     ///
     /// The window is always five minutes wide — the IC will not accept an
     /// ingress message expiring further ahead than that — so this places it
-    /// rather than sizing it.
+    /// rather than sizing it. It is rounded down to the whole minute, and so may
+    /// open up to 59 seconds earlier than asked; the file records the window it
+    /// actually got.
     #[arg(long, value_name = "WHEN", requires = "sign_only")]
     pub(crate) valid_from: Option<ValidFrom>,
 }
@@ -377,13 +381,26 @@ async fn sign_only(
         resolve_network_offline(ctx, &selections.network, &selections.environment).await?;
 
     let now = OffsetDateTime::now_utc();
+    // Checked throughout: `--valid-from` accepts any duration that fits a `u64`
+    // of seconds, which reaches far past the last representable instant, and
+    // `OffsetDateTime`'s `+` panics rather than saturating.
+    let out_of_range = || {
+        anyhow!(
+            "`--valid-from` is too far from now to place a submission window in representable time"
+        )
+    };
     let opens_at = match &args.valid_from {
         Some(ValidFrom::At(at)) => *at,
-        Some(ValidFrom::In(duration)) => now + *duration,
+        Some(ValidFrom::In(duration)) => now.checked_add(*duration).ok_or_else(out_of_range)?,
         None => now,
     };
-    let valid_until = floor_to_minute(opens_at + signed_message::SUBMISSION_WINDOW);
-    let valid_from = valid_until - signed_message::SUBMISSION_WINDOW;
+    let valid_until = opens_at
+        .checked_add(signed_message::SUBMISSION_WINDOW)
+        .map(floor_to_minute)
+        .ok_or_else(out_of_range)?;
+    let valid_from = valid_until
+        .checked_sub(signed_message::SUBMISSION_WINDOW)
+        .ok_or_else(out_of_range)?;
     if valid_until <= now {
         bail!(
             "`--valid-from` puts the submission window at {} to {}, which has already closed",
@@ -450,9 +467,11 @@ async fn sign_only(
         version: signed_message::VERSION,
         request,
         network: signed_message::Network { url, root_key },
-        // Every call this command can compose is routed by canister id. A
-        // subnet-scoped destination is legal in the format, but nothing produces
-        // one yet.
+        // Routed by the target's own canister id, which is what `call` does
+        // online too — it passes no effective canister id to
+        // `update_or_proxy_raw`. So a management-canister call records
+        // `aaaaa-aa` and is misrouted here exactly as it already is online. A
+        // subnet destination is legal in the format, but nothing produces one yet.
         destination: Destination::Canister(cid),
         candid: interface.map(str::to_owned),
         summary: Summary {
@@ -468,10 +487,17 @@ async fn sign_only(
 
     // Refuse to hand over a file we would not accept back. Signing is the last
     // thing the air-gapped machine does, so a mistake found on the other side is
-    // found too late.
-    message
-        .validate(now)
+    // found too late. The clock is re-read rather than reused from above:
+    // unlocking the identity and signing on a hardware token both take time.
+    let validated = message
+        .validate(OffsetDateTime::now_utc())
         .context("the signed message failed its own validation")?;
+    anyhow::ensure!(
+        validated.window != WindowState::Expired,
+        "the submission window closed at {} while the message was being signed, \
+         so it could no longer be submitted; nothing was written",
+        signed_message::format_timestamp(valid_until),
+    );
 
     if out == "-" {
         let mut stdout = io::stdout();

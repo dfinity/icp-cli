@@ -388,8 +388,12 @@ async fn sync_multiple_canisters() {
         .success()
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stderr(contains("DEBUG icp::events: [canister-a] syncing canister-a"))
-        .stderr(contains("DEBUG icp::events: [canister-b] syncing canister-b"))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-a] syncing canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-b] syncing canister-b",
+        ))
         .stderr(contains("DEBUG icp::events: [canister-c] syncing canister-c").not());
 }
 
@@ -862,7 +866,11 @@ async fn sync_all_canisters_in_environment() {
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: []"#))
         .stderr(contains(r#"environment: Some("test-env")"#))
-        .stderr(contains("DEBUG icp::events: [canister-a] syncing canister-a"))
-        .stderr(contains("DEBUG icp::events: [canister-b] syncing canister-b"))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-a] syncing canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-b] syncing canister-b",
+        ))
         .stderr(contains("DEBUG icp::events: [canister-c] syncing canister-c").not()); // not in test-env
 }

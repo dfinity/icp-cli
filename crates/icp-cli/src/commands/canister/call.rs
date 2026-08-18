@@ -13,7 +13,7 @@ use icp::manifest::ArgsFormat;
 use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
 use icp::parsers::{CyclesAmount, DurationAmount};
 use icp::prelude::*;
-use icp::signed_message::{self, Destination, Request, RequestType, SignedMessage, Summary};
+use icp::signed_message::{self, CallType, Destination, Request, SignedMessage, Summary};
 use serde::Serialize;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -407,7 +407,7 @@ async fn sign_only(
             .sign()
             .context("failed to sign the query")?;
         Request {
-            request_type: RequestType::Query,
+            call_type: CallType::Query,
             envelope: signed.signed_query,
             // A query answers immediately, so there is nothing to poll for.
             request_id: None,
@@ -437,13 +437,13 @@ async fn sign_only(
         );
 
         Request {
-            request_type: RequestType::Update,
+            call_type: CallType::Update,
             envelope: signed.signed_update,
             request_id: Some(signed.request_id.to_string()),
             status_check: Some(status_check.signed_request_status),
         }
     };
-    let request_type = request.request_type;
+    let call_type = request.call_type;
 
     let message = SignedMessage {
         format: signed_message::FORMAT.to_string(),
@@ -483,7 +483,7 @@ async fn sign_only(
 
     eprintln!(
         "Signed a {} call to '{method}' on {cid}, as {sender}.",
-        request_type.as_str(),
+        call_type.as_str(),
     );
     eprintln!(
         "It can be submitted between {} and {} — a five-minute window.",

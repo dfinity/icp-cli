@@ -82,7 +82,7 @@ pub struct SignedMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Request {
     #[serde(rename = "type")]
-    pub request_type: RequestType,
+    pub call_type: CallType,
 
     /// The CBOR authentication envelope. The only authenticated content here.
     #[serde(with = "base64_bytes")]
@@ -104,18 +104,33 @@ pub struct Request {
     pub status_check: Option<Vec<u8>>,
 }
 
+/// Which submission API the signed envelope targets — *not* what kind of method
+/// is being called.
+///
+/// A method is an update method, a query method, or a composite query, but there
+/// are only two ways to invoke one: `/call` for replicated execution and
+/// `/query` for non-replicated. The mapping is not one-to-one — an update method
+/// can only go through `/call`, a composite query only through `/query`, and a
+/// query method through either — so which one was signed for has to be recorded
+/// here rather than re-derived from the interface.
+///
+/// [`CallType::Update`] is the envelope's `call` request type, spelled "update"
+/// to match `sync-plugin.wit`'s `enum call-type { update, query }`, which draws
+/// the same distinction for the same reason. Checked against the envelope's own
+/// discriminant on the way in; selects `update_signed` over `query_signed` on
+/// the way out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum RequestType {
+pub enum CallType {
     Update,
     Query,
 }
 
-impl RequestType {
+impl CallType {
     pub fn as_str(self) -> &'static str {
         match self {
-            RequestType::Update => "update",
-            RequestType::Query => "query",
+            CallType::Update => "update",
+            CallType::Query => "query",
         }
     }
 }
@@ -193,7 +208,7 @@ pub enum WindowState {
     reason = "read by the submitting side, which lands separately"
 )]
 pub struct Validated {
-    pub request_type: RequestType,
+    pub call_type: CallType,
     pub sender: Principal,
     pub canister_id: Principal,
     pub method: String,
@@ -259,9 +274,9 @@ impl SignedMessage {
                 ..
             } => {
                 ensure!(
-                    self.request.request_type == RequestType::Update,
-                    RequestTypeMismatchSnafu {
-                        declared: self.request.request_type,
+                    self.request.call_type == CallType::Update,
+                    CallTypeMismatchSnafu {
+                        declared: self.request.call_type,
                         envelope: "update",
                     }
                 );
@@ -282,9 +297,9 @@ impl SignedMessage {
                 ..
             } => {
                 ensure!(
-                    self.request.request_type == RequestType::Query,
-                    RequestTypeMismatchSnafu {
-                        declared: self.request.request_type,
+                    self.request.call_type == CallType::Query,
+                    CallTypeMismatchSnafu {
+                        declared: self.request.call_type,
                         envelope: "query",
                     }
                 );
@@ -297,8 +312,8 @@ impl SignedMessage {
                 )
             }
             EnvelopeContent::ReadState { .. } => {
-                return RequestTypeMismatchSnafu {
-                    declared: self.request.request_type,
+                return CallTypeMismatchSnafu {
+                    declared: self.request.call_type,
                     envelope: "read_state",
                 }
                 .fail();
@@ -308,8 +323,8 @@ impl SignedMessage {
         // The summary is what a human reads out of the file, so it has to be the
         // envelope's own story. `ic-agent`'s inspectors compare exactly the
         // fields the envelope carries.
-        let inspect = match self.request.request_type {
-            RequestType::Update => signed_update_inspect(
+        let inspect = match self.request.call_type {
+            CallType::Update => signed_update_inspect(
                 self.summary.sender,
                 self.summary.canister_id,
                 &self.summary.method,
@@ -317,7 +332,7 @@ impl SignedMessage {
                 ingress_expiry,
                 self.request.envelope.clone(),
             ),
-            RequestType::Query => signed_query_inspect(
+            CallType::Query => signed_query_inspect(
                 self.summary.sender,
                 self.summary.canister_id,
                 &self.summary.method,
@@ -341,8 +356,8 @@ impl SignedMessage {
             }
         );
 
-        let request_id = match self.request.request_type {
-            RequestType::Update => {
+        let request_id = match self.request.call_type {
+            CallType::Update => {
                 let computed = content.to_request_id();
                 let recorded = self
                     .request
@@ -375,7 +390,7 @@ impl SignedMessage {
 
                 Some(computed)
             }
-            RequestType::Query => {
+            CallType::Query => {
                 ensure!(
                     self.request.request_id.is_none() && self.request.status_check.is_none(),
                     QueryCarriesUpdateFieldsSnafu
@@ -395,7 +410,7 @@ impl SignedMessage {
         };
 
         Ok(Validated {
-            request_type: self.request.request_type,
+            call_type: self.request.call_type,
             sender,
             canister_id,
             method,
@@ -413,9 +428,9 @@ impl SignedMessage {
         let Destination::Subnet(subnet) = self.destination else {
             return Ok(());
         };
-        let permitted = match self.request.request_type {
-            RequestType::Update => SUBNET_SCOPED_UPDATE_METHODS.contains(&method),
-            RequestType::Query => SUBNET_SCOPED_QUERY_METHODS.contains(&method),
+        let permitted = match self.request.call_type {
+            CallType::Update => SUBNET_SCOPED_UPDATE_METHODS.contains(&method),
+            CallType::Query => SUBNET_SCOPED_QUERY_METHODS.contains(&method),
         };
         ensure!(
             permitted && self.summary.canister_id == Principal::management_canister(),
@@ -483,8 +498,8 @@ pub enum Error {
         "the file declares a {} request but its envelope is a {envelope} request",
         declared.as_str()
     ))]
-    RequestTypeMismatch {
-        declared: RequestType,
+    CallTypeMismatch {
+        declared: CallType,
         envelope: &'static str,
     },
 
@@ -642,7 +657,7 @@ mod tests {
             format: FORMAT.to_string(),
             version: VERSION,
             request: Request {
-                request_type: RequestType::Update,
+                call_type: CallType::Update,
                 envelope: signed.signed_update,
                 request_id: Some(signed.request_id.to_string()),
                 status_check: Some(status_check.signed_request_status),
@@ -684,7 +699,7 @@ mod tests {
             format: FORMAT.to_string(),
             version: VERSION,
             request: Request {
-                request_type: RequestType::Query,
+                call_type: CallType::Query,
                 envelope: signed.signed_query,
                 request_id: None,
                 status_check: None,
@@ -722,7 +737,7 @@ mod tests {
         assert_eq!(validated.canister_id, canister());
         assert_eq!(validated.method, "greet");
         assert_eq!(validated.arg, b"arg");
-        assert_eq!(validated.request_type, RequestType::Update);
+        assert_eq!(validated.call_type, CallType::Update);
         assert_eq!(validated.window, WindowState::Valid);
         assert_eq!(
             validated
@@ -770,7 +785,7 @@ mod tests {
         let validated = message
             .validate(OffsetDateTime::now_utc())
             .expect("validate");
-        assert_eq!(validated.request_type, RequestType::Query);
+        assert_eq!(validated.call_type, CallType::Query);
         assert!(validated.request_id.is_none());
     }
 
@@ -789,11 +804,11 @@ mod tests {
     #[test]
     fn declared_type_must_match_the_envelope() {
         let mut message = query_message();
-        message.request.request_type = RequestType::Update;
+        message.request.call_type = CallType::Update;
 
         assert!(matches!(
             message.validate(OffsetDateTime::now_utc()),
-            Err(Error::RequestTypeMismatch { .. }),
+            Err(Error::CallTypeMismatch { .. }),
         ));
     }
 

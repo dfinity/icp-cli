@@ -982,18 +982,35 @@ mod tests {
     /// `--debug`, where the bars are hidden, so what it says is worth asserting on
     /// directly rather than through the bar it is standing in for.
     fn captured_debug_lines(f: impl FnOnce()) -> Vec<String> {
-        use std::sync::{Arc, Mutex};
+        use std::collections::HashMap;
+        use std::sync::{Mutex, OnceLock};
+        use std::thread::{self, ThreadId};
         use tracing::{Event as TracingEvent, Level, Subscriber, field};
         use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan};
 
-        #[derive(Clone, Default)]
-        struct Capture(Arc<Mutex<Vec<String>>>);
+        /// The lines captured for each thread currently inside this helper.
+        ///
+        /// A thread is only listening while it has an entry here, so the tests that
+        /// run alongside it — on other threads, in the same process — do not put
+        /// their own output in its list.
+        static LISTENING: OnceLock<Mutex<HashMap<ThreadId, Vec<String>>>> = OnceLock::new();
+
+        fn listening() -> &'static Mutex<HashMap<ThreadId, Vec<String>>> {
+            LISTENING.get_or_init(Default::default)
+        }
+
+        struct Capture;
 
         impl<S: Subscriber + for<'a> LookupSpan<'a>> tracing_subscriber::Layer<S> for Capture {
             fn on_event(&self, event: &TracingEvent<'_>, _ctx: Context<'_, S>) {
                 if *event.metadata().level() != Level::DEBUG {
                     return;
                 }
+
+                let mut listening = listening().lock().expect("capture poisoned");
+                let Some(lines) = listening.get_mut(&thread::current().id()) else {
+                    return;
+                };
 
                 struct Message(String);
                 impl field::Visit for Message {
@@ -1006,18 +1023,40 @@ mod tests {
 
                 let mut message = Message(String::new());
                 event.record(&mut message);
-                self.0.lock().expect("capture poisoned").push(message.0);
+                lines.push(message.0);
             }
         }
 
-        let capture = Capture::default();
-        let lines = capture.0.clone();
-        // No target filter: the layer takes every `DEBUG` event and the assertions
-        // below name the exact lines, so a filter would only be another thing able
-        // to make the test pass by seeing nothing.
-        tracing::subscriber::with_default(tracing_subscriber::registry().with(capture), f);
+        // Installed once, for the whole test binary, and globally rather than for
+        // this thread alone. `tracing` decides whether a callsite is enabled the
+        // first time that callsite is reached and caches the answer for the whole
+        // process, resolving it against the subscriber of the thread that got there
+        // first. So with a thread-local capture, another test reaching the same
+        // `debug!` first cached "disabled" and this thread heard nothing. A global
+        // capture is every thread's subscriber, so the answer is the same whoever
+        // reaches the callsite first.
+        static INSTALLED: OnceLock<()> = OnceLock::new();
+        INSTALLED.get_or_init(|| {
+            // No target filter: the layer takes every `DEBUG` event and the
+            // assertions below name the exact lines, so a filter would only be
+            // another thing able to make the test pass by seeing nothing.
+            tracing::subscriber::set_global_default(tracing_subscriber::registry().with(Capture))
+                .expect("no other subscriber is installed by these tests");
+        });
 
-        lines.lock().expect("capture poisoned").clone()
+        let id = thread::current().id();
+        listening()
+            .lock()
+            .expect("capture poisoned")
+            .insert(id, Vec::new());
+
+        f();
+
+        listening()
+            .lock()
+            .expect("capture poisoned")
+            .remove(&id)
+            .expect("this thread was listening")
     }
 
     /// A step's output is logged with the canister name, because under `--debug` the

@@ -3,7 +3,7 @@ use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 
-use crate::operations::bundle::create_bundle;
+use crate::{events::indicatif_reporter, operations::bundle::create_bundle};
 
 /// Bundle a project into a self-contained deployable archive.
 ///
@@ -37,6 +37,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
+        &indicatif_reporter(ctx.debug),
         ctx.debug,
         &args.output,
     )

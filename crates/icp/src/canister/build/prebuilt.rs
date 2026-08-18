@@ -1,5 +1,5 @@
+use icp_events::OutputWriter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::{canister::wasm, fs, manifest::adapter::prebuilt::Adapter, package::PackageCache};
 
@@ -17,7 +17,7 @@ pub enum PrebuiltError {
 pub(super) async fn build(
     adapter: &Adapter,
     params: &Params,
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
     pkg_cache: &PackageCache,
 ) -> Result<(), PrebuiltError> {
     let src = wasm::resolve(
@@ -29,10 +29,8 @@ pub(super) async fn build(
     )
     .await?;
 
-    if let Some(tx) = &stdio {
-        let _ = tx
-            .send(format!("Writing WASM file: {}", params.output))
-            .await;
+    if let Some(out) = &stdio {
+        out.line(format!("Writing WASM file: {}", params.output));
     }
     fs::copy(&src, &params.output).context(CopyFileSnafu)?;
 

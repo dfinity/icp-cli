@@ -502,9 +502,13 @@ fn build_multiple_canisters() {
         .assert()
         .success()
         .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stderr(contains("DEBUG icp::progress: building canister-a"))
-        .stderr(contains("DEBUG icp::progress: building canister-b"))
-        .stderr(contains("DEBUG icp::progress: building canister-c").not());
+        .stderr(contains(
+            "DEBUG icp::events: [canister-a] building canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-b] building canister-b",
+        ))
+        .stderr(contains("DEBUG icp::events: [canister-c] building canister-c").not());
 }
 
 #[test]
@@ -559,7 +563,11 @@ fn build_all_canisters_in_environment() {
         .success()
         .stderr(contains(r#"canisters: []"#))
         .stderr(contains(r#"environment: Some("test-env")"#))
-        .stderr(contains("DEBUG icp::progress: building canister-a"))
-        .stderr(contains("DEBUG icp::progress: building canister-b"))
-        .stderr(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
+        .stderr(contains(
+            "DEBUG icp::events: [canister-a] building canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::events: [canister-b] building canister-b",
+        ))
+        .stderr(contains("DEBUG icp::events: [canister-c] building canister-c").not()); // not in test-env
 }

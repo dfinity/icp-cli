@@ -3,23 +3,23 @@ use std::sync::{Arc, OnceLock};
 use clap::Parser;
 use icp::{context::Context, network::managed::cache::download_launcher_version};
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use icp_events::TaskKind;
+
+use crate::events::indicatif_reporter;
 
 /// Update icp-cli-network-launcher to the latest version.
 #[derive(Parser, Debug)]
 pub struct UpdateArgs {}
 
 pub async fn exec(ctx: &Context, _args: &UpdateArgs) -> Result<(), anyhow::Error> {
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-    let pb = progress_manager.create_independent_progress_bar();
-    pb.set_message("Downloading latest icp-cli-network-launcher...".to_string());
+    let task = indicatif_reporter(ctx.debug).unlabelled_task(TaskKind::Spinner);
+    task.message("Downloading latest icp-cli-network-launcher...");
 
     let pkg = ctx.dirs.package_cache()?;
     let version_slot: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
     let version_capture = version_slot.clone();
 
-    ProgressManager::execute_with_progress(
-        &pb,
+    task.run(
         async move {
             pkg.with_write(async move |pkg| {
                 let (ver, _path) =

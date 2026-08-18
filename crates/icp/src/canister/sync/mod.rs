@@ -4,8 +4,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
+use icp_events::OutputWriter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::SyncStep;
 use crate::package::PackageCache;
@@ -46,7 +46,7 @@ pub trait Synchronize: Sync + Send {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
@@ -77,7 +77,7 @@ impl Synchronize for Syncer {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
@@ -112,7 +112,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _step: &SyncStep,
         _params: &Params,
         _agent: &Agent,
-        _stdio: Option<Sender<String>>,
+        _stdio: Option<OutputWriter>,
         _pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
@@ -139,7 +139,7 @@ mod tests {
         async fn run_script(
             &self,
             invocation: ScriptInvocation,
-            _stdio: Option<Sender<String>>,
+            _stdio: Option<OutputWriter>,
         ) -> Result<Vec<String>, ScriptRunError> {
             self.seen.lock().unwrap().push(invocation);
             Ok(vec![])

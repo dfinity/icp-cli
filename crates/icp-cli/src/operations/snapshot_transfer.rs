@@ -19,7 +19,7 @@ use icp::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
-use indicatif::{ProgressBar, ProgressStyle};
+use icp_events::Task;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::{
@@ -424,19 +424,6 @@ where
     }
 }
 
-/// Create a progress bar for byte transfers.
-pub fn create_transfer_progress_bar(total_bytes: u64, label: &str) -> ProgressBar {
-    let pb = ProgressBar::new(total_bytes);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .expect("invalid progress bar template")
-            .progress_chars("#>-"),
-    );
-    pb.set_prefix(label.to_string());
-    pb
-}
-
 /// Read snapshot metadata from a canister.
 pub async fn read_snapshot_metadata(
     agent: &Agent,
@@ -513,7 +500,7 @@ pub async fn download_blob_to_file(
     total_size: u64,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut DownloadProgress,
-    progress_bar: &ProgressBar,
+    task: &Task,
 ) -> Result<(), SnapshotTransferError> {
     let output_path = paths.blob_path(blob_type);
 
@@ -545,9 +532,9 @@ pub async fn download_blob_to_file(
         f
     };
 
-    // Set initial progress based on frontier
+    // Set initial progress based on frontier: a resumed download starts partway in.
     let initial_bytes = progress.blob_progress(blob_type).frontier;
-    progress_bar.set_position(initial_bytes);
+    task.position(initial_bytes);
 
     // Determine which chunks need downloading
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -611,8 +598,8 @@ pub async fn download_blob_to_file(
             .mark_complete(chunk_offset, total_size);
         save_download_progress(progress, paths)?;
 
-        // Update progress bar to show frontier position
-        progress_bar.set_position(progress.blob_progress(blob_type).frontier);
+        // Report the frontier position
+        task.position(progress.blob_progress(blob_type).frontier);
     }
 
     Ok(())
@@ -663,7 +650,7 @@ pub async fn upload_blob_from_file(
     blob_type: BlobType,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut UploadProgress,
-    progress_bar: &ProgressBar,
+    task: &Task,
 ) -> Result<u64, SnapshotTransferError> {
     let input_path = paths.blob_path(blob_type);
     let file_size = std::fs::metadata(&input_path)
@@ -690,7 +677,8 @@ pub async fn upload_blob_from_file(
             .context(SeekBlobFileSnafu { path: &input_path })?;
     }
 
-    progress_bar.set_position(start_offset);
+    // A resumed upload starts partway in.
+    task.position(start_offset);
 
     // Read all chunks and launch uploads concurrently
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -742,7 +730,7 @@ pub async fn upload_blob_from_file(
                 while let Some(&size) = completed.get(&next_report_offset) {
                     completed.remove(&next_report_offset);
                     next_report_offset += size;
-                    progress_bar.set_position(next_report_offset);
+                    task.position(next_report_offset);
 
                     // Update and save progress
                     match blob_type {
@@ -901,4 +889,79 @@ pub fn load_metadata(
         });
     }
     Ok(icp::fs::json::load(&metadata_path)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::test_support::{recording_reporter, unreachable_agent};
+    use icp_events::{Event, TaskId, TaskKind};
+
+    /// A transfer that resumes reports the offset it recovered before anything else,
+    /// so the bar opens where the last attempt stopped rather than at zero.
+    ///
+    /// Nothing is uploaded here: the recorded offset already covers the whole blob,
+    /// which is the boundary case that leaves the chunk loop with no work and needs no
+    /// network. The reported position is the interesting part either way.
+    #[tokio::test]
+    async fn a_resumed_upload_reports_the_offset_it_starts_from() {
+        let (reporter, sink) = recording_reporter();
+        let dir = camino_tempfile::Utf8TempDir::new().expect("temp dir");
+
+        let snapshot = SnapshotPaths::new(dir.path().to_owned()).expect("snapshot dir");
+        let blob = vec![7u8; 4096];
+        let uploaded = snapshot
+            .with_write(async |paths| {
+                paths.ensure_dirs()?;
+                icp::fs::write(&paths.blob_path(BlobType::WasmModule), &blob)?;
+
+                let mut progress = UploadProgress::new("aa".to_owned());
+                progress.wasm_module_offset = blob.len() as u64;
+
+                let task = reporter.task(
+                    TaskKind::Bytes {
+                        total: blob.len() as u64,
+                    },
+                    "WASM module",
+                );
+                let uploaded = upload_blob_from_file(
+                    &unreachable_agent(),
+                    None,
+                    Principal::from_slice(&[7; 4]),
+                    &[0xaa],
+                    BlobType::WasmModule,
+                    paths,
+                    &mut progress,
+                    &task,
+                )
+                .await?;
+                task.succeed("done");
+
+                Ok::<_, SnapshotTransferError>(uploaded)
+            })
+            .await
+            .expect("lock")
+            .expect("nothing left to upload");
+
+        assert_eq!(uploaded, blob.len() as u64);
+        assert_eq!(
+            sink.events(),
+            vec![
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Bytes { total: 4096 },
+                    label: Some("WASM module".to_owned()),
+                },
+                Event::TaskPosition {
+                    id: TaskId(0),
+                    position: 4096,
+                },
+                Event::TaskFinished {
+                    id: TaskId(0),
+                    outcome: icp_events::Outcome::Success,
+                    message: Some("done".to_owned()),
+                },
+            ]
+        );
+    }
 }

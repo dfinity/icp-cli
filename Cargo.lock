@@ -3636,6 +3636,7 @@ dependencies = [
  "ic-management-canister-types 0.8.0",
  "ic-utils",
  "icp-canister-interfaces",
+ "icp-events",
  "icp-sync-plugin",
  "icrc-ledger-types",
  "indexmap",
@@ -3726,6 +3727,7 @@ dependencies = [
  "ic-utils",
  "icp",
  "icp-canister-interfaces",
+ "icp-events",
  "icrc-ledger-types",
  "indicatif",
  "indoc",
@@ -3770,6 +3772,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-events"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "icp-sync-plugin"
 version = "1.3.0"
 dependencies = [
@@ -3782,6 +3793,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "icp-canister-interfaces",
+ "icp-events",
  "snafu",
  "tokio",
  "wasmtime",

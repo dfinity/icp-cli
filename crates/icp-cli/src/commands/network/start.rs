@@ -22,7 +22,9 @@ use icp::{
 };
 use tracing::{debug, info, warn};
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use icp_events::TaskKind;
+
+use crate::events::indicatif_reporter;
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;
@@ -191,27 +193,25 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
                 } else {
                     // The version is not fresh or not cached, download it
                     debug!("Downloading icp-cli-network-launcher version `{version}`");
-                    let progress_manager =
-                        ProgressManager::new(ProgressManagerSettings { hidden: debug });
-                    let pb = progress_manager.create_independent_progress_bar();
-                    pb.set_message(format!("Downloading icp-cli-network-launcher {version}..."));
+                    let task = indicatif_reporter(debug).unlabelled_task(TaskKind::Spinner);
+                    task.message(format!("Downloading icp-cli-network-launcher {version}..."));
                     let version_slot: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
                     let version_capture = version_slot.clone();
-                    let path = ProgressManager::execute_with_progress(
-                        &pb,
-                        async {
-                            let (ver, path) =
-                                download_launcher_version(pkg, version, &client).await?;
-                            let _ = version_capture.set(ver);
-                            anyhow::Ok(path)
-                        },
-                        move || {
-                            let ver = version_slot.get().map(String::as_str).unwrap();
-                            format!("Downloaded icp-cli-network-launcher {ver}")
-                        },
-                        |err| format!("Failed to download icp-cli-network-launcher: {err}"),
-                    )
-                    .await?;
+                    let path = task
+                        .run(
+                            async {
+                                let (ver, path) =
+                                    download_launcher_version(pkg, version, &client).await?;
+                                let _ = version_capture.set(ver);
+                                anyhow::Ok(path)
+                            },
+                            move || {
+                                let ver = version_slot.get().map(String::as_str).unwrap();
+                                format!("Downloaded icp-cli-network-launcher {ver}")
+                            },
+                            |err| format!("Failed to download icp-cli-network-launcher: {err}"),
+                        )
+                        .await?;
                     Ok(Some(path))
                 }
             })

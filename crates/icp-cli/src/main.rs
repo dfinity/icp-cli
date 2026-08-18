@@ -17,10 +17,10 @@ mod artifacts;
 mod commands;
 mod complete;
 mod dist;
+mod events;
 mod logging;
 pub(crate) mod operations;
 mod options;
-mod progress;
 mod telemetry;
 mod version;
 

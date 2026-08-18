@@ -24,9 +24,9 @@ use bytes::Bytes;
 use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
+use icp_events::OutputWriter;
 use snafu::prelude::*;
 use tokio::io::{self, AsyncWrite};
-use tokio::sync::mpsc::Sender;
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 use wasmtime_wasi::p2::{OutputStream, Pollable, StreamError};
 use wasmtime_wasi::{DirPerms, FilePerms};
@@ -213,7 +213,7 @@ pub fn run_plugin(
     identity_principal: Principal,
     environment: String,
     compute_limit_secs: u64,
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
 ) -> Result<Vec<String>, RunPluginError> {
     use wasmtime::component::{Component, Linker};
     use wasmtime::{Config, Engine, Store};
@@ -376,8 +376,8 @@ pub fn run_plugin(
 // `LineCapture` implements both `StdoutStream` (so it can be installed on a
 // `WasiCtxBuilder`) and `OutputStream` / `AsyncWrite` (so the bytes written
 // by the guest flow through the same code path). Each write is split on
-// newlines; complete lines have ANSI escapes stripped and are pushed to the
-// rolling-view `Sender<String>` via `try_send` (best-effort). For stderr,
+// newlines; complete lines have ANSI escapes stripped and are reported to the
+// rolling-view `OutputWriter`. For stderr,
 // the same lines are also appended to `persistent`, which is drained by
 // `run_plugin()` after `exec()` returns. Total accepted bytes are capped at
 // `MAX_PLUGIN_OUTPUT` per stream; further bytes are dropped and `finalize`
@@ -397,14 +397,14 @@ struct CaptureState {
 struct LineCapture {
     state: Arc<StdMutex<CaptureState>>,
     label: &'static str,
-    forward: Option<Sender<String>>,
+    forward: Option<OutputWriter>,
     persistent: Option<Arc<StdMutex<Vec<String>>>>,
 }
 
 impl LineCapture {
     fn new(
         label: &'static str,
-        forward: Option<Sender<String>>,
+        forward: Option<OutputWriter>,
         persistent: Option<Arc<StdMutex<Vec<String>>>>,
     ) -> Self {
         Self {
@@ -441,8 +441,8 @@ impl LineCapture {
     }
 
     fn emit(&self, line: String) {
-        if let Some(tx) = &self.forward {
-            let _ = tx.try_send(line.clone());
+        if let Some(out) = &self.forward {
+            out.line(line.clone());
         }
         if let Some(p) = &self.persistent {
             p.lock().unwrap().push(line);
@@ -527,6 +527,33 @@ mod tests {
 
     use candid::Principal;
     use ic_agent::Agent;
+    use icp_events::{Event, RecordingSink, Reporter, TaskKind};
+
+    /// An [`OutputWriter`] whose lines can be read back, standing in for the
+    /// rolling step view the CLI would otherwise be drawing.
+    fn recording_writer() -> (OutputWriter, Arc<RecordingSink>) {
+        let sink = Arc::new(RecordingSink::new());
+        let mut task = Reporter::new(sink.clone()).unlabelled_task(TaskKind::Steps {
+            output_label: "Sync".to_owned(),
+        });
+        task.begin_step("plugin");
+
+        // The task is dropped here: a writer keeps reporting for as long as anything
+        // holds it, and the task's own start/finish events are not what these tests
+        // are about.
+        (task.output(), sink)
+    }
+
+    /// Every line reported through the writer, in order.
+    fn reported_lines(sink: &RecordingSink) -> Vec<String> {
+        sink.events()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StepOutput { line, .. } => Some(line),
+                _ => None,
+            })
+            .collect()
+    }
 
     fn dummy_agent() -> Agent {
         Agent::builder()
@@ -761,7 +788,7 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        let (writer, sink) = recording_writer();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),
@@ -774,12 +801,15 @@ mod tests {
                 anon(),
                 "print".to_string(),
                 DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
+                Some(writer),
             )
         });
         assert!(result.is_ok());
-        let msg = rx.try_recv().expect("expected stdout message on channel");
-        assert!(msg.contains("stdout from plugin"), "got: {msg}");
+        let reported = reported_lines(&sink);
+        assert!(
+            reported.iter().any(|l| l.contains("stdout from plugin")),
+            "got: {reported:?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -787,7 +817,7 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        let (writer, sink) = recording_writer();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),
@@ -800,13 +830,16 @@ mod tests {
                 anon(),
                 "hello".to_string(),
                 DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
+                Some(writer),
             )
         });
         let lines = result.expect("plugin should succeed");
         assert_eq!(lines, vec!["hello".to_string()]);
-        // The same line is forwarded to the rolling-view channel.
-        let live = rx.try_recv().expect("expected stderr line on channel");
-        assert!(live.contains("hello"), "got: {live}");
+        // The same line is reported for the rolling view.
+        let reported = reported_lines(&sink);
+        assert!(
+            reported.iter().any(|l| l.contains("hello")),
+            "got: {reported:?}"
+        );
     }
 }

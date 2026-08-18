@@ -10,8 +10,12 @@ pub(crate) mod proxy_management;
 pub(crate) mod recover_cycles;
 pub(crate) mod settings;
 pub(crate) mod snapshot_transfer;
+pub(crate) mod step_replay;
 pub(crate) mod sync;
 pub(crate) mod token;
 
 pub(crate) mod misc;
 pub(crate) mod wasm;
+
+#[cfg(test)]
+pub(crate) mod test_support;

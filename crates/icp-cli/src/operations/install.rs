@@ -11,7 +11,7 @@ use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use icp_events::{Reporter, TaskKind};
 
 use super::misc::fetch_canister_metadata;
 use super::proxy::UpdateOrProxyError;
@@ -349,7 +349,7 @@ async fn stop_and_start_if_upgrade(
     install_result
 }
 
-/// Installs code to multiple canisters and displays progress bars.
+/// Installs code to multiple canisters, reporting progress per canister.
 pub(crate) async fn install_many(
     agent: Agent,
     proxy: Option<Principal>,
@@ -363,22 +363,20 @@ pub(crate) async fn install_many(
         ),
     >,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode, status, init_args) in canisters {
-        let pb = progress_manager.create_progress_bar(&name);
+        // Started up front so the tasks appear in the order the canisters were given,
+        // regardless of the order the futures below are first polled in.
+        let task = reporter.task(TaskKind::Spinner, name.as_str());
         let agent = agent.clone();
         let install_fn = {
-            let pb = pb.clone();
             let artifacts = artifacts.clone();
             let name = name.clone();
 
             async move {
-                pb.set_message("Installing...");
-
                 let wasm = artifacts.lookup(&name).await.map_err(|_| {
                     InstallOperationError::ArtifactNotFound {
                         canister_name: name.clone(),
@@ -401,13 +399,15 @@ pub(crate) async fn install_many(
         };
 
         futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
-            )
-            .await;
+            task.message("Installing...");
+
+            let result = task
+                .run(
+                    install_fn,
+                    || "Installed successfully".to_string(),
+                    |err| format!("Failed to install canister: {err}"),
+                )
+                .await;
 
             result.map_err(|error| InstallFailure {
                 canister_name: name.clone(),
@@ -443,4 +443,118 @@ pub(crate) async fn install_many(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::test_support::{
+        EmptyArtifacts, outcome_of, recording_reporter, task_labels, unreachable_agent,
+    };
+    use icp_events::{Event, Outcome, TaskId, TaskKind};
+
+    fn canister_id() -> Principal {
+        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap()
+    }
+
+    /// A missing build artifact is caught before the agent is touched, so this
+    /// exercises the whole reporting path without a network.
+    #[tokio::test]
+    async fn a_missing_artifact_is_reported_against_its_canister() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = install_many(
+            unreachable_agent(),
+            None,
+            vec![(
+                "backend".to_string(),
+                canister_id(),
+                CanisterInstallMode::Install,
+                CanisterStatusType::Stopped,
+                None,
+            )],
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            sink.events(),
+            vec![
+                Event::TaskStarted {
+                    id: TaskId(0),
+                    kind: TaskKind::Spinner,
+                    label: Some("backend".into()),
+                },
+                Event::TaskMessage {
+                    id: TaskId(0),
+                    message: "Installing...".into(),
+                },
+                Event::TaskFinished {
+                    id: TaskId(0),
+                    outcome: Outcome::Failure,
+                    message: Some(
+                        "Failed to install canister: Could not find build artifact for canister \
+                         'backend'"
+                            .into()
+                    ),
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn one_task_per_canister_in_the_given_order() {
+        let (reporter, sink) = recording_reporter();
+
+        let canisters = ["frontend", "backend", "database"].map(|name| {
+            (
+                name.to_string(),
+                canister_id(),
+                CanisterInstallMode::Install,
+                CanisterStatusType::Stopped,
+                None,
+            )
+        });
+
+        let _ = install_many(
+            unreachable_agent(),
+            None,
+            canisters,
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        let events = sink.events();
+        assert_eq!(
+            task_labels(&events),
+            vec![
+                Some("frontend".to_string()),
+                Some("backend".to_string()),
+                Some("database".to_string()),
+            ]
+        );
+        for id in 0..3 {
+            assert_eq!(outcome_of(&events, TaskId(id)).0, Outcome::Failure);
+        }
+    }
+
+    #[tokio::test]
+    async fn nothing_to_install_reports_nothing() {
+        let (reporter, sink) = recording_reporter();
+
+        let result = install_many(
+            unreachable_agent(),
+            None,
+            Vec::new(),
+            Arc::new(EmptyArtifacts),
+            &reporter,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert!(sink.events().is_empty());
+    }
 }

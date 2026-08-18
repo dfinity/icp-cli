@@ -53,7 +53,8 @@ crates/icp-sync-plugin/
     lib.rs          — public API: run_plugin(), RunPluginError
     runtime.rs      — wasmtime component setup, HostState, bindgen!, exec() call
   sync-plugin.wit   — WIT interface (source of truth)
-  Cargo.toml        — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio
+  Cargo.toml        — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu,
+                      tokio, icp-events
 ```
 
 Public function:
@@ -70,7 +71,7 @@ pub fn run_plugin(
     identity_principal: Principal,
     environment: String,
     compute_limit_secs: u64,
-    stdio: Option<Sender<String>>,
+    stdio: Option<OutputWriter>,
 ) -> Result<Vec<String>, RunPluginError>
 ```
 
@@ -81,7 +82,8 @@ preopens each `dir` from `base_dir.join(dir)` and reads each `file` from
 both inside the runtime means the path-safety logic (below) lives in one place
 and stays private to this crate — the CLI just forwards strings. The returned
 `Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
-`stdio`, when set, receives the rolling progress lines live.
+`stdio`, when set, is the `icp_events::OutputWriter` that receives the rolling
+progress lines live.
 
 ### Declared-path safety (no symlinks)
 
@@ -147,11 +149,12 @@ to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset.
 ### stdio capture
 
 `LineCapture` implements `StdoutStream`/`OutputStream`, splits guest output on
-newlines, strips ANSI codes, and (best-effort) forwards each complete line to
-the `stdio` channel for the rolling step view. stderr lines are additionally
-accumulated and returned from `run_plugin` so the CLI can reprint them
-persistently. Each stream is capped at 1 MiB; overflow is dropped and a single
-truncation note is emitted on `finalize`.
+newlines, strips ANSI codes, and reports each complete line to the `stdio`
+`OutputWriter` for the rolling step view — synchronously, so a noisy plugin no
+longer loses lines by outrunning a bounded channel. stderr lines are
+additionally accumulated and returned from `run_plugin` so the CLI can reprint
+them persistently. Each stream is capped at 1 MiB; overflow is dropped and a
+single truncation note is emitted on `finalize`.
 
 ### `crates/icp/src/manifest/adapter/plugin.rs`
 

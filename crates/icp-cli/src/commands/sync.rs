@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use tracing::info;
 
 use crate::{
+    events::indicatif_reporter,
     operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
 };
@@ -133,6 +134,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         env.network.name.clone(),
         canister_ids,
         args.proxy,
+        &indicatif_reporter(ctx.debug),
         ctx.debug,
         &pkg_cache,
     )

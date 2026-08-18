@@ -28,7 +28,9 @@ use icp::{
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
-use crate::operations::build::{BuildManyError, build_many_with_progress_bar};
+use icp_events::Reporter;
+
+use crate::operations::build::{BuildManyError, build_many};
 
 #[derive(Debug, Snafu)]
 pub enum BundleError {
@@ -328,7 +330,8 @@ pub(crate) async fn create_bundle(
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn store_artifact::Access>,
     pkg_cache: &PackageCache,
-    debug: bool,
+    reporter: &Reporter,
+    all_step_output: bool,
     output: &Path,
 ) -> Result<(), BundleError> {
     // A bundle mirrors the workspace: the root project at the archive root and
@@ -347,13 +350,14 @@ pub(crate) async fn create_bundle(
     validate_env_var_files(&canisters, &canonical_project_dir)?;
     validate_output_path(output, &canonical_sync_dirs)?;
 
-    build_many_with_progress_bar(
+    build_many(
         canisters.clone(),
         environment,
         builder,
         artifacts.clone(),
         pkg_cache,
-        debug,
+        reporter,
+        all_step_output,
     )
     .await?;
 

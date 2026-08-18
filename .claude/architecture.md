@@ -77,6 +77,56 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
 
 Store management is in `crates/icp/src/store_id.rs`.
 
+## Progress & User-Facing Output
+
+Operations in `crates/icp-cli/src/operations/` report progress as data, not as terminal
+calls. `crates/icp-events` defines the vocabulary (`Event`, `Reporter`, `Task`,
+`OutputWriter`, `EventSink`, `CancelToken`) and depends only on serde and futures — never on
+`icp`, an async runtime, or anything terminal-shaped. `crates/icp-cli/src/events.rs` holds
+`IndicatifSink`, the only place that maps events onto `indicatif` bars, and the styles they
+are drawn in.
+
+- Operations take a `&Reporter`, never a `debug: bool`. Callers build one per operation with
+  `events::indicatif_reporter(ctx.debug)`. The multi-canister operations
+  (`build_many`, `sync_many`, `create_bundle`) still take one bool, `all_step_output`: it
+  decides how much of a failure is replayed, not how anything is drawn.
+- Nothing outside `events.rs` imports `indicatif`, with two exceptions that never went
+  through the shared renderer and build their own one-off spinners:
+  `commands/canister/migrate_id.rs` and `commands/identity/link/web.rs`. Everything else
+  reports events. To check that this still holds:
+
+  ```bash
+  grep -rl 'use indicatif' crates/icp-cli/src crates/icp/src
+  ```
+
+- A library that produces output lines — a subprocess, a sync plugin — is handed an
+  `OutputWriter` rather than a channel. Each line becomes an `Event::StepOutput` and is kept
+  in the task's step log, capped at `MAX_RECORDED_LINES_PER_STEP`, so an operation can replay
+  the failing step after the bars are down. `operations/step_replay.rs` formats that replay;
+  read the steps back with `Task::recorded_steps` *before* finishing the task, since
+  finishing consumes it.
+- The event model is deliberately not semver-stable: `publish = false`, `0.x`, all enums
+  `#[non_exhaustive]`, `TaskKind` closed.
+- Events do not drive `--json`. `--json` means the command's final result; progress never
+  appears in it.
+- `tracing` at INFO level is product output here, not logging — `logging.rs` installs a
+  `UserLayer` that prints `Level::INFO` to stderr unprefixed. `Event::Notice` is the event
+  model's equivalent; the `info!`/`warn!`/`error!` calls inside `operations/` have not been
+  converted yet.
+- Under `--debug` the bars are hidden, so the `debug!` line the sink logs for each
+  `Event::StepOutput` is the only thing tying that line to the canister that printed it —
+  and canisters build in parallel, interleaving their output. `BarState` therefore keeps the
+  prefix it gave the bar, and the log line reuses it, so both paths name a canister the same
+  way. Anything else that has to name a task should read that prefix rather than the bar.
+- A bar has to be fully styled and labelled before it is shown, and a spinner before
+  `enable_steady_tick`: that call spawns a thread which draws immediately, so anything set
+  afterwards races the first frame.
+
+Operations are unit-tested by running them against `RecordingSink` and asserting on the
+resulting `Vec<Event>`; see `operations/test_support.rs`. `events.rs::rendering`
+additionally pins the frames `IndicatifSink` draws against the literal output of the
+renderer it replaced, captured before that renderer was deleted.
+
 ## Telemetry
 
 Anonymous usage telemetry implementation. User-facing documentation is in `docs/telemetry.md`.

@@ -13,8 +13,8 @@
 //! sync path.
 
 use async_trait::async_trait;
+use icp_events::OutputWriter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::adapter::script::Adapter;
 use crate::prelude::*;
@@ -91,7 +91,7 @@ pub trait ScriptRunner: Sync + Send {
     async fn run_script(
         &self,
         invocation: ScriptInvocation,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
     ) -> Result<Vec<String>, ScriptRunError>;
 }
 
@@ -103,7 +103,7 @@ impl ScriptRunner for HostScripts {
     async fn run_script(
         &self,
         invocation: ScriptInvocation,
-        stdio: Option<Sender<String>>,
+        stdio: Option<OutputWriter>,
     ) -> Result<Vec<String>, ScriptRunError> {
         let env_refs: Vec<(&str, &str)> = invocation
             .env

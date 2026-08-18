@@ -8,6 +8,11 @@ Tests are split between unit tests (in modules) and integration tests:
 - Use `assert_cmd` for CLI assertions and `predicates` for output matching
 - Use `serial_test` with file locks for tests that share resources (network ports)
 - Some tests launch local networks and require available ports
+- Only one process-global `tracing` subscriber may be installed per test binary. In `icp-cli`'s
+  unit tests that is `events.rs::tests::captured_debug_lines`, which captures `debug!` lines;
+  installing a second one panics it. It has to be global rather than thread-local because
+  `tracing` decides whether a callsite is enabled the first time any thread reaches it and
+  caches that answer for the process.
 
 ## Mock Helpers
 

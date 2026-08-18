@@ -113,6 +113,11 @@ are drawn in.
   `UserLayer` that prints `Level::INFO` to stderr unprefixed. `Event::Notice` is the event
   model's equivalent; the `info!`/`warn!`/`error!` calls inside `operations/` have not been
   converted yet.
+- Under `--debug` the bars are hidden, so the `debug!` line the sink logs for each
+  `Event::StepOutput` is the only thing tying that line to the canister that printed it —
+  and canisters build in parallel, interleaving their output. `BarState` therefore keeps the
+  prefix it gave the bar, and the log line reuses it, so both paths name a canister the same
+  way. Anything else that has to name a task should read that prefix rather than the bar.
 - A bar has to be fully styled and labelled before it is shown, and a spinner before
   `enable_steady_tick`: that call spawns a thread which draws immediately, so anything set
   afterwards races the first frame.

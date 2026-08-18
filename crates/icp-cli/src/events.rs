@@ -132,6 +132,10 @@ impl std::fmt::Debug for IndicatifSink {
 /// Everything needed to keep drawing one task.
 struct BarState {
     bar: ProgressBar,
+    /// The prefix the bar is drawn with, kept here as well because the bars are
+    /// hidden under `--debug` and the step output logged there still has to say
+    /// which canister produced it.
+    prefix: Option<String>,
     /// Byte bars carry their own template, so they do not take the spinner's
     /// success/failure styles when they finish.
     styled_spinner: bool,
@@ -170,18 +174,26 @@ impl IndicatifSink {
         // after `enable_steady_tick` races that first tick and can lose — which is
         // what drew a stray unprefixed spinner frame. See
         // `tests::a_spinner_is_labelled_before_its_first_tick`.
+        // Byte bars label themselves undecorated; spinners wrap the name in
+        // brackets. Both match what the code being replaced did, and the same string
+        // is kept on the `BarState` so anything else that has to name the task reads
+        // the same as the bar.
+        let prefix = label.map(|label| match kind {
+            TaskKind::Bytes { .. } => label,
+            _ => format!("[{label}]"),
+        });
+
         let state = match kind {
             TaskKind::Bytes { total } => {
-                // Byte bars label themselves undecorated; spinners wrap the name in
-                // brackets. Both match what the code being replaced did.
                 let bar = ProgressBar::new(total).with_style(byte_style());
-                let bar = match label {
-                    Some(label) => bar.with_prefix(label),
+                let bar = match &prefix {
+                    Some(prefix) => bar.with_prefix(prefix.clone()),
                     None => bar,
                 };
 
                 BarState {
                     bar: self.multi.add(bar),
+                    prefix,
                     styled_spinner: false,
                     step_title: None,
                     visible: RollingLines::new(VISIBLE_STEP_LINES),
@@ -191,8 +203,8 @@ impl IndicatifSink {
             // differs, and steps build a richer one.
             _ => {
                 let bar = ProgressBar::new_spinner().with_style(running_style());
-                let bar = match label {
-                    Some(label) => bar.with_prefix(format!("[{label}]")),
+                let bar = match &prefix {
+                    Some(prefix) => bar.with_prefix(prefix.clone()),
                     None => bar,
                 };
 
@@ -201,6 +213,7 @@ impl IndicatifSink {
 
                 BarState {
                     bar,
+                    prefix,
                     styled_spinner: true,
                     step_title: None,
                     visible: RollingLines::new(VISIBLE_STEP_LINES),
@@ -249,6 +262,15 @@ impl IndicatifSink {
         }
     }
 
+    /// The prefix the bar for `id` is drawn with, if it has one.
+    fn prefix_of(&self, id: TaskId) -> Option<String> {
+        self.bars
+            .lock()
+            .expect("bars poisoned")
+            .get(&id)
+            .and_then(|state| state.prefix.clone())
+    }
+
     /// Redraw the step in progress: its title, then the tail of its output.
     fn redraw_step(state: &BarState) {
         let Some(title) = &state.step_title else {
@@ -282,7 +304,14 @@ impl EventSink for IndicatifSink {
             }),
 
             Event::StepOutput { id, line } => {
-                debug!("{line}");
+                // Under `--debug` the bars are hidden, so this log line is the only
+                // place a canister name can appear — and several canisters build at
+                // once, interleaving their output. Carry the bar's own prefix so the
+                // two paths read the same way.
+                match self.prefix_of(id) {
+                    Some(prefix) => debug!("{prefix} {line}"),
+                    None => debug!("{line}"),
+                }
 
                 self.with_bar(id, |state| {
                     state.visible.push(line);
@@ -945,6 +974,143 @@ mod tests {
             frames.iter().all(|frame| frame.contains("[backend]")),
             "frames: {frames:?}"
         );
+    }
+
+    /// Every `DEBUG` message emitted while `f` runs, in order.
+    ///
+    /// The step-output log line is the only record of a build's output under
+    /// `--debug`, where the bars are hidden, so what it says is worth asserting on
+    /// directly rather than through the bar it is standing in for.
+    fn captured_debug_lines(f: impl FnOnce()) -> Vec<String> {
+        use std::sync::{Arc, Mutex};
+        use tracing::{Event as TracingEvent, Level, Subscriber, field};
+        use tracing_subscriber::{layer::Context, prelude::*, registry::LookupSpan};
+
+        #[derive(Clone, Default)]
+        struct Capture(Arc<Mutex<Vec<String>>>);
+
+        impl<S: Subscriber + for<'a> LookupSpan<'a>> tracing_subscriber::Layer<S> for Capture {
+            fn on_event(&self, event: &TracingEvent<'_>, _ctx: Context<'_, S>) {
+                if *event.metadata().level() != Level::DEBUG {
+                    return;
+                }
+
+                struct Message(String);
+                impl field::Visit for Message {
+                    fn record_debug(&mut self, f: &field::Field, value: &dyn std::fmt::Debug) {
+                        if f.name() == "message" {
+                            self.0 = format!("{value:?}");
+                        }
+                    }
+                }
+
+                let mut message = Message(String::new());
+                event.record(&mut message);
+                self.0.lock().expect("capture poisoned").push(message.0);
+            }
+        }
+
+        let capture = Capture::default();
+        let lines = capture.0.clone();
+        // No target filter: the layer takes every `DEBUG` event and the assertions
+        // below name the exact lines, so a filter would only be another thing able
+        // to make the test pass by seeing nothing.
+        tracing::subscriber::with_default(tracing_subscriber::registry().with(capture), f);
+
+        lines.lock().expect("capture poisoned").clone()
+    }
+
+    /// A step's output is logged with the canister name, because under `--debug` the
+    /// bars that would carry it are hidden and several canisters build at once.
+    #[test]
+    fn step_output_is_logged_with_the_canister_that_produced_it() {
+        let sink = sink();
+
+        let lines = captured_debug_lines(|| {
+            for (id, name) in [(0, "backend"), (1, "frontend")] {
+                sink.emit(Event::TaskStarted {
+                    id: TaskId(id),
+                    kind: TaskKind::Steps {
+                        output_label: "Build".into(),
+                    },
+                    label: Some(name.into()),
+                });
+            }
+
+            // Interleaved, the way two canisters building at once arrive.
+            sink.emit(Event::StepOutput {
+                id: TaskId(0),
+                line: "compiling backend".into(),
+            });
+            sink.emit(Event::StepOutput {
+                id: TaskId(1),
+                line: "bundling frontend".into(),
+            });
+            sink.emit(Event::StepOutput {
+                id: TaskId(0),
+                line: "linking backend".into(),
+            });
+        });
+
+        assert_eq!(
+            lines,
+            [
+                "[backend] compiling backend",
+                "[frontend] bundling frontend",
+                "[backend] linking backend",
+            ]
+        );
+    }
+
+    /// An unlabelled task has no name to attribute its output to, and a line still
+    /// has to reach the log rather than being dropped for want of a prefix.
+    #[test]
+    fn an_unlabelled_task_logs_its_output_unattributed() {
+        let sink = sink();
+
+        let lines = captured_debug_lines(|| {
+            sink.emit(Event::TaskStarted {
+                id: TaskId(0),
+                kind: TaskKind::Steps {
+                    output_label: "Build".into(),
+                },
+                label: None,
+            });
+            sink.emit(Event::StepOutput {
+                id: TaskId(0),
+                line: "no one to blame".into(),
+            });
+
+            // A line arriving after its task finished is logged too, bare.
+            sink.emit(Event::StepOutput {
+                id: TaskId(9),
+                line: "late line".into(),
+            });
+        });
+
+        assert_eq!(lines, ["no one to blame", "late line"]);
+    }
+
+    /// A byte task's label is undecorated on its bar, so it stays undecorated here
+    /// too. Byte transfers report no step output today, so this only fixes what the
+    /// shape would be rather than changing anything visible.
+    #[test]
+    fn a_byte_task_attributes_output_with_its_undecorated_label() {
+        let sink = sink();
+
+        let lines = captured_debug_lines(|| {
+            sink.emit(Event::TaskStarted {
+                id: TaskId(0),
+                kind: TaskKind::Bytes { total: 100 },
+                label: Some("WASM module".into()),
+            });
+            sink.emit(Event::StepOutput {
+                id: TaskId(0),
+                line: "chunk 1".into(),
+            });
+        });
+
+        assert_eq!(lines, ["WASM module chunk 1"]);
     }
 
     #[test]

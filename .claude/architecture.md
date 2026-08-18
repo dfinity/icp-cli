@@ -94,7 +94,7 @@ are drawn in.
   reports events. To check that this still holds:
 
   ```bash
-  grep -rl indicatif crates/icp-cli/src crates/icp/src
+  grep -rl 'use indicatif' crates/icp-cli/src crates/icp/src
   ```
 
 - A library that produces output lines — a subprocess, a sync plugin — is handed an

@@ -239,6 +239,16 @@ impl IndicatifSink {
         }
     }
 
+    /// Run `f` against the bar belonging to `id`.
+    ///
+    /// A task with no bar is not an error: an event can arrive after its task has
+    /// finished and been removed, and the code being replaced ignored those too.
+    fn with_bar(&self, id: TaskId, f: impl FnOnce(&mut BarState)) {
+        if let Some(state) = self.bars.lock().expect("bars poisoned").get_mut(&id) {
+            f(state);
+        }
+    }
+
     /// Redraw the step in progress: its title, then the tail of its output.
     fn redraw_step(state: &BarState) {
         let Some(title) = &state.step_title else {
@@ -259,37 +269,29 @@ impl EventSink for IndicatifSink {
             Event::TaskStarted { id, kind, label } => self.start(id, kind, label),
 
             Event::TaskMessage { id, message } => {
-                if let Some(state) = self.bars.lock().expect("bars poisoned").get(&id) {
-                    state.bar.set_message(message);
-                }
+                self.with_bar(id, |state| state.bar.set_message(message));
             }
 
             Event::TaskPosition { id, position } => {
-                if let Some(state) = self.bars.lock().expect("bars poisoned").get(&id) {
-                    state.bar.set_position(position);
-                }
+                self.with_bar(id, |state| state.bar.set_position(position));
             }
 
-            Event::StepStarted { id, title, .. } => {
-                if let Some(state) = self.bars.lock().expect("bars poisoned").get_mut(&id) {
-                    state.step_title = Some(title);
-                    state.visible = RollingLines::new(VISIBLE_STEP_LINES);
-                }
-            }
+            Event::StepStarted { id, title, .. } => self.with_bar(id, |state| {
+                state.step_title = Some(title);
+                state.visible = RollingLines::new(VISIBLE_STEP_LINES);
+            }),
 
             Event::StepOutput { id, line } => {
                 debug!("{line}");
 
-                if let Some(state) = self.bars.lock().expect("bars poisoned").get_mut(&id) {
+                self.with_bar(id, |state| {
                     state.visible.push(line);
                     Self::redraw_step(state);
-                }
+                });
             }
 
             Event::StepFinished { id, .. } => {
-                if let Some(state) = self.bars.lock().expect("bars poisoned").get_mut(&id) {
-                    state.step_title = None;
-                }
+                self.with_bar(id, |state| state.step_title = None);
             }
 
             Event::TaskFinished {
@@ -339,14 +341,48 @@ mod rendering {
     /// compared directly between two runs.
     const ANIMATION_GLYPHS: [char; 5] = ['✶', '✸', '✹', '✺', '✷'];
 
+    /// Drop the colour codes from a frame.
+    ///
+    /// `indicatif` only calls `ProgressStyle::set_for_stderr` when its draw target
+    /// *is* stderr, which a [`TermLike`] target never is, so the styled template
+    /// fields fall back to `console`'s stdout-based colour detection: run from a
+    /// terminal the frames arrive wrapped in SGR codes, run from a pipe they do not.
+    /// What is drawn does not depend on how the developer started `cargo test`, so
+    /// the codes come off before anything else looks at the frame.
+    fn strip_ansi(frame: &str) -> String {
+        let mut out = String::with_capacity(frame.len());
+        let mut chars = frame.chars();
+
+        while let Some(c) = chars.next() {
+            if c != '\u{1b}' {
+                out.push(c);
+                continue;
+            }
+
+            // A CSI sequence — `ESC [`, which is all `console` emits — runs up to and
+            // including its final byte in `@..=~`. Any other escape is two characters.
+            if chars.next() == Some('[') {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        out
+    }
+
     impl RecordingTerm {
         /// Every frame drawn, with the spinner's animation collapsed to a single
         /// marker and the resulting consecutive duplicates removed.
         ///
         /// What survives is the sequence of *states* a bar passed through — prefix,
-        /// message, and final tick — which is exactly what has to match. Three things
+        /// message, and final tick — which is exactly what has to match. Four things
         /// are dropped on the way:
         ///
+        /// - the colour codes, which depend on whether the test binary's stdout is a
+        ///   terminal rather than on what was drawn (see [`strip_ansi`]);
         /// - the blank line indicatif writes to pad out the rest of the terminal row,
         ///   which is a function of the frame it follows;
         /// - the animation glyph, which advances on a timer and so differs run to run;
@@ -360,6 +396,7 @@ mod rendering {
                 .lock()
                 .expect("writes poisoned")
                 .iter()
+                .map(|frame| strip_ansi(frame))
                 .filter(|frame| !frame.trim().is_empty())
                 .map(|frame| {
                     frame
@@ -379,14 +416,15 @@ mod rendering {
             frames
         }
 
-        /// Every frame drawn, untouched apart from dropping the blank padding lines.
+        /// Every frame drawn, untouched apart from dropping the blank padding lines
+        /// and the environment-dependent colour codes.
         pub(super) fn raw_frames(&self) -> Vec<String> {
             self.writes
                 .lock()
                 .expect("writes poisoned")
                 .iter()
+                .map(|frame| strip_ansi(frame))
                 .filter(|frame| !frame.trim().is_empty())
-                .cloned()
                 .collect()
         }
 
@@ -453,6 +491,43 @@ mod rendering {
         Reporter::new(Arc::new(IndicatifSink::with_draw_target(recording_target(
             term,
         ))))
+    }
+
+    /// Whether the recorded frames carry colour codes is a property of the machine
+    /// the tests run on, not of the sink: a [`TermLike`] draw target is never stderr,
+    /// so `indicatif` leaves the styled fields following `console`'s stdout-based
+    /// detection, and the goldens below would only hold when `cargo test` was piped.
+    /// Both views have to normalize that away before the animation-glyph and
+    /// message-less-frame rules can see anything either.
+    #[test]
+    fn normalization_strips_the_colour_codes_a_terminal_would_add() {
+        let term = RecordingTerm::default();
+        for line in [
+            "[backend] \u{1b}[34m✶\u{1b}[0m ",
+            "[backend] \u{1b}[34m✶\u{1b}[0m Installing...",
+            "[backend] \u{1b}[32m✔\u{1b}[0m Installed successfully",
+        ] {
+            term.write_line(line).expect("recording cannot fail");
+        }
+
+        assert_eq!(
+            term.raw_frames(),
+            [
+                "[backend] ✶ ",
+                "[backend] ✶ Installing...",
+                "[backend] ✔ Installed successfully",
+            ]
+        );
+
+        // The message-less frame still drops out, which the trailing-glyph rule can
+        // only tell once the reset code sitting after that glyph is gone.
+        assert_eq!(
+            term.frames(),
+            [
+                "[backend] ~ Installing...",
+                "[backend] ✔ Installed successfully",
+            ]
+        );
     }
 
     /// Every frame the event stream draws for one canister's outcome.

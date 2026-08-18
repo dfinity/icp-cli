@@ -113,7 +113,7 @@ pub(super) async fn execute_commands(
             //
             // Stdout
             tokio::spawn({
-                // Clone the stdio sender for use in the stdout handling task
+                // Clone the stdio writer for use in the stdout handling task
                 let stdio = stdio.clone();
 
                 async move {
@@ -128,7 +128,7 @@ pub(super) async fn execute_commands(
             //
             // Stderr
             tokio::spawn({
-                // Clone the stdio sender for use in the stderr handling task
+                // Clone the stdio writer for use in the stderr handling task
                 let stdio = stdio.clone();
 
                 async move {

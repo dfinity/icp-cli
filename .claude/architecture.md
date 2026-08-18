@@ -87,7 +87,9 @@ calls. `crates/icp-events` defines the vocabulary (`Event`, `Reporter`, `Task`,
 are drawn in.
 
 - Operations take a `&Reporter`, never a `debug: bool`. Callers build one per operation with
-  `events::indicatif_reporter(ctx.debug)`.
+  `events::indicatif_reporter(ctx.debug)`. The multi-canister operations
+  (`build_many`, `sync_many`, `create_bundle`) still take one bool, `all_step_output`: it
+  decides how much of a failure is replayed, not how anything is drawn.
 - Nothing outside `events.rs` imports `indicatif`, with two exceptions that never went
   through the shared renderer and build their own one-off spinners:
   `commands/canister/migrate_id.rs` and `commands/identity/link/web.rs`. Everything else

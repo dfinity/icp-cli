@@ -90,6 +90,7 @@ cryptoki.workspace = true
 predicates.workspace = true
 rand.workspace = true
 send_ctrlc.workspace = true
+serde_cbor.workspace = true
 serde_yaml.workspace = true
 serial_test.workspace = true
 test-tag.workspace = true

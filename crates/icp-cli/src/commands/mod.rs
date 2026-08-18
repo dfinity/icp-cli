@@ -8,6 +8,7 @@ pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
 pub(crate) mod identity;
+pub(crate) mod message;
 pub(crate) mod network;
 pub(crate) mod new;
 pub(crate) mod parsers;
@@ -30,6 +31,8 @@ pub(crate) enum Command {
     Environment(environment::Command),
     #[command(subcommand)]
     Identity(identity::Command),
+    #[command(subcommand)]
+    Message(message::Command),
     #[command(subcommand)]
     Network(network::Command),
     New(new::IcpGenerateArgs),

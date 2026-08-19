@@ -110,7 +110,8 @@ impl ScriptRunner for HostScripts {
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        execute_commands(&invocation.commands, &invocation.cwd, &env_refs, stdio)
+        let reporter = super::stdio_reporter(stdio);
+        execute_commands(&invocation.commands, &invocation.cwd, &env_refs, &reporter)
             .await
             .map_err(|source| ScriptRunError {
                 source: Box::new(source),

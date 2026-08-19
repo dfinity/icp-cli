@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::Sender;
+use icp_events::StepReporter;
 
 use crate::manifest::adapter::script::Adapter;
 
@@ -9,7 +9,7 @@ use super::super::script::{ScriptError, execute};
 pub(super) async fn build(
     adapter: &Adapter,
     params: &Params,
-    stdio: Option<Sender<String>>,
+    reporter: &StepReporter,
 ) -> Result<(), ScriptError> {
     execute(
         adapter,
@@ -18,7 +18,7 @@ pub(super) async fn build(
             ("ICP_WASM_OUTPUT_PATH", params.output.as_ref()),
             ("ICP_CLI_ENVIRONMENT", &params.environment),
         ],
-        stdio,
+        reporter,
     )
     .await
 }
@@ -55,7 +55,7 @@ mod tests {
                 output: "/".into(),
                 environment: LOCAL.to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await
         .expect("failed to build script step");
@@ -91,7 +91,7 @@ mod tests {
                 output: "/".into(),
                 environment: LOCAL.to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await
         .expect("failed to build script step");
@@ -127,7 +127,7 @@ mod tests {
                 output: out_wasm.path().to_owned(),
                 environment: "staging".to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await
         .expect("failed to build script step");
@@ -155,7 +155,7 @@ mod tests {
                 output: "/".into(),
                 environment: LOCAL.to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await;
 
@@ -179,7 +179,7 @@ mod tests {
                 output: "/".into(),
                 environment: LOCAL.to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await;
 
@@ -203,7 +203,7 @@ mod tests {
                 output: "/".into(),
                 environment: LOCAL.to_owned(),
             },
-            None,
+            &StepReporter::null(),
         )
         .await;
 

@@ -23,7 +23,7 @@ use crate::{
     commands::{args::ArgsOpt, canister::create},
     operations::{
         binding_env_vars::set_binding_env_vars_many,
-        build::build_many_with_progress_bar,
+        build::build_many,
         candid_compat::check_candid_compatibility_many,
         create::{CreateFunding, CreateOperation, CreateTarget},
         install::{install_many, resolve_install_mode_and_status},
@@ -33,6 +33,7 @@ use crate::{
     },
     options::{IdentityOpt, arg_struct_change_help},
     progress::{ProgressManager, ProgressManagerSettings},
+    render::Renderer,
 };
 
 /// Deploy a project to an environment
@@ -182,15 +183,24 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // Build the selected canisters
     info!("Building canisters:");
 
-    build_many_with_progress_bar(
+    let (reporter, events) = icp_events::channel();
+    let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
+
+    let build_result = build_many(
         canisters_to_build,
         environment_selection.name(),
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
-        ctx.debug,
+        &reporter,
     )
-    .await?;
+    .await;
+
+    // Close the event stream so the renderer can finish, and let it flush
+    // (failure dumps) before the result is acted on.
+    drop(reporter);
+    render.await?;
+    build_result?;
 
     // Ensure the selected canisters exist, creating any that are missing.
     let env = ctx

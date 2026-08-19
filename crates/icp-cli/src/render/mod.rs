@@ -64,6 +64,7 @@ impl Renderer {
 fn step_header(kind: &TaskKind, number: usize, total: usize, label: &str) -> String {
     match kind {
         TaskKind::Build { .. } => format!("Building: step {number} of {total} {label}"),
+        TaskKind::Sync { .. } => format!("\nSyncing: {label} {number} of {total}"),
     }
 }
 
@@ -71,6 +72,7 @@ fn step_header(kind: &TaskKind, number: usize, total: usize, label: &str) -> Str
 fn output_label(kind: &TaskKind) -> &'static str {
     match kind {
         TaskKind::Build { .. } => "Build",
+        TaskKind::Sync { .. } => "Sync",
     }
 }
 
@@ -78,6 +80,7 @@ fn output_label(kind: &TaskKind) -> &'static str {
 fn success_message(kind: &TaskKind) -> String {
     match kind {
         TaskKind::Build { .. } => "Built successfully".to_owned(),
+        TaskKind::Sync { canister_id, .. } => format!("Synced successfully: {canister_id}"),
     }
 }
 
@@ -85,6 +88,7 @@ fn success_message(kind: &TaskKind) -> String {
 fn failure_message(kind: &TaskKind, message: &str) -> String {
     match kind {
         TaskKind::Build { .. } => format!("Failed to build canister: {message}"),
+        TaskKind::Sync { .. } => format!("Failed to sync canister: {message}"),
     }
 }
 
@@ -94,6 +98,18 @@ fn failure_header(kind: &TaskKind) -> String {
         TaskKind::Build { canister } => {
             format!("----- Failed to build canister '{canister}' -----")
         }
+        TaskKind::Sync {
+            canister,
+            canister_id,
+        } => format!("----- Failed to sync canister '{canister}': {canister_id} -----"),
+    }
+}
+
+/// Print output lines a task retained past its rolling step view (e.g.
+/// sync-plugin stderr), prefixed with the canister name.
+fn print_retained(kind: &TaskKind, lines: &[String]) {
+    for line in lines {
+        eprintln!("[{}] {line}", kind.canister());
     }
 }
 
@@ -103,12 +119,17 @@ pub(super) struct TaskLog {
     kind: TaskKind,
     finished_steps: Vec<StepLog>,
     current_step: Option<StepLog>,
-    failure: Option<String>,
+    failure: Option<Failure>,
 }
 
 struct StepLog {
     title: String,
     lines: RollingLines,
+}
+
+struct Failure {
+    message: String,
+    causes: Vec<String>,
 }
 
 impl TaskLog {
@@ -146,8 +167,8 @@ impl TaskLog {
         }
     }
 
-    fn fail(&mut self, message: String) {
-        self.failure = Some(message);
+    fn fail(&mut self, message: String, causes: Vec<String>) {
+        self.failure = Some(Failure { message, causes });
     }
 
     /// Render the captured output. When `all_steps` is true, output from
@@ -189,12 +210,15 @@ impl TaskLog {
 /// Print the failure dump for every failed task, in task-creation order.
 fn dump_failures(logs: &BTreeMap<TaskId, TaskLog>, all_steps: bool) {
     for log in logs.values() {
-        let Some(message) = &log.failure else {
+        let Some(failure) = &log.failure else {
             continue;
         };
 
         error!("{}", failure_header(&log.kind));
-        error!("'{message}'");
+        error!("'{}'", failure.message);
+        for cause in &failure.causes {
+            error!("  caused by: {cause}");
+        }
         for line in log.dump(all_steps) {
             error!("{line}");
         }

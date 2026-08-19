@@ -25,8 +25,9 @@ use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use snafu::prelude::*;
+// Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
+use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
-use tokio::sync::mpsc::Sender;
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 use wasmtime_wasi::p2::{OutputStream, Pollable, StreamError};
 use wasmtime_wasi::{DirPerms, FilePerms};
@@ -213,7 +214,7 @@ pub fn run_plugin(
     identity_principal: Principal,
     environment: String,
     compute_limit_secs: u64,
-    stdio: Option<Sender<String>>,
+    reporter: StepReporter,
 ) -> Result<Vec<String>, RunPluginError> {
     use wasmtime::component::{Component, Linker};
     use wasmtime::{Config, Engine, Store};
@@ -299,8 +300,13 @@ pub fn run_plugin(
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
-    let stdout_capture = LineCapture::new("stdout", stdio.clone(), None);
-    let stderr_capture = LineCapture::new("stderr", stdio.clone(), Some(persistent_stderr.clone()));
+    let stdout_capture = LineCapture::new("stdout", EventStream::Stdout, reporter.clone(), None);
+    let stderr_capture = LineCapture::new(
+        "stderr",
+        EventStream::Stderr,
+        reporter.clone(),
+        Some(persistent_stderr.clone()),
+    );
     wasi_builder
         .stdout(stdout_capture.clone())
         .stderr(stderr_capture.clone());
@@ -376,9 +382,9 @@ pub fn run_plugin(
 // `LineCapture` implements both `StdoutStream` (so it can be installed on a
 // `WasiCtxBuilder`) and `OutputStream` / `AsyncWrite` (so the bytes written
 // by the guest flow through the same code path). Each write is split on
-// newlines; complete lines have ANSI escapes stripped and are pushed to the
-// rolling-view `Sender<String>` via `try_send` (best-effort). For stderr,
-// the same lines are also appended to `persistent`, which is drained by
+// newlines; complete lines have ANSI escapes stripped and are emitted as
+// output events on the step reporter (non-blocking). For stderr, the same
+// lines are also appended to `persistent`, which is drained by
 // `run_plugin()` after `exec()` returns. Total accepted bytes are capped at
 // `MAX_PLUGIN_OUTPUT` per stream; further bytes are dropped and `finalize`
 // emits a single "… N bytes of <label> truncated" line.
@@ -397,20 +403,23 @@ struct CaptureState {
 struct LineCapture {
     state: Arc<StdMutex<CaptureState>>,
     label: &'static str,
-    forward: Option<Sender<String>>,
+    stream: EventStream,
+    reporter: StepReporter,
     persistent: Option<Arc<StdMutex<Vec<String>>>>,
 }
 
 impl LineCapture {
     fn new(
         label: &'static str,
-        forward: Option<Sender<String>>,
+        stream: EventStream,
+        reporter: StepReporter,
         persistent: Option<Arc<StdMutex<Vec<String>>>>,
     ) -> Self {
         Self {
             state: Arc::default(),
             label,
-            forward,
+            stream,
+            reporter,
             persistent,
         }
     }
@@ -441,9 +450,7 @@ impl LineCapture {
     }
 
     fn emit(&self, line: String) {
-        if let Some(tx) = &self.forward {
-            let _ = tx.try_send(line.clone());
-        }
+        self.reporter.output(self.stream, line.clone());
         if let Some(p) = &self.persistent {
             p.lock().unwrap().push(line);
         }
@@ -556,7 +563,7 @@ mod tests {
             anon(),
             "test".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(result, Err(RunPluginError::LoadComponent { .. })));
     }
@@ -594,7 +601,7 @@ mod tests {
             anon(),
             "test".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
     }
@@ -622,7 +629,7 @@ mod tests {
             anon(),
             "test".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
     }
@@ -643,7 +650,7 @@ mod tests {
             anon(),
             "test".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(result, Err(RunPluginError::ReadFile { .. })));
     }
@@ -671,7 +678,7 @@ mod tests {
             anon(),
             "test".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(result, Err(RunPluginError::SymlinkFile { .. })));
     }
@@ -692,7 +699,7 @@ mod tests {
             anon(),
             "ok".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(result.is_ok());
     }
@@ -713,7 +720,7 @@ mod tests {
             anon(),
             "error".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(
             result,
@@ -739,7 +746,7 @@ mod tests {
             anon(),
             "spin".to_string(),
             1,
-            None,
+            StepReporter::null(),
         );
         let err = result.expect_err("spinning plugin should hit the compute limit");
         // The trap surfaces through the CallExec source chain, so walk it and
@@ -756,12 +763,25 @@ mod tests {
         );
     }
 
+    /// Drain the emitted output events into (stream, line) pairs.
+    fn output_lines(
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<icp_events::Event>,
+    ) -> Vec<(EventStream, String)> {
+        let mut lines = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            if let icp_events::EventKind::Output { stream, line } = event.kind {
+                lines.push((stream, line));
+            }
+        }
+        lines
+    }
+
     #[tokio::test(flavor = "multi_thread")]
-    async fn plugin_stdout_forwarded_through_stdio_channel() {
+    async fn plugin_stdout_forwarded_through_step_reporter() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        let (reporter, mut rx) = icp_events::step_channel();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),
@@ -774,12 +794,18 @@ mod tests {
                 anon(),
                 "print".to_string(),
                 DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
+                reporter,
             )
         });
         assert!(result.is_ok());
-        let msg = rx.try_recv().expect("expected stdout message on channel");
-        assert!(msg.contains("stdout from plugin"), "got: {msg}");
+        let lines = output_lines(&mut rx);
+        assert!(
+            lines
+                .iter()
+                .any(|(stream, line)| matches!(stream, EventStream::Stdout)
+                    && line.contains("stdout from plugin")),
+            "got: {lines:?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -787,7 +813,7 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        let (reporter, mut rx) = icp_events::step_channel();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),
@@ -800,13 +826,18 @@ mod tests {
                 anon(),
                 "hello".to_string(),
                 DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
+                reporter,
             )
         });
         let lines = result.expect("plugin should succeed");
         assert_eq!(lines, vec!["hello".to_string()]);
-        // The same line is forwarded to the rolling-view channel.
-        let live = rx.try_recv().expect("expected stderr line on channel");
-        assert!(live.contains("hello"), "got: {live}");
+        // The same line is also streamed as a live stderr event.
+        let live = output_lines(&mut rx);
+        assert!(
+            live.iter()
+                .any(|(stream, line)| matches!(stream, EventStream::Stderr)
+                    && line.contains("hello")),
+            "got: {live:?}"
+        );
     }
 }

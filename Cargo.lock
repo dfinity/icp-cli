@@ -3778,6 +3778,7 @@ dependencies = [
 name = "icp-events"
 version = "1.3.0"
 dependencies = [
+ "candid",
  "serde",
  "tokio",
 ]
@@ -3795,6 +3796,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "icp-canister-interfaces",
+ "icp-events",
  "snafu",
  "tokio",
  "wasmtime",

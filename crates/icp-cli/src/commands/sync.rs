@@ -12,6 +12,7 @@ use tracing::info;
 use crate::{
     operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
+    render::Renderer,
 };
 
 /// Synchronize canisters
@@ -125,7 +126,11 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .collect();
 
     let pkg_cache = ctx.dirs.package_cache()?;
-    sync_many(
+
+    let (reporter, events) = icp_events::channel();
+    let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
+
+    let result = sync_many(
         ctx.syncer.clone(),
         agent,
         sync_canisters,
@@ -133,10 +138,16 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         env.network.name.clone(),
         canister_ids,
         args.proxy,
-        ctx.debug,
         &pkg_cache,
+        &reporter,
     )
-    .await?;
+    .await;
+
+    // Close the event stream so the renderer can finish, and let it flush
+    // (failure dumps) before the result is acted on.
+    drop(reporter);
+    render.await?;
+    result?;
 
     Ok(())
 }

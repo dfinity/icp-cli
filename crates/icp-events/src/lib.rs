@@ -17,6 +17,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
+use candid::Principal;
 use serde::Serialize;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -63,7 +64,13 @@ pub enum EventKind {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TaskKind {
-    Build { canister: String },
+    Build {
+        canister: String,
+    },
+    Sync {
+        canister: String,
+        canister_id: Principal,
+    },
 }
 
 impl TaskKind {
@@ -71,6 +78,7 @@ impl TaskKind {
     pub fn canister(&self) -> &str {
         match self {
             TaskKind::Build { canister } => canister,
+            TaskKind::Sync { canister, .. } => canister,
         }
     }
 }
@@ -95,12 +103,52 @@ pub enum StepOutcome {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum TaskOutcome {
-    Succeeded,
-    /// `message` is for display only; the typed error stays on the
-    /// operation's return path.
+    Succeeded {
+        /// Output lines that belong on the persistent output channel after
+        /// success — e.g. sync-plugin stderr, which the rolling step view
+        /// would otherwise discard. Most tasks retain nothing.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        retained_output: Vec<String>,
+    },
+    /// Failure descriptions are for display only; the typed error stays on
+    /// the operation's return path.
     Failed {
         message: String,
+        /// The rendered `source()` chain of the failure, outermost first.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        causes: Vec<String>,
     },
+}
+
+impl TaskOutcome {
+    /// Success with nothing retained.
+    pub fn succeeded() -> Self {
+        TaskOutcome::Succeeded {
+            retained_output: Vec::new(),
+        }
+    }
+
+    /// Failure with no cause chain.
+    pub fn failed(message: impl Into<String>) -> Self {
+        TaskOutcome::Failed {
+            message: message.into(),
+            causes: Vec::new(),
+        }
+    }
+}
+
+/// Create a lone [`StepReporter`] wired to its own receiver, for callers that
+/// need to observe a single step's output without the task/step ceremony —
+/// primarily tests.
+pub fn step_channel() -> (StepReporter, UnboundedReceiver<Event>) {
+    let (tx, rx) = unbounded_channel();
+    (
+        StepReporter {
+            tx: Some(tx),
+            task_id: TaskId(0),
+        },
+        rx,
+    )
 }
 
 /// Create a connected reporter/receiver pair. The receiver yields `None` once
@@ -209,28 +257,6 @@ impl StepReporter {
     pub fn null() -> Self {
         Self {
             tx: None,
-            task_id: TaskId(0),
-        }
-    }
-
-    /// TEMPORARY: adapt a legacy line channel into a [`StepReporter`].
-    ///
-    /// Output lines emitted through the returned reporter are forwarded to
-    /// `lines` by a background task, which drains and exits once the reporter
-    /// and all of its clones are dropped. Used by call sites that still
-    /// render through the old progress-bar channel (sync); remove once those
-    /// paths take a real [`Reporter`].
-    pub fn bridge_lines(lines: tokio::sync::mpsc::Sender<String>) -> Self {
-        let (tx, mut rx) = unbounded_channel::<Event>();
-        tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                if let EventKind::Output { line, .. } = event.kind {
-                    let _ = lines.send(line).await;
-                }
-            }
-        });
-        Self {
-            tx: Some(tx),
             task_id: TaskId(0),
         }
     }

@@ -24,20 +24,39 @@ use bytes::Bytes;
 use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
+use semver::{Version, VersionReq};
 use snafu::prelude::*;
 // Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
 use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
+use wasmtime::component::{Component, HasSelf, Linker};
+use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 use wasmtime_wasi::p2::{OutputStream, Pollable, StreamError};
 use wasmtime_wasi::{DirPerms, FilePerms};
 
-wasmtime::component::bindgen!({
-    world: "sync-plugin",
-    path: "sync-plugin.wit",
-});
+// Both the current and the legacy plugin interfaces are bound, each in its own
+// module so their generated type names don't collide. `run_plugin` reads the
+// interface version from the component's own metadata (see `detect_plugin_abi`)
+// and drives it through the matching module, so plugins built against either
+// interface load. The two interfaces are currently structurally identical; the
+// split exists so later breaking changes to the current interface can land
+// without dropping support for already-built plugins.
+mod v2 {
+    wasmtime::component::bindgen!({
+        world: "sync-plugin",
+        path: "sync-plugin.wit",
+    });
+}
 
-use icp::sync_plugin::types::CallType;
+mod v1 {
+    wasmtime::component::bindgen!({
+        world: "sync-plugin",
+        path: "sync-plugin-v1.wit",
+    });
+}
+
+use v2::icp::sync_plugin::types::CallType;
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
@@ -65,31 +84,35 @@ impl wasmtime_wasi::WasiView for HostState {
     }
 }
 
-// `types::Host` is an empty marker trait generated for the `types` interface.
-impl icp::sync_plugin::types::Host for HostState {}
-
-impl SyncPluginImports for HostState {
-    fn canister_call(&mut self, req: CanisterCallRequest) -> Result<Vec<u8>, String> {
+impl HostState {
+    /// Perform a canister call to the canister being synced. Shared by both
+    /// interface versions.
+    fn do_canister_call(
+        &mut self,
+        method: String,
+        arg_bytes: Vec<u8>,
+        call_type: CallType,
+        direct: bool,
+        cycles: u64,
+    ) -> Result<Vec<u8>, String> {
         use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 
-        let arg_bytes = req.arg;
         let cid = self.target_canister_id;
-        let method = req.method.clone();
         let agent = Arc::clone(&self.agent);
-        let proxy = if req.direct { None } else { self.proxy };
+        let proxy = if direct { None } else { self.proxy };
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
-            match req.call_type {
+            match call_type {
                 CallType::Update => {
                     if let Some(proxy_cid) = proxy {
                         let proxy_args = ProxyArgs {
                             canister_id: cid,
                             method: method.clone(),
                             args: arg_bytes,
-                            cycles: candid::Nat::from(req.cycles),
+                            cycles: candid::Nat::from(cycles),
                         };
                         let encoded = Encode!(&proxy_args)
                             .map_err(|e| format!("proxy encode failed: {e}"))?;
@@ -126,6 +149,38 @@ impl SyncPluginImports for HostState {
         self.epoch_extension
             .fetch_add(elapsed_ticks, Ordering::Relaxed);
         result
+    }
+}
+
+// -- v0.2.0 interface. ---------------------------------------------------------
+
+// `types::Host` is an empty marker trait generated for the `types` interface.
+impl v2::icp::sync_plugin::types::Host for HostState {}
+
+impl v2::SyncPluginImports for HostState {
+    fn canister_call(
+        &mut self,
+        req: v2::icp::sync_plugin::types::CanisterCallRequest,
+    ) -> Result<Vec<u8>, String> {
+        self.do_canister_call(req.method, req.arg, req.call_type, req.direct, req.cycles)
+    }
+}
+
+// -- v0.1.0 interface. ---------------------------------------------------------
+
+impl v1::icp::sync_plugin::types::Host for HostState {}
+
+impl v1::SyncPluginImports for HostState {
+    fn canister_call(
+        &mut self,
+        req: v1::icp::sync_plugin::types::CanisterCallRequest,
+    ) -> Result<Vec<u8>, String> {
+        // v1's `call-type` is a distinct generated enum; map it to the shared one.
+        let call_type = match req.call_type {
+            v1::icp::sync_plugin::types::CallType::Update => CallType::Update,
+            v1::icp::sync_plugin::types::CallType::Query => CallType::Query,
+        };
+        self.do_canister_call(req.method, req.arg, call_type, req.direct, req.cycles)
     }
 }
 
@@ -192,6 +247,12 @@ pub enum RunPluginError {
         path: Utf8PathBuf,
     },
 
+    #[snafu(display(
+        "wasm component at {path} does not implement a supported sync-plugin interface ({detail}). \
+         Supported: icp:sync-plugin@0.1 and icp:sync-plugin@0.2."
+    ))]
+    UnsupportedInterface { path: Utf8PathBuf, detail: String },
+
     #[snafu(display("failed to call exec() on plugin at {path}"))]
     CallExec {
         source: wasmtime::Error,
@@ -200,6 +261,72 @@ pub enum RunPluginError {
 
     #[snafu(display("plugin returned error: {message}"))]
     PluginFailed { message: String },
+}
+
+/// Which version of the sync-plugin interface a component was built against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PluginAbi {
+    /// Current interface (`icp:sync-plugin@0.2.x`).
+    V2,
+    /// Legacy interface (`icp:sync-plugin@0.1.x`).
+    V1,
+}
+
+/// The interface package a `use`-ing plugin component imports, whose version we
+/// read to pick the ABI. wit-bindgen emits this import for any world that pulls
+/// types from the interface, so it is present on every real plugin.
+const TYPES_INTERFACE_PREFIX: &str = "icp:sync-plugin/types@";
+
+/// Determine which interface a component implements by reading the version off
+/// its imported `icp:sync-plugin/types@<version>` instance — the plugin's own
+/// declared metadata — rather than probing with a trial instantiation. The
+/// version is matched with semver caret requirements, so each supported minor
+/// (the breaking unit for 0.x) accepts any patch release within it.
+fn detect_plugin_abi(
+    engine: &Engine,
+    component: &Component,
+    wasm_path: &Utf8PathBuf,
+) -> Result<PluginAbi, RunPluginError> {
+    let raw = component
+        .component_type()
+        .imports(engine)
+        .find_map(|(name, _)| name.strip_prefix(TYPES_INTERFACE_PREFIX).map(str::to_owned));
+
+    let Some(raw) = raw else {
+        return UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("no {TYPES_INTERFACE_PREFIX}<version> import found"),
+        }
+        .fail();
+    };
+
+    let version = Version::parse(&raw).map_err(|source| {
+        UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("interface version '{raw}' is not valid semver: {source}"),
+        }
+        .build()
+    })?;
+
+    // `^0.1`/`^0.2` follow semver's 0.x rule: they match within the minor and
+    // exclude the next one (>=0.1.0, <0.2.0 and >=0.2.0, <0.3.0 respectively).
+    if VersionReq::parse("^0.2")
+        .expect("valid req")
+        .matches(&version)
+    {
+        Ok(PluginAbi::V2)
+    } else if VersionReq::parse("^0.1")
+        .expect("valid req")
+        .matches(&version)
+    {
+        Ok(PluginAbi::V1)
+    } else {
+        UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("unsupported interface version {version}"),
+        }
+        .fail()
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -216,9 +343,6 @@ pub fn run_plugin(
     compute_limit_secs: u64,
     reporter: StepReporter,
 ) -> Result<Vec<String>, RunPluginError> {
-    use wasmtime::component::{Component, Linker};
-    use wasmtime::{Config, Engine, Store};
-
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.max_wasm_stack(MAX_WASM_STACK);
@@ -284,7 +408,9 @@ pub fn run_plugin(
     // Read each declared file on the host and pass its content inline. The same
     // path-safety checks as `dirs` apply: reject escaping or symlinked paths so
     // a read cannot leave `base_dir`.
-    let mut file_inputs: Vec<FileInput> = Vec::with_capacity(files.len());
+    // Held as plain (name, content) pairs so they can be converted to whichever
+    // interface version's `file-input` record the plugin turns out to use.
+    let mut file_contents: Vec<(String, String)> = Vec::with_capacity(files.len());
     for name in &files {
         ensure!(!crate::path::escapes_base(name), UnsafeFileSnafu { name });
         if let Some(link) = crate::path::first_symlink_component(&base_dir, name) {
@@ -293,10 +419,7 @@ pub fn run_plugin(
         let path = base_dir.join(name);
         let content =
             std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
-        file_inputs.push(FileInput {
-            name: name.clone(),
-            content,
-        });
+        file_contents.push((name.clone(), content));
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
@@ -321,16 +444,6 @@ pub fn run_plugin(
         epoch_extension: epoch_extension.clone(),
     };
 
-    let mut linker: Linker<HostState> = Linker::new(&engine);
-    wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-        path: wasm_path.clone(),
-    })?;
-    SyncPlugin::add_to_linker::<_, wasmtime::component::HasSelf<_>>(&mut linker, |s| s).context(
-        InstantiateSnafu {
-            path: wasm_path.clone(),
-        },
-    )?;
-
     let mut store = Store::new(&engine, host_state);
     store.set_epoch_deadline(compute_limit_secs);
     store.epoch_deadline_callback(move |_| {
@@ -345,21 +458,71 @@ pub fn run_plugin(
         }
     });
 
-    let plugin =
-        SyncPlugin::instantiate(&mut store, &component, &linker).context(InstantiateSnafu {
-            path: wasm_path.clone(),
-        })?;
+    let canister_id_text = target_canister_id.to_text();
+    let identity_text = identity_principal.to_text();
+    let proxy_text = proxy.map(|p| p.to_text());
 
-    let input = SyncExecInput {
-        canister_id: target_canister_id.to_text(),
-        environment,
-        dirs,
-        files: file_inputs,
-        identity_principal: identity_principal.to_text(),
-        proxy_canister_id: proxy.map(|p| p.to_text()),
+    // Which interface the plugin was built against is read from the component's
+    // own declared metadata (see `detect_plugin_abi`) rather than probed by
+    // trial instantiation, then driven through the matching bindgen world.
+    let call_result = match detect_plugin_abi(&engine, &component, &wasm_path)? {
+        PluginAbi::V2 => {
+            let mut linker: Linker<HostState> = Linker::new(&engine);
+            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+                path: wasm_path.clone(),
+            })?;
+            v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let plugin = v2::SyncPlugin::instantiate(&mut store, &component, &linker).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let input = v2::SyncExecInput {
+                canister_id: canister_id_text,
+                environment,
+                dirs,
+                files: file_contents
+                    .into_iter()
+                    .map(|(name, content)| v2::FileInput { name, content })
+                    .collect(),
+                identity_principal: identity_text,
+                proxy_canister_id: proxy_text,
+            };
+            plugin.call_exec(&mut store, &input)
+        }
+        PluginAbi::V1 => {
+            let mut linker: Linker<HostState> = Linker::new(&engine);
+            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+                path: wasm_path.clone(),
+            })?;
+            v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let plugin = v1::SyncPlugin::instantiate(&mut store, &component, &linker).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let input = v1::SyncExecInput {
+                canister_id: canister_id_text,
+                environment,
+                dirs,
+                files: file_contents
+                    .into_iter()
+                    .map(|(name, content)| v1::FileInput { name, content })
+                    .collect(),
+                identity_principal: identity_text,
+                proxy_canister_id: proxy_text,
+            };
+            plugin.call_exec(&mut store, &input)
+        }
     };
-
-    let call_result = plugin.call_exec(&mut store, &input);
 
     // Flush any partial line and emit the truncation note (if any) before
     // we hand control back, so the last line of plugin output isn't lost.
@@ -807,6 +970,47 @@ mod tests {
                     && line.contains("stdout from plugin")),
             "got: {lines:?}"
         );
+    }
+
+    #[test]
+    fn legacy_v1_plugin_is_detected_and_driven() {
+        // A plugin built against the v0.1.0 interface must still load: the host
+        // reads its declared interface version and drives it through the v1 path.
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "ok".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
+            None,
+        );
+        assert!(result.is_ok());
+        // Its error surface flows through the same machinery as v0.2.0 plugins.
+        let result = run_plugin(
+            wasm_path.into(),
+            ".".into(),
+            vec![],
+            vec![],
+            anon(),
+            dummy_agent(),
+            None,
+            anon(),
+            "error".to_string(),
+            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
+            None,
+        );
+        assert!(matches!(
+            result,
+            Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate v1 failure"
+        ));
     }
 
     #[tokio::test(flavor = "multi_thread")]

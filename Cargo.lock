@@ -3813,6 +3813,7 @@ dependencies = [
  "ic-agent",
  "icp-canister-interfaces",
  "icp-events",
+ "semver",
  "snafu",
  "tokio",
  "wasmtime",

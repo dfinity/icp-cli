@@ -75,7 +75,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 ```
 
 `PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
-`host_canister_id` (the canister being synced), `agent`, `proxy`,
+`fields`, `host_canister_id` (the canister being synced), `agent`, `proxy`,
 `identity_principal`, `environment`, `compute_limit_secs`, the exposed
 `canister_ids` table, the `callable: CallableCanisters` enforcement set, and
 `stdio`. The CLI resolves the manifest's declared `canisters:` into
@@ -188,7 +188,8 @@ pub struct Adapter {
     pub sha256: Option<String>,
     pub dirs: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
-    pub canisters: Option<Vec<String>>,   // extra callable canisters, by name
+    pub fields: Option<HashMap<String, String>>, // inline key-value fields
+    pub canisters: Option<Vec<String>>, // extra callable canisters, by name
 }
 ```
 

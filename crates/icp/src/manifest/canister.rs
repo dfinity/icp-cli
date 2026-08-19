@@ -793,6 +793,7 @@ mod tests {
                                 sha256: None,
                                 dirs: Some(vec!["assets/seed-data/".to_string()]),
                                 files: None,
+                                fields: None,
                                 canisters: None,
                             }
                         )]
@@ -838,6 +839,7 @@ mod tests {
                             ),
                             dirs: None,
                             files: None,
+                            fields: None,
                             canisters: None,
                         })]
                     }),

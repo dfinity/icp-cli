@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -20,6 +22,8 @@ use super::prebuilt::SourceField;
 ///     - assets/seed-data
 ///   files:                              # files read by the host and passed inline
 ///     - config.txt
+///   fields:                             # key-value fields passed inline
+///     api_url: https://example.com
 /// ```
 ///
 /// Example (remote URL — `sha256` is required):
@@ -46,6 +50,10 @@ pub struct Adapter {
     /// the plugin as part of `sync-exec-input.files`.
     pub files: Option<Vec<String>>,
 
+    /// Key-value fields passed to the plugin as part of `sync-exec-input.fields`.
+    /// Values are strings; the plugin decides how to interpret them.
+    pub fields: Option<HashMap<String, String>>,
+
     /// Canisters this plugin may call in addition to the canister being synced.
     /// Each entry is a canister name resolved against the project's canister ID
     /// table for the environment being synced (e.g. `backend`, or a namespaced
@@ -64,6 +72,7 @@ impl<'de> Deserialize<'de> for Adapter {
             sha256: Option<String>,
             dirs: Option<Vec<String>>,
             files: Option<Vec<String>>,
+            fields: Option<HashMap<String, String>>,
             canisters: Option<Vec<String>>,
         }
 
@@ -78,6 +87,7 @@ impl<'de> Deserialize<'de> for Adapter {
             sha256: h.sha256,
             dirs: h.dirs,
             files: h.files,
+            fields: h.fields,
             canisters: h.canisters,
         })
     }
@@ -104,6 +114,7 @@ mod tests {
                 sha256: None,
                 dirs: None,
                 files: None,
+                fields: None,
                 canisters: None,
             },
         );
@@ -131,8 +142,29 @@ mod tests {
                 sha256: Some("abc123".to_string()),
                 dirs: Some(vec!["assets/seed-data".to_string(), "config".to_string()]),
                 files: Some(vec!["config.txt".to_string()]),
+                fields: None,
                 canisters: None,
             },
+        );
+    }
+
+    #[test]
+    fn fields_parse_as_a_string_map() {
+        let adapter = serde_yaml::from_str::<Adapter>(
+            r#"
+            path: plugins/my-sync.wasm
+            fields:
+              api_url: https://example.com
+              token: abc123
+            "#,
+        )
+        .expect("failed to deserialize Adapter with fields");
+        assert_eq!(
+            adapter.fields,
+            Some(HashMap::from([
+                ("api_url".to_string(), "https://example.com".to_string()),
+                ("token".to_string(), "abc123".to_string()),
+            ])),
         );
     }
 
@@ -188,6 +220,7 @@ mod tests {
                 sha256: Some("a665a45920422f9d417e".to_string()),
                 dirs: None,
                 files: None,
+                fields: None,
                 canisters: None,
             },
         );

@@ -3782,6 +3782,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "icp-canister-interfaces",
+ "semver",
  "snafu",
  "tokio",
  "wasmtime",

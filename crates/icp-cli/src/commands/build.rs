@@ -6,8 +6,9 @@ use icp::context::{Context, EnvironmentSelection};
 use tracing::info;
 
 use crate::{
-    operations::build::build_many_with_progress_bar,
+    operations::build::build_many,
     options::{EnvironmentOpt, arg_struct_change_help},
+    render::Renderer,
 };
 
 /// Build canisters
@@ -57,15 +58,24 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
     // Build the selected canisters
     info!("Building canisters:");
 
-    build_many_with_progress_bar(
+    let (reporter, events) = icp_events::channel();
+    let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
+
+    let result = build_many(
         canisters_to_build,
         environment_selection.name(),
         ctx.builder.clone(),
         ctx.artifacts.clone(),
         &ctx.dirs.package_cache()?,
-        ctx.debug,
+        &reporter,
     )
-    .await?;
+    .await;
+
+    // Close the event stream so the renderer can finish, and let it flush
+    // (failure dumps) before the result is acted on.
+    drop(reporter);
+    render.await?;
+    result?;
 
     info!("Canisters built successfully");
 

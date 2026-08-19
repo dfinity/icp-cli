@@ -1,8 +1,8 @@
 use camino::{Utf8Path, Utf8PathBuf};
+use icp_events::StepReporter;
 use reqwest::{Client, Method, Request};
 use sha2::{Digest, Sha256};
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 use url::Url;
 
 use crate::{
@@ -50,22 +50,18 @@ pub async fn resolve(
     source: &SourceField,
     base_dir: &Utf8Path,
     sha256: Option<&str>,
-    stdio: Option<&Sender<String>>,
+    reporter: &StepReporter,
     pkg_cache: &PackageCache,
 ) -> Result<crate::prelude::PathBuf, WasmError> {
     match source {
         SourceField::Local(s) => {
             let path = base_dir.join(&s.path);
             if let Some(expected) = sha256 {
-                if let Some(tx) = stdio {
-                    let _ = tx.send(format!("Reading wasm: {}", s.path)).await;
-                }
+                reporter.info(format!("Reading wasm: {}", s.path));
                 let bytes = read(&path).context(ReadLocalSnafu {
                     path: s.path.clone(),
                 })?;
-                if let Some(tx) = stdio {
-                    let _ = tx.send("Verifying checksum".to_string()).await;
-                }
+                reporter.info("Verifying checksum");
                 let actual = hex::encode(Sha256::digest(&bytes));
                 ensure!(
                     actual == expected,
@@ -94,17 +90,13 @@ pub async fn resolve(
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(path) = cached {
-                    if let Some(tx) = stdio {
-                        let _ = tx.send("Using cached file".to_string()).await;
-                    }
+                    reporter.info("Using cached file");
                     return Ok(path);
                 }
             }
 
             let url = Url::parse(&s.url).context(ParseUrlSnafu)?;
-            if let Some(tx) = stdio {
-                let _ = tx.send(format!("Fetching wasm: {url}")).await;
-            }
+            reporter.info(format!("Fetching wasm: {url}"));
             let resp = Client::new()
                 .execute(Request::new(Method::GET, url))
                 .await
@@ -118,9 +110,7 @@ pub async fn resolve(
             // Use provided sha256 as cache key (after verifying), or compute from bytes.
             let cache_sha = match sha256 {
                 Some(expected) => {
-                    if let Some(tx) = stdio {
-                        let _ = tx.send("Verifying checksum".to_string()).await;
-                    }
+                    reporter.info("Verifying checksum");
                     let actual = hex::encode(Sha256::digest(&bytes));
                     ensure!(
                         actual == expected,

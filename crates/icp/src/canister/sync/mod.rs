@@ -16,6 +16,17 @@ pub mod script;
 
 use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
 
+/// TEMPORARY: adapt the sync path's legacy stdio line channel into a
+/// [`StepReporter`](icp_events::StepReporter) for the low-level helpers that
+/// now report events ([`wasm::resolve`](crate::canister::wasm::resolve), the
+/// script executor). Remove once [`Synchronize`] takes a reporter directly.
+pub(crate) fn stdio_reporter(stdio: Option<Sender<String>>) -> icp_events::StepReporter {
+    match stdio {
+        Some(lines) => icp_events::StepReporter::bridge_lines(lines),
+        None => icp_events::StepReporter::null(),
+    }
+}
+
 pub struct Params {
     pub path: PathBuf,
     pub cid: Principal,

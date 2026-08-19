@@ -13,19 +13,19 @@ pub(crate) const MAX_LINES_PER_STEP: usize = 10_000;
 const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
 
 // Final tick symbols for different completion states
-const TICK_EMPTY: &str = " ";
-const TICK_SUCCESS: &str = "✔";
-const TICK_FAILURE: &str = "✘";
+pub(crate) const TICK_EMPTY: &str = " ";
+pub(crate) const TICK_SUCCESS: &str = "✔";
+pub(crate) const TICK_FAILURE: &str = "✘";
 
 // Color schemes for different progress states
-const COLOR_REGULAR: &str = "blue";
-const COLOR_SUCCESS: &str = "green";
-const COLOR_FAILURE: &str = "red";
+pub(crate) const COLOR_REGULAR: &str = "blue";
+pub(crate) const COLOR_SUCCESS: &str = "green";
+pub(crate) const COLOR_FAILURE: &str = "red";
 
 // Creates a progress bar style with a spinner that transitions to a final tick symbol
 // - end_tick: the symbol to display when the progress completes (success, failure, etc.)
 // - color: the color theme for the spinner and text
-fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
+pub(crate) fn make_style(end_tick: &str, color: &str) -> ProgressStyle {
     // Template format: "[prefix] [spinner] [message]"
     let tmpl = format!("{{prefix}} {{spinner:.{color}}} {{msg}}");
 
@@ -61,6 +61,11 @@ impl RollingLines {
     /// Get an iterator over the current contents (in order).
     pub(crate) fn iter(&self) -> impl Iterator<Item = &str> {
         self.buf.iter().map(|s| s.as_str())
+    }
+
+    /// Whether no lines have been pushed.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     /// Convert the buffer into an iterator (in order).

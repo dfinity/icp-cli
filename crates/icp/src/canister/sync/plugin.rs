@@ -78,7 +78,7 @@ pub(super) async fn sync(
         &adapter.source,
         &params.path,
         adapter.sha256.as_deref(),
-        stdio.as_ref(),
+        &super::stdio_reporter(stdio.clone()),
         pkg_cache,
     )
     .await?;

@@ -14,6 +14,16 @@ interface types {
         content: string,
     }
 
+    /// A key-value field declared in the manifest step's `fields` setting.
+    /// The host passes the plugin's declared fields inline; how they are
+    /// interpreted is up to the plugin.
+    record field-input {
+        /// Field name, as spelled in the manifest.
+        name: string,
+        /// Field value.
+        value: string,
+    }
+
     /// An entry in the project's canister ID mapping table: a canister name
     /// and the textual principal it resolves to in the environment being synced.
     record canister-id-entry {
@@ -63,6 +73,9 @@ interface types {
         /// Files declared in the manifest step's `files` setting, read by
         /// the host and passed inline. The plugin decides how to use them.
         files: list<file-input>,
+        /// Key-value fields declared in the manifest step's `fields` setting,
+        /// passed inline. The plugin decides how to use them.
+        fields: list<field-input>,
         /// Textual principal of the signing identity used for canister calls.
         identity-principal: string,
         /// Textual principal of the proxy canister, if one was configured via
@@ -105,7 +118,7 @@ interface types {
 
 /// The complete interface of a sync plugin.
 world sync-plugin {
-    use types.{sync-exec-input, canister-call-request, call-target, canister-id-entry, file-input};
+    use types.{sync-exec-input, canister-call-request, call-target, canister-id-entry, file-input, field-input};
 
     // -------------------------------------------------------------------------
     // Host functions (imports) — provided by icp-cli, called by the plugin

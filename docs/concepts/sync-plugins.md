@@ -25,7 +25,7 @@ When a `plugin` sync step executes for a canister, icp-cli:
 
 1. Resolves the wasm — reads the local `path`, or downloads the `url` to the package cache.
 2. Verifies the `sha256` checksum if one is given (required for `url`).
-3. Reads any files listed in `files:` and preopens any directories listed in `dirs:` read-only.
+3. Reads any files listed in `files:`, preopens any directories listed in `dirs:` read-only, and collects any key-value pairs listed in `fields:`.
 4. Instantiates the component in a WASI sandbox and calls its `exec()` export.
 5. Forwards the plugin's output to the CLI and reports success or the returned error.
 
@@ -36,7 +36,7 @@ icp sync
        │    canister-id        = <canister being synced>
        │    identity-principal = <your signing identity>
        │    canister-ids       = <name → principal table for the environment>
-       │    dirs / files       = what you declared in the manifest
+       │    dirs/files/fields  = what you declared in the manifest
        │
        └─ plugin makes canister-call({ target, ... }) (× N)
             target = host (the canister being synced), or a
@@ -69,6 +69,7 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
 | `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
 | `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |

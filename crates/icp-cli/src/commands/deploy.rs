@@ -500,7 +500,11 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             .collect();
 
         let pkg_cache = ctx.dirs.package_cache()?;
-        sync_many(
+
+        let (reporter, events) = icp_events::channel();
+        let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
+
+        let sync_result = sync_many(
             ctx.syncer.clone(),
             agent.clone(),
             sync_canisters,
@@ -508,10 +512,16 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             env.network.name.clone(),
             canister_ids,
             args.proxy,
-            ctx.debug,
             &pkg_cache,
+            &reporter,
         )
-        .await?;
+        .await;
+
+        // Close the event stream so the renderer can finish, and let it flush
+        // (failure dumps) before the result is acted on.
+        drop(reporter);
+        render.await?;
+        sync_result?;
     }
 
     // Print URLs for deployed canisters

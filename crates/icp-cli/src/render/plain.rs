@@ -56,8 +56,13 @@ impl PlainRenderer {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;
                 };
-                if let TaskOutcome::Failed { message } = outcome {
-                    log.fail(message);
+                match outcome {
+                    TaskOutcome::Succeeded { retained_output } => {
+                        super::print_retained(log.kind(), &retained_output);
+                    }
+                    TaskOutcome::Failed { message, causes } => {
+                        log.fail(message, causes);
+                    }
                 }
             }
         }

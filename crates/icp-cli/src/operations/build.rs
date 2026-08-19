@@ -118,10 +118,8 @@ pub(crate) async fn build_many(
             .await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::Succeeded),
-                Err(error) => task.finish(TaskOutcome::Failed {
-                    message: error.to_string(),
-                }),
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
             }
 
             result.map_err(|_| canister.name.clone())

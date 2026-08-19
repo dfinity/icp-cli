@@ -106,19 +106,20 @@ impl InteractiveRenderer {
                 };
 
                 match outcome {
-                    TaskOutcome::Succeeded => {
+                    TaskOutcome::Succeeded { retained_output } => {
                         view.bar.set_style(make_style(TICK_SUCCESS, COLOR_SUCCESS));
                         view.bar.set_message(success_message(view.log.kind()));
+                        view.bar.finish();
+                        super::print_retained(view.log.kind(), &retained_output);
                     }
-                    TaskOutcome::Failed { message } => {
+                    TaskOutcome::Failed { message, causes } => {
                         view.bar.set_style(make_style(TICK_FAILURE, COLOR_FAILURE));
                         view.bar
                             .set_message(failure_message(view.log.kind(), &message));
-                        view.log.fail(message);
+                        view.bar.finish();
+                        view.log.fail(message, causes);
                     }
                 }
-
-                view.bar.finish();
             }
         }
     }

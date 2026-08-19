@@ -67,7 +67,7 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n  fields:                             # key-value fields passed inline\n    api_url: https://example.com\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
       "properties": {
         "canisters": {
           "description": "Canisters this plugin may call in addition to the canister being synced.\nEach entry is a canister name resolved against the project's canister ID\ntable for the environment being synced (e.g. `backend`, or a namespaced\nsubproject canister such as `services/open-crm:backend`). The plugin\npicks a target per call via the `call-target` in its `canister-call`\nrequest; a target not listed here is rejected by the host.",
@@ -86,6 +86,16 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Key-value fields passed to the plugin as part of `sync-exec-input.fields`.\nValues are strings; the plugin decides how to interpret them.",
+          "type": [
+            "object",
             "null"
           ]
         },

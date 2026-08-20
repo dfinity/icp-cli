@@ -82,7 +82,7 @@
         "dirs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/NamedPathsSchema"
+              "$ref": "#/$defs/NamedPaths"
             },
             {
               "type": "null"
@@ -107,7 +107,7 @@
         "files": {
           "anyOf": [
             {
-              "$ref": "#/$defs/NamedPathsSchema"
+              "$ref": "#/$defs/NamedPaths"
             },
             {
               "type": "null"
@@ -818,9 +818,10 @@
       ],
       "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
     },
-    "NamedPathsSchema": {
+    "NamedPaths": {
       "anyOf": [
         {
+          "description": "A plain list of paths, carrying no keys.",
           "items": {
             "type": "string"
           },
@@ -828,12 +829,13 @@
         },
         {
           "additionalProperties": {
-            "$ref": "#/$defs/PathOrListSchema"
+            "$ref": "#/$defs/PathOrList"
           },
+          "description": "A map of name → path(s), tagging each path with the key it sits under.",
           "type": "object"
         }
       ],
-      "description": "A list of paths, or a map of name → path (or list of paths). The map form\ntags each path with its key for the plugin; a key may map to several paths.\n\nThis type exists only to describe [`NamedPaths`] in the generated JSON schema\n(see the `#[schemars(with = ...)]` on the adapter fields); [`NamedPaths`]\nowns the actual (de)serialization."
+      "description": "The paths declared for a plugin step's `dirs` or `files`: either a plain list\nof paths, or a map of name → path(s) whose keys are surfaced to the plugin.\n\n```yaml\n# a plain list — entries carry no key\nfiles:\n  - config.txt\n  - data.json\n# a map whose keys each name a single path...\nfiles:\n  main: config.txt\n# ...or a list of paths, which then all share that key\nfiles:\n  seeds:\n    - a.json\n    - b.json\n```\n\nOrder is preserved in both forms: list entries in written order; map entries\nin written key order, each key's paths in written order."
     },
     "NetworkManifest": {
       "description": "A network definition for the project",
@@ -875,19 +877,21 @@
       ],
       "type": "object"
     },
-    "PathOrListSchema": {
+    "PathOrList": {
       "anyOf": [
         {
+          "description": "A single path under the key.",
           "type": "string"
         },
         {
+          "description": "Several paths, all sharing the key.",
           "items": {
             "type": "string"
           },
           "type": "array"
         }
       ],
-      "description": "One map value in [`NamedPathsSchema`]: a single path, or a list of paths that\nshare the key."
+      "description": "One value of a [`NamedPaths::Map`]: a single path, or a list of paths that\nall share the key."
     },
     "Recipe": {
       "properties": {

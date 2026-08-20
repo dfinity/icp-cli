@@ -197,13 +197,15 @@ pub struct Adapter {
 }
 ```
 
-`NamedPaths` deserializes `dirs:`/`files:` from either a plain list of paths or a
-map of name → path (or list of paths), flattening to an ordered list of
-`(key, path)` entries: `key` is `None` for a list entry and `Some(name)` for a
-map entry, and is *non-unique* — a map key that resolves to a list of paths
-produces one entry per path, all sharing the key. The CLI passes these to the
-runtime as `KeyedPath`s (this crate stays free of manifest types), which surface
-in `sync-exec-input.dirs`/`files` as each entry's `key`.
+`NamedPaths` is an untagged `List(Vec<String>) | Map(IndexMap<String, PathOrList>)`
+— the two shapes `dirs:`/`files:` may be written in — keeping the written form
+exact, so bundling can rewrite the paths (`map_paths`) and serialize the step
+back out unchanged in shape. `entries()` flattens either form to ordered
+`(key, path)` pairs: `key` is `None` for a list entry and `Some(name)` for a map
+entry, and is *non-unique* — a map key holding a list of paths yields one entry
+per path, all sharing the key. The CLI passes those to the runtime as
+`KeyedPath`s (this crate stays free of manifest types), which surface in
+`sync-exec-input.dirs`/`files` as each entry's `key`.
 
 Each `canisters:` entry is a canister name resolved against the project's ID
 table for the environment being synced. `Deserialize` is hand-written to reject a

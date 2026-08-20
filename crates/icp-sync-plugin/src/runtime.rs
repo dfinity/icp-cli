@@ -71,6 +71,16 @@ pub struct KeyedPath {
     pub path: String,
 }
 
+/// A declared file the host read: the key and path it was declared under, plus
+/// its content. Held version-agnostically so it can be converted to whichever
+/// interface version's `file-input` record the plugin turns out to use — the
+/// v0.1.0 record has no `key`, so it is dropped there.
+struct FileContent {
+    key: Option<String>,
+    name: String,
+    content: String,
+}
+
 /// The canisters a sync plugin is permitted to call, beyond the canister being
 /// synced (which is always reachable via [`CallTarget::Host`]).
 ///
@@ -515,10 +525,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
     // Read each declared file on the host and pass its content inline. The same
     // path-safety checks as `dirs` apply: reject escaping or symlinked paths so
     // a read cannot leave `base_dir`.
-    // Held as plain (key, name, content) triples so they can be converted to
-    // whichever interface version's `file-input` record the plugin turns out to
-    // use (v0.1.0 has no `key`, so it is dropped there).
-    let mut file_contents: Vec<(Option<String>, String, String)> = Vec::with_capacity(files.len());
+    let mut file_contents: Vec<FileContent> = Vec::with_capacity(files.len());
     for KeyedPath { key, path: name } in &files {
         ensure!(!crate::path::escapes_base(name), UnsafeFileSnafu { name });
         if let Some(link) = crate::path::first_symlink_component(&base_dir, name) {
@@ -527,7 +534,11 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         let path = base_dir.join(name);
         let content =
             std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
-        file_contents.push((key.clone(), name.clone(), content));
+        file_contents.push(FileContent {
+            key: key.clone(),
+            name: name.clone(),
+            content,
+        });
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
@@ -601,7 +612,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
                     .collect(),
                 files: file_contents
                     .into_iter()
-                    .map(|(key, name, content)| v2::FileInput { key, name, content })
+                    .map(|FileContent { key, name, content }| v2::FileInput { key, name, content })
                     .collect(),
                 fields: fields
                     .into_iter()
@@ -642,9 +653,10 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
                     .into_iter()
                     .map(|KeyedPath { path, .. }| path)
                     .collect(),
+                // The v0.1.0 `file-input` record has no `key`; drop it.
                 files: file_contents
                     .into_iter()
-                    .map(|(_key, name, content)| v1::FileInput { name, content })
+                    .map(|FileContent { name, content, .. }| v1::FileInput { name, content })
                     .collect(),
                 identity_principal: identity_text,
                 proxy_canister_id: proxy_text,

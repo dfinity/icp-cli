@@ -16,6 +16,8 @@ use crate::{
     package::PackageCache,
 };
 
+use super::Params;
+
 /// Convert a manifest [`NamedPaths`] (or its absence) into the runtime's
 /// key-tagged path list. A missing setting yields an empty list.
 fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
@@ -23,13 +25,11 @@ fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
         .into_iter()
         .flat_map(NamedPaths::entries)
         .map(|entry| KeyedPath {
-            key: entry.key.clone(),
-            path: entry.path.clone(),
+            key: entry.key.map(str::to_string),
+            path: entry.path.to_string(),
         })
         .collect()
 }
-
-use super::Params;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {

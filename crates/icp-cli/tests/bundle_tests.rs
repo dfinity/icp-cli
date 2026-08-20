@@ -768,6 +768,71 @@ fn bundle_normalizes_dotdot_within_project() {
     );
 }
 
+/// Unlike `dirs`/`files`, a plugin step's `fields` reference nothing on disk, so bundling must
+/// carry them into the rewritten manifest verbatim — a deploy from the bundle sees the same
+/// configuration the original project declared.
+#[test]
+fn bundle_preserves_plugin_fields() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  fields:
+                    api_url: https://example.com
+                    port: 8080
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut manifest_yaml = String::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+    }
+
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
+    let fields = &parsed["canisters"][0]["sync"]["steps"][0]["fields"];
+    assert_eq!(fields["api_url"].as_str(), Some("https://example.com"));
+    // `port` was written unquoted; loading stringifies it, so the rewritten
+    // manifest carries a string too.
+    assert_eq!(fields["port"].as_str(), Some("8080"));
+}
+
 /// A plugin sync step whose `dirs` entry resolves *outside* the project directory must be
 /// rejected. Bundles can only reference files inside the project so the produced archive is portable.
 #[test]

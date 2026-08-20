@@ -1017,26 +1017,21 @@ mod tests {
         assert!(msg.contains("stdout from plugin"), "got: {msg}");
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn plugin_fields_are_passed_through() {
+    #[test]
+    fn plugin_fields_are_passed_through() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
-        let result = tokio::task::block_in_place(|| {
-            let mut inv = invocation(wasm_path, "fields");
-            inv.fields = BTreeMap::from([
-                ("greeting".to_string(), "hi".to_string()),
-                ("audience".to_string(), "world".to_string()),
-            ]);
-            inv.stdio = Some(tx);
-            run_plugin(inv)
-        });
-        assert!(result.is_ok());
-        let echoed = rx
-            .try_recv()
-            .expect("expected the plugin to echo its fields");
-        assert_eq!(echoed, "audience=world,greeting=hi");
+        let mut inv = invocation(wasm_path, "fields");
+        inv.fields = BTreeMap::from([
+            ("greeting".to_string(), "hi".to_string()),
+            ("audience".to_string(), "world".to_string()),
+        ]);
+        // The "fields" fixture echoes what it received to stderr, which
+        // run_plugin returns. The interface promises no field order, but the
+        // BTreeMap makes the host's order name-sorted in practice.
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(lines, vec!["audience=world,greeting=hi".to_string()]);
     }
 
     #[test]

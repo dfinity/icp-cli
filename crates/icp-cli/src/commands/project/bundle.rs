@@ -3,7 +3,7 @@ use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 
-use crate::{operations::bundle::create_bundle, render::Renderer};
+use crate::{operations::bundle::create_bundle, render::rendered};
 
 /// Bundle a project into a self-contained deployable archive.
 ///
@@ -30,26 +30,22 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
 
     let canisters: Vec<_> = project.canisters.into_values().collect();
 
-    let (reporter, events) = icp_events::channel();
-    let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
-
-    let result = create_bundle(
-        &project.dir,
-        canisters,
-        &args.environment,
-        ctx.builder.clone(),
-        ctx.artifacts.clone(),
-        &ctx.dirs.package_cache()?,
-        &reporter,
-        &args.output,
-    )
-    .await;
-
-    // Close the event stream so the renderer can finish, and let it flush
-    // (failure dumps) before the result is acted on.
-    drop(reporter);
-    render.await?;
-    result.context("failed to create bundle")?;
+    let pkg_cache = ctx.dirs.package_cache()?;
+    rendered(ctx.debug, async |reporter| {
+        create_bundle(
+            &project.dir,
+            canisters,
+            &args.environment,
+            ctx.builder.clone(),
+            ctx.artifacts.clone(),
+            &pkg_cache,
+            reporter,
+            &args.output,
+        )
+        .await
+    })
+    .await
+    .context("failed to create bundle")?;
 
     Ok(())
 }

@@ -71,14 +71,38 @@ pub enum TaskKind {
         canister: String,
         canister_id: Principal,
     },
+    Create {
+        canister: String,
+    },
+    Install {
+        canister: String,
+        canister_id: Principal,
+    },
+    UpdateSettings {
+        canister: String,
+        canister_id: Principal,
+    },
+    UpdateEnvironmentVariables {
+        canister: String,
+        canister_id: Principal,
+    },
+    CandidCheck {
+        canister: String,
+        canister_id: Principal,
+    },
 }
 
 impl TaskKind {
     /// The canister this task operates on.
     pub fn canister(&self) -> &str {
         match self {
-            TaskKind::Build { canister } => canister,
-            TaskKind::Sync { canister, .. } => canister,
+            TaskKind::Build { canister }
+            | TaskKind::Sync { canister, .. }
+            | TaskKind::Create { canister }
+            | TaskKind::Install { canister, .. }
+            | TaskKind::UpdateSettings { canister, .. }
+            | TaskKind::UpdateEnvironmentVariables { canister, .. }
+            | TaskKind::CandidCheck { canister, .. } => canister,
         }
     }
 }
@@ -118,6 +142,9 @@ pub enum TaskOutcome {
         #[serde(skip_serializing_if = "Vec::is_empty")]
         causes: Vec<String>,
     },
+    /// The task did not apply and no work was done (e.g. a Candid
+    /// compatibility check on an install that is not an upgrade).
+    Skipped { reason: String },
 }
 
 impl TaskOutcome {

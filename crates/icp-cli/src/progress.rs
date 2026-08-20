@@ -88,13 +88,6 @@ impl ProgressManager {
         Self { multi_progress }
     }
 
-    /// Create a new progress bar with standard configuration
-    pub(crate) fn create_progress_bar(&self, canister_name: &str) -> SimpleProgressBar {
-        let pb = self.create_independent_progress_bar();
-        pb.set_prefix(format!("[{canister_name}]"));
-        pb
-    }
-
     pub(crate) fn create_independent_progress_bar(&self) -> SimpleProgressBar {
         let pb = self
             .multi_progress

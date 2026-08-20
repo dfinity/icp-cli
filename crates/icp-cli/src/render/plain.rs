@@ -63,6 +63,7 @@ impl PlainRenderer {
                     TaskOutcome::Failed { message, causes } => {
                         log.fail(message, causes);
                     }
+                    TaskOutcome::Skipped { .. } => {}
                 }
             }
         }

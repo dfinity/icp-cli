@@ -294,6 +294,71 @@ fn tampered_file_is_refused() {
         .stderr(contains("summary does not match the signed request"));
 }
 
+/// The interface a message carries is unauthenticated, and Candid's record
+/// subtyping lets a narrower one decode the same bytes while dropping fields — so
+/// a courier could otherwise show an operator an argument that understates what
+/// they are approving. The untyped decode comes from the argument's own type
+/// table, which is part of the signed bytes, so it cannot be made to omit
+/// anything and is used to catch exactly this.
+#[test]
+fn a_doctored_interface_cannot_hide_the_signed_argument() {
+    let ctx = TestContext::new();
+    let did = ctx.home_path().join("transfer.did");
+    write_string(
+        &did,
+        r#"service : { "transfer" : (record { to : text; amount : nat }) -> () }"#,
+    )
+    .expect("write candid");
+    let msg = ctx.home_path().join("transfer.json");
+
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            "http://127.0.0.1:1",
+            "--root-key",
+            "mainnet",
+            "--candid",
+            did.as_str(),
+            "--sign-only",
+            msg.as_str(),
+            "ryjl3-tyaaa-aaaaa-aaaba-cai",
+            "transfer",
+            "(record { to = \"alice\"; amount = 1000 : nat })",
+        ])
+        .assert()
+        .success();
+
+    // Honest file: the amount is shown, and nothing is flagged.
+    ctx.icp()
+        .args(["message", "send", msg.as_str(), "--dry-run"])
+        .assert()
+        .success()
+        .stderr(contains("amount = 1_000"))
+        .stderr(contains("WARNING").not());
+
+    // Swap in an interface that declares only `to`. It still decodes, and the
+    // envelope and summary still validate — nothing about the file is invalid.
+    let mut file: Value =
+        serde_json::from_str(&icp::fs::read_to_string(&msg).expect("read")).expect("JSON");
+    file["candid"] =
+        Value::String(r#"service : { "transfer" : (record { to : text }) -> () }"#.into());
+    write_string(
+        &msg,
+        &serde_json::to_string_pretty(&file).expect("serialize"),
+    )
+    .expect("write");
+
+    ctx.icp()
+        .args(["message", "send", msg.as_str(), "--dry-run"])
+        .assert()
+        .success()
+        .stderr(contains("renders less than the signed argument contains"))
+        // The hidden value is surfaced from the signed bytes, by field hash.
+        .stderr(contains("1_000"));
+}
+
 /// A message whose window has not opened is refused with the opening time, so
 /// the operator knows to wait rather than to re-sign. Refused before anything
 /// touches the network: the URL here is unreachable.
@@ -348,8 +413,9 @@ fn expired_file_is_refused() {
     let ctx = TestContext::new();
     let canister = candid::Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").expect("principal");
 
-    // A window that closed ten minutes ago.
-    let valid_until = (OffsetDateTime::now_utc() - time::Duration::minutes(10))
+    // A window that closed two minutes ago: close enough that the drift note
+    // applies, which measured against the wrong edge it never was.
+    let valid_until = (OffsetDateTime::now_utc() - time::Duration::minutes(2))
         .replace_nanosecond(0)
         .and_then(|t| t.replace_second(0))
         .expect("0 is a valid second and nanosecond");
@@ -402,5 +468,6 @@ fn expired_file_is_refused() {
         .failure()
         .stderr(contains("Expired"))
         .stderr(contains(&format_timestamp(valid_until)[..]))
+        .stderr(contains("clock is off"))
         .stderr(contains("signed again"));
 }

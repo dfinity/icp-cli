@@ -23,6 +23,7 @@ use crate::{
     operations::call_output::{
         CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
     },
+    operations::create::shell_quote,
     operations::proxy::update_or_proxy_raw,
     operations::wasm::extract_candid_service,
 };
@@ -470,7 +471,11 @@ async fn sign_only(
     );
     match out.as_str() {
         "-" => eprintln!("Submit it with: icp message send <FILE>"),
-        path => eprintln!("Written to {path}. Submit it with: icp message send {path}"),
+        // Quoted: a path with a space in it would otherwise paste as two arguments.
+        path => eprintln!(
+            "Written to {path}. Submit it with: icp message send {}",
+            shell_quote(path)
+        ),
     }
     if interface.is_none() {
         warn!(

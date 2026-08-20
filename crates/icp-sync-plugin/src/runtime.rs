@@ -1,4 +1,5 @@
 // Host-side Component Model runtime for sync plugins.
+use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -56,7 +57,7 @@ mod v1 {
     });
 }
 
-use v2::icp::sync_plugin::types::CallType;
+use v2::icp::sync_plugin::types::{CallType, CanisterIdEntry};
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
@@ -329,20 +330,53 @@ fn detect_plugin_abi(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn run_plugin(
-    wasm_path: Utf8PathBuf,
-    base_dir: Utf8PathBuf,
-    dirs: Vec<String>,
-    files: Vec<String>,
-    target_canister_id: Principal,
-    agent: Agent,
-    proxy: Option<Principal>,
-    identity_principal: Principal,
-    environment: String,
-    compute_limit_secs: u64,
-    reporter: StepReporter,
-) -> Result<Vec<String>, RunPluginError> {
+/// Everything [`run_plugin`] needs to load and drive one sync plugin.
+#[derive(Debug)]
+pub struct PluginInvocation {
+    /// On-disk path to the plugin's wasm component.
+    pub wasm_path: Utf8PathBuf,
+    /// Directory the declared `dirs`/`files` are anchored at (the canister dir).
+    pub base_dir: Utf8PathBuf,
+    /// Manifest-relative directories to preopen read-only.
+    pub dirs: Vec<String>,
+    /// Manifest-relative files to read and pass inline.
+    pub files: Vec<String>,
+    /// The canister being synced.
+    pub target_canister_id: Principal,
+    /// Agent used for canister calls.
+    pub agent: Agent,
+    /// Proxy canister to route update calls through, if configured.
+    pub proxy: Option<Principal>,
+    /// Signing identity principal, surfaced to the plugin.
+    pub identity_principal: Principal,
+    /// Name of the environment being synced.
+    pub environment: String,
+    /// Pure-wasm compute-time budget in seconds.
+    pub compute_limit_secs: u64,
+    /// The project's canister ID table for this environment, as exposed to the
+    /// plugin. Same-project canisters appear both under their fully-qualified
+    /// key and their bare local name (see the WIT `canister-id-entry` docs).
+    pub canister_ids: BTreeMap<String, Principal>,
+    /// Reporter the plugin's live stdout/stderr is emitted on.
+    pub reporter: StepReporter,
+}
+
+pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError> {
+    let PluginInvocation {
+        wasm_path,
+        base_dir,
+        dirs,
+        files,
+        target_canister_id,
+        agent,
+        proxy,
+        identity_principal,
+        environment,
+        compute_limit_secs,
+        canister_ids,
+        reporter,
+    } = invocation;
+
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.max_wasm_stack(MAX_WASM_STACK);
@@ -491,6 +525,13 @@ pub fn run_plugin(
                     .collect(),
                 identity_principal: identity_text,
                 proxy_canister_id: proxy_text,
+                canister_ids: canister_ids
+                    .into_iter()
+                    .map(|(name, id)| CanisterIdEntry {
+                        name,
+                        id: id.to_text(),
+                    })
+                    .collect(),
             };
             plugin.call_exec(&mut store, &input)
         }
@@ -709,25 +750,34 @@ mod tests {
         Principal::anonymous()
     }
 
+    /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
+    /// and identity, no proxy, an empty canister ID table, the default compute
+    /// limit, and the current directory as the base. Individual tests override
+    /// the few fields they care about.
+    fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
+        PluginInvocation {
+            wasm_path: wasm_path.into(),
+            base_dir: ".".into(),
+            dirs: vec![],
+            files: vec![],
+            target_canister_id: anon(),
+            agent: dummy_agent(),
+            proxy: None,
+            identity_principal: anon(),
+            environment: environment.to_string(),
+            compute_limit_secs: DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
+            canister_ids: BTreeMap::new(),
+            reporter: StepReporter::null(),
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Error-path tests — no fixture WASM needed
     // -------------------------------------------------------------------------
 
     #[test]
     fn load_component_error_on_missing_file() {
-        let result = run_plugin(
-            "nonexistent.wasm".into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
+        let result = run_plugin(invocation("nonexistent.wasm", "test"));
         assert!(matches!(result, Err(RunPluginError::LoadComponent { .. })));
     }
 
@@ -753,20 +803,12 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec!["nonexistent_dir".to_string()],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.dirs = vec!["nonexistent_dir".to_string()];
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::PreopenDir { .. })
+        ));
     }
 
     #[cfg(unix)]
@@ -781,20 +823,13 @@ mod tests {
         std::fs::create_dir_all(base.join("real")).expect("create real dir");
         symlink(base.join("real"), base.join("link")).expect("create symlink");
 
-        let result = run_plugin(
-            wasm_path.into(),
-            base.to_path_buf(),
-            vec!["link".to_string()],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.base_dir = base.to_path_buf();
+        inv.dirs = vec!["link".to_string()];
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::SymlinkDir { .. })
+        ));
     }
 
     #[test]
@@ -802,20 +837,12 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec!["nonexistent_file.txt".to_string()],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(matches!(result, Err(RunPluginError::ReadFile { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.files = vec!["nonexistent_file.txt".to_string()];
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::ReadFile { .. })
+        ));
     }
 
     #[cfg(unix)]
@@ -830,20 +857,13 @@ mod tests {
         std::fs::write(base.join("real.txt"), b"data").expect("write real file");
         symlink(base.join("real.txt"), base.join("link.txt")).expect("create symlink");
 
-        let result = run_plugin(
-            wasm_path.into(),
-            base.to_path_buf(),
-            vec![],
-            vec!["link.txt".to_string()],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(matches!(result, Err(RunPluginError::SymlinkFile { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.base_dir = base.to_path_buf();
+        inv.files = vec!["link.txt".to_string()];
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::SymlinkFile { .. })
+        ));
     }
 
     #[test]
@@ -851,20 +871,7 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "ok".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(result.is_ok());
+        assert!(run_plugin(invocation(wasm_path, "ok")).is_ok());
     }
 
     #[test]
@@ -872,21 +879,8 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "error".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
         assert!(matches!(
-            result,
+            run_plugin(invocation(wasm_path, "error")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate failure"
         ));
     }
@@ -898,20 +892,9 @@ mod tests {
         };
         // The "spin" fixture busy-loops forever; a 1-second limit keeps the
         // test fast while still exercising the epoch-interruption trap.
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "spin".to_string(),
-            1,
-            StepReporter::null(),
-        );
-        let err = result.expect_err("spinning plugin should hit the compute limit");
+        let mut inv = invocation(wasm_path, "spin");
+        inv.compute_limit_secs = 1;
+        let err = run_plugin(inv).expect_err("spinning plugin should hit the compute limit");
         // The trap surfaces through the CallExec source chain, so walk it and
         // assert the message names both the limit and the override env var.
         let mut chain = err.to_string();
@@ -947,19 +930,9 @@ mod tests {
         // The task payload type is irrelevant here: only step output is observed.
         let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
-            run_plugin(
-                wasm_path.into(),
-                ".".into(),
-                vec![],
-                vec![],
-                anon(),
-                dummy_agent(),
-                None,
-                anon(),
-                "print".to_string(),
-                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                reporter,
-            )
+            let mut inv = invocation(wasm_path, "print");
+            inv.reporter = reporter;
+            run_plugin(inv)
         });
         assert!(result.is_ok());
         let lines = output_lines(&mut rx);
@@ -979,36 +952,10 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "ok".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
-        assert!(result.is_ok());
+        assert!(run_plugin(invocation(wasm_path, "ok")).is_ok());
         // Its error surface flows through the same machinery as v0.2.0 plugins.
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "error".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            StepReporter::null(),
-        );
         assert!(matches!(
-            result,
+            run_plugin(invocation(wasm_path, "error")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate v1 failure"
         ));
     }
@@ -1021,19 +968,9 @@ mod tests {
         // The task payload type is irrelevant here: only step output is observed.
         let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
-            run_plugin(
-                wasm_path.into(),
-                ".".into(),
-                vec![],
-                vec![],
-                anon(),
-                dummy_agent(),
-                None,
-                anon(),
-                "hello".to_string(),
-                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                reporter,
-            )
+            let mut inv = invocation(wasm_path, "hello");
+            inv.reporter = reporter;
+            run_plugin(inv)
         });
         let lines = result.expect("plugin should succeed");
         assert_eq!(lines, vec!["hello".to_string()]);

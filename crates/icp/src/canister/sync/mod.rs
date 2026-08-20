@@ -19,6 +19,10 @@ use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
 pub struct Params {
     pub path: PathBuf,
     pub cid: Principal,
+    /// Fully-qualified store key of the canister being synced (e.g. `backend`,
+    /// or `services/open-crm:backend` for a dependency canister). Its namespace
+    /// prefix identifies which other canisters are in the same subproject.
+    pub name: String,
     /// Name of the environment being synced (e.g. "local", "production").
     /// Passed to sync plugin steps via `SyncExecInput`.
     pub environment: String,
@@ -165,6 +169,7 @@ mod tests {
         let params = Params {
             path: "/work/backend".into(),
             cid,
+            name: "backend".to_owned(),
             environment: "production".to_owned(),
             network: "ic".to_owned(),
             canister_ids: BTreeMap::from([(

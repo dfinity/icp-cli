@@ -145,6 +145,7 @@ mod tests {
         Params {
             path: "/work/backend".into(),
             cid: principal(1),
+            name: "backend".to_owned(),
             environment: "production".to_owned(),
             network: "ic".to_owned(),
             canister_ids: canister_ids

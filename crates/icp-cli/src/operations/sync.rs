@@ -59,6 +59,7 @@ async fn sync_canister(
                 &Params {
                     path: canister_path.clone(),
                     cid: canister_id,
+                    name: canister_info.name.clone(),
                     environment: environment.to_owned(),
                     network: network.to_owned(),
                     canister_ids: canister_ids.clone(),

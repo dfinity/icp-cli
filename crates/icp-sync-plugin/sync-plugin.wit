@@ -14,6 +14,24 @@ interface types {
         content: string,
     }
 
+    /// An entry in the project's canister ID mapping table: a canister name
+    /// and the textual principal it resolves to in the environment being synced.
+    record canister-id-entry {
+        /// The canister's fully-qualified project key: the subproject it belongs
+        /// to (a path relative to the app root) joined to its local name by a
+        /// single colon, e.g. "services/open-accounts:backend". A canister
+        /// defined directly in the project being synced has no subproject prefix
+        /// and appears as its bare local name, e.g. "backend".
+        ///
+        /// Every canister in the same subproject as the canister being synced is
+        /// additionally listed under its bare local name (a duplicate entry with
+        /// the same `id`), so a plugin can address a sibling by the same local
+        /// name the manifest uses.
+        name: string,
+        /// Textual principal the name resolves to for this environment.
+        id: string,
+    }
+
     /// Input passed by the runtime to the plugin's exec() export.
     record sync-exec-input {
         /// Textual principal of the canister being synced.
@@ -32,6 +50,12 @@ interface types {
         /// Textual principal of the proxy canister, if one was configured via
         /// `--proxy`. None when no proxy is in use.
         proxy-canister-id: option<string>,
+        /// Name→principal mapping for every named canister in the project for
+        /// the environment being synced, sorted by name. Informational: the
+        /// plugin may use it to resolve canister names it knows about. Being
+        /// listed here does not grant permission to call a canister — that
+        /// still requires declaring it as a dependency (see `call-target`).
+        canister-ids: list<canister-id-entry>,
     }
 
     /// A request to call a method on the target canister.
@@ -59,7 +83,7 @@ interface types {
 
 /// The complete interface of a sync plugin.
 world sync-plugin {
-    use types.{sync-exec-input, canister-call-request, file-input};
+    use types.{sync-exec-input, canister-call-request, canister-id-entry, file-input};
 
     // -------------------------------------------------------------------------
     // Host functions (imports) — provided by icp-cli, called by the plugin

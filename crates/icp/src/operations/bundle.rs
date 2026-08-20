@@ -793,6 +793,7 @@ async fn prepare_plugin_step(
         sha256: Some(plugin_sha256),
         dirs: bundle_dirs,
         files: bundle_files,
+        canisters: None,
     }))
 }
 

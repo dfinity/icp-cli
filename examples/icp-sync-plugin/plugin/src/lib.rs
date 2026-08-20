@@ -24,6 +24,7 @@ impl Guest for Plugin {
             .map_err(|e| format!("invalid identity principal: {e}"))?;
         let arg = Encode!(&uploader).map_err(|e| format!("encode set_uploader arg: {e}"))?;
         canister_call(&CanisterCallRequest {
+            target: CallTarget::Host,
             method: "set_uploader".to_string(),
             arg,
             call_type: icp::sync_plugin::types::CallType::Update,
@@ -68,6 +69,7 @@ fn register_dir(dir: &Path) -> Result<u32, String> {
             let arg = Encode!(&path_str, &content_trimmed)
                 .map_err(|e| format!("encode register arg: {e}"))?;
             canister_call(&CanisterCallRequest {
+                target: CallTarget::Host,
                 method: "register".to_string(),
                 arg,
                 call_type: icp::sync_plugin::types::CallType::Update,

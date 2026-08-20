@@ -65,6 +65,7 @@ impl Guest for Plugin {
 
         // Call a method on the canister being synced.
         canister_call(&CanisterCallRequest {
+            target: CallTarget::Host, // the canister being synced
             method: "set_uploader".to_string(),
             arg,
             call_type: icp::sync_plugin::types::CallType::Update,
@@ -84,7 +85,7 @@ export!(Plugin);
 A few things to note:
 
 - **You encode the arguments.** `arg` is raw Candid bytes. Encode with `candid::Encode!`; decode any response (`Vec<u8>`) with `candid::Decode!`.
-- **The target is fixed.** `canister_call` always reaches the canister in `input.canister_id` — there is no field to target another canister.
+- **You choose the target.** `target: CallTarget::Host` reaches the canister being synced. To call another canister, declare it in the manifest's [`canisters:`](../reference/configuration.md#plugin-sync) list and address it with `CallTarget::Name("ledger".into())` or `CallTarget::Id(principal_text)` — a name matches the entries in `input.canister_ids`. The host rejects a target you did not declare.
 - **`direct` and `cycles` control proxy routing.** With `direct: false`, update calls go through the [proxy canister](proxy-canister.md) when one is configured, and `cycles` can fund the forwarded call. With `direct: true`, the call always goes straight to the target. See [The Plugin Interface](../concepts/sync-plugins.md#the-plugin-interface) for the full semantics.
 
 ## Read Declared Files and Directories

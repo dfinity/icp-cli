@@ -1,16 +1,20 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use camino::Utf8PathBuf;
 use candid::Principal;
 use ic_agent::Agent;
 use icp_events::StepReporter;
 use icp_sync_plugin::{
-    DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, PluginInvocation, RunPluginError,
-    run_plugin,
+    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV,
+    PluginInvocation, RunPluginError, run_plugin,
 };
 use snafu::prelude::*;
 
-use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
+use crate::{
+    canister::wasm,
+    manifest::adapter::plugin::{Adapter, CanisterRef},
+    package::PackageCache,
+};
 
 use super::Params;
 
@@ -29,6 +33,12 @@ pub enum PluginError {
 
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
+
+    #[snafu(display(
+        "sync plugin declares a dependency on canister '{name}', but no canister by that name \
+         is known in environment '{environment}'"
+    ))]
+    UnknownDependency { name: String, environment: String },
 }
 
 /// Resolve the plugin compute-time limit, honoring the
@@ -94,8 +104,10 @@ pub(super) async fn sync(
     let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
     let files: Vec<String> = adapter.files.clone().unwrap_or_default();
 
-    // 3. Build the canister ID table exposed to the plugin.
+    // 3. Build the canister ID table exposed to the plugin, then resolve the
+    //    plugin's declared callable canisters against it.
     let canister_ids = exposed_canister_ids(params);
+    let callable = resolve_callable(adapter, &canister_ids, environment)?;
 
     // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent
@@ -112,13 +124,14 @@ pub(super) async fn sync(
             base_dir,
             dirs,
             files,
-            target_canister_id: params.cid,
+            host_canister_id: params.cid,
             agent: agent_clone,
             proxy,
             identity_principal,
             environment: environment_owned,
             compute_limit_secs,
             canister_ids,
+            callable,
             reporter: reporter_clone,
         })
     })
@@ -150,6 +163,38 @@ fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
     table
 }
 
+/// Resolve the canisters a plugin declared it may call into a [`CallableCanisters`]
+/// enforcement set. Named dependencies are looked up in `canister_ids`; a name
+/// that does not resolve is a manifest error.
+fn resolve_callable(
+    adapter: &Adapter,
+    canister_ids: &BTreeMap<String, Principal>,
+    environment: &str,
+) -> Result<CallableCanisters, PluginError> {
+    let mut by_name = BTreeMap::new();
+    let mut by_id = BTreeSet::new();
+    for canister in adapter.canisters.iter().flatten() {
+        match canister {
+            CanisterRef::Principal(principal) => {
+                by_id.insert(*principal);
+            }
+            CanisterRef::Name(name) => {
+                let principal =
+                    canister_ids
+                        .get(name)
+                        .copied()
+                        .context(UnknownDependencySnafu {
+                            name: name.clone(),
+                            environment: environment.to_owned(),
+                        })?;
+                by_name.insert(name.clone(), principal);
+                by_id.insert(principal);
+            }
+        }
+    }
+    Ok(CallableCanisters { by_name, by_id })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +218,8 @@ mod tests {
         }
     }
 
+    use crate::manifest::adapter::prebuilt::{LocalSource, SourceField};
+
     fn principal(byte: u8) -> Principal {
         Principal::from_slice(&[byte; 4])
     }
@@ -186,6 +233,18 @@ mod tests {
             network: "ic".to_owned(),
             canister_ids: ids.iter().map(|(n, p)| ((*n).to_owned(), *p)).collect(),
             proxy: None,
+        }
+    }
+
+    fn adapter_with(canisters: Option<Vec<CanisterRef>>) -> Adapter {
+        Adapter {
+            source: SourceField::Local(LocalSource {
+                path: "plugin.wasm".into(),
+            }),
+            sha256: None,
+            dirs: None,
+            files: None,
+            canisters,
         }
     }
 
@@ -275,5 +334,30 @@ mod tests {
         let table = exposed_canister_ids(&params);
         assert_eq!(table.len(), 1);
         assert_eq!(table.get("backend"), Some(&backend));
+    }
+
+    #[test]
+    fn resolve_callable_resolves_names_and_principals() {
+        let dep = principal(1);
+        let raw = principal(2);
+        let table = BTreeMap::from([("backend".to_owned(), dep)]);
+        let adapter = adapter_with(Some(vec![
+            CanisterRef::Name("backend".to_owned()),
+            CanisterRef::Principal(raw),
+        ]));
+
+        let callable = resolve_callable(&adapter, &table, "demo").unwrap();
+
+        assert_eq!(callable.by_name.get("backend"), Some(&dep));
+        assert!(callable.by_id.contains(&dep));
+        assert!(callable.by_id.contains(&raw));
+    }
+
+    #[test]
+    fn resolve_callable_rejects_unknown_name() {
+        let adapter = adapter_with(Some(vec![CanisterRef::Name("nope".to_owned())]));
+        let err = resolve_callable(&adapter, &BTreeMap::new(), "demo")
+            .expect_err("an undeclared name must fail");
+        assert!(matches!(err, PluginError::UnknownDependency { .. }));
     }
 }

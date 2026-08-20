@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use icp_events::{Event, Reporter, TaskId, TaskKind};
+use icp_events::{Event, Reporter, TaskId, TaskKind, TaskOutcome, TaskReporter, TransferBlob};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
@@ -73,18 +73,51 @@ pub(crate) async fn rendered<T>(debug: bool, op: impl AsyncFnOnce(&Reporter) -> 
     result
 }
 
+/// Run a single task under its own renderer: starts a task of `kind`, hands
+/// its reporter to `op`, and finishes the task from the result before the
+/// renderer flushes.
+pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
+    debug: bool,
+    kind: TaskKind,
+    op: impl AsyncFnOnce(&TaskReporter) -> Result<T, E>,
+) -> Result<T, E> {
+    rendered(debug, async |reporter| {
+        let task = reporter.task(kind);
+        let result = op(&task).await;
+
+        match &result {
+            Ok(_) => task.finish(TaskOutcome::succeeded()),
+            Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+        }
+
+        result
+    })
+    .await
+}
+
 // Wording for each task kind. Events carry data; these helpers own the words.
 
 /// Message shown while a task runs, before any step reports in. Multi-step
 /// tasks (build, sync) have none — their step headers take over.
 fn running_message(kind: &TaskKind) -> Option<&'static str> {
     match kind {
-        TaskKind::Build { .. } | TaskKind::Sync { .. } => None,
+        // Build and sync step headers take over; a transfer's byte bar has no
+        // message slot at all.
+        TaskKind::Build { .. } | TaskKind::Sync { .. } | TaskKind::SnapshotTransfer { .. } => None,
         TaskKind::Create { .. } => Some("Creating..."),
         TaskKind::Install { .. } => Some("Installing..."),
         TaskKind::UpdateSettings { .. } => Some("Updating canister settings..."),
         TaskKind::UpdateEnvironmentVariables { .. } => Some("Updating environment variables..."),
         TaskKind::CandidCheck { .. } => Some("Checking compatibility..."),
+    }
+}
+
+/// Prefix label for a snapshot-transfer byte bar.
+fn transfer_label(blob: &TransferBlob) -> &'static str {
+    match blob {
+        TransferBlob::WasmModule => "WASM module",
+        TransferBlob::WasmMemory => "WASM memory",
+        TransferBlob::StableMemory => "Stable memory",
     }
 }
 
@@ -119,6 +152,8 @@ fn success_message(kind: &TaskKind) -> String {
             "Environment variables updated successfully".to_owned()
         }
         TaskKind::CandidCheck { .. } => "Compatible".to_owned(),
+        // A transfer's byte bar has no message slot; nothing to show.
+        TaskKind::SnapshotTransfer { .. } => "done".to_owned(),
     }
 }
 
@@ -138,6 +173,8 @@ fn failure_message(kind: &TaskKind, message: &str) -> String {
             format!("Failed to update environment variables: {message}")
         }
         TaskKind::CandidCheck { .. } => "Incompatible".to_owned(),
+        // Transfer failures surface through the command's returned error.
+        TaskKind::SnapshotTransfer { .. } => message.to_owned(),
     }
 }
 
@@ -179,6 +216,7 @@ fn failure_header(kind: &TaskKind) -> Option<String> {
         } => Some(format!(
             " ----- Candid interface compatibility check failed: '{canister}' ({canister_id}) -----"
         )),
+        TaskKind::SnapshotTransfer { .. } => None,
     }
 }
 

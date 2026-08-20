@@ -4,8 +4,8 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use icp_events::{Event, EventKind, TaskId, TaskOutcome};
-use indicatif::{MultiProgress, ProgressBar};
+use icp_events::{Event, EventKind, TaskId, TaskKind, TaskOutcome};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tracing::debug;
 
@@ -14,7 +14,9 @@ use crate::progress::{
     TICK_SUCCESS, make_style,
 };
 
-use super::{TaskLog, dump_failures, failure_message, step_header, success_message};
+use super::{
+    TaskLog, dump_failures, failure_message, step_header, success_message, transfer_label,
+};
 
 /// Number of output lines shown live under a task's progress bar.
 const LIVE_WINDOW_LINES: usize = 4;
@@ -44,14 +46,30 @@ impl InteractiveRenderer {
     pub(crate) fn handle(&mut self, event: Event) {
         match event.kind {
             EventKind::TaskStarted { task } => {
-                let bar = self.multi_progress.add(
-                    ProgressBar::new_spinner().with_style(make_style(TICK_EMPTY, COLOR_REGULAR)),
-                );
-                bar.set_prefix(format!("[{}]", task.canister()));
-                if let Some(message) = super::running_message(&task) {
-                    bar.set_message(message);
-                }
-                bar.enable_steady_tick(Duration::from_millis(120));
+                let bar = match &task {
+                    // Quantifiable transfers get a byte bar instead of a
+                    // spinner, labeled by the blob rather than the canister.
+                    TaskKind::SnapshotTransfer {
+                        blob, total_bytes, ..
+                    } => {
+                        let bar = self.multi_progress.add(ProgressBar::new(*total_bytes));
+                        bar.set_style(transfer_style());
+                        bar.set_prefix(transfer_label(blob));
+                        bar
+                    }
+                    _ => {
+                        let bar = self.multi_progress.add(
+                            ProgressBar::new_spinner()
+                                .with_style(make_style(TICK_EMPTY, COLOR_REGULAR)),
+                        );
+                        bar.set_prefix(format!("[{}]", task.canister()));
+                        if let Some(message) = super::running_message(&task) {
+                            bar.set_message(message);
+                        }
+                        bar.enable_steady_tick(Duration::from_millis(120));
+                        bar
+                    }
+                };
 
                 self.tasks.insert(
                     event.task_id,
@@ -62,6 +80,12 @@ impl InteractiveRenderer {
                         window: RollingLines::new(LIVE_WINDOW_LINES),
                     },
                 );
+            }
+
+            EventKind::Progress { position } => {
+                if let Some(view) = self.tasks.get(&event.task_id) {
+                    view.bar.set_position(position);
+                }
             }
 
             EventKind::StepStarted {
@@ -108,6 +132,16 @@ impl InteractiveRenderer {
                     return;
                 };
 
+                // A transfer's byte bar has no message or tick slot; it just
+                // freezes at its final position.
+                if matches!(view.log.kind(), TaskKind::SnapshotTransfer { .. }) {
+                    view.bar.finish();
+                    if let TaskOutcome::Failed { message, causes } = outcome {
+                        view.log.fail(message, causes);
+                    }
+                    return;
+                }
+
                 match outcome {
                     TaskOutcome::Succeeded { retained_output } => {
                         view.bar.set_style(make_style(TICK_SUCCESS, COLOR_SUCCESS));
@@ -142,4 +176,12 @@ impl InteractiveRenderer {
             .collect();
         dump_failures(&logs, false);
     }
+}
+
+/// Style for a byte-transfer bar.
+fn transfer_style() -> ProgressStyle {
+    ProgressStyle::default_bar()
+        .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+        .expect("invalid progress bar template")
+        .progress_chars("#>-")
 }

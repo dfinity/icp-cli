@@ -52,6 +52,9 @@ impl PlainRenderer {
                 }
             }
 
+            // No live display to advance.
+            EventKind::Progress { .. } => {}
+
             EventKind::TaskCompleted { outcome } => {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;

@@ -469,6 +469,75 @@ async fn sync_plugin_registers_seed_data() {
         );
 }
 
+/// `dirs:` may be written as a map (name → path, or name → list of paths)
+/// instead of a plain list. The declared paths are still preopened and traversed
+/// the same way, so registration works end-to-end; this proves the map form
+/// deserializes and reaches the runtime.
+#[tokio::test]
+async fn sync_plugin_accepts_map_form_dirs() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // Two directories, declared under one map key as a list.
+    let fruit = project_dir.join("fruit");
+    let veg = project_dir.join("veg");
+    create_dir_all(&fruit).expect("failed to create fruit dir");
+    create_dir_all(&veg).expect("failed to create veg dir");
+    write_string(&fruit.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&veg.join("veg-01.txt"), "carrot").expect("failed to write veg-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    produce:
+                      - fruit
+                      - veg
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("apple").and(contains("carrot")));
+}
+
 /// A malformed `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` must abort the sync with an
 /// actionable error rather than being silently ignored. This also exercises the
 /// end-to-end wiring: it proves the override is actually read on the real plugin

@@ -92,25 +92,27 @@ A few things to note:
 
 A plugin can't see the filesystem freely — only what you grant it in the manifest's `dirs:` and `files:`.
 
-Directories in `dirs:` are preopened read-only at the same relative path. Traverse them with standard `std::fs`:
+Directories in `dirs:` are preopened read-only at the same relative path. Each entry gives you its `path` plus a `key` (the map key it was declared under, or `None` for a plain-list entry). Traverse them with standard `std::fs`:
 
 ```rust
 for dir in &input.dirs {
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+    for entry in std::fs::read_dir(&dir.path).map_err(|e| e.to_string())? {
         let path = entry.map_err(|e| e.to_string())?.path();
         let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        // ... encode and send to the canister ...
+        // ... encode and send to the canister; dir.key groups related dirs ...
     }
 }
 ```
 
-Files in `files:` are read by the host up front and passed inline — read them from the input struct, not from disk:
+Files in `files:` are read by the host up front and passed inline — read them from the input struct, not from disk. Each entry carries its `key`, `name` (the path), and `content`:
 
 ```rust
 for file in &input.files {
     println!("{} = {}", file.name, file.content.trim());
 }
 ```
+
+Declaring `dirs:`/`files:` as a map instead of a list tags each entry with a `key`, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A key that maps to a list of paths yields several entries sharing that key.
 
 Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 

@@ -67,7 +67,7 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n  fields:                             # key-value fields passed inline\n    api_url: https://example.com\n    retries: 3\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n  fields:                             # key-value fields passed inline\n    api_url: https://example.com\n    retries: 3\n```\n\n`dirs` and `files` may instead be written as a map, tagging each entry with a\n`key` surfaced to the plugin; a key may map to a single path or a list:\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  dirs:\n    seed: assets/seed-data           # keyed single path\n    migrations:                      # keyed list — entries share the key\n      - migrations/2025\n      - migrations/2026\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
       "properties": {
         "canisters": {
           "description": "Canisters this plugin may call in addition to the canister being synced.\nEach entry is a canister name resolved against the project's canister ID\ntable for the environment being synced (e.g. `backend`, or a namespaced\nsubproject canister such as `services/open-crm:backend`). The plugin\npicks a target per call via the `call-target` in its `canister-call`\nrequest; a target not listed here is rejected by the host.",
@@ -80,14 +80,15 @@
           ]
         },
         "dirs": {
-          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NamedPathsSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs. Written as a plain list\nof paths, or as a map of name → path (or list of paths); the name is\nsurfaced to the plugin as each entry's `key`."
         },
         "fields": {
           "additionalProperties": {
@@ -104,14 +105,15 @@
           ]
         },
         "files": {
-          "description": "Files (relative to canister directory) the host reads and passes to\nthe plugin as part of `sync-exec-input.files`.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NamedPathsSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Files (relative to canister directory) the host reads and passes to\nthe plugin as part of `sync-exec-input.files`. Written as a plain list\nof paths, or as a map of name → path (or list of paths); the name is\nsurfaced to the plugin as each entry's `key`."
         },
         "sha256": {
           "description": "Optional sha256 checksum of the wasm file.\nOptional for `path`; required for `url`.",
@@ -816,6 +818,23 @@
       ],
       "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
     },
+    "NamedPathsSchema": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/PathOrListSchema"
+          },
+          "type": "object"
+        }
+      ],
+      "description": "A list of paths, or a map of name → path (or list of paths). The map form\ntags each path with its key for the plugin; a key may map to several paths.\n\nThis type exists only to describe [`NamedPaths`] in the generated JSON schema\n(see the `#[schemars(with = ...)]` on the adapter fields); [`NamedPaths`]\nowns the actual (de)serialization."
+    },
     "NetworkManifest": {
       "description": "A network definition for the project",
       "oneOf": [
@@ -855,6 +874,20 @@
         "name"
       ],
       "type": "object"
+    },
+    "PathOrListSchema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "One map value in [`NamedPathsSchema`]: a single path, or a list of paths that\nshare the key."
     },
     "Recipe": {
       "properties": {

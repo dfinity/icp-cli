@@ -67,14 +67,16 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 |-------|-------------|
 | `canister-id` | Textual principal of the canister being synced |
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
-| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
-| `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only. Each entry carries its `key` (see below) and `path` |
+| `files` | The files you declared in `files:`, each with its `key`, `name` (path), and `content` read by the host |
 | `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
 Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
+
+`dirs` and `files` each carry a `key`: the map key the entry was declared under in the manifest, or absent when `dirs:`/`files:` was written as a plain list. A key that maps to a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
 
 ### Calling a canister — `canister-call`
 

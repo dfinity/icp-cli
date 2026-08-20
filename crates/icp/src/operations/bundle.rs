@@ -771,39 +771,49 @@ async fn prepare_plugin_step(
 
     // Plugin preopened dirs go under a `dirs/` subdir so a user-supplied dir literally named
     // `files` cannot collide with the `files/` area used for plugin input files.
+    // The declared paths are rewritten to their archive locations; each entry's
+    // map key is carried through unchanged.
     let bundle_dirs = adapter.dirs.as_ref().map(|dirs| {
-        dirs.iter()
+        dirs.entries()
+            .iter()
             .map(|d| {
                 let manifest_path = format!(
                     "plugins/{path_name}/{idx}/dirs/{}",
-                    normalize_archive_dir(d)
+                    normalize_archive_dir(&d.path)
                 );
                 out.plugin_dirs.push(DirEntry {
-                    src_path: canister_path.join(d),
+                    src_path: canister_path.join(&d.path),
                     archive_prefix: archive_join(prefix, &manifest_path),
                 });
-                manifest_path
+                plugin::NamedPath {
+                    key: d.key.clone(),
+                    path: manifest_path,
+                }
             })
-            .collect::<Vec<_>>()
+            .collect::<plugin::NamedPaths>()
     });
 
     let bundle_files = adapter.files.as_ref().map(|files| {
         files
+            .entries()
             .iter()
             .map(|f| {
                 let manifest_path = format!(
                     "plugins/{path_name}/{idx}/files/{}",
-                    normalize_archive_dir(f)
+                    normalize_archive_dir(&f.path)
                 );
                 out.plugin_files.push(PluginFile {
-                    src_path: canister_path.join(f),
+                    src_path: canister_path.join(&f.path),
                     archive_path: archive_join(prefix, &manifest_path),
                     canister_name: canister.name.clone(),
-                    orig_file: f.clone(),
+                    orig_file: f.path.clone(),
                 });
-                manifest_path
+                plugin::NamedPath {
+                    key: f.key.clone(),
+                    path: manifest_path,
+                }
             })
-            .collect::<Vec<_>>()
+            .collect::<plugin::NamedPaths>()
     });
 
     Ok(SyncStep::Plugin(plugin::Adapter {
@@ -1345,8 +1355,8 @@ fn validate_source_paths(
                 SyncStep::Script(_) => {}
                 SyncStep::Plugin(adapter) => {
                     if let Some(dirs) = &adapter.dirs {
-                        for d in dirs {
-                            let src = canister_path.join(d);
+                        for d in dirs.entries() {
+                            let src = canister_path.join(&d.path);
                             let resolved = resolve_within_project(
                                 &src,
                                 project_dir,
@@ -1357,8 +1367,8 @@ fn validate_source_paths(
                         }
                     }
                     if let Some(files) = &adapter.files {
-                        for f in files {
-                            let src = canister_path.join(f);
+                        for f in files.entries() {
+                            let src = canister_path.join(&f.path);
                             resolve_within_project(
                                 &src,
                                 project_dir,

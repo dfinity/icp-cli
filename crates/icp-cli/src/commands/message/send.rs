@@ -2,7 +2,7 @@ use anyhow::{Context as _, bail};
 use candid::{IDLArgs, TypeEnv, types::Function};
 use clap::{Args, ValueHint};
 use ic_agent::agent::CallResponse;
-use icp::context::{Context, IC_ROOT_KEY, NetworkSelection};
+use icp::context::{Context, IC_ROOT_KEY};
 use icp::identity::IdentitySelection;
 use icp::network::RootKeySpec;
 use icp::prelude::*;
@@ -18,7 +18,6 @@ use url::Url;
 use crate::operations::call_output::{
     CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
 };
-use crate::options::NetworkOpt;
 
 /// Submit a message signed on another machine
 ///
@@ -26,19 +25,16 @@ use crate::options::NetworkOpt;
 /// contains, submits it, and waits for the reply. No identity is used and none
 /// is needed: the message was already signed by whoever composed it, so this
 /// machine only has to carry it to the network.
+///
+/// It is submitted to the network the file names. If that has to change — the
+/// signing machine recorded a URL this one cannot reach, say — edit `network` in
+/// the file: the envelope is signed and carries no URL of its own, so where it
+/// goes cannot change what executes.
 #[derive(Args, Debug)]
 pub(crate) struct SendArgs {
     /// The signed message file. `-` reads stdin.
     #[arg(value_hint = ValueHint::FilePath)]
     pub(crate) file: PathBuf,
-
-    /// Where to submit, overriding the network recorded in the file.
-    ///
-    /// Useful when the signing machine recorded a URL this one cannot reach.
-    /// The envelope is signed and carries no URL of its own, so redirecting it
-    /// cannot change what executes — only whether it is accepted.
-    #[command(flatten)]
-    pub(crate) network: NetworkOpt,
 
     /// Show what the message contains and exit without submitting it.
     #[arg(long)]
@@ -78,7 +74,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
         refuse_unsubmittable(&validated)?;
     }
 
-    let (url, root_key) = resolve_network(ctx, args, &message).await?;
+    // Where to submit comes from the file and nowhere else. There is deliberately
+    // no `--network` override: the signer already decided, a courier who genuinely
+    // has to redirect can edit `network` in the file (it is unauthenticated
+    // either way, so that is within the trust model rather than around it), and a
+    // flag here would inherit `ICP_NETWORK` from the environment — which would let
+    // a stray shell variable silently send a message somewhere else.
+    let url = &message.network.url;
+    let root_key = &message.network.root_key;
 
     // `--dry-run` is the file-inspection command, so it stays entirely offline:
     // no agent, no root key, and no fetching an interface the file did not carry.
@@ -86,9 +89,9 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
         true => None,
         false => {
             let agent = ctx
-                .get_agent_for_url(&IdentitySelection::Anonymous, &url)
+                .get_agent_for_url(&IdentitySelection::Anonymous, url)
                 .await?;
-            apply_root_key(&agent, &root_key).await?;
+            apply_root_key(&agent, root_key).await?;
             Some(agent)
         }
     };
@@ -98,7 +101,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
         .as_ref()
         .and_then(|i| Some((i.env.clone(), i.get_method(&validated.method)?.clone())));
 
-    print_summary(&message, &validated, &url, declared_method.as_ref());
+    print_summary(&message, &validated, url, declared_method.as_ref());
 
     if args.dry_run {
         eprintln!("Not submitted: this was a --dry-run.");
@@ -176,24 +179,6 @@ fn load(path: &Path) -> Result<SignedMessage, anyhow::Error> {
         .read_to_string(&mut buf)
         .context("failed to read the signed message from stdin")?;
     serde_json::from_str(&buf).context("failed to parse the signed message read from stdin")
-}
-
-/// Where to submit: the file's network, unless this machine was told otherwise.
-async fn resolve_network(
-    ctx: &Context,
-    args: &SendArgs,
-    message: &SignedMessage,
-) -> Result<(Url, RootKeySpec), anyhow::Error> {
-    let selection: NetworkSelection = args.network.clone().into();
-    if selection == NetworkSelection::Default {
-        return Ok((
-            message.network.url.clone(),
-            message.network.root_key.clone(),
-        ));
-    }
-    let network = ctx.get_network(&selection).await?;
-    let access = ctx.network.access(&network).await?;
-    Ok((access.api_url, RootKeySpec::Explicit(access.root_key)))
 }
 
 /// The reply's certificate is verified against this, so it is the one piece of

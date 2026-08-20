@@ -198,6 +198,58 @@ fn dry_run_inspects_without_sending() {
         .stderr(contains("Not submitted"));
 }
 
+/// Where a message goes is the file's business. A courier who genuinely has to
+/// redirect one edits the file — `network` is unauthenticated either way, so that
+/// is inside the trust model. Nothing outside the file can change it, and in
+/// particular `ICP_NETWORK` cannot: a stray shell variable silently sending a
+/// signed message to mainnet is exactly the accident there is no flag for.
+#[test]
+fn only_the_file_says_where_to_submit() {
+    let ctx = TestContext::new();
+    let did = ctx.home_path().join("service.did");
+    write_string(&did, GREET_DID).expect("write candid");
+    let msg = ctx.home_path().join("redirect.json");
+
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            "http://127.0.0.1:9999",
+            "--root-key",
+            "mainnet",
+            "--candid",
+            did.as_str(),
+            "--sign-only",
+            msg.as_str(),
+            "ryjl3-tyaaa-aaaaa-aaaba-cai",
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success();
+
+    // An edited network is honoured, and the message still validates: the
+    // envelope is signed and carries no URL, so this cannot change what executes.
+    let mut file: Value =
+        serde_json::from_str(&icp::fs::read_to_string(&msg).expect("read")).expect("JSON");
+    file["network"]["url"] = Value::String("http://127.0.0.1:1234/".into());
+    write_string(
+        &msg,
+        &serde_json::to_string_pretty(&file).expect("serialize"),
+    )
+    .expect("write");
+
+    ctx.icp()
+        .args(["message", "send", msg.as_str(), "--dry-run"])
+        .env("ICP_NETWORK", "ic")
+        .assert()
+        .success()
+        .stderr(contains("Network:     http://127.0.0.1:1234/"))
+        // Not mainnet, which is where `ICP_NETWORK=ic` would have pointed it.
+        .stderr(contains("icp-api.io").not());
+}
+
 /// The summary is display-only, so a file whose summary disagrees with its
 /// signed envelope is refused rather than quietly believed either way.
 #[test]

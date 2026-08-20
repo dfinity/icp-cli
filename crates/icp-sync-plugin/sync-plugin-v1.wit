@@ -1,8 +1,6 @@
-// Version 0.1.0 of the sync-plugin interface, preserved verbatim so the host
-// can still load plugins built against it. New plugins should target the
+// Version 0.1.0 of the sync-plugin interface. New plugins should target the
 // current interface in `sync-plugin.wit`; see that file for the up-to-date
-// contract. The host tries the current interface first and falls back to this
-// one, so both APIs are supported in parallel.
+// contract. The host will load this version if the plugin imports it.
 package icp:sync-plugin@0.1.0;
 
 /// Types shared between the host runtime and sync plugins.

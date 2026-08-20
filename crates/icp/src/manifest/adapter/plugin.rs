@@ -1,9 +1,82 @@
-use std::collections::HashMap;
+use std::{collections::BTreeMap, fmt};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{
+    Deserialize, Deserializer, Serialize,
+    de::{self, Visitor},
+};
 
 use super::prebuilt::SourceField;
+
+/// One `fields:` value on its way in from the manifest. A plugin always receives
+/// a string, but writing `port: 8080` should not have to be quoted, so any YAML
+/// scalar is accepted and stringified. Lists, mappings, and empty values are
+/// rejected: there is no string to hand the plugin.
+///
+/// Note this cannot be left to serde's own `String` handling. `serde_yaml`
+/// coerces scalars when deserializing straight from YAML text, but the manifest
+/// is parsed into a `serde_yaml::Value` first (see `CanisterManifest`'s
+/// `Deserialize`), and re-deserializing from a `Value` keeps a number a number.
+struct FieldValue(String);
+
+impl<'de> Deserialize<'de> for FieldValue {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct ScalarVisitor;
+
+        impl Visitor<'_> for ScalarVisitor {
+            type Value = FieldValue;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a string, number, or boolean")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<FieldValue, E> {
+                Ok(FieldValue(v.to_owned()))
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<FieldValue, E> {
+                Ok(FieldValue(v.to_string()))
+            }
+
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<FieldValue, E> {
+                Ok(FieldValue(v.to_string()))
+            }
+
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<FieldValue, E> {
+                Ok(FieldValue(v.to_string()))
+            }
+
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<FieldValue, E> {
+                Ok(FieldValue(v.to_string()))
+            }
+        }
+
+        d.deserialize_any(ScalarVisitor)
+    }
+}
+
+impl JsonSchema for FieldValue {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "FieldValue".into()
+    }
+
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": ["string", "number", "boolean"],
+        })
+    }
+}
+
+fn deserialize_fields<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<Option<BTreeMap<String, String>>, D::Error> {
+    let fields = Option::<BTreeMap<String, FieldValue>>::deserialize(d)?;
+    Ok(fields.map(|fields| fields.into_iter().map(|(k, v)| (k, v.0)).collect()))
+}
 
 /// Configuration for a sync plugin step.
 ///
@@ -24,6 +97,7 @@ use super::prebuilt::SourceField;
 ///     - config.txt
 ///   fields:                             # key-value fields passed inline
 ///     api_url: https://example.com
+///     retries: 3
 /// ```
 ///
 /// Example (remote URL — `sha256` is required):
@@ -51,8 +125,10 @@ pub struct Adapter {
     pub files: Option<Vec<String>>,
 
     /// Key-value fields passed to the plugin as part of `sync-exec-input.fields`.
-    /// Values are strings; the plugin decides how to interpret them.
-    pub fields: Option<HashMap<String, String>>,
+    /// A plugin receives every value as a string; a number or boolean written
+    /// unquoted arrives as its text form. The plugin decides how to interpret them.
+    #[schemars(with = "Option<BTreeMap<String, FieldValue>>")]
+    pub fields: Option<BTreeMap<String, String>>,
 
     /// Canisters this plugin may call in addition to the canister being synced.
     /// Each entry is a canister name resolved against the project's canister ID
@@ -72,7 +148,8 @@ impl<'de> Deserialize<'de> for Adapter {
             sha256: Option<String>,
             dirs: Option<Vec<String>>,
             files: Option<Vec<String>>,
-            fields: Option<HashMap<String, String>>,
+            #[serde(default, deserialize_with = "deserialize_fields")]
+            fields: Option<BTreeMap<String, String>>,
             canisters: Option<Vec<String>>,
         }
 
@@ -95,6 +172,8 @@ impl<'de> Deserialize<'de> for Adapter {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
     use crate::manifest::adapter::prebuilt::{LocalSource, RemoteSource};
 
@@ -148,9 +227,19 @@ mod tests {
         );
     }
 
+    /// Parse an adapter the way the manifest loader does: YAML text into a
+    /// `serde_yaml::Value`, then that value into the typed adapter. Going
+    /// through the value matters for `fields` — deserializing straight from
+    /// text lets `serde_yaml` coerce scalars to strings on its own, which
+    /// would hide whether `FieldValue` accepts them.
+    fn adapter_via_value(yaml: &str) -> Result<Adapter, serde_yaml::Error> {
+        let value: serde_yaml::Value = serde_yaml::from_str(yaml).expect("invalid yaml");
+        serde_yaml::from_value(value)
+    }
+
     #[test]
     fn fields_parse_as_a_string_map() {
-        let adapter = serde_yaml::from_str::<Adapter>(
+        let adapter = adapter_via_value(
             r#"
             path: plugins/my-sync.wasm
             fields:
@@ -161,11 +250,61 @@ mod tests {
         .expect("failed to deserialize Adapter with fields");
         assert_eq!(
             adapter.fields,
-            Some(HashMap::from([
+            Some(BTreeMap::from([
                 ("api_url".to_string(), "https://example.com".to_string()),
                 ("token".to_string(), "abc123".to_string()),
             ])),
         );
+    }
+
+    #[test]
+    fn scalar_field_values_are_stringified() {
+        let adapter = adapter_via_value(
+            r#"
+            path: plugins/my-sync.wasm
+            fields:
+              port: 8080
+              enabled: true
+              ratio: 1.5
+            "#,
+        )
+        .expect("failed to deserialize Adapter with scalar fields");
+        assert_eq!(
+            adapter.fields,
+            Some(BTreeMap::from([
+                ("port".to_string(), "8080".to_string()),
+                ("enabled".to_string(), "true".to_string()),
+                ("ratio".to_string(), "1.5".to_string()),
+            ])),
+        );
+    }
+
+    #[test]
+    fn non_scalar_field_values_are_rejected() {
+        for yaml in [
+            // A plugin can only receive a string, so there is nothing sensible
+            // to hand it for a nested mapping...
+            indoc! {r#"
+                path: plugins/my-sync.wasm
+                fields:
+                  nested:
+                    a: b
+            "#},
+            // ...or for a key written with no value at all.
+            indoc! {r#"
+                path: plugins/my-sync.wasm
+                fields:
+                  blank:
+            "#},
+        ] {
+            let err =
+                adapter_via_value(yaml).expect_err("non-scalar field value should be rejected");
+            assert!(
+                err.to_string()
+                    .contains("expected a string, number, or boolean"),
+                "unexpected error: {err}"
+            );
+        }
     }
 
     #[test]

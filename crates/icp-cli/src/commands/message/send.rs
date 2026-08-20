@@ -18,6 +18,7 @@ use url::Url;
 use crate::operations::call_output::{
     CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
 };
+use crate::operations::create::shell_quote;
 
 /// Submit a message signed on another machine
 ///
@@ -114,6 +115,11 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
         return Ok(());
     }
 
+    // The prompt above can sit open for as long as it likes, so the window is
+    // checked again rather than spending a round trip on a message that expired
+    // while it waited.
+    refuse_unsubmittable(&message.validate(OffsetDateTime::now_utc())?)?;
+
     let effective_id = message.destination.to_effective_id();
     let response = match validated.call_type {
         CallType::Query => agent
@@ -124,7 +130,12 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
             let submitted = agent
                 .update_signed(effective_id, message.request.envelope.clone())
                 .await
-                .with_context(|| resubmit_advice(&args.file))?;
+                .with_context(|| {
+                    resubmit_advice(
+                        &args.file,
+                        "the message may already have reached the network",
+                    )
+                })?;
             match submitted {
                 // The synchronous call path already returned a certified reply.
                 CallResponse::Response(reply) => reply,
@@ -140,13 +151,29 @@ pub(crate) async fn exec(ctx: &Context, args: &SendArgs) -> Result<(), anyhow::E
                         .wait_signed(&request_id, effective_id, status_check)
                         .await
                         .map(|(reply, _cert)| reply)
-                        .with_context(|| resubmit_advice(&args.file))?
+                        .with_context(|| {
+                            resubmit_advice(
+                                &args.file,
+                                "the call was submitted; waiting for its outcome failed",
+                            )
+                        })?
                 }
             }
         }
     };
 
-    print_response(&response, args.output, declared_method.as_ref(), args.json)
+    print_response(&response, args.output, declared_method.as_ref(), args.json).map_err(|e| {
+        match validated.call_type {
+            // Nothing executed, so a rendering failure is just that.
+            CallType::Query => e,
+            // The call ran and its reply is in hand — this is the case where
+            // someone is most likely to reach for signing it again.
+            CallType::Update => e.context(resubmit_advice(
+                &args.file,
+                "the call executed and its reply arrived, but could not be rendered",
+            )),
+        }
+    })
 }
 
 /// Refuses a message that is outside its submission window, naming the window so
@@ -258,12 +285,15 @@ fn report_window(validated: &Validated) {
         ),
     }
     // The window is computed from the signing machine's clock, and an offline
-    // machine is exactly the kind that drifts.
-    if matches!(
-        validated.window,
-        WindowState::NotYetValid | WindowState::Expired
-    ) && (validated.valid_from - now).abs() < SUBMISSION_WINDOW
-    {
+    // machine is exactly the kind that drifts. Measured against whichever edge
+    // was missed: against `valid_from` the expired side is always more than a
+    // whole window away, so this would never have fired there.
+    let overshoot = match validated.window {
+        WindowState::NotYetValid => Some(validated.valid_from - now),
+        WindowState::Expired => Some(now - validated.valid_until),
+        WindowState::Valid => None,
+    };
+    if overshoot.is_some_and(|by| by < SUBMISSION_WINDOW) {
         eprintln!(
             "It is only just outside the window, which usually means the signing machine's \
              clock is off rather than that you are early or late."
@@ -299,17 +329,49 @@ fn print_summary(
     eprintln!();
 }
 
-/// The argument decoded, or hex if there is no interface to decode it with.
-/// A prompt showing a hex blob is not something anyone can review.
+/// The argument as the operator should see it before approving anything.
+///
+/// Rendered through the interface when there is one, because a hex blob makes the
+/// prompt useless for review. But the interface usually comes out of the message
+/// itself and is not authenticated, and Candid's record subtyping lets a narrower
+/// one decode the very same bytes while silently dropping fields — a doctored
+/// `.did` can show `(record { to = "alice" })` for an argument that also says
+/// `amount = 1_000`.
+///
+/// So the untyped decode is used as a cross-check. It reads the argument's own
+/// type table, which is part of the signed bytes and so cannot be tampered with,
+/// meaning it can never omit anything. When the two disagree about how much is
+/// there, both are shown and the readable one is not to be trusted.
 fn render_argument(arg: &[u8], declared_method: Option<&(TypeEnv, Function)>) -> String {
-    let decoded = match declared_method {
-        Some((env, func)) => IDLArgs::from_bytes_with_types(arg, env, &func.args).ok(),
-        None => IDLArgs::from_bytes(arg).ok(),
-    };
-    match decoded {
-        Some(args) => format!("{args}"),
-        None => format!("{} (hex, could not decode)", hex::encode(arg)),
+    let untyped = IDLArgs::from_bytes(arg).ok();
+    let typed = declared_method
+        .and_then(|(env, func)| IDLArgs::from_bytes_with_types(arg, env, &func.args).ok());
+
+    match (typed, untyped) {
+        (Some(typed), Some(untyped)) if values_in(&typed) < values_in(&untyped) => format!(
+            "{typed}\n               WARNING: the interface in this message renders less than the \
+             signed argument contains.\n               The signed bytes say: {untyped}"
+        ),
+        (Some(typed), _) => format!("{typed}"),
+        (None, Some(untyped)) => format!("{untyped}"),
+        (None, None) => format!("{} (hex, could not decode)", hex::encode(arg)),
     }
+}
+
+/// Counts the values a decode actually surfaced, so a rendering that drops record
+/// fields can be told apart from one that shows everything.
+fn values_in(args: &IDLArgs) -> usize {
+    fn walk(value: &candid::IDLValue) -> usize {
+        use candid::IDLValue;
+        1 + match value {
+            IDLValue::Record(fields) => fields.iter().map(|f| walk(&f.val)).sum(),
+            IDLValue::Vec(values) => values.iter().map(walk).sum(),
+            IDLValue::Opt(inner) => walk(inner),
+            IDLValue::Variant(v) => walk(&v.0.val),
+            _ => 0,
+        }
+    }
+    args.args.iter().map(walk).sum()
 }
 
 fn confirm() -> Result<bool, anyhow::Error> {
@@ -325,17 +387,30 @@ fn confirm() -> Result<bool, anyhow::Error> {
         .context("failed to read confirmation")
 }
 
-/// What to do when a submission fails after the message may already have been
-/// sent. Re-running is safe; re-signing is not.
-fn resubmit_advice(file: &Path) -> String {
+/// What to do when something fails after the message may already have reached
+/// the network. Re-submitting the identical message is safe; signing a new one is
+/// not.
+///
+/// `situation` says what is known to have happened, because the two cases differ:
+/// a failed submission may or may not have executed, while a reply that could not
+/// be rendered certainly did.
+fn resubmit_advice(file: &Path, situation: &str) -> String {
+    // `-` has already consumed its input, so telling the caller to re-run the
+    // same command would send them at a pipe that is empty — or leave them
+    // waiting on one that never closes.
+    let rerun = match file.as_str() {
+        "-" => "feed the identical bytes to `icp message send -` again (you need the message \
+                you piped in; save it to a file if you no longer have it)"
+            .to_string(),
+        path => format!("re-run `icp message send {}`", shell_quote(path)),
+    };
     format!(
-        "the message may already have reached the network. Re-run `icp message send {file}` on \
-         the same file — the request id is a hash of the signed content, so resubmitting the \
-         identical message is de-duplicated by the IC and cannot execute twice. Do NOT sign it \
-         again: a new signature means a new expiry, hence a different request id, which is NOT \
-         de-duplicated. Two limits worth knowing: once the reply is pruned from the ingress \
-         history the outcome can no longer be recovered (the call still executed), and once the \
-         window closes the message cannot be submitted at all"
+        "{situation}. To recover, {rerun} — the request id is a hash of the signed content, so \
+         resubmitting the identical message is de-duplicated by the IC and cannot execute twice. \
+         Do NOT sign it again: a new signature means a new expiry, hence a different request id, \
+         which is NOT de-duplicated. Two limits worth knowing: once the reply is pruned from the \
+         ingress history the outcome can no longer be recovered (the call still executed), and \
+         once the window closes the message cannot be submitted at all"
     )
 }
 

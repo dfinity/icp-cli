@@ -990,7 +990,7 @@ mod tests {
             anon(),
             "ok".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(result.is_ok());
         // Its error surface flows through the same machinery as v0.2.0 plugins.
@@ -1005,7 +1005,7 @@ mod tests {
             anon(),
             "error".to_string(),
             DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+            StepReporter::null(),
         );
         assert!(matches!(
             result,

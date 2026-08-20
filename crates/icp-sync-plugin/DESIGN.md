@@ -12,7 +12,8 @@ invokes its `exec()` export during `icp sync` for a single canister.
 > - [Sync Plugins](../../docs/concepts/sync-plugins.md) — concept, WIT interface, sandbox, resource limits
 > - [Writing a Sync Plugin](../../docs/guides/writing-sync-plugins.md) — authoring guide (Rust)
 > - [Plugin Sync (Configuration Reference)](../../docs/reference/configuration.md) — `type: plugin` manifest fields
-> - [`sync-plugin.wit`](sync-plugin.wit) — the interface, and the sole source of truth
+> - [`sync-plugin.wit`](sync-plugin.wit) — the current interface (v0.2.0), and its source of truth
+> - [`sync-plugin-v1.wit`](sync-plugin-v1.wit) — the frozen v0.1.0 interface, still loadable
 
 ---
 
@@ -36,8 +37,8 @@ docs; the *reasons* behind those choices are recorded here.
 - **Logging via stdio, not a host import** — stdout/stderr are captured by the
   host and forwarded to the CLI. Plugins use normal print facilities.
 - **No generated bindings checked in** — `wasmtime::component::bindgen!` (host)
-  and `wit_bindgen::generate!` (guest) both run at build time from the WIT file,
-  which stays the single source of truth.
+  and `wit_bindgen::generate!` (guest) both run at build time from the WIT files,
+  which stay the source of truth for the interface they define.
 
 ---
 
@@ -50,10 +51,12 @@ Host-side Component Model runtime for sync plugins.
 ```
 crates/icp-sync-plugin/
   src/
-    lib.rs          — public API: run_plugin(), RunPluginError
-    runtime.rs      — wasmtime component setup, HostState, bindgen!, exec() call
-  sync-plugin.wit   — WIT interface (source of truth)
-  Cargo.toml        — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio
+    lib.rs             — public API: run_plugin(), RunPluginError
+    runtime.rs         — wasmtime component setup, HostState, bindgen!, exec() call
+    path.rs            — declared-path safety checks (escapes_base, symlinks)
+  sync-plugin.wit      — current WIT interface, v0.2.0
+  sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
+  Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio, semver
 ```
 
 Public function:

@@ -1,5 +1,5 @@
 // Host-side Component Model runtime for sync plugins.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -39,8 +39,7 @@ use wasmtime_wasi::{DirPerms, FilePerms};
 // module so their generated type names don't collide. `run_plugin` reads the
 // interface version from the component's own metadata (see `detect_plugin_abi`)
 // and drives it through the matching module, so plugins built against either
-// interface load. The split exists so breaking changes to the current interface
-// can land without dropping support for already-built plugins.
+// interface load.
 mod v2 {
     wasmtime::component::bindgen!({
         world: "sync-plugin",
@@ -55,11 +54,62 @@ mod v1 {
     });
 }
 
-use v2::icp::sync_plugin::types::{CallType, CanisterIdEntry};
+use v2::icp::sync_plugin::types::{CallTarget, CallType, CanisterIdEntry};
+
+/// The canisters a sync plugin is permitted to call, beyond the canister being
+/// synced (which is always reachable via [`CallTarget::Host`]).
+///
+/// Built by the CLI from the plugin step's declared `canisters` dependencies,
+/// resolved against the project's canister ID table. Keeping the resolution on
+/// the CLI side keeps this runtime crate free of any manifest knowledge.
+#[derive(Clone, Debug, Default)]
+pub struct CallableCanisters {
+    /// Dependencies callable by name ([`CallTarget::Name`]). Maps the name — as
+    /// it appears in the canister ID table — to the principal it resolves to.
+    pub by_name: BTreeMap<String, Principal>,
+    /// Every principal callable by [`CallTarget::Id`]. Includes the principals
+    /// of the `by_name` entries, so an author may target the same canister
+    /// either way.
+    pub by_id: BTreeSet<Principal>,
+}
+
+/// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
+/// that the plugin declared it as a dependency. The canister being synced
+/// (`host`) is always permitted.
+fn resolve_call_target(
+    target: &CallTarget,
+    host_canister_id: Principal,
+    callable: &CallableCanisters,
+) -> Result<Principal, String> {
+    match target {
+        CallTarget::Host => Ok(host_canister_id),
+        CallTarget::Name(name) => callable.by_name.get(name).copied().ok_or_else(|| {
+            format!(
+                "plugin is not permitted to call canister '{name}': declare it in the sync step's \
+                 `canisters` list to allow it"
+            )
+        }),
+        CallTarget::Id(text) => {
+            let principal = Principal::from_text(text)
+                .map_err(|e| format!("invalid target principal '{text}': {e}"))?;
+            if principal == host_canister_id || callable.by_id.contains(&principal) {
+                Ok(principal)
+            } else {
+                Err(format!(
+                    "plugin is not permitted to call canister '{principal}': declare it in the \
+                     sync step's `canisters` list to allow it"
+                ))
+            }
+        }
+    }
+}
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
-    target_canister_id: Principal,
+    /// The canister being synced — the target of [`CallTarget::Host`] calls.
+    host_canister_id: Principal,
+    /// Canisters the plugin declared as dependencies and may also call.
+    callable: CallableCanisters,
     agent: Arc<Agent>,
     /// Proxy canister to route update calls through, if configured.
     proxy: Option<Principal>,
@@ -84,10 +134,12 @@ impl wasmtime_wasi::WasiView for HostState {
 }
 
 impl HostState {
-    /// Perform a canister call to the canister being synced. Shared by both
-    /// interface versions.
+    /// Perform a canister call to an already-resolved target principal. Shared
+    /// by both interface versions: the v0.1.0 import always passes the canister
+    /// being synced; the v0.2.0 import passes the resolved `call-target`.
     fn do_canister_call(
         &mut self,
+        target: Principal,
         method: String,
         arg_bytes: Vec<u8>,
         call_type: CallType,
@@ -96,7 +148,6 @@ impl HostState {
     ) -> Result<Vec<u8>, String> {
         use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 
-        let cid = self.target_canister_id;
         let agent = Arc::clone(&self.agent);
         let proxy = if direct { None } else { self.proxy };
 
@@ -108,7 +159,7 @@ impl HostState {
                 CallType::Update => {
                     if let Some(proxy_cid) = proxy {
                         let proxy_args = ProxyArgs {
-                            canister_id: cid,
+                            canister_id: target,
                             method: method.clone(),
                             args: arg_bytes,
                             cycles: candid::Nat::from(cycles),
@@ -128,14 +179,14 @@ impl HostState {
                         }
                     } else {
                         agent
-                            .update(&cid, &method)
+                            .update(&target, &method)
                             .with_arg(arg_bytes)
                             .await
                             .map_err(|e| format!("canister call failed: {e}"))
                     }
                 }
                 CallType::Query => agent
-                    .query(&cid, &method)
+                    .query(&target, &method)
                     .with_arg(arg_bytes)
                     .call()
                     .await
@@ -151,7 +202,7 @@ impl HostState {
     }
 }
 
-// -- v0.2.0 interface. ---------------------------------------------------------
+// -- v0.2.0 interface: the plugin chooses the target via `call-target`. --------
 
 // `types::Host` is an empty marker trait generated for the `types` interface.
 impl v2::icp::sync_plugin::types::Host for HostState {}
@@ -161,11 +212,19 @@ impl v2::SyncPluginImports for HostState {
         &mut self,
         req: v2::icp::sync_plugin::types::CanisterCallRequest,
     ) -> Result<Vec<u8>, String> {
-        self.do_canister_call(req.method, req.arg, req.call_type, req.direct, req.cycles)
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_canister_call(
+            target,
+            req.method,
+            req.arg,
+            req.call_type,
+            req.direct,
+            req.cycles,
+        )
     }
 }
 
-// -- v0.1.0 interface. ---------------------------------------------------------
+// -- v0.1.0 interface: calls always go to the canister being synced. -----------
 
 impl v1::icp::sync_plugin::types::Host for HostState {}
 
@@ -174,12 +233,16 @@ impl v1::SyncPluginImports for HostState {
         &mut self,
         req: v1::icp::sync_plugin::types::CanisterCallRequest,
     ) -> Result<Vec<u8>, String> {
+        // The legacy interface has no target field; always call the host canister.
+        let target = self.host_canister_id;
         // v1's `call-type` is a distinct generated enum; map it to the shared one.
         let call_type = match req.call_type {
             v1::icp::sync_plugin::types::CallType::Update => CallType::Update,
             v1::icp::sync_plugin::types::CallType::Query => CallType::Query,
         };
-        self.do_canister_call(req.method, req.arg, call_type, req.direct, req.cycles)
+        self.do_canister_call(
+            target, req.method, req.arg, call_type, req.direct, req.cycles,
+        )
     }
 }
 
@@ -265,9 +328,11 @@ pub enum RunPluginError {
 /// Which version of the sync-plugin interface a component was built against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PluginAbi {
-    /// Current interface (`icp:sync-plugin@0.2.x`).
+    /// Current interface (`icp:sync-plugin@0.2.x`): `canister-call` chooses a
+    /// target and `sync-exec-input` carries the canister ID table.
     V2,
-    /// Legacy interface (`icp:sync-plugin@0.1.x`).
+    /// Legacy interface (`icp:sync-plugin@0.1.x`): calls always reach the
+    /// canister being synced.
     V1,
 }
 
@@ -339,8 +404,8 @@ pub struct PluginInvocation {
     pub dirs: Vec<String>,
     /// Manifest-relative files to read and pass inline.
     pub files: Vec<String>,
-    /// The canister being synced.
-    pub target_canister_id: Principal,
+    /// The canister being synced. Reachable via `call-target::host`.
+    pub host_canister_id: Principal,
     /// Agent used for canister calls.
     pub agent: Agent,
     /// Proxy canister to route update calls through, if configured.
@@ -355,6 +420,10 @@ pub struct PluginInvocation {
     /// plugin. Same-project canisters appear both under their fully-qualified
     /// key and their bare local name (see the WIT `canister-id-entry` docs).
     pub canister_ids: BTreeMap<String, Principal>,
+    /// Canisters the plugin declared as dependencies and may call, beyond the
+    /// canister being synced. Ignored by v0.1.0 plugins, which can only reach
+    /// the canister being synced.
+    pub callable: CallableCanisters,
     /// Channel for live rolling-view output, if any.
     pub stdio: Option<Sender<String>>,
 }
@@ -365,13 +434,14 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         base_dir,
         dirs,
         files,
-        target_canister_id,
+        host_canister_id,
         agent,
         proxy,
         identity_principal,
         environment,
         compute_limit_secs,
         canister_ids,
+        callable,
         stdio,
     } = invocation;
 
@@ -463,7 +533,8 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 
     let epoch_extension = Arc::new(AtomicU64::new(0));
     let host_state = HostState {
-        target_canister_id,
+        host_canister_id,
+        callable,
         agent: Arc::new(agent),
         proxy,
         wasi_ctx: wasi_builder.build(),
@@ -485,13 +556,15 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         }
     });
 
-    let canister_id_text = target_canister_id.to_text();
+    let canister_id_text = host_canister_id.to_text();
     let identity_text = identity_principal.to_text();
     let proxy_text = proxy.map(|p| p.to_text());
 
     // Which interface the plugin was built against is read from the component's
     // own declared metadata (see `detect_plugin_abi`) rather than probed by
-    // trial instantiation, then driven through the matching bindgen world.
+    // trial instantiation. Both are served in parallel: v0.2.0 plugins choose a
+    // call target and receive the canister ID table; v0.1.0 plugins get neither
+    // and always call the canister being synced.
     let call_result = match detect_plugin_abi(&engine, &component, &wasm_path)? {
         PluginAbi::V2 => {
             let mut linker: Linker<HostState> = Linker::new(&engine);
@@ -743,7 +816,7 @@ mod tests {
     }
 
     /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
-    /// and identity, no proxy, an empty canister ID table, the default compute
+    /// and identity, no proxy, no declared dependencies, the default compute
     /// limit, and the current directory as the base. Individual tests override
     /// the few fields they care about.
     fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
@@ -752,15 +825,78 @@ mod tests {
             base_dir: ".".into(),
             dirs: vec![],
             files: vec![],
-            target_canister_id: anon(),
+            host_canister_id: anon(),
             agent: dummy_agent(),
             proxy: None,
             identity_principal: anon(),
             environment: environment.to_string(),
             compute_limit_secs: DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             canister_ids: BTreeMap::new(),
+            callable: CallableCanisters::default(),
             stdio: None,
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Call-target resolution (enforcement) — pure logic, no fixture WASM needed
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn resolve_target_host_is_always_allowed() {
+        let host = Principal::from_slice(&[1; 4]);
+        let callable = CallableCanisters::default();
+        assert_eq!(
+            resolve_call_target(&CallTarget::Host, host, &callable).unwrap(),
+            host
+        );
+    }
+
+    #[test]
+    fn resolve_target_name_requires_declaration() {
+        let host = Principal::from_slice(&[1; 4]);
+        let dep = Principal::from_slice(&[2; 4]);
+        let callable = CallableCanisters {
+            by_name: BTreeMap::from([("backend".to_string(), dep)]),
+            by_id: BTreeSet::from([dep]),
+        };
+        assert_eq!(
+            resolve_call_target(&CallTarget::Name("backend".into()), host, &callable).unwrap(),
+            dep
+        );
+        let err = resolve_call_target(&CallTarget::Name("frontend".into()), host, &callable)
+            .expect_err("undeclared name must be rejected");
+        assert!(
+            err.contains("not permitted") && err.contains("frontend"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_target_id_allows_host_and_declared_only() {
+        let host = Principal::from_slice(&[1; 4]);
+        let dep = Principal::from_slice(&[2; 4]);
+        let other = Principal::from_slice(&[3; 4]);
+        let callable = CallableCanisters {
+            by_name: BTreeMap::new(),
+            by_id: BTreeSet::from([dep]),
+        };
+        // A declared principal is allowed; so is the host, implicitly.
+        assert_eq!(
+            resolve_call_target(&CallTarget::Id(dep.to_text()), host, &callable).unwrap(),
+            dep
+        );
+        assert_eq!(
+            resolve_call_target(&CallTarget::Id(host.to_text()), host, &callable).unwrap(),
+            host
+        );
+        // An undeclared principal is rejected.
+        let err = resolve_call_target(&CallTarget::Id(other.to_text()), host, &callable)
+            .expect_err("undeclared principal must be rejected");
+        assert!(err.contains("not permitted"), "got: {err}");
+        // Garbage text is a distinct, clearer error.
+        let err = resolve_call_target(&CallTarget::Id("not a principal".into()), host, &callable)
+            .expect_err("invalid principal text must be rejected");
+        assert!(err.contains("invalid target principal"), "got: {err}");
     }
 
     // -------------------------------------------------------------------------

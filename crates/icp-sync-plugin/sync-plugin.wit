@@ -53,8 +53,8 @@ interface types {
         /// Name→principal mapping for every named canister in the project for
         /// the environment being synced, sorted by name. Informational: the
         /// plugin may use it to resolve canister names it knows about. Being
-        /// listed here does not grant permission to call a canister — that
-        /// still requires declaring it as a dependency (see `call-target`).
+        /// listed here does not let the plugin call a canister — the
+        /// `canister-call` import always targets the canister being synced.
         canister-ids: list<canister-id-entry>,
     }
 

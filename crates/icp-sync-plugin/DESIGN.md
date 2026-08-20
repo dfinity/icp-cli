@@ -33,8 +33,9 @@ docs; the *reasons* behind those choices are recorded here.
   than a policy the plugin could bypass.
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
-  canister names it knows about. It is informational only; calling still
-  requires a declaration.
+  canister names it knows about. It is informational only: `canister-call`
+  still targets the canister being synced, so the table grants no ability to
+  call other canisters.
 - **Filesystem access via WASI, not a host import** — plugins use standard
   language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
   bespoke `read-file`/`list-dir` import is needed.

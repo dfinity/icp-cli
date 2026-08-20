@@ -17,7 +17,9 @@ use icp::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
         EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
         ManifestInitArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
-        SyncSteps, load_manifest_from_path, plugin, prebuilt,
+        SyncSteps, load_manifest_from_path, plugin,
+        plugin::CanisterRef,
+        prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
@@ -650,6 +652,7 @@ async fn prepare_canister(
                         canister_path,
                         &path_name,
                         idx,
+                        local_names,
                         pkg_cache,
                         out,
                     )
@@ -710,6 +713,27 @@ fn localize_controllers<EnvVar>(
     settings
 }
 
+/// Rewrite a plugin's declared call targets from workspace store keys back to the
+/// local names of the instance being written, on the same grounds as
+/// [`localize_controllers`]. Principals are already absolute and pass through.
+fn localize_call_targets(
+    canisters: Option<&[CanisterRef]>,
+    local_names: &HashMap<&str, &str>,
+) -> Option<Vec<CanisterRef>> {
+    canisters.map(|canisters| {
+        canisters
+            .iter()
+            .map(|target| match target {
+                CanisterRef::Name(name) => match local_names.get(name.as_str()) {
+                    Some(local) => CanisterRef::Name((*local).to_owned()),
+                    None => target.clone(),
+                },
+                CanisterRef::Principal(_) => target.clone(),
+            })
+            .collect()
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_plugin_step(
     adapter: &plugin::Adapter,
@@ -718,6 +742,7 @@ async fn prepare_plugin_step(
     canister_path: &Path,
     path_name: &str,
     idx: usize,
+    local_names: &HashMap<&str, &str>,
     pkg_cache: &PackageCache,
     out: &mut BundleArtifacts,
 ) -> Result<SyncStep, BundleError> {
@@ -788,7 +813,7 @@ async fn prepare_plugin_step(
         sha256: Some(plugin_sha256),
         dirs: bundle_dirs,
         files: bundle_files,
-        canisters: None,
+        canisters: localize_call_targets(adapter.canisters.as_deref(), local_names),
     }))
 }
 

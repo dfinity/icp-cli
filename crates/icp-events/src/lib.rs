@@ -53,6 +53,11 @@ pub enum EventKind {
     /// One line of output produced while the task's current step runs.
     Output { stream: OutputStream, line: String },
 
+    /// How far a quantifiable task has come, in the unit its [`TaskKind`]
+    /// declares (e.g. bytes out of [`TaskKind::SnapshotTransfer`]'s
+    /// `total_bytes`).
+    Progress { position: u64 },
+
     /// The task's current step finished.
     StepCompleted { outcome: StepOutcome },
 
@@ -90,6 +95,12 @@ pub enum TaskKind {
         canister: String,
         canister_id: Principal,
     },
+    SnapshotTransfer {
+        canister: String,
+        direction: TransferDirection,
+        blob: TransferBlob,
+        total_bytes: u64,
+    },
 }
 
 impl TaskKind {
@@ -102,9 +113,27 @@ impl TaskKind {
             | TaskKind::Install { canister, .. }
             | TaskKind::UpdateSettings { canister, .. }
             | TaskKind::UpdateEnvironmentVariables { canister, .. }
-            | TaskKind::CandidCheck { canister, .. } => canister,
+            | TaskKind::CandidCheck { canister, .. }
+            | TaskKind::SnapshotTransfer { canister, .. } => canister,
         }
     }
+}
+
+/// Which way a snapshot blob is moving relative to the local machine.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferDirection {
+    Upload,
+    Download,
+}
+
+/// The snapshot blob being transferred.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferBlob {
+    WasmModule,
+    WasmMemory,
+    StableMemory,
 }
 
 /// Where an output line came from.
@@ -263,6 +292,12 @@ impl TaskReporter {
             tx: self.tx.clone(),
             task_id: self.task_id,
         }
+    }
+
+    /// Report how far the task has come, emitting [`EventKind::Progress`].
+    /// The unit is whatever the task's [`TaskKind`] declares.
+    pub fn progress(&self, position: u64) {
+        self.send(EventKind::Progress { position });
     }
 
     /// Finish the task, emitting [`EventKind::TaskCompleted`]. No further

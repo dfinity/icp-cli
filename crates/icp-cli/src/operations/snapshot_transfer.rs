@@ -19,7 +19,7 @@ use icp::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
-use indicatif::{ProgressBar, ProgressStyle};
+use icp_events::TaskReporter;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::{
@@ -424,19 +424,6 @@ where
     }
 }
 
-/// Create a progress bar for byte transfers.
-pub fn create_transfer_progress_bar(total_bytes: u64, label: &str) -> ProgressBar {
-    let pb = ProgressBar::new(total_bytes);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .expect("invalid progress bar template")
-            .progress_chars("#>-"),
-    );
-    pb.set_prefix(label.to_string());
-    pb
-}
-
 /// Read snapshot metadata from a canister.
 pub async fn read_snapshot_metadata(
     agent: &Agent,
@@ -513,7 +500,7 @@ pub async fn download_blob_to_file(
     total_size: u64,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut DownloadProgress,
-    progress_bar: &ProgressBar,
+    task: &TaskReporter,
 ) -> Result<(), SnapshotTransferError> {
     let output_path = paths.blob_path(blob_type);
 
@@ -547,7 +534,7 @@ pub async fn download_blob_to_file(
 
     // Set initial progress based on frontier
     let initial_bytes = progress.blob_progress(blob_type).frontier;
-    progress_bar.set_position(initial_bytes);
+    task.progress(initial_bytes);
 
     // Determine which chunks need downloading
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -612,7 +599,7 @@ pub async fn download_blob_to_file(
         save_download_progress(progress, paths)?;
 
         // Update progress bar to show frontier position
-        progress_bar.set_position(progress.blob_progress(blob_type).frontier);
+        task.progress(progress.blob_progress(blob_type).frontier);
     }
 
     Ok(())
@@ -663,7 +650,7 @@ pub async fn upload_blob_from_file(
     blob_type: BlobType,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut UploadProgress,
-    progress_bar: &ProgressBar,
+    task: &TaskReporter,
 ) -> Result<u64, SnapshotTransferError> {
     let input_path = paths.blob_path(blob_type);
     let file_size = std::fs::metadata(&input_path)
@@ -690,7 +677,7 @@ pub async fn upload_blob_from_file(
             .context(SeekBlobFileSnafu { path: &input_path })?;
     }
 
-    progress_bar.set_position(start_offset);
+    task.progress(start_offset);
 
     // Read all chunks and launch uploads concurrently
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -742,7 +729,7 @@ pub async fn upload_blob_from_file(
                 while let Some(&size) = completed.get(&next_report_offset) {
                     completed.remove(&next_report_offset);
                     next_report_offset += size;
-                    progress_bar.set_position(next_report_offset);
+                    task.progress(next_report_offset);
 
                     // Update and save progress
                     match blob_type {

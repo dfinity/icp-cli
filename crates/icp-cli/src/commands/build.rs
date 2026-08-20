@@ -6,8 +6,9 @@ use icp::context::{Context, EnvironmentSelection};
 use tracing::info;
 
 use crate::{
-    operations::build::build_many_with_progress_bar,
+    operations::build::build_many,
     options::{EnvironmentOpt, arg_struct_change_help},
+    render::rendered,
 };
 
 /// Build canisters
@@ -57,14 +58,18 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
     // Build the selected canisters
     info!("Building canisters:");
 
-    build_many_with_progress_bar(
-        canisters_to_build,
-        environment_selection.name(),
-        ctx.builder.clone(),
-        ctx.artifacts.clone(),
-        &ctx.dirs.package_cache()?,
-        ctx.debug,
-    )
+    let pkg_cache = ctx.dirs.package_cache()?;
+    rendered(ctx.debug, async |reporter| {
+        build_many(
+            canisters_to_build,
+            environment_selection.name(),
+            ctx.builder.clone(),
+            ctx.artifacts.clone(),
+            &pkg_cache,
+            reporter,
+        )
+        .await
+    })
     .await?;
 
     info!("Canisters built successfully");

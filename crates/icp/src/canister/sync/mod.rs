@@ -4,8 +4,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
+use icp_events::StepReporter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::SyncStep;
 use crate::package::PackageCache;
@@ -46,7 +46,7 @@ pub trait Synchronize: Sync + Send {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
@@ -77,13 +77,13 @@ impl Synchronize for Syncer {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
             SyncStep::Script(adapter) => Ok(self
                 .scripts
-                .run_script(ScriptInvocation::new(adapter, params), stdio)
+                .run_script(ScriptInvocation::new(adapter, params), reporter)
                 .await?),
             SyncStep::Plugin(adapter) => Ok(plugin::sync(
                 adapter,
@@ -91,7 +91,7 @@ impl Synchronize for Syncer {
                 agent,
                 &params.environment,
                 params.proxy,
-                stdio,
+                reporter,
                 pkg_cache,
             )
             .await?),
@@ -112,7 +112,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _step: &SyncStep,
         _params: &Params,
         _agent: &Agent,
-        _stdio: Option<Sender<String>>,
+        _reporter: &StepReporter,
         _pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
@@ -139,7 +139,7 @@ mod tests {
         async fn run_script(
             &self,
             invocation: ScriptInvocation,
-            _stdio: Option<Sender<String>>,
+            _reporter: &StepReporter,
         ) -> Result<Vec<String>, ScriptRunError> {
             self.seen.lock().unwrap().push(invocation);
             Ok(vec![])
@@ -181,7 +181,13 @@ mod tests {
         let pkg_cache = PackageCache::new(tmp.path().to_owned()).unwrap();
 
         let retained = syncer
-            .sync(&step, &params, &dummy_agent(), None, &pkg_cache)
+            .sync(
+                &step,
+                &params,
+                &dummy_agent(),
+                &StepReporter::null(),
+                &pkg_cache,
+            )
             .await
             .expect("script step should dispatch");
         assert!(retained.is_empty());

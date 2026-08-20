@@ -15,12 +15,11 @@ use icp::{
     context::{Context, EnvironmentSelection},
     store_id::IdMapping,
 };
+use icp_events::{Reporter, TaskKind, TaskOutcome};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
-use tracing::{error, warn};
-
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use tracing::warn;
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -44,13 +43,6 @@ pub(crate) enum SyncSettingsOperationError {
 #[snafu(display("Canister(s) {names:?} failed to update settings."))]
 pub struct SyncSettingsManyError {
     names: Vec<String>,
-}
-
-/// Holds error information from a failed canister settings update operation
-struct SettingsFailure {
-    canister_name: String,
-    canister_id: Principal,
-    error: SyncSettingsOperationError,
 }
 
 /// Compare two LogVisibility values in an order-insensitive manner.
@@ -226,23 +218,21 @@ pub(crate) async fn sync_settings_many(
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
     let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
-        let pb = progress_manager.create_progress_bar(&info.name);
-        let canister_name = info.name.clone();
+        let task = reporter.task(TaskKind::UpdateSettings {
+            canister: info.name.clone(),
+            canister_id: cid,
+        });
+        let agent = agent.clone();
         let ids = ids.clone();
 
-        let settings_fn = {
-            let agent = agent.clone();
-            let pb = pb.clone();
-
-            async move {
-                pb.set_message("Updating canister settings...");
+        futs.push_back(async move {
+            let result = async {
                 let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
                 for name in &unresolved {
                     warn!(
@@ -253,51 +243,28 @@ pub(crate) async fn sync_settings_many(
                 }
                 Ok::<_, SyncSettingsOperationError>(())
             }
-        };
-
-        futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                settings_fn,
-                || "Canister settings updated successfully".to_string(),
-                |err| format!("Failed to update canister settings: {err}"),
-            )
             .await;
 
-            // Map error to include canister context for deferred printing
-            result.map_err(|error| SettingsFailure {
-                canister_name,
-                canister_id: cid,
-                error,
-            })
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| info.name.clone())
         });
     }
 
-    // Consume the set of futures and collect errors
-    let mut errors: Vec<SettingsFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        // Print all errors in batch
-        for failure in &errors {
-            error!(
-                "----- Failed to update settings for canister '{}': {} -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!("'{}'", failure.error);
-        }
-
-        return SyncSettingsManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return SyncSettingsManySnafu { names: failed }.fail();
     }
 
     Ok(())

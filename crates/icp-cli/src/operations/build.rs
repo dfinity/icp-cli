@@ -8,10 +8,8 @@ use icp::{
     package::PackageCache,
     prelude::*,
 };
+use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
 use snafu::{ResultExt, Snafu};
-use tracing::error;
-
-use crate::progress::{MultiStepProgressBar, ProgressManager, ProgressManagerSettings};
 
 #[derive(Debug, Snafu)]
 pub enum BuildOperationError {
@@ -39,18 +37,11 @@ pub struct BuildManyError {
     names: Vec<String>,
 }
 
-/// Holds error information from a failed canister build operation
-struct BuildFailure {
-    canister_name: String,
-    error: BuildOperationError,
-    progress_output: Vec<String>,
-}
-
 pub(crate) async fn build(
     canister_path: &Path,
     canister: &Canister,
     environment: &str,
-    pb: &mut MultiStepProgressBar,
+    task: &TaskReporter,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     pkg_cache: &PackageCache,
@@ -60,9 +51,7 @@ pub(crate) async fn build(
 
     let step_count = canister.build.steps.len();
     for (i, step) in canister.build.steps.iter().enumerate() {
-        let current_step = i + 1;
-        let pb_hdr = format!("Building: step {current_step} of {step_count} {step}");
-        let tx = pb.begin_step(pb_hdr);
+        let reporter = task.step(i + 1, step_count, step.to_string());
 
         let build_result = builder
             .build(
@@ -72,12 +61,15 @@ pub(crate) async fn build(
                     output: wasm_output_path.to_owned(),
                     environment: environment.to_owned(),
                 },
-                Some(tx),
+                &reporter,
                 pkg_cache,
             )
             .await;
 
-        pb.end_step().await;
+        reporter.done(match &build_result {
+            Ok(()) => StepOutcome::Succeeded,
+            Err(_) => StepOutcome::Failed,
+        });
 
         build_result?;
     }
@@ -96,80 +88,56 @@ pub(crate) async fn build(
     Ok(())
 }
 
-pub(crate) async fn build_many_with_progress_bar(
+pub(crate) async fn build_many(
     canisters: Vec<(PathBuf, Canister)>,
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn icp::store_artifact::Access>,
     pkg_cache: &PackageCache,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (canister_path, canister) in canisters {
-        let mut pb = progress_manager.create_multi_step_progress_bar(&canister.name, "Build");
+        let task = reporter.task(TaskKind::Build {
+            canister: canister.name.clone(),
+        });
         let builder = builder.clone();
         let artifacts = artifacts.clone();
+
         let fut = async move {
-            let build_result = build(
+            let result = build(
                 &canister_path,
                 &canister,
                 environment,
-                &mut pb,
+                &task,
                 builder,
                 artifacts,
                 pkg_cache,
             )
             .await;
 
-            // Execute with progress tracking for final state
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                async { build_result },
-                || "Built successfully".to_string(),
-                |err| format!("Failed to build canister: {err}"),
-            )
-            .await;
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
 
-            // Map error to include canister context for deferred printing
-            result.map_err(|error| BuildFailure {
-                canister_name: canister.name.clone(),
-                error,
-                progress_output: pb.dump_output(debug),
-            })
+            result.map_err(|_| canister.name.clone())
         };
         futs.push_back(fut);
     }
 
-    // Consume the set of futures and collect errors
-    let mut errors: Vec<BuildFailure> = Vec::new();
+    // Consume the set of futures and collect the failed canister names; the
+    // renderer owns displaying each failure's captured output.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        // Print all errors in batch
-        for failure in &errors {
-            error!(
-                "----- Failed to build canister '{}' -----",
-                failure.canister_name,
-            );
-            error!("'{}'", failure.error);
-            for line in &failure.progress_output {
-                error!("{line}");
-            }
-        }
-
-        return BuildManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return BuildManySnafu { names: failed }.fail();
     }
 
     Ok(())

@@ -205,7 +205,7 @@ async fn sync_aborts_when_canister_not_running() {
     // sync aborts early with an actionable message; the `echo "syncing"` step
     // never runs, so its runtime progress output must not appear. (The `--debug`
     // config dump echoes the step's command text, so we check for the runtime
-    // `DEBUG icp::progress: syncing` marker rather than the bare word "syncing".)
+    // `DEBUG icp::render::plain: syncing` marker rather than the bare word "syncing".)
     ctx.icp()
         .current_dir(&project_dir)
         .env("NO_COLOR", "1")
@@ -221,7 +221,7 @@ async fn sync_aborts_when_canister_not_running() {
         .stderr(
             contains("asset sync requires it to be Running")
                 .and(contains("icp canister start"))
-                .and(contains("DEBUG icp::progress: syncing").not()),
+                .and(contains("DEBUG icp::render::plain: syncing").not()),
         );
 }
 
@@ -387,9 +387,9 @@ async fn sync_multiple_canisters() {
         .success()
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-a"))
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-b"))
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-c").not());
 }
 
 #[tokio::test]
@@ -861,7 +861,7 @@ async fn sync_all_canisters_in_environment() {
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: []"#))
         .stderr(contains(r#"environment: Some("test-env")"#))
-        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-c").not()); // not in test-env
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-a"))
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-b"))
+        .stderr(contains("DEBUG icp::render::plain: syncing canister-c").not()); // not in test-env
 }

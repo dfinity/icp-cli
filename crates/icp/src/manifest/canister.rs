@@ -791,7 +791,14 @@ mod tests {
                                     path: "./plugins/my-sync.wasm".into(),
                                 }),
                                 sha256: None,
-                                dirs: Some(vec!["assets/seed-data/".to_string()]),
+                                dirs: Some(
+                                    crate::manifest::adapter::plugin::NamedPaths::from_entries(
+                                        vec![crate::manifest::adapter::plugin::NamedPath {
+                                            key: None,
+                                            path: "assets/seed-data/".to_string(),
+                                        }],
+                                    )
+                                ),
                                 files: None,
                                 fields: None,
                                 canisters: None,

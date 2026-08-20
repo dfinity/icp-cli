@@ -4,13 +4,30 @@ use camino::Utf8PathBuf;
 use candid::Principal;
 use ic_agent::Agent;
 use icp_sync_plugin::{
-    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV,
+    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV,
     PluginInvocation, RunPluginError, run_plugin,
 };
 use snafu::prelude::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
+use crate::{
+    canister::wasm,
+    manifest::adapter::plugin::{Adapter, NamedPaths},
+    package::PackageCache,
+};
+
+/// Convert a manifest [`NamedPaths`] (or its absence) into the runtime's
+/// key-tagged path list. A missing setting yields an empty list.
+fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
+    paths
+        .into_iter()
+        .flat_map(NamedPaths::entries)
+        .map(|entry| KeyedPath {
+            key: entry.key.clone(),
+            path: entry.path.clone(),
+        })
+        .collect()
+}
 
 use super::Params;
 
@@ -97,8 +114,8 @@ pub(super) async fn sync(
     //    subject to the runtime's path-safety checks (no escaping or symlinked
     //    paths).
     let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
-    let files: Vec<String> = adapter.files.clone().unwrap_or_default();
+    let dirs = keyed_paths(adapter.dirs.as_ref());
+    let files = keyed_paths(adapter.files.as_ref());
     let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
 
     // 3. Build the canister ID table exposed to the plugin, then resolve the

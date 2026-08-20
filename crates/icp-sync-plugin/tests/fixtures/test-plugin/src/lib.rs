@@ -19,22 +19,19 @@ impl Guest for TestPlugin {
                 println!("stdout from plugin");
                 Ok(())
             }
-            // Echo the fields back so the host can assert on ordering and
-            // values; fail if the expected field is missing.
             "fields" => {
+                if !input.fields.iter().any(|f| f.name == "greeting") {
+                    return Err("missing 'greeting' field".to_string());
+                }
+                // Echo the fields back so the host can assert on what arrived.
                 let rendered = input
                     .fields
                     .iter()
                     .map(|f| format!("{}={}", f.name, f.value))
                     .collect::<Vec<_>>()
                     .join(",");
-                match input.fields.iter().find(|f| f.name == "greeting") {
-                    Some(_) => {
-                        eprintln!("{rendered}");
-                        Ok(())
-                    }
-                    None => Err("missing 'greeting' field".to_string()),
-                }
+                eprintln!("{rendered}");
+                Ok(())
             }
             "spin" => {
                 // Busy-loop forever to exercise the host's compute-time limit.

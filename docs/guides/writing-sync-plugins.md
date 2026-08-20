@@ -124,6 +124,8 @@ for field in &input.fields {
 }
 ```
 
+A value always arrives as a string, so parse the ones you want as another type — a manifest may write `retries: 3` unquoted, and the plugin receives `"3"`.
+
 ## Build
 
 ```bash
@@ -147,6 +149,7 @@ sync:
         - config.txt
       fields:
         api_url: https://example.com
+        retries: 3
 ```
 
 Then run the sync phase:

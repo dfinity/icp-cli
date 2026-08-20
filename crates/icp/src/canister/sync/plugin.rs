@@ -129,17 +129,22 @@ pub(super) async fn sync(
 /// project, plus — for canisters in the same subproject as the one being synced
 /// — a duplicate entry under the bare local name. A store key is
 /// `<subproject>:<local>` for a dependency canister and a bare local name for a
-/// canister defined directly in the project (see the WIT `canister-id-entry`
+/// canister defined directly in the app root (see the WIT `canister-id-entry`
 /// docs), so the syncing canister's namespace is the prefix of its own key.
+///
+/// A local name never contains a colon but a subproject directory may, so keys
+/// split on their *last* colon. The bare-name aliases take precedence over an
+/// app-root canister of the same local name: a plugin resolving a bare name is
+/// naming what the syncing canister's own manifest calls it.
 fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
-    let syncing_namespace = params.name.split_once(':').map(|(namespace, _)| namespace);
+    let syncing_namespace = params.name.rsplit_once(':').map(|(namespace, _)| namespace);
 
     let mut table = params.canister_ids.clone();
     for (key, id) in &params.canister_ids {
-        if let Some((namespace, local)) = key.split_once(':')
+        if let Some((namespace, local)) = key.rsplit_once(':')
             && Some(namespace) == syncing_namespace
         {
-            table.entry(local.to_owned()).or_insert(*id);
+            table.insert(local.to_owned(), *id);
         }
     }
     table
@@ -215,6 +220,50 @@ mod tests {
         // The other subproject's canister is not reachable by a bare name; the
         // bare "backend" belongs to the syncing canister's own subproject.
         assert_eq!(table.get("backend"), Some(&backend));
+    }
+
+    /// An app-root canister sharing a local name with a sibling of the syncing
+    /// canister does not keep the bare name: the syncing subproject's own
+    /// canister is what that name means to the plugin.
+    #[test]
+    fn exposed_ids_sibling_alias_overrides_the_app_root_name() {
+        let root_backend = principal(1);
+        let sibling_backend = principal(2);
+        let params = params_named(
+            "services/open-accounts:frontend",
+            &[
+                ("backend", root_backend),
+                ("services/open-accounts:backend", sibling_backend),
+                ("services/open-accounts:frontend", principal(3)),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("backend"), Some(&sibling_backend));
+        // The app-root canister's only key was that bare name, so it drops out
+        // of the table entirely rather than answering to a sibling's name.
+        assert!(!table.values().any(|id| *id == root_backend));
+    }
+
+    /// A subproject directory may itself contain a colon, so keys are split on
+    /// their last one — the same rule bundling uses.
+    #[test]
+    fn exposed_ids_split_subproject_prefix_at_the_last_colon() {
+        let backend = principal(1);
+        let frontend = principal(2);
+        let params = params_named(
+            "services/odd:name:backend",
+            &[
+                ("services/odd:name:backend", backend),
+                ("services/odd:name:frontend", frontend),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("backend"), Some(&backend));
+        assert_eq!(table.get("frontend"), Some(&frontend));
     }
 
     /// A single-project layout keys canisters by bare local name already, so no

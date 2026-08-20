@@ -20,13 +20,14 @@ interface types {
         /// The canister's fully-qualified project key: the subproject it belongs
         /// to (a path relative to the app root) joined to its local name by a
         /// single colon, e.g. "services/open-accounts:backend". A canister
-        /// defined directly in the project being synced has no subproject prefix
-        /// and appears as its bare local name, e.g. "backend".
+        /// defined directly in the app root has no subproject prefix and appears
+        /// as its bare local name, e.g. "backend".
         ///
         /// Every canister in the same subproject as the canister being synced is
         /// additionally listed under its bare local name (a duplicate entry with
         /// the same `id`), so a plugin can address a sibling by the same local
-        /// name the manifest uses.
+        /// name the manifest uses. A bare name always means the sibling, so an
+        /// app-root canister sharing that local name is not listed.
         name: string,
         /// Textual principal the name resolves to for this environment.
         id: string,

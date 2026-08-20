@@ -71,7 +71,7 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
-Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister in the project being synced, or a `subproject:canister` key for a dependency canister. Canisters in the same subproject as the one being synced are additionally listed under their bare local name.
+Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister that came from a dependency. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
 
 ### Calling the canister — `canister-call`
 

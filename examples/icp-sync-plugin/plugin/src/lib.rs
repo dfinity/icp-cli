@@ -38,7 +38,7 @@ impl Guest for Plugin {
         //    uploader principal, which is the current identity — not the proxy.
         let mut registered = 0u32;
         for dir in &input.dirs {
-            registered += register_dir(Path::new(dir))?;
+            registered += register_dir(Path::new(&dir.path))?;
         }
 
         // Persisted after the step completes; use stderr.

@@ -1,9 +1,14 @@
-use std::{collections::BTreeMap, fmt};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt,
+};
 
+use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{self, Visitor},
+    ser::SerializeMap,
 };
 
 use super::prebuilt::SourceField;
@@ -78,6 +83,156 @@ fn deserialize_fields<'de, D: Deserializer<'de>>(
     Ok(fields.map(|fields| fields.into_iter().map(|(k, v)| (k, v.0)).collect()))
 }
 
+/// A single manifest path together with the map key it was declared under.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedPath {
+    /// The map key this path was declared under, or `None` for a plain-list
+    /// entry. Non-unique: several paths share a key when the key maps to a list.
+    pub key: Option<String>,
+    /// The path itself, relative to the canister directory.
+    pub path: String,
+}
+
+/// A set of manifest paths declared either as a plain list or as a map of
+/// name → path(s). Used for a plugin step's `dirs` and `files`.
+///
+/// In `canister.yaml` this accepts three shapes:
+/// ```yaml
+/// # a plain list — entries carry no key
+/// files:
+///   - config.txt
+///   - data.json
+/// # a map whose keys each name a single path...
+/// files:
+///   main: config.txt
+/// # ...or a list of paths, which all share that key
+/// files:
+///   seeds:
+///     - a.json
+///     - b.json
+/// ```
+///
+/// Order is preserved: list entries in written order; map entries in written
+/// key order, each key's paths in written order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NamedPaths(Vec<NamedPath>);
+
+/// A list of paths, or a map of name → path (or list of paths). The map form
+/// tags each path with its key for the plugin; a key may map to several paths.
+///
+/// This type exists only to describe [`NamedPaths`] in the generated JSON schema
+/// (see the `#[schemars(with = ...)]` on the adapter fields); [`NamedPaths`]
+/// owns the actual (de)serialization.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum NamedPathsSchema {
+    List(Vec<String>),
+    Map(HashMap<String, PathOrListSchema>),
+}
+
+/// One map value in [`NamedPathsSchema`]: a single path, or a list of paths that
+/// share the key.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum PathOrListSchema {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl NamedPaths {
+    /// Build from an ordered list of key-tagged paths.
+    pub fn from_entries(entries: Vec<NamedPath>) -> Self {
+        NamedPaths(entries)
+    }
+
+    /// The declared paths, in order, each tagged with its map key (if any).
+    pub fn entries(&self) -> &[NamedPath] {
+        &self.0
+    }
+
+    /// Consume into the ordered list of key-tagged paths.
+    pub fn into_entries(self) -> Vec<NamedPath> {
+        self.0
+    }
+}
+
+impl FromIterator<NamedPath> for NamedPaths {
+    fn from_iter<I: IntoIterator<Item = NamedPath>>(iter: I) -> Self {
+        NamedPaths(iter.into_iter().collect())
+    }
+}
+
+impl<'de> Deserialize<'de> for NamedPaths {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        /// A map value: a single path or a list of paths sharing the key.
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum PathOrList {
+            One(String),
+            Many(Vec<String>),
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            List(Vec<String>),
+            Map(IndexMap<String, PathOrList>),
+        }
+
+        let entries = match Repr::deserialize(d)? {
+            Repr::List(paths) => paths
+                .into_iter()
+                .map(|path| NamedPath { key: None, path })
+                .collect(),
+            Repr::Map(map) => map
+                .into_iter()
+                .flat_map(|(key, value)| {
+                    let paths = match value {
+                        PathOrList::One(path) => vec![path],
+                        PathOrList::Many(paths) => paths,
+                    };
+                    paths.into_iter().map(move |path| NamedPath {
+                        key: Some(key.clone()),
+                        path,
+                    })
+                })
+                .collect(),
+        };
+        Ok(NamedPaths(entries))
+    }
+}
+
+impl Serialize for NamedPaths {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        // Deserialization yields either all-unkeyed (list form) or all-keyed
+        // (map form) entries; serialize back to whichever it was.
+        if self.0.iter().all(|e| e.key.is_none()) {
+            let paths: Vec<&str> = self.0.iter().map(|e| e.path.as_str()).collect();
+            paths.serialize(s)
+        } else {
+            // Group paths by key, preserving order. A key with one path
+            // serializes as a scalar; multiple as a list.
+            let mut groups: IndexMap<&str, Vec<&str>> = IndexMap::new();
+            for e in &self.0 {
+                groups
+                    .entry(e.key.as_deref().unwrap_or_default())
+                    .or_default()
+                    .push(&e.path);
+            }
+            let mut map = s.serialize_map(Some(groups.len()))?;
+            for (key, paths) in groups {
+                match paths.as_slice() {
+                    [one] => map.serialize_entry(key, one)?,
+                    many => map.serialize_entry(key, many)?,
+                }
+            }
+            map.end()
+        }
+    }
+}
+
 /// Configuration for a sync plugin step.
 ///
 /// A sync plugin is a WebAssembly module invoked during `icp sync` for a
@@ -100,6 +255,18 @@ fn deserialize_fields<'de, D: Deserializer<'de>>(
 ///     retries: 3
 /// ```
 ///
+/// `dirs` and `files` may instead be written as a map, tagging each entry with a
+/// `key` surfaced to the plugin; a key may map to a single path or a list:
+/// ```yaml
+/// - type: plugin
+///   path: ./plugins/populate-data.wasm
+///   dirs:
+///     seed: assets/seed-data           # keyed single path
+///     migrations:                      # keyed list — entries share the key
+///       - migrations/2025
+///       - migrations/2026
+/// ```
+///
 /// Example (remote URL — `sha256` is required):
 /// ```yaml
 /// - type: plugin
@@ -117,12 +284,18 @@ pub struct Adapter {
 
     /// Directories (relative to canister directory) the plugin may read from.
     /// Each entry must be a directory; it is preopened via WASI so the plugin
-    /// can traverse it using standard filesystem APIs.
-    pub dirs: Option<Vec<String>>,
+    /// can traverse it using standard filesystem APIs. Written as a plain list
+    /// of paths, or as a map of name → path (or list of paths); the name is
+    /// surfaced to the plugin as each entry's `key`.
+    #[schemars(with = "Option<NamedPathsSchema>")]
+    pub dirs: Option<NamedPaths>,
 
     /// Files (relative to canister directory) the host reads and passes to
-    /// the plugin as part of `sync-exec-input.files`.
-    pub files: Option<Vec<String>>,
+    /// the plugin as part of `sync-exec-input.files`. Written as a plain list
+    /// of paths, or as a map of name → path (or list of paths); the name is
+    /// surfaced to the plugin as each entry's `key`.
+    #[schemars(with = "Option<NamedPathsSchema>")]
+    pub files: Option<NamedPaths>,
 
     /// Key-value fields passed to the plugin as part of `sync-exec-input.fields`.
     /// A plugin receives every value as a string; a number or boolean written
@@ -146,8 +319,8 @@ impl<'de> Deserialize<'de> for Adapter {
             #[serde(flatten)]
             source: SourceField,
             sha256: Option<String>,
-            dirs: Option<Vec<String>>,
-            files: Option<Vec<String>>,
+            dirs: Option<NamedPaths>,
+            files: Option<NamedPaths>,
             #[serde(default, deserialize_with = "deserialize_fields")]
             fields: Option<BTreeMap<String, String>>,
             canisters: Option<Vec<String>>,
@@ -175,6 +348,27 @@ mod tests {
     use indoc::indoc;
 
     use super::*;
+
+    /// [`NamedPaths`] with no keys, as a plain-list manifest entry produces.
+    fn unkeyed<const N: usize>(paths: [&str; N]) -> NamedPaths {
+        NamedPaths::from_entries(
+            paths
+                .into_iter()
+                .map(|path| NamedPath {
+                    key: None,
+                    path: path.to_string(),
+                })
+                .collect(),
+        )
+    }
+
+    /// A single key-tagged [`NamedPath`].
+    fn keyed(key: &str, path: &str) -> NamedPath {
+        NamedPath {
+            key: Some(key.to_string()),
+            path: path.to_string(),
+        }
+    }
     use crate::manifest::adapter::prebuilt::{LocalSource, RemoteSource};
 
     #[test]
@@ -219,8 +413,8 @@ mod tests {
                     path: "plugins/my-sync.wasm".into(),
                 }),
                 sha256: Some("abc123".to_string()),
-                dirs: Some(vec!["assets/seed-data".to_string(), "config".to_string()]),
-                files: Some(vec!["config.txt".to_string()]),
+                dirs: Some(unkeyed(["assets/seed-data", "config"])),
+                files: Some(unkeyed(["config.txt"])),
                 fields: None,
                 canisters: None,
             },
@@ -235,6 +429,70 @@ mod tests {
     fn adapter_via_value(yaml: &str) -> Result<Adapter, serde_yaml::Error> {
         let value: serde_yaml::Value = serde_yaml::from_str(yaml).expect("invalid yaml");
         serde_yaml::from_value(value)
+    }
+
+    /// The list form leaves every entry keyless.
+    #[test]
+    fn dirs_and_files_as_plain_lists_have_no_keys() {
+        let adapter = serde_yaml::from_str::<Adapter>(
+            r#"
+            path: plugins/my-sync.wasm
+            dirs:
+              - assets
+            files:
+              - a.txt
+              - b.txt
+            "#,
+        )
+        .expect("failed to deserialize Adapter with list dirs/files");
+        assert_eq!(adapter.dirs, Some(unkeyed(["assets"])));
+        assert_eq!(adapter.files, Some(unkeyed(["a.txt", "b.txt"])));
+    }
+
+    /// The map form tags each entry with its key. A key mapping to a list yields
+    /// several entries sharing that (non-unique) key, in written order.
+    #[test]
+    fn dirs_and_files_as_maps_carry_keys() {
+        let adapter = serde_yaml::from_str::<Adapter>(
+            r#"
+            path: plugins/my-sync.wasm
+            dirs:
+              seed: assets/seed-data
+              extra:
+                - one
+                - two
+            files:
+              main: config.txt
+            "#,
+        )
+        .expect("failed to deserialize Adapter with map dirs/files");
+        assert_eq!(
+            adapter.dirs.map(NamedPaths::into_entries),
+            Some(vec![
+                keyed("seed", "assets/seed-data"),
+                keyed("extra", "one"),
+                keyed("extra", "two"),
+            ]),
+        );
+        assert_eq!(
+            adapter.files.map(NamedPaths::into_entries),
+            Some(vec![keyed("main", "config.txt")]),
+        );
+    }
+
+    /// The list and map forms round-trip through serialization back to their
+    /// natural YAML shape.
+    #[test]
+    fn named_paths_round_trip() {
+        for yaml in [
+            "- a.txt\n- b.txt\n",
+            "single: one.txt\nmany:\n- x.txt\n- y.txt\n",
+        ] {
+            let parsed: NamedPaths =
+                serde_yaml::from_str(yaml).expect("failed to parse NamedPaths");
+            let reserialized = serde_yaml::to_string(&parsed).expect("failed to serialize");
+            assert_eq!(reserialized, yaml, "round-trip changed the YAML shape");
+        }
     }
 
     #[test]

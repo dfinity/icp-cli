@@ -33,6 +33,17 @@ impl Guest for TestPlugin {
                 eprintln!("{rendered}");
                 Ok(())
             }
+            // Echo each dir/file entry as `kind key=path`, using "-" for an
+            // absent key, so the host can assert keys survive the boundary.
+            "keys" => {
+                for dir in &input.dirs {
+                    eprintln!("dir {}={}", dir.key.as_deref().unwrap_or("-"), dir.path);
+                }
+                for file in &input.files {
+                    eprintln!("file {}={}", file.key.as_deref().unwrap_or("-"), file.name);
+                }
+                Ok(())
+            }
             "spin" => {
                 // Busy-loop forever to exercise the host's compute-time limit.
                 // The epoch-interruption check at the loop back-edge traps this,

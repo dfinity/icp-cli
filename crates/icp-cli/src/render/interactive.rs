@@ -48,6 +48,9 @@ impl InteractiveRenderer {
                     ProgressBar::new_spinner().with_style(make_style(TICK_EMPTY, COLOR_REGULAR)),
                 );
                 bar.set_prefix(format!("[{}]", task.canister()));
+                if let Some(message) = super::running_message(&task) {
+                    bar.set_message(message);
+                }
                 bar.enable_steady_tick(Duration::from_millis(120));
 
                 self.tasks.insert(
@@ -118,6 +121,11 @@ impl InteractiveRenderer {
                             .set_message(failure_message(view.log.kind(), &message));
                         view.bar.finish();
                         view.log.fail(message, causes);
+                    }
+                    // Skipped keeps the neutral style — nothing succeeded or
+                    // failed.
+                    TaskOutcome::Skipped { reason } => {
+                        view.bar.finish_with_message(format!("Skipped ({reason})"));
                     }
                 }
             }

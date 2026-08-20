@@ -6,12 +6,11 @@ use ic_management_canister_types::{
     ClearChunkStoreArgs, InstallChunkedCodeArgs, InstallCodeArgs, UpgradeFlags, UploadChunkArgs,
     WasmMemoryPersistence,
 };
+use icp_events::{Reporter, TaskKind, TaskOutcome};
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
-use tracing::{debug, error, warn};
-
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use tracing::{debug, warn};
 
 use super::misc::fetch_canister_metadata;
 use super::proxy::UpdateOrProxyError;
@@ -69,13 +68,6 @@ pub enum InstallOperationError {
 #[snafu(display("Canister(s) {names:?} failed to install."))]
 pub struct InstallManyError {
     names: Vec<String>,
-}
-
-/// Holds error information from a failed canister install operation
-struct InstallFailure {
-    canister_name: String,
-    canister_id: Principal,
-    error: InstallOperationError,
 }
 
 /// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
@@ -349,7 +341,7 @@ async fn stop_and_start_if_upgrade(
     install_result
 }
 
-/// Installs code to multiple canisters and displays progress bars.
+/// Installs code to multiple canisters concurrently.
 pub(crate) async fn install_many(
     agent: Agent,
     proxy: Option<Principal>,
@@ -363,22 +355,20 @@ pub(crate) async fn install_many(
         ),
     >,
     artifacts: Arc<dyn icp::store_artifact::Access>,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode, status, init_args) in canisters {
-        let pb = progress_manager.create_progress_bar(&name);
+        let task = reporter.task(TaskKind::Install {
+            canister: name.clone(),
+            canister_id: cid,
+        });
         let agent = agent.clone();
-        let install_fn = {
-            let pb = pb.clone();
-            let artifacts = artifacts.clone();
-            let name = name.clone();
+        let artifacts = artifacts.clone();
 
-            async move {
-                pb.set_message("Installing...");
-
+        futs.push_back(async move {
+            let result = async {
                 let wasm = artifacts.lookup(&name).await.map_err(|_| {
                     InstallOperationError::ArtifactNotFound {
                         canister_name: name.clone(),
@@ -398,48 +388,28 @@ pub(crate) async fn install_many(
                 )
                 .await
             }
-        };
-
-        futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
-            )
             .await;
 
-            result.map_err(|error| InstallFailure {
-                canister_name: name.clone(),
-                canister_id: cid,
-                error,
-            })
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| name)
         });
     }
 
-    let mut errors: Vec<InstallFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        for failure in &errors {
-            error!(
-                "----- Failed to install canister '{}': {} -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!("'{}'", failure.error);
-        }
-
-        return InstallManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return InstallManySnafu { names: failed }.fail();
     }
 
     Ok(())

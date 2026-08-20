@@ -12,6 +12,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use icp_events::{TaskKind, TaskOutcome};
 use itertools::Itertools;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -32,8 +33,7 @@ use crate::{
         sync::sync_many,
     },
     options::{IdentityOpt, arg_struct_change_help},
-    progress::{ProgressManager, ProgressManagerSettings},
-    render::Renderer,
+    render::rendered,
 };
 
 /// Deploy a project to an environment
@@ -183,24 +183,19 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // Build the selected canisters
     info!("Building canisters:");
 
-    let (reporter, events) = icp_events::channel();
-    let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
-
-    let build_result = build_many(
-        canisters_to_build,
-        environment_selection.name(),
-        ctx.builder.clone(),
-        ctx.artifacts.clone(),
-        &ctx.dirs.package_cache()?,
-        &reporter,
-    )
-    .await;
-
-    // Close the event stream so the renderer can finish, and let it flush
-    // (failure dumps) before the result is acted on.
-    drop(reporter);
-    render.await?;
-    build_result?;
+    let pkg_cache = ctx.dirs.package_cache()?;
+    rendered(ctx.debug, async |reporter| {
+        build_many(
+            canisters_to_build,
+            environment_selection.name(),
+            ctx.builder.clone(),
+            ctx.artifacts.clone(),
+            &pkg_cache,
+            reporter,
+        )
+        .await
+    })
+    .await?;
 
     // Ensure the selected canisters exist, creating any that are missing.
     let env = ctx
@@ -240,61 +235,65 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             CreateFunding::Cycles(args.cycles.get()),
             existing_canisters.into_values().collect(),
         );
-        let mut futs = FuturesOrdered::new();
-        let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: ctx.debug });
-        for name in canisters_to_create.iter() {
-            let pb = progress_manager.create_progress_bar(name);
-            pb.set_message("Creating...");
-            let create_op = create_operation.clone();
-            let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
-            futs.push_back(async move {
-                ProgressManager::execute_with_custom_progress(
-                    &pb,
-                    create_op.create(&canister_info.settings.into()),
-                    || "Created successfully".to_string(),
-                    |err: &_| err.to_string(),
-                    |_| false,
-                )
-                .await
-            });
-        }
+        rendered(ctx.debug, async |reporter| {
+            let mut futs = FuturesOrdered::new();
+            for name in canisters_to_create.iter() {
+                let task = reporter.task(TaskKind::Create {
+                    canister: (*name).clone(),
+                });
+                let create_op = create_operation.clone();
+                let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
+                futs.push_back(async move {
+                    let result = create_op.create(&canister_info.settings.into()).await;
 
-        // Cache errors until all futures are processed. Otherwise we risk dropping a canister id.
-        let mut error: Option<anyhow::Error> = None;
-        let mut idx = 0;
-        while let Some(res) = futs.next().await {
-            match res {
-                Ok(id) => {
-                    let canister_name = canisters_to_create
-                        .get(idx)
-                        .expect("should have tried to create every canister");
-                    if !args.json {
-                        println!("Created canister {canister_name} with ID {id}");
+                    match &result {
+                        Ok(_) => task.finish(TaskOutcome::succeeded()),
+                        Err(err) => task.finish(TaskOutcome::failed(err.to_string())),
                     }
-                    ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
+
+                    result
+                });
+            }
+
+            // Cache errors until all futures are processed. Otherwise we risk dropping a canister id.
+            let mut error: Option<anyhow::Error> = None;
+            let mut idx = 0;
+            while let Some(res) = futs.next().await {
+                match res {
+                    Ok(id) => {
+                        let canister_name = canisters_to_create
+                            .get(idx)
+                            .expect("should have tried to create every canister");
+                        if !args.json {
+                            println!("Created canister {canister_name} with ID {id}");
+                        }
+                        ctx.set_canister_id_for_env(canister_name, id, &environment_selection)
+                            .await
+                            .map_err(|e| anyhow!(e))?;
+                        // Apply controller settings for any already-created canister that was
+                        // waiting for this one to exist (e.g. created via `icp canister create`).
+                        sync_controller_dependents(
+                            ctx,
+                            &agent,
+                            args.proxy,
+                            canister_name,
+                            &environment_selection,
+                        )
                         .await
                         .map_err(|e| anyhow!(e))?;
-                    // Apply controller settings for any already-created canister that was
-                    // waiting for this one to exist (e.g. created via `icp canister create`).
-                    sync_controller_dependents(
-                        ctx,
-                        &agent,
-                        args.proxy,
-                        canister_name,
-                        &environment_selection,
-                    )
-                    .await
-                    .map_err(|e| anyhow!(e))?;
+                    }
+                    Err(err) => {
+                        error = Some(err.into());
+                    }
                 }
-                Err(err) => {
-                    error = Some(err.into());
-                }
+                idx += 1;
             }
-            idx += 1;
-        }
-        if let Some(err) = error {
-            return Err(err);
-        }
+            if let Some(err) = error {
+                return Err(err);
+            }
+            Ok(())
+        })
+        .await?;
     }
 
     ctx.update_custom_domains(&environment_selection).await;
@@ -329,24 +328,30 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         .await
         .map_err(|e| anyhow!(e))?;
 
-    set_binding_env_vars_many(
-        agent.clone(),
-        args.proxy,
-        &env.name,
-        target_canisters.clone(),
-        canister_list.clone(),
-        ctx.debug,
-    )
+    rendered(ctx.debug, async |reporter| {
+        set_binding_env_vars_many(
+            agent.clone(),
+            args.proxy,
+            &env.name,
+            target_canisters.clone(),
+            canister_list.clone(),
+            reporter,
+        )
+        .await
+    })
     .await
     .map_err(|e| anyhow!(e))?;
 
-    sync_settings_many(
-        agent.clone(),
-        args.proxy,
-        target_canisters,
-        canister_list,
-        ctx.debug,
-    )
+    rendered(ctx.debug, async |reporter| {
+        sync_settings_many(
+            agent.clone(),
+            args.proxy,
+            target_canisters,
+            canister_list,
+            reporter,
+        )
+        .await
+    })
     .await
     .map_err(|e| anyhow!(e))?;
 
@@ -389,27 +394,33 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     if !args.yes {
         info!("Checking compatibility:");
-        check_candid_compatibility_many(
-            agent.clone(),
-            canisters
-                .iter()
-                .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
-            ctx.artifacts.clone(),
-            ctx.debug,
-        )
+        rendered(ctx.debug, async |reporter| {
+            check_candid_compatibility_many(
+                agent.clone(),
+                canisters
+                    .iter()
+                    .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
+                ctx.artifacts.clone(),
+                reporter,
+            )
+            .await
+        })
         .await
         .map_err(|e| anyhow!(e))?;
     }
 
     info!("Installing canisters:");
 
-    install_many(
-        agent.clone(),
-        args.proxy,
-        canisters,
-        ctx.artifacts.clone(),
-        ctx.debug,
-    )
+    rendered(ctx.debug, async |reporter| {
+        install_many(
+            agent.clone(),
+            args.proxy,
+            canisters,
+            ctx.artifacts.clone(),
+            reporter,
+        )
+        .await
+    })
     .await?;
 
     // Sync the selected canisters
@@ -501,27 +512,21 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
         let pkg_cache = ctx.dirs.package_cache()?;
 
-        let (reporter, events) = icp_events::channel();
-        let render = tokio::spawn(Renderer::for_ctx(ctx.debug).run(events));
-
-        let sync_result = sync_many(
-            ctx.syncer.clone(),
-            agent.clone(),
-            sync_canisters,
-            environment_selection.name().to_owned(),
-            env.network.name.clone(),
-            canister_ids,
-            args.proxy,
-            &pkg_cache,
-            &reporter,
-        )
-        .await;
-
-        // Close the event stream so the renderer can finish, and let it flush
-        // (failure dumps) before the result is acted on.
-        drop(reporter);
-        render.await?;
-        sync_result?;
+        rendered(ctx.debug, async |reporter| {
+            sync_many(
+                ctx.syncer.clone(),
+                agent.clone(),
+                sync_canisters,
+                environment_selection.name().to_owned(),
+                env.network.name.clone(),
+                canister_ids,
+                args.proxy,
+                &pkg_cache,
+                reporter,
+            )
+            .await
+        })
+        .await?;
     }
 
     // Print URLs for deployed canisters

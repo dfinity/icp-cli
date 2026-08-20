@@ -151,6 +151,9 @@ sync:
         - config
       files:                             # files read by the host and passed inline
         - config.txt
+      canisters:                          # extra canisters the plugin may call
+        - ledger                          #   by name (resolved for the environment)
+        - ryjl3-tyaaa-aaaaa-aaaba-cai      #   or by principal
 
     # Remote plugin (downloaded and verified before execution)
     - type: plugin
@@ -165,10 +168,13 @@ sync:
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
 | `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
 | `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name (resolved against the project's canister IDs for the environment) or a textual principal |
 
 Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
 
-The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a dependency canister. A name that does not resolve to a known canister for the environment fails the sync step.
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 

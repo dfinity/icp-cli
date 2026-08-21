@@ -809,6 +809,7 @@ async fn prepare_plugin_step(
         dirs: bundle_dirs,
         files: bundle_files,
         canisters: localize_call_targets(adapter.canisters.as_deref(), local_names),
+        fields: adapter.fields.clone(),
     }))
 }
 

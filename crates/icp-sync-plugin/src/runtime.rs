@@ -388,6 +388,9 @@ pub struct PluginInvocation {
     pub dirs: Vec<String>,
     /// Manifest-relative files to read and pass inline.
     pub files: Vec<String>,
+    /// Key-value fields to pass inline. Passed to v0.2.0 plugins; ignored by
+    /// v0.1.0 plugins, whose interface has no `fields`.
+    pub fields: BTreeMap<String, String>,
     /// The canister being synced. Reachable via `call-target::host`.
     pub host_canister_id: Principal,
     /// Agent used for canister calls.
@@ -418,6 +421,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         base_dir,
         dirs,
         files,
+        fields,
         host_canister_id,
         agent,
         proxy,
@@ -572,6 +576,10 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
                 files: file_contents
                     .into_iter()
                     .map(|(name, content)| v2::FileInput { name, content })
+                    .collect(),
+                fields: fields
+                    .into_iter()
+                    .map(|(name, value)| v2::FieldInput { name, value })
                     .collect(),
                 identity_principal: identity_text,
                 proxy_canister_id: proxy_text,
@@ -809,6 +817,7 @@ mod tests {
             base_dir: ".".into(),
             dirs: vec![],
             files: vec![],
+            fields: BTreeMap::new(),
             host_canister_id: anon(),
             agent: dummy_agent(),
             proxy: None,
@@ -1006,6 +1015,35 @@ mod tests {
         assert!(result.is_ok());
         let msg = rx.try_recv().expect("expected stdout message on channel");
         assert!(msg.contains("stdout from plugin"), "got: {msg}");
+    }
+
+    #[test]
+    fn plugin_fields_are_passed_through() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "fields");
+        inv.fields = BTreeMap::from([
+            ("greeting".to_string(), "hi".to_string()),
+            ("audience".to_string(), "world".to_string()),
+        ]);
+        // The "fields" fixture echoes what it received to stderr, which
+        // run_plugin returns. The interface promises no field order, but the
+        // BTreeMap makes the host's order name-sorted in practice.
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(lines, vec!["audience=world,greeting=hi".to_string()]);
+    }
+
+    #[test]
+    fn plugin_missing_expected_field_fails() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        // The "fields" fixture requires a `greeting` field; passing none fails.
+        assert!(matches!(
+            run_plugin(invocation(wasm_path, "fields")),
+            Err(RunPluginError::PluginFailed { ref message }) if message == "missing 'greeting' field"
+        ));
     }
 
     #[test]

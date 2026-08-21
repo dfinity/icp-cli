@@ -75,7 +75,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 ```
 
 `PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
-`host_canister_id` (the canister being synced), `agent`, `proxy`,
+`fields`, `host_canister_id` (the canister being synced), `agent`, `proxy`,
 `identity_principal`, `environment`, `compute_limit_secs`, the exposed
 `canister_ids` table, the `callable: CallableCanisters` enforcement set, and
 `stdio`. The CLI resolves the manifest's declared `canisters:` into
@@ -153,7 +153,10 @@ instantiates the matching `bindgen!` world and builds the matching
 trial instantiation: it is unambiguous and needs no throwaway `Store`. A
 component with no recognized `icp:sync-plugin/types@<version>` import, or an
 unsupported version, is rejected with `UnsupportedInterface`. Both `.wit` files
-are checked in; `sync-plugin-v1.wit` is the frozen v0.1.0 contract.
+are checked in; `sync-plugin-v1.wit` is the frozen v0.1.0 contract. Inputs the
+v0.1.0 `sync-exec-input` has no field for — `canister-ids` and `fields` — are
+simply dropped for a v1 plugin; a v1 plugin cannot observe them, so declaring
+`fields:` alongside one has no effect.
 
 ### Compute budget (epoch interruption)
 
@@ -188,13 +191,25 @@ pub struct Adapter {
     pub sha256: Option<String>,
     pub dirs: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
-    pub canisters: Option<Vec<String>>,   // extra callable canisters, by name
+    pub fields: Option<BTreeMap<String, String>>, // inline key-value fields
+    pub canisters: Option<Vec<String>>, // extra callable canisters, by name
 }
 ```
 
 Each `canisters:` entry is a canister name resolved against the project's ID
 table for the environment being synced. `Deserialize` is hand-written to reject a
-`url` source without a `sha256`.
+`url` source without a `sha256`. `fields` is a `BTreeMap` rather than a `HashMap`
+so that re-serializing the adapter (the bundler writes a consolidated manifest)
+is byte-stable; the WIT interface itself makes no promise about the order fields
+arrive in.
+
+Each `fields` value deserializes through `FieldValue`, which takes any YAML
+scalar and stringifies it, so `retries: 3` need not be quoted. `serde_yaml` does
+that coercion itself when reading YAML *text*, but a canister's build/sync
+section reaches the adapter as an already-parsed `serde_yaml::Value` (see
+`CanisterManifest`'s hand-written `Deserialize`), and re-deserializing from a
+`Value` keeps a number a number — hence the explicit visitor. Lists, mappings,
+and empty values are rejected: there is no string to hand the plugin.
 
 ### `crates/icp/src/canister/sync/plugin.rs`
 

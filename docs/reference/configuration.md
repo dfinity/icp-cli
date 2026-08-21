@@ -151,7 +151,10 @@ sync:
         - config
       files:                             # files read by the host and passed inline
         - config.txt
-      canisters:                          # extra canisters the plugin may call,
+      fields:                            # key-value fields passed inline
+        api_url: https://example.com
+        retries: 3
+      canisters:                          # extra canisters the plugin may call
         - ledger                          #   by name (resolved for the environment)
         - services/open-crm:backend
 
@@ -168,9 +171,12 @@ sync:
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
 | `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
 | `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
 | `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
 Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
+
+A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
 

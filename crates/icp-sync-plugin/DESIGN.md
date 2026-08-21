@@ -31,6 +31,11 @@ docs; the *reasons* behind those choices are recorded here.
   from `sync-exec-input.canister-id`. There is deliberately no field for a
   different target, so the single-canister restriction is *structural* rather
   than a policy the plugin could bypass.
+- **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
+  the project's name→principal map for the environment, so a plugin can resolve
+  canister names it knows about. It is informational only: `canister-call`
+  still targets the canister being synced, so the table grants no ability to
+  call other canisters.
 - **Filesystem access via WASI, not a host import** — plugins use standard
   language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
   bespoke `read-file`/`list-dir` import is needed.
@@ -62,20 +67,13 @@ crates/icp-sync-plugin/
 Public function:
 
 ```rust
-pub fn run_plugin(
-    wasm_path: Utf8PathBuf,
-    base_dir: Utf8PathBuf,
-    dirs: Vec<String>,
-    files: Vec<String>,
-    target_canister_id: Principal,
-    agent: Agent,
-    proxy: Option<Principal>,
-    identity_principal: Principal,
-    environment: String,
-    compute_limit_secs: u64,
-    stdio: Option<Sender<String>>,
-) -> Result<Vec<String>, RunPluginError>
+pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError>
 ```
+
+`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
+`target_canister_id` (the canister being synced), `agent`, `proxy`,
+`identity_principal`, `environment`, `compute_limit_secs`, and the exposed
+`canister_ids` table, plus `stdio`.
 
 `dirs` and `files` are the manifest-relative path strings, straight from the
 adapter. The runtime owns *all* filesystem access anchored at `base_dir`: it
@@ -188,7 +186,9 @@ pub struct Adapter {
 ### `crates/icp/src/canister/sync/plugin.rs`
 
 Resolves the wasm (local read or remote HTTP fetch into the package cache),
-verifies sha256, then calls `icp_sync_plugin::run_plugin(...)`, forwarding the
-manifest's `dirs`/`files` strings unchanged. The runtime — not the CLI — opens
-those paths and enforces the path-safety checks, so the CLI no longer touches
-the plugin's input files itself.
+verifies sha256, builds the exposed canister ID table, then calls
+`icp_sync_plugin::run_plugin(...)` with a `PluginInvocation`. The runtime — not
+the CLI — opens the declared paths and enforces the path-safety checks, so the
+CLI no longer touches the plugin's input files itself. `exposed_canister_ids`
+adds a bare-local-name duplicate for every canister in the same subproject as
+the one being synced.

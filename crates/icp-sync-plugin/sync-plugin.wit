@@ -5,14 +5,17 @@ interface types {
     /// Whether a canister call is an update or a query.
     enum call-type { update, query }
 
-    /// A directory the host preopened on behalf of the plugin.
+    /// A directory the host made readable for the plugin.
     record dir-input {
         /// The map key this directory was declared under in the manifest, or
         /// `none` when `dirs` was written as a plain list. Several entries share
         /// one key when a key maps to a list of directories.
         key: option<string>,
         /// Path of the directory as declared in the manifest (relative to the
-        /// canister directory). The host preopens it at this same path.
+        /// canister directory). It is readable at this same path. Entries may
+        /// repeat a path or name a directory inside another entry's; the host
+        /// preopens each distinct tree once, so such an entry is read through
+        /// the preopen that covers it.
         path: string,
     }
 
@@ -82,8 +85,8 @@ interface types {
         /// Name of the environment being synced (e.g. "production", "local").
         environment: string,
         /// Directories declared in the manifest step's `dirs` setting.
-        /// The host preopens each entry via WASI; the plugin can traverse
-        /// them with standard `wasi:filesystem` (e.g. Rust's `std::fs`).
+        /// The host makes each entry readable via WASI preopens; the plugin
+        /// traverses them with standard `wasi:filesystem` (e.g. Rust's `std::fs`).
         /// Each entry carries the map key it was declared under, if any (see
         /// `dir-input`).
         dirs: list<dir-input>,

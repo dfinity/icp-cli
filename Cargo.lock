@@ -3726,6 +3726,7 @@ dependencies = [
  "ic-utils",
  "icp",
  "icp-canister-interfaces",
+ "icp-sync-plugin",
  "icrc-ledger-types",
  "indicatif",
  "indoc",
@@ -6354,6 +6355,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
  "dyn-clone",
+ "indexmap",
  "ref-cast",
  "schemars_derive",
  "serde",

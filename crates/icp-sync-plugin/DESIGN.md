@@ -82,10 +82,11 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 `CallableCanisters` before calling; this crate stays free of any manifest
 knowledge.
 
-`dirs` and `files` are the manifest-relative path strings, straight from the
-adapter. The runtime owns *all* filesystem access anchored at `base_dir`: it
-preopens each `dir` from `base_dir.join(dir)` and reads each `file` from
-`base_dir.join(file)`, passing the contents inline in `SyncExecInput`. Keeping
+`dirs` and `files` are the manifest-relative paths (as `KeyedPath`s carrying the
+map key each was declared under, if any), straight from the adapter. The runtime
+owns *all* filesystem access anchored at `base_dir`: it preopens each `dir` from
+`base_dir.join(dir.path)` and reads each `file` from `base_dir.join(file.path)`,
+passing the contents — and the keys — inline in `SyncExecInput`. Keeping
 both inside the runtime means the path-safety logic (below) lives in one place
 and stays private to this crate — the CLI just forwards strings. The returned
 `Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
@@ -189,12 +190,22 @@ Deserializes the `canister.yaml` fields into:
 pub struct Adapter {
     pub source: SourceField,              // path: or url:
     pub sha256: Option<String>,
-    pub dirs: Option<Vec<String>>,
-    pub files: Option<Vec<String>>,
+    pub dirs: Option<NamedPaths>,
+    pub files: Option<NamedPaths>,
     pub fields: Option<BTreeMap<String, String>>, // inline key-value fields
     pub canisters: Option<Vec<String>>, // extra callable canisters, by name
 }
 ```
+
+`NamedPaths` is an untagged `List(Vec<String>) | Map(IndexMap<String, PathOrList>)`
+— the two shapes `dirs:`/`files:` may be written in — keeping the written form
+exact, so bundling can rewrite the paths (`map_paths`) and serialize the step
+back out unchanged in shape. `entries()` flattens either form to ordered
+`(key, path)` pairs: `key` is `None` for a list entry and `Some(name)` for a map
+entry, and is *non-unique* — a map key holding a list of paths yields one entry
+per path, all sharing the key. The CLI passes those to the runtime as
+`KeyedPath`s (this crate stays free of manifest types), which surface in
+`sync-exec-input.dirs`/`files` as each entry's `key`.
 
 Each `canisters:` entry is a canister name resolved against the project's ID
 table for the environment being synced. `Deserialize` is hand-written to reject a

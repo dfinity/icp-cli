@@ -318,7 +318,8 @@ pub enum SyncStep {
     /// Represents a sync step executed by a WebAssembly plugin running inside
     /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
     /// the canister being synced and read files from the declared `dirs`.
-    Plugin(adapter::plugin::Adapter),
+    // Boxed: a plugin step carries far more configuration than a script one.
+    Plugin(Box<adapter::plugin::Adapter>),
 }
 
 impl<'de> Deserialize<'de> for SyncStep {
@@ -332,7 +333,7 @@ impl<'de> Deserialize<'de> for SyncStep {
         #[serde(tag = "type", rename_all = "lowercase")]
         enum Helper {
             Script(adapter::script::Adapter),
-            Plugin(adapter::plugin::Adapter),
+            Plugin(Box<adapter::plugin::Adapter>),
             Assets(serde::de::IgnoredAny),
         }
 
@@ -383,6 +384,7 @@ mod tests {
     use crate::{
         manifest::{
             adapter::{
+                plugin,
                 prebuilt::{self, RemoteSource, SourceField},
                 script,
             },
@@ -785,18 +787,18 @@ mod tests {
                         })]
                     },
                     sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Plugin(
-                            crate::manifest::adapter::plugin::Adapter {
-                                source: prebuilt::SourceField::Local(prebuilt::LocalSource {
-                                    path: "./plugins/my-sync.wasm".into(),
-                                }),
-                                sha256: None,
-                                dirs: Some(vec!["assets/seed-data/".to_string()]),
-                                files: None,
-                                fields: None,
-                                canisters: None,
-                            }
-                        )]
+                        steps: vec![SyncStep::Plugin(Box::new(plugin::Adapter {
+                            source: prebuilt::SourceField::Local(prebuilt::LocalSource {
+                                path: "./plugins/my-sync.wasm".into(),
+                            }),
+                            sha256: None,
+                            dirs: Some(plugin::NamedPaths::List(vec![
+                                "assets/seed-data/".to_string()
+                            ])),
+                            files: None,
+                            fields: None,
+                            canisters: None,
+                        }))]
                     }),
                 },
             },
@@ -829,7 +831,7 @@ mod tests {
                         })]
                     },
                     sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Plugin(crate::manifest::adapter::plugin::Adapter {
+                        steps: vec![SyncStep::Plugin(Box::new(plugin::Adapter {
                             source: prebuilt::SourceField::Remote(prebuilt::RemoteSource {
                                 url: "https://example.com/plugins/migrate-v2.wasm".to_string(),
                             }),
@@ -841,7 +843,7 @@ mod tests {
                             files: None,
                             fields: None,
                             canisters: None,
-                        })]
+                        }))]
                     }),
                 },
             },

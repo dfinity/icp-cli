@@ -67,14 +67,16 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 |-------|-------------|
 | `canister-id` | Textual principal of the canister being synced |
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
-| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
-| `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only. Each entry carries its `key` (see below) and `path` |
+| `files` | The files you declared in `files:`, each with its `key`, `name` (path), and `content` read by the host |
 | `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
 Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
+
+`dirs` and `files` each carry a `key`: the map key the entry was declared under in the manifest, or absent when `dirs:`/`files:` was written as a plain list. A key that maps to a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
 
 ### Calling a canister — `canister-call`
 
@@ -106,7 +108,8 @@ The plugin runs with a deliberately narrow capability surface.
 
 ### Filesystem
 
-- Each directory in `dirs:` is preopened **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `dirs: ["assets"]` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
+- Each directory in `dirs:` is readable **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `dirs: ["assets"]` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
+- Entries may name the same directory under several keys, or name a directory inside another entry's, and the plugin is told about each entry as written. The preopens behind them are one per distinct tree: an entry nested inside another is read through the preopen covering it, which grants nothing extra.
 - Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
 - Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.
 - Paths in `dirs:`/`files:` must be relative and may not contain `..`. They also may not be — or traverse — a symlink: each declared entry is rejected if it or any of its parent components is a symlink, so a declared path cannot resolve to a target outside the canister directory. (This restriction may be relaxed later if a safe use case emerges.)

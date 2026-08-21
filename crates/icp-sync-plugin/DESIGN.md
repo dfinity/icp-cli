@@ -28,18 +28,18 @@ docs; the *reasons* behind those choices are recorded here.
   `list<u8>`. The plugin owns Candid encoding/decoding; the host forwards bytes
   unchanged. This keeps the host free of any per-canister type knowledge.
 - **`canister-call` takes an explicit `target`** — the plugin selects the
-  canister being synced (`host`) or a canister it declared as a dependency, by
-  name. The host resolves the target and *enforces* the declaration: a target
-  absent from the step's `canisters:` list is rejected without a call. Names are
-  the only way to address a dependency: the name→principal mapping is the host's
-  to make, since it varies per environment, and a plugin that hardcodes a
-  principal is pinned to one deployment. (In the earlier `@0.1.0` interface
+  canister being synced (`host`) or a canister from the step's `canisters:`
+  list, by name. The host resolves the target and *enforces* the list: a target
+  absent from it is rejected without a call. Names are the only way to address
+  another canister: the name→principal mapping is the host's to make, since it
+  varies per environment, and a plugin that hardcodes a principal is pinned to
+  one deployment. (In the earlier `@0.1.0` interface
   `canister-call` had no target and always reached the canister being synced; see
   *Interface versioning* below.)
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
   canister names it knows about. It is informational only; calling still
-  requires a declaration.
+  requires an entry in `canisters:`.
 - **Filesystem access via WASI, not a host import** — plugins use standard
   language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
   bespoke `read-file`/`list-dir` import is needed.
@@ -205,5 +205,5 @@ enforcement set (resolving `canisters:` against the project's IDs), then calls
 the CLI — opens the declared paths and enforces the path-safety checks, so the
 CLI no longer touches the plugin's input files itself. `exposed_canister_ids`
 adds a bare-local-name duplicate for every canister in the same subproject as
-the one being synced; `resolve_callable` fails the step if a declared dependency
-name does not resolve.
+the one being synced; `resolve_callable` fails the step if a name in
+`canisters:` does not resolve.

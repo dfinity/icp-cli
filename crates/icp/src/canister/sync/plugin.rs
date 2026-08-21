@@ -31,10 +31,10 @@ pub enum PluginError {
     Run { source: RunPluginError },
 
     #[snafu(display(
-        "sync plugin declares a dependency on canister '{name}', but no canister by that name \
+        "sync plugin lists canister '{name}' as callable, but no canister by that name \
          is known in environment '{environment}'"
     ))]
-    UnknownDependency { name: String, environment: String },
+    UnknownCallableCanister { name: String, environment: String },
 }
 
 /// Resolve the plugin compute-time limit, honoring the
@@ -101,7 +101,7 @@ pub(super) async fn sync(
     let files: Vec<String> = adapter.files.clone().unwrap_or_default();
 
     // 3. Build the canister ID table exposed to the plugin, then resolve the
-    //    plugin's declared callable canisters against it.
+    //    step's `canisters` list against it.
     let canister_ids = exposed_canister_ids(params);
     let callable = resolve_callable(adapter, &canister_ids, environment)?;
 
@@ -137,9 +137,10 @@ pub(super) async fn sync(
 /// The canister ID table exposed to a sync plugin: every named canister in the
 /// project, plus — for canisters in the same subproject as the one being synced
 /// — a duplicate entry under the bare local name. A store key is
-/// `<subproject>:<local>` for a dependency canister and a bare local name for a
-/// canister defined directly in the app root (see the WIT `canister-id-entry`
-/// docs), so the syncing canister's namespace is the prefix of its own key.
+/// `<subproject>:<local>` for a canister in a subproject and a bare local name
+/// for a canister defined directly in the app root (see the WIT
+/// `canister-id-entry` docs), so the syncing canister's namespace is the prefix
+/// of its own key.
 ///
 /// A local name never contains a colon but a subproject directory may, so keys
 /// split on their *last* colon. The bare-name aliases take precedence over an
@@ -159,9 +160,9 @@ fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
     table
 }
 
-/// Resolve the canisters a plugin declared it may call into a [`CallableCanisters`]
-/// enforcement set. Each declared name is looked up in `canister_ids`; a name
-/// that does not resolve is a manifest error.
+/// Resolve the step's `canisters` list into a [`CallableCanisters`] enforcement
+/// set. Each listed name is looked up in `canister_ids`; a name that does not
+/// resolve is a manifest error.
 fn resolve_callable(
     adapter: &Adapter,
     canister_ids: &BTreeMap<String, Principal>,
@@ -172,7 +173,7 @@ fn resolve_callable(
         let principal = canister_ids
             .get(name)
             .copied()
-            .context(UnknownDependencySnafu {
+            .context(UnknownCallableCanisterSnafu {
                 name: name.clone(),
                 environment: environment.to_owned(),
             })?;
@@ -349,6 +350,6 @@ mod tests {
         let adapter = adapter_with(Some(vec!["nope".to_owned()]));
         let err = resolve_callable(&adapter, &BTreeMap::new(), "demo")
             .expect_err("an undeclared name must fail");
-        assert!(matches!(err, PluginError::UnknownDependency { .. }));
+        assert!(matches!(err, PluginError::UnknownCallableCanister { .. }));
     }
 }

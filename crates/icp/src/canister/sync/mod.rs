@@ -20,7 +20,7 @@ pub struct Params {
     pub path: PathBuf,
     pub cid: Principal,
     /// Fully-qualified store key of the canister being synced (e.g. `backend`,
-    /// or `services/open-crm:backend` for a dependency canister). Its namespace
+    /// or `services/open-crm:backend` for a canister in a subproject). Its namespace
     /// prefix identifies which other canisters are in the same subproject.
     pub name: String,
     /// Name of the environment being synced (e.g. "local", "production").

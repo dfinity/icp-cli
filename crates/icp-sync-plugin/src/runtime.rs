@@ -60,19 +60,19 @@ use v2::icp::sync_plugin::types::{CallTarget, CallType, CanisterIdEntry};
 /// The canisters a sync plugin is permitted to call, beyond the canister being
 /// synced (which is always reachable via [`CallTarget::Host`]).
 ///
-/// Built by the CLI from the plugin step's declared `canisters` dependencies,
-/// resolved against the project's canister ID table. Keeping the resolution on
-/// the CLI side keeps this runtime crate free of any manifest knowledge.
+/// Built by the CLI from the plugin step's `canisters` list, resolved against
+/// the project's canister ID table. Keeping the resolution on the CLI side
+/// keeps this runtime crate free of any manifest knowledge.
 #[derive(Clone, Debug, Default)]
 pub struct CallableCanisters {
-    /// Dependencies callable by name ([`CallTarget::Name`]). Maps the name — as
-    /// it appears in the canister ID table — to the principal it resolves to.
+    /// Canisters callable by name ([`CallTarget::Name`]). Maps the name — as it
+    /// appears in the canister ID table — to the principal it resolves to.
     pub by_name: BTreeMap<String, Principal>,
 }
 
 /// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
-/// that the plugin declared it as a dependency. The canister being synced
-/// (`host`) is always permitted.
+/// that the plugin listed it in `canisters`. The canister being synced (`host`)
+/// is always permitted.
 fn resolve_call_target(
     target: &CallTarget,
     host_canister_id: Principal,
@@ -93,7 +93,7 @@ fn resolve_call_target(
 struct HostState {
     /// The canister being synced — the target of [`CallTarget::Host`] calls.
     host_canister_id: Principal,
-    /// Canisters the plugin declared as dependencies and may also call.
+    /// Canisters the plugin declared in `canisters` and may also call.
     callable: CallableCanisters,
     agent: Arc<Agent>,
     /// Proxy canister to route update calls through, if configured.
@@ -405,7 +405,7 @@ pub struct PluginInvocation {
     /// plugin. Same-project canisters appear both under their fully-qualified
     /// key and their bare local name (see the WIT `canister-id-entry` docs).
     pub canister_ids: BTreeMap<String, Principal>,
-    /// Canisters the plugin declared as dependencies and may call, beyond the
+    /// Canisters the plugin declared in `canisters` and may call, beyond the
     /// canister being synced. Ignored by v0.1.0 plugins, which can only reach
     /// the canister being synced.
     pub callable: CallableCanisters,
@@ -807,8 +807,8 @@ mod tests {
     }
 
     /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
-    /// and identity, no proxy, no declared dependencies, the default compute
-    /// limit, and the current directory as the base. Individual tests override
+    /// and identity, no proxy, no declared callable canisters, the default
+    /// compute limit, and the current directory as the base. Tests override
     /// the few fields they care about.
     fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
         PluginInvocation {

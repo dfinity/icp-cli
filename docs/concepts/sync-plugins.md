@@ -40,7 +40,7 @@ icp sync
        │
        └─ plugin makes canister-call({ target, ... }) (× N)
             target = host (the canister being synced), or a
-                     declared-dependency canister by name or principal
+                     declared-dependency canister by name
 ```
 
 ## The Plugin Interface
@@ -81,14 +81,14 @@ The plugin calls methods through the `canister-call` import. It picks a `target`
 
 | Request field | Meaning |
 |---------------|---------|
-| `target` | Which canister to call: `host` (the canister being synced), or a canister declared in `canisters:` addressed by `name` or by `id` (principal) |
+| `target` | Which canister to call: `host` (the canister being synced), or a canister declared in `canisters:` addressed by `name` |
 | `method` | The canister method to call |
 | `arg` | Candid-encoded argument bytes (the plugin encodes; the host forwards as-is) |
 | `call-type` | `update` or `query` |
 | `direct` | When `false` (default), update calls are routed through the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, the call always goes directly to the target. Query calls always go directly regardless. |
 | `cycles` | Cycles to attach to a proxied update call; only meaningful when `direct` is `false`, a proxy is configured, and `call-type` is `update` |
 
-The `host` target always resolves to `sync-exec-input.canister-id` and is always permitted. A `name`/`id` target is permitted only if that canister appears in the sync step's [`canisters:`](../reference/configuration.md#plugin-sync) list; the host rejects any other target without making a call.
+The `host` target always resolves to `sync-exec-input.canister-id` and is always permitted. A `name` target is permitted only if that canister appears in the sync step's [`canisters:`](../reference/configuration.md#plugin-sync) list; the host rejects any other target without making a call. A name is the only way to address another canister — the host owns the name→principal mapping, which differs per environment.
 
 ### Logging — stdout and stderr
 

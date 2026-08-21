@@ -45,6 +45,14 @@ pub struct Adapter {
     /// Files (relative to canister directory) the host reads and passes to
     /// the plugin as part of `sync-exec-input.files`.
     pub files: Option<Vec<String>>,
+
+    /// Canisters this plugin may call in addition to the canister being synced.
+    /// Each entry is a canister name resolved against the project's canister ID
+    /// table for the environment being synced (e.g. `backend`, or a namespaced
+    /// subproject canister such as `services/open-crm:backend`). The plugin
+    /// picks a target per call via the `call-target` in its `canister-call`
+    /// request; a target not listed here is rejected by the host.
+    pub canisters: Option<Vec<String>>,
 }
 
 impl<'de> Deserialize<'de> for Adapter {
@@ -56,6 +64,7 @@ impl<'de> Deserialize<'de> for Adapter {
             sha256: Option<String>,
             dirs: Option<Vec<String>>,
             files: Option<Vec<String>>,
+            canisters: Option<Vec<String>>,
         }
 
         let h = AdapterHelper::deserialize(d)?;
@@ -69,6 +78,7 @@ impl<'de> Deserialize<'de> for Adapter {
             sha256: h.sha256,
             dirs: h.dirs,
             files: h.files,
+            canisters: h.canisters,
         })
     }
 }
@@ -94,6 +104,7 @@ mod tests {
                 sha256: None,
                 dirs: None,
                 files: None,
+                canisters: None,
             },
         );
     }
@@ -120,6 +131,7 @@ mod tests {
                 sha256: Some("abc123".to_string()),
                 dirs: Some(vec!["assets/seed-data".to_string(), "config".to_string()]),
                 files: Some(vec!["config.txt".to_string()]),
+                canisters: None,
             },
         );
     }
@@ -140,6 +152,26 @@ mod tests {
     }
 
     #[test]
+    fn canisters_parse_as_names() {
+        let adapter = serde_yaml::from_str::<Adapter>(
+            r#"
+            path: plugins/my-sync.wasm
+            canisters:
+              - backend
+              - services/open-crm:backend
+            "#,
+        )
+        .expect("failed to deserialize Adapter with canisters");
+        assert_eq!(
+            adapter.canisters,
+            Some(vec![
+                "backend".to_string(),
+                "services/open-crm:backend".to_string(),
+            ]),
+        );
+    }
+
+    #[test]
     fn remote_url_with_sha256() {
         assert_eq!(
             serde_yaml::from_str::<Adapter>(
@@ -156,6 +188,7 @@ mod tests {
                 sha256: Some("a665a45920422f9d417e".to_string()),
                 dirs: None,
                 files: None,
+                canisters: None,
             },
         );
     }

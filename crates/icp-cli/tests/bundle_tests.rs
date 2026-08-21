@@ -1088,6 +1088,134 @@ fn bundle_packages_plugin_sync_steps() {
     );
 }
 
+/// A plugin's declared call targets must survive bundling — dropping them would turn a
+/// working project into a bundle whose cross-canister calls are all rejected. Names of
+/// the writing instance's own canisters come back out as local names; principals and
+/// names that already resolved against the workspace are left alone.
+#[test]
+fn bundle_preserves_plugin_call_targets() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    // Bundling only repackages the plugin wasm bytes, so any non-empty content works.
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write(&dep_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write dependency plugin wasm");
+
+    // The dependency's plugin names its own sibling, both bare and by store key.
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: plugin.wasm
+                      canisters:
+                        - helper
+                        - vendor/openemail:helper
+              - name: helper
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    // The root's plugin names a root sibling and a dependency canister by store key.
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: plugin.wasm
+                      canisters:
+                        - api
+                        - vendor/openemail:backend
+              - name: api
+                {build_step}
+
+            dependencies:
+              - name: openemail
+                path: ./vendor/openemail
+                canisters: [backend]
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut manifests: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path.ends_with("icp.yaml") {
+            let mut yaml = String::new();
+            entry
+                .read_to_string(&mut yaml)
+                .expect("failed to read manifest");
+            manifests.insert(path, yaml);
+        }
+    }
+
+    let plugin_targets = |yaml: &str, canister: &str| -> Vec<String> {
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(yaml).expect("manifest yaml is invalid");
+        let canisters = parsed["canisters"]
+            .as_sequence()
+            .expect("manifest has no canisters");
+        let entry = canisters
+            .iter()
+            .find(|c| c["name"].as_str() == Some(canister))
+            .unwrap_or_else(|| panic!("{canister} not found in bundled manifest: {yaml}"));
+        entry["sync"]["steps"][0]["canisters"]
+            .as_sequence()
+            .unwrap_or_else(|| panic!("{canister} plugin step lost its canisters: {yaml}"))
+            .iter()
+            .map(|t| t.as_str().expect("call target is not a string").to_owned())
+            .collect()
+    };
+
+    assert_eq!(
+        plugin_targets(&manifests["icp.yaml"], "frontend"),
+        ["api", "vendor/openemail:backend"],
+    );
+    // Both spellings of the dependency's own sibling come out as its local name.
+    assert_eq!(
+        plugin_targets(&manifests["vendor/openemail/icp.yaml"], "backend"),
+        ["helper", "helper"],
+    );
+}
+
 /// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
 /// top-level `images` paths relocated under a top-level `images/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.

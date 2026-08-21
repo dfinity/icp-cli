@@ -25,6 +25,7 @@ use crate::{
 };
 use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
+use icp_sync_plugin::{covering_dirs, distinct_paths};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
@@ -773,35 +774,55 @@ async fn prepare_plugin_step(
     // `files` cannot collide with the `files/` area used for plugin input files.
     // The declared paths are rewritten to their archive locations; each entry's
     // map key is carried through unchanged.
-    let bundle_dirs = adapter.dirs.as_ref().map(|dirs| {
-        dirs.map_paths(|dir| {
-            let manifest_path = format!(
-                "plugins/{path_name}/{idx}/dirs/{}",
-                normalize_archive_dir(dir)
-            );
-            out.plugin_dirs.push(DirEntry {
-                src_path: canister_path.join(dir),
-                archive_prefix: archive_join(prefix, &manifest_path),
-            });
-            manifest_path
-        })
+    let dirs_prefix = format!("plugins/{path_name}/{idx}/dirs");
+    let files_prefix = format!("plugins/{path_name}/{idx}/files");
+    let bundle_dirs = adapter
+        .dirs
+        .as_ref()
+        .map(|dirs| dirs.map_paths(|dir| format!("{dirs_prefix}/{}", normalize_archive_dir(dir))));
+    let bundle_files = adapter.files.as_ref().map(|files| {
+        files.map_paths(|file| format!("{files_prefix}/{}", normalize_archive_dir(file)))
     });
 
-    let bundle_files = adapter.files.as_ref().map(|files| {
-        files.map_paths(|file| {
-            let manifest_path = format!(
-                "plugins/{path_name}/{idx}/files/{}",
-                normalize_archive_dir(file)
-            );
-            out.plugin_files.push(PluginFile {
-                src_path: canister_path.join(file),
-                archive_path: archive_join(prefix, &manifest_path),
-                canister_name: canister.name.clone(),
-                orig_file: file.to_string(),
-            });
-            manifest_path
-        })
-    });
+    // The rewritten manifest above keeps every declared entry; the archive holds
+    // the trees and files behind them, of which there are fewer. A directory
+    // named under two keys is one tree to copy, and a declared subdirectory of
+    // another is already inside its copy — writing either twice would collide in
+    // the archive. The reduction runs over the paths as declared, so two that
+    // only *look* alike once rewritten (`../shared` and `shared` both normalize
+    // to `shared`) stay separate and are still caught as a collision.
+    for dir in covering_dirs(
+        adapter
+            .dirs
+            .iter()
+            .flat_map(plugin::NamedPaths::entries)
+            .map(|entry| entry.path),
+    ) {
+        out.plugin_dirs.push(DirEntry {
+            src_path: canister_path.join(dir),
+            archive_prefix: archive_join(
+                prefix,
+                &format!("{dirs_prefix}/{}", normalize_archive_dir(dir)),
+            ),
+        });
+    }
+    for file in distinct_paths(
+        adapter
+            .files
+            .iter()
+            .flat_map(plugin::NamedPaths::entries)
+            .map(|entry| entry.path),
+    ) {
+        out.plugin_files.push(PluginFile {
+            src_path: canister_path.join(file),
+            archive_path: archive_join(
+                prefix,
+                &format!("{files_prefix}/{}", normalize_archive_dir(file)),
+            ),
+            canister_name: canister.name.clone(),
+            orig_file: file.to_string(),
+        });
+    }
 
     Ok(SyncStep::Plugin(Box::new(plugin::Adapter {
         source: SourceField::Local(LocalSource {

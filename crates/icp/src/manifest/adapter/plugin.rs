@@ -229,10 +229,12 @@ pub struct Adapter {
     pub sha256: Option<String>,
 
     /// Directories (relative to canister directory) the plugin may read from.
-    /// Each entry must be a directory; it is preopened via WASI so the plugin
-    /// can traverse it using standard filesystem APIs. Written as a plain list
-    /// of paths, or as a map of name → path (or list of paths); the name is
-    /// surfaced to the plugin as each entry's `key`.
+    /// Each entry must be a directory; it is made readable via WASI so the
+    /// plugin can traverse it using standard filesystem APIs. Written as a plain
+    /// list of paths, or as a map of name → path (or list of paths); the name is
+    /// surfaced to the plugin as each entry's `key`. Entries may repeat a
+    /// directory or name one inside another's — the plugin is told about each
+    /// entry as written, and reads them all.
     pub dirs: Option<NamedPaths>,
 
     /// Files (relative to canister directory) the host reads and passes to

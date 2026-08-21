@@ -3726,6 +3726,7 @@ dependencies = [
  "ic-utils",
  "icp",
  "icp-canister-interfaces",
+ "icp-sync-plugin",
  "icrc-ledger-types",
  "indicatif",
  "indoc",

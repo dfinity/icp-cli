@@ -289,6 +289,9 @@ pub enum RunPluginError {
     ))]
     SymlinkDir { dir: String, link: Utf8PathBuf },
 
+    #[snafu(display("plugin dir '{dir}' is not an existing directory"))]
+    MissingDir { dir: String },
+
     #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
     PreopenDir {
         source: wasmtime::Error,
@@ -498,9 +501,9 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             path: wasm_path.clone(),
         })?;
 
-    // Preopen each declared directory read-only. The guest sees it at the
-    // same relative path it used in the manifest.
-    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+    // Check every declared directory: each one is handed to the plugin as
+    // configuration, so it is rejected for being unsafe or unusable whether or
+    // not it ends up needing a preopen of its own.
     for KeyedPath { path: dir, .. } in &dirs {
         ensure!(!crate::path::escapes_base(dir), UnsafeDirSnafu { dir });
         // Reject symlinks in the declared path: neither the final entry nor any
@@ -510,6 +513,17 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         if let Some(link) = crate::path::first_symlink_component(&base_dir, dir) {
             return SymlinkDirSnafu { dir, link }.fail();
         }
+        let host_path = base_dir.join(dir);
+        let is_dir = std::fs::metadata(host_path.as_std_path()).is_ok_and(|meta| meta.is_dir());
+        ensure!(is_dir, MissingDirSnafu { dir });
+    }
+
+    // Preopen read-only, one per distinct tree — a directory declared twice, or
+    // one already reachable through a declared ancestor, needs no preopen of its
+    // own. The guest sees each preopen at the same relative path it used in the
+    // manifest, and reaches a nested declared directory through its ancestor.
+    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+    for dir in crate::path::covering_dirs(dirs.iter().map(|d| d.path.as_str())) {
         let host_path = base_dir.join(dir);
         wasi_builder
             .preopened_dir(
@@ -938,7 +952,7 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
-    fn preopen_dir_error_on_missing_dir() {
+    fn missing_dir_is_rejected() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
@@ -946,8 +960,44 @@ mod tests {
         inv.dirs = unkeyed(&["nonexistent_dir"]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::PreopenDir { .. })
+            Err(RunPluginError::MissingDir { .. })
         ));
+    }
+
+    /// A directory declared under several keys, or nested inside another
+    /// declared one, reaches the plugin as every entry it was written as. Only
+    /// the preopens behind those entries collapse — `data/inner` has none of its
+    /// own here, and is read through the `data` preopen that covers it.
+    #[test]
+    fn aliased_and_nested_dirs_are_all_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("data/inner")).expect("create dir");
+        std::fs::write(base.join("data/top.txt"), b"top").expect("write file");
+        std::fs::write(base.join("data/inner/deep.txt"), b"deep").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = base.to_path_buf();
+        inv.dirs = [("seed", "data"), ("backup", "data"), ("sub", "data/inner")]
+            .into_iter()
+            .map(|(key, path)| KeyedPath {
+                key: Some(key.to_owned()),
+                path: path.to_owned(),
+            })
+            .collect();
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            [
+                "seed=inner,top.txt".to_string(),
+                "backup=inner,top.txt".to_string(),
+                "sub=deep.txt".to_string(),
+            ],
+        );
     }
 
     #[cfg(unix)]

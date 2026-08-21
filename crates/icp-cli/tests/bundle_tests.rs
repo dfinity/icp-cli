@@ -1383,6 +1383,108 @@ fn bundle_preserves_plugin_path_keys() {
     );
 }
 
+/// `dirs:`/`files:` are configuration as well as sandbox grants, so the same path may be
+/// named under several keys, and one key's directory may sit inside another's. The bundled
+/// manifest keeps every entry as declared; the archive holds one copy of each tree, since
+/// two copies of one directory (or a copy of a directory already inside another) cannot be
+/// written to the archive at all.
+#[test]
+fn bundle_archives_aliased_plugin_paths_once() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let plugin_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00plugin";
+    write(&project_dir.join("plugin.wasm"), plugin_bytes).expect("failed to write plugin");
+
+    let inner = project_dir.join("data/inner");
+    create_dir_all(&inner).expect("failed to create dir");
+    write_string(&project_dir.join("data/top.txt"), "top").expect("failed to write file");
+    write_string(&inner.join("deep.txt"), "deep").expect("failed to write file");
+    write_string(&project_dir.join("config.toml"), "key=value").expect("failed to write config");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  dirs:
+                    seed: data
+                    backup: data
+                    sub: data/inner
+                  files:
+                    main: config.toml
+                    fallback: ./config.toml
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut archived: Vec<String> = Vec::new();
+    let mut manifest_yaml = String::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+        archived.push(path);
+    }
+
+    // One copy of the tree, holding what the nested entry points at.
+    for expected in [
+        "plugins/my-canister/0/dirs/data/top.txt",
+        "plugins/my-canister/0/dirs/data/inner/deep.txt",
+        "plugins/my-canister/0/files/config.toml",
+    ] {
+        assert_eq!(
+            archived.iter().filter(|path| *path == expected).count(),
+            1,
+            "{expected} should appear exactly once; archive holds {archived:?}"
+        );
+    }
+
+    // Every declared entry survives, keys and all.
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
+    let step = &parsed["canisters"][0]["sync"]["steps"][0];
+    for (key, expected) in [
+        ("seed", "plugins/my-canister/0/dirs/data"),
+        ("backup", "plugins/my-canister/0/dirs/data"),
+        ("sub", "plugins/my-canister/0/dirs/data/inner"),
+    ] {
+        assert_eq!(step["dirs"][key].as_str(), Some(expected));
+    }
+    for key in ["main", "fallback"] {
+        assert_eq!(
+            step["files"][key].as_str(),
+            Some("plugins/my-canister/0/files/config.toml")
+        );
+    }
+}
+
 /// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
 /// top-level `images` paths relocated under a top-level `images/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.

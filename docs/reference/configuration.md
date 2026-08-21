@@ -169,7 +169,7 @@ sync:
 | `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
 | `url` | string | One of `path` or `url` | URL to download the wasm from |
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
-| `dirs` | list of paths, or map of name → path(s) | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
+| `dirs` | list of paths, or map of name → path(s) | No | Directories (relative to the canister directory) the plugin may read; each is made readable read-only via WASI |
 | `files` | list of paths, or map of name → path(s) | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
 | `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
 | `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |

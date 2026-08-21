@@ -39,9 +39,8 @@ use wasmtime_wasi::{DirPerms, FilePerms};
 // module so their generated type names don't collide. `run_plugin` reads the
 // interface version from the component's own metadata (see `detect_plugin_abi`)
 // and drives it through the matching module, so plugins built against either
-// interface load. The two interfaces are currently structurally identical; the
-// split exists so later breaking changes to the current interface can land
-// without dropping support for already-built plugins.
+// interface load. The split exists so breaking changes to the current interface
+// can land without dropping support for already-built plugins.
 mod v2 {
     wasmtime::component::bindgen!({
         world: "sync-plugin",

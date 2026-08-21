@@ -88,7 +88,7 @@
               "type": "null"
             }
           ],
-          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs. Written as a plain list\nof paths, or as a map of name → path (or list of paths); the name is\nsurfaced to the plugin as each entry's `key`."
+          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is made readable via WASI so the\nplugin can traverse it using standard filesystem APIs. Written as a plain\nlist of paths, or as a map of name → path (or list of paths); the name is\nsurfaced to the plugin as each entry's `key`. Entries may repeat a\ndirectory or name one inside another's — the plugin is told about each\nentry as written, and reads them all."
         },
         "fields": {
           "additionalProperties": {

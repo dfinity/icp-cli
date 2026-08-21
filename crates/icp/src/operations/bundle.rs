@@ -15,9 +15,7 @@ use crate::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
         EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
         ManifestArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
-        SyncSteps, load_manifest_from_path, plugin,
-        plugin::CanisterRef,
-        prebuilt,
+        SyncSteps, load_manifest_from_path, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
     package::PackageCache,
@@ -720,20 +718,17 @@ fn localize_controllers<EnvVar>(
 
 /// Rewrite a plugin's declared call targets from workspace store keys back to the
 /// local names of the instance being written, on the same grounds as
-/// [`localize_controllers`]. Principals are already absolute and pass through.
+/// [`localize_controllers`].
 fn localize_call_targets(
-    canisters: Option<&[CanisterRef]>,
+    canisters: Option<&[String]>,
     local_names: &HashMap<&str, &str>,
-) -> Option<Vec<CanisterRef>> {
+) -> Option<Vec<String>> {
     canisters.map(|canisters| {
         canisters
             .iter()
-            .map(|target| match target {
-                CanisterRef::Name(name) => match local_names.get(name.as_str()) {
-                    Some(local) => CanisterRef::Name((*local).to_owned()),
-                    None => target.clone(),
-                },
-                CanisterRef::Principal(_) => target.clone(),
+            .map(|target| match local_names.get(target.as_str()) {
+                Some(local) => (*local).to_owned(),
+                None => target.clone(),
             })
             .collect()
     })

@@ -1,5 +1,5 @@
 // Host-side Component Model runtime for sync plugins.
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -68,10 +68,6 @@ pub struct CallableCanisters {
     /// Dependencies callable by name ([`CallTarget::Name`]). Maps the name — as
     /// it appears in the canister ID table — to the principal it resolves to.
     pub by_name: BTreeMap<String, Principal>,
-    /// Every principal callable by [`CallTarget::Id`]. Includes the principals
-    /// of the `by_name` entries, so an author may target the same canister
-    /// either way.
-    pub by_id: BTreeSet<Principal>,
 }
 
 /// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
@@ -90,18 +86,6 @@ fn resolve_call_target(
                  `canisters` list to allow it"
             )
         }),
-        CallTarget::Id(text) => {
-            let principal = Principal::from_text(text)
-                .map_err(|e| format!("invalid target principal '{text}': {e}"))?;
-            if principal == host_canister_id || callable.by_id.contains(&principal) {
-                Ok(principal)
-            } else {
-                Err(format!(
-                    "plugin is not permitted to call canister '{principal}': declare it in the \
-                     sync step's `canisters` list to allow it"
-                ))
-            }
-        }
     }
 }
 
@@ -864,7 +848,6 @@ mod tests {
         let dep = Principal::from_slice(&[2; 4]);
         let callable = CallableCanisters {
             by_name: BTreeMap::from([("backend".to_string(), dep)]),
-            by_id: BTreeSet::from([dep]),
         };
         assert_eq!(
             resolve_call_target(&CallTarget::Name("backend".into()), host, &callable).unwrap(),
@@ -876,34 +859,6 @@ mod tests {
             err.contains("not permitted") && err.contains("frontend"),
             "got: {err}"
         );
-    }
-
-    #[test]
-    fn resolve_target_id_allows_host_and_declared_only() {
-        let host = Principal::from_slice(&[1; 4]);
-        let dep = Principal::from_slice(&[2; 4]);
-        let other = Principal::from_slice(&[3; 4]);
-        let callable = CallableCanisters {
-            by_name: BTreeMap::new(),
-            by_id: BTreeSet::from([dep]),
-        };
-        // A declared principal is allowed; so is the host, implicitly.
-        assert_eq!(
-            resolve_call_target(&CallTarget::Id(dep.to_text()), host, &callable).unwrap(),
-            dep
-        );
-        assert_eq!(
-            resolve_call_target(&CallTarget::Id(host.to_text()), host, &callable).unwrap(),
-            host
-        );
-        // An undeclared principal is rejected.
-        let err = resolve_call_target(&CallTarget::Id(other.to_text()), host, &callable)
-            .expect_err("undeclared principal must be rejected");
-        assert!(err.contains("not permitted"), "got: {err}");
-        // Garbage text is a distinct, clearer error.
-        let err = resolve_call_target(&CallTarget::Id("not a principal".into()), host, &callable)
-            .expect_err("invalid principal text must be rejected");
-        assert!(err.contains("invalid target principal"), "got: {err}");
     }
 
     // -------------------------------------------------------------------------

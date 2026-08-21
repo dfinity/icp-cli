@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use camino::Utf8PathBuf;
 use candid::Principal;
@@ -10,11 +10,7 @@ use icp_sync_plugin::{
 };
 use snafu::prelude::*;
 
-use crate::{
-    canister::wasm,
-    manifest::adapter::plugin::{Adapter, CanisterRef},
-    package::PackageCache,
-};
+use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
 
 use super::Params;
 
@@ -164,7 +160,7 @@ fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
 }
 
 /// Resolve the canisters a plugin declared it may call into a [`CallableCanisters`]
-/// enforcement set. Named dependencies are looked up in `canister_ids`; a name
+/// enforcement set. Each declared name is looked up in `canister_ids`; a name
 /// that does not resolve is a manifest error.
 fn resolve_callable(
     adapter: &Adapter,
@@ -172,27 +168,17 @@ fn resolve_callable(
     environment: &str,
 ) -> Result<CallableCanisters, PluginError> {
     let mut by_name = BTreeMap::new();
-    let mut by_id = BTreeSet::new();
-    for canister in adapter.canisters.iter().flatten() {
-        match canister {
-            CanisterRef::Principal(principal) => {
-                by_id.insert(*principal);
-            }
-            CanisterRef::Name(name) => {
-                let principal =
-                    canister_ids
-                        .get(name)
-                        .copied()
-                        .context(UnknownDependencySnafu {
-                            name: name.clone(),
-                            environment: environment.to_owned(),
-                        })?;
-                by_name.insert(name.clone(), principal);
-                by_id.insert(principal);
-            }
-        }
+    for name in adapter.canisters.iter().flatten() {
+        let principal = canister_ids
+            .get(name)
+            .copied()
+            .context(UnknownDependencySnafu {
+                name: name.clone(),
+                environment: environment.to_owned(),
+            })?;
+        by_name.insert(name.clone(), principal);
     }
-    Ok(CallableCanisters { by_name, by_id })
+    Ok(CallableCanisters { by_name })
 }
 
 #[cfg(test)]
@@ -236,7 +222,7 @@ mod tests {
         }
     }
 
-    fn adapter_with(canisters: Option<Vec<CanisterRef>>) -> Adapter {
+    fn adapter_with(canisters: Option<Vec<String>>) -> Adapter {
         Adapter {
             source: SourceField::Local(LocalSource {
                 path: "plugin.wasm".into(),
@@ -337,25 +323,30 @@ mod tests {
     }
 
     #[test]
-    fn resolve_callable_resolves_names_and_principals() {
+    fn resolve_callable_resolves_names() {
         let dep = principal(1);
-        let raw = principal(2);
-        let table = BTreeMap::from([("backend".to_owned(), dep)]);
+        let sibling = principal(2);
+        let table = BTreeMap::from([
+            ("backend".to_owned(), sibling),
+            ("services/open-crm:backend".to_owned(), dep),
+        ]);
         let adapter = adapter_with(Some(vec![
-            CanisterRef::Name("backend".to_owned()),
-            CanisterRef::Principal(raw),
+            "backend".to_owned(),
+            "services/open-crm:backend".to_owned(),
         ]));
 
         let callable = resolve_callable(&adapter, &table, "demo").unwrap();
 
-        assert_eq!(callable.by_name.get("backend"), Some(&dep));
-        assert!(callable.by_id.contains(&dep));
-        assert!(callable.by_id.contains(&raw));
+        assert_eq!(callable.by_name.get("backend"), Some(&sibling));
+        assert_eq!(
+            callable.by_name.get("services/open-crm:backend"),
+            Some(&dep)
+        );
     }
 
     #[test]
     fn resolve_callable_rejects_unknown_name() {
-        let adapter = adapter_with(Some(vec![CanisterRef::Name("nope".to_owned())]));
+        let adapter = adapter_with(Some(vec!["nope".to_owned()]));
         let err = resolve_callable(&adapter, &BTreeMap::new(), "demo")
             .expect_err("an undeclared name must fail");
         assert!(matches!(err, PluginError::UnknownDependency { .. }));

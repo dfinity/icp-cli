@@ -36,9 +36,9 @@ interface types {
     /// Which canister a `canister-call-request` targets.
     ///
     /// A plugin may target the canister being synced, or any canister it
-    /// declared as a dependency in the sync step's `canisters` list — by that
-    /// canister's name or by its textual principal. Targeting a canister that
-    /// was not declared as a dependency is rejected by the host.
+    /// declared as a dependency in the sync step's `canisters` list — always by
+    /// that canister's name. Targeting a canister that was not declared as a
+    /// dependency is rejected by the host.
     variant call-target {
         /// The canister being synced (`sync-exec-input.canister-id`). Always
         /// permitted, whether or not it also appears in `canisters`.
@@ -48,8 +48,6 @@ interface types {
         /// canister in the same subproject, or a `subproject:local` key
         /// otherwise. The host resolves it against that mapping table.
         name(string),
-        /// A declared-dependency canister identified by its textual principal.
-        id(string),
     }
 
     /// Input passed by the runtime to the plugin's exec() export.
@@ -81,7 +79,7 @@ interface types {
     /// A request to call a method on a canister.
     record canister-call-request {
         /// Which canister to call. `host` targets the canister being synced;
-        /// `name`/`id` target a canister declared as a dependency in the sync
+        /// `name` targets a canister declared as a dependency in the sync
         /// step's `canisters` list.
         target: call-target,
         /// The canister method to call.
@@ -116,8 +114,8 @@ world sync-plugin {
     /// Make an update or query call to a canister.
     /// The `req.target` selects the canister: the one being synced (`host`), or
     /// a canister declared as a dependency in the sync step's `canisters` list,
-    /// by name or principal. A target that was not declared as a dependency is
-    /// rejected without making a call.
+    /// by name. A target that was not declared as a dependency is rejected
+    /// without making a call.
     /// Returns the raw Candid-encoded response bytes on success or an error
     /// message on failure. The plugin is responsible for decoding.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;

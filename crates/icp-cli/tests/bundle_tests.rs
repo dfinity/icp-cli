@@ -1221,8 +1221,7 @@ fn bundle_preserves_plugin_call_targets() {
     )
     .expect("failed to write dependency manifest");
 
-    // The root's plugin names a root sibling, a dependency canister by store key, and a
-    // literal principal.
+    // The root's plugin names a root sibling and a dependency canister by store key.
     write_string(
         &project_dir.join("icp.yaml"),
         &formatdoc! {r#"
@@ -1236,7 +1235,6 @@ fn bundle_preserves_plugin_call_targets() {
                       canisters:
                         - api
                         - vendor/openemail:backend
-                        - aaaaa-aa
               - name: api
                 {build_step}
 
@@ -1296,7 +1294,7 @@ fn bundle_preserves_plugin_call_targets() {
 
     assert_eq!(
         plugin_targets(&manifests["icp.yaml"], "frontend"),
-        ["api", "vendor/openemail:backend", "aaaaa-aa"],
+        ["api", "vendor/openemail:backend"],
     );
     // Both spellings of the dependency's own sibling come out as its local name.
     assert_eq!(

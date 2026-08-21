@@ -29,11 +29,13 @@ docs; the *reasons* behind those choices are recorded here.
   unchanged. This keeps the host free of any per-canister type knowledge.
 - **`canister-call` takes an explicit `target`** — the plugin selects the
   canister being synced (`host`) or a canister it declared as a dependency, by
-  name or principal. The host resolves the target and *enforces* the
-  declaration: a target absent from the step's `canisters:` list is rejected
-  without a call. (In the earlier `@0.1.0` interface `canister-call` had no
-  target and always reached the canister being synced; see *Interface
-  versioning* below.)
+  name. The host resolves the target and *enforces* the declaration: a target
+  absent from the step's `canisters:` list is rejected without a call. Names are
+  the only way to address a dependency: the name→principal mapping is the host's
+  to make, since it varies per environment, and a plugin that hardcodes a
+  principal is pinned to one deployment. (In the earlier `@0.1.0` interface
+  `canister-call` had no target and always reached the canister being synced; see
+  *Interface versioning* below.)
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
   canister names it knows about. It is informational only; calling still
@@ -118,7 +120,7 @@ mod v1 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugi
 
 struct HostState {
     host_canister_id: Principal,
-    callable: CallableCanisters,          // by_name + by_id, from the manifest
+    callable: CallableCanisters,          // name → principal, from the manifest
     agent: Arc<Agent>,
     proxy: Option<Principal>,
     wasi_ctx: wasmtime_wasi::WasiCtx,
@@ -186,14 +188,13 @@ pub struct Adapter {
     pub sha256: Option<String>,
     pub dirs: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
-    pub canisters: Option<Vec<CanisterRef>>, // extra callable canisters
+    pub canisters: Option<Vec<String>>,   // extra callable canisters, by name
 }
 ```
 
-`CanisterRef` is an untagged `Principal | Name` (anything that parses as a
-principal is one; everything else is a name), written in the manifest as a plain
-string. `Deserialize` is hand-written to reject a `url` source without a
-`sha256`.
+Each `canisters:` entry is a canister name resolved against the project's ID
+table for the environment being synced. `Deserialize` is hand-written to reject a
+`url` source without a `sha256`.
 
 ### `crates/icp/src/canister/sync/plugin.rs`
 

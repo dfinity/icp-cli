@@ -49,7 +49,7 @@ pub struct Adapter {
     /// Canisters this plugin may call in addition to the canister being synced.
     /// Each entry is a canister name resolved against the project's canister ID
     /// table for the environment being synced (e.g. `backend`, or a namespaced
-    /// dependency canister such as `services/open-crm:backend`). The plugin
+    /// subproject canister such as `services/open-crm:backend`). The plugin
     /// picks a target per call via the `call-target` in its `canister-call`
     /// request; a target not listed here is rejected by the host.
     pub canisters: Option<Vec<String>>,

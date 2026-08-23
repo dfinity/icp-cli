@@ -14,6 +14,7 @@ candid.workspace = true
 console.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
+ic-management-canister-types.workspace = true
 icp-canister-interfaces.workspace = true
 semver.workspace = true
 snafu.workspace = true

@@ -24,7 +24,9 @@ pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 use bytes::Bytes;
 use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
+use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
+use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
 use tokio::io::{self, AsyncWrite};
@@ -93,6 +95,16 @@ pub struct CallableCanisters {
     pub by_name: BTreeMap<String, Principal>,
 }
 
+/// The distinguishing phrase in the management canister's rejection of a
+/// metadata read for a section the target does not have ("The canister <id> has
+/// no metadata section with the name <name>."). A proxied read reaches the
+/// plugin as reject text, not as a code, so recognizing absence — which
+/// [`HostState::do_get_metadata_section`] reports as `Ok(None)`, matching what
+/// a direct read proves from the certificate — means matching that text. A
+/// reword upstream turns absence back into an error rather than into a wrong
+/// answer.
+const NO_SUCH_SECTION_REJECT: &str = "no metadata section";
+
 /// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
 /// that the plugin listed it in `canisters`. The canister being synced (`host`)
 /// is always permitted.
@@ -119,7 +131,8 @@ struct HostState {
     /// Canisters the plugin declared in `canisters` and may also call.
     callable: CallableCanisters,
     agent: Arc<Agent>,
-    /// Proxy canister to route update calls through, if configured.
+    /// Proxy canister to route update calls and metadata reads through, if
+    /// configured.
     proxy: Option<Principal>,
     // WASI context. Preopened directories in this context are the only
     // filesystem locations the plugin can access.
@@ -154,8 +167,6 @@ impl HostState {
         direct: bool,
         cycles: u64,
     ) -> Result<Vec<u8>, String> {
-        use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
-
         let agent = Arc::clone(&self.agent);
         let proxy = if direct { None } else { self.proxy };
 
@@ -201,12 +212,85 @@ impl HostState {
                     .map_err(|e| format!("canister call failed: {e}")),
             }
         });
-        // Return the time spent in the host call to the compute budget so
-        // canister network latency doesn't count against the plugin's limit.
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Read a metadata section from an already-resolved target principal.
+    /// `Ok(None)` is the target reporting it has no such section, kept distinct
+    /// from a failed read so a plugin can probe for an optional section without
+    /// inspecting error text (see [`NO_SUCH_SECTION_REJECT`]).
+    ///
+    /// A direct read is a certified `read_state` signed by the sync identity —
+    /// `read_state` is not a canister method, so it cannot be forwarded. A
+    /// proxied read therefore goes the other way around: the proxy calls the
+    /// management canister's `canister_metadata` on the plugin's behalf, which
+    /// checks the *proxy* against the target's controllers and so reaches
+    /// sections private to it.
+    fn do_get_metadata_section(
+        &mut self,
+        target: Principal,
+        name: String,
+        direct: bool,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let agent = Arc::clone(&self.agent);
+        let proxy = if direct { None } else { self.proxy };
+
+        let start = Instant::now();
+        let result = tokio::runtime::Handle::current().block_on(async move {
+            let Some(proxy_cid) = proxy else {
+                return match agent.read_state_canister_metadata(target, &name).await {
+                    Ok(bytes) => Ok(Some(bytes)),
+                    Err(AgentError::LookupPathAbsent(_)) => Ok(None),
+                    Err(err) => Err(format!("metadata read failed: {err}")),
+                };
+            };
+
+            let metadata_args = Encode!(&CanisterMetadataArgs {
+                canister_id: target,
+                name,
+            })
+            .map_err(|e| format!("metadata encode failed: {e}"))?;
+            let proxy_args = ProxyArgs {
+                canister_id: Principal::management_canister(),
+                method: "canister_metadata".to_string(),
+                args: metadata_args,
+                cycles: candid::Nat::from(0u8),
+            };
+            let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
+            let raw = agent
+                .update(&proxy_cid, "proxy")
+                .with_arg(encoded)
+                .await
+                .map_err(|e| format!("proxy call failed: {e}"))?;
+            let (result,): (ProxyResult,) =
+                candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
+            match result {
+                ProxyResult::Ok(ok) => {
+                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&ok.result)
+                        .map_err(|e| format!("metadata decode failed: {e}"))?;
+                    Ok(Some(metadata.value))
+                }
+                ProxyResult::Err(err) => {
+                    let message = err.format_error();
+                    if message.contains(NO_SUCH_SECTION_REJECT) {
+                        Ok(None)
+                    } else {
+                        Err(message)
+                    }
+                }
+            }
+        });
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Return the wall-clock time a host call spent off-wasm to the compute
+    /// budget, so network latency doesn't count against the plugin's limit.
+    fn refund_host_call_time(&self, start: Instant) {
         let elapsed_ticks = start.elapsed().as_secs() + 1;
         self.epoch_extension
             .fetch_add(elapsed_ticks, Ordering::Relaxed);
-        result
     }
 }
 
@@ -229,6 +313,14 @@ impl v2::SyncPluginImports for HostState {
             req.direct,
             req.cycles,
         )
+    }
+
+    fn get_metadata_section(
+        &mut self,
+        req: v2::icp::sync_plugin::types::MetadataSectionRequest,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_get_metadata_section(target, req.name, req.direct)
     }
 }
 
@@ -448,7 +540,8 @@ pub struct PluginInvocation {
     pub host_canister_id: Principal,
     /// Agent used for canister calls.
     pub agent: Agent,
-    /// Proxy canister to route update calls through, if configured.
+    /// Proxy canister to route update calls and metadata reads through, if
+    /// configured.
     pub proxy: Option<Principal>,
     /// Signing identity principal, surfaced to the plugin.
     pub identity_principal: Principal,
@@ -1290,6 +1383,25 @@ mod tests {
             run_plugin(invocation(wasm_path, "error")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate failure"
         ));
+    }
+
+    /// A metadata read names its target the same way a call does, and the host
+    /// enforces the `canisters` list before going to the network — so an
+    /// undeclared target is refused without a live canister to read from.
+    #[test]
+    fn metadata_read_of_undeclared_canister_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines = run_plugin(invocation(wasm_path, "metadata-undeclared"))
+            .expect("plugin should succeed");
+        let [refusal] = &lines[..] else {
+            panic!("expected one refusal line, got: {lines:?}");
+        };
+        assert!(
+            refusal.contains("not permitted") && refusal.contains("undeclared"),
+            "got: {refusal}"
+        );
     }
 
     #[test]

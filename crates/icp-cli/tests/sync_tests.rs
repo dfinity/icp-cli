@@ -437,11 +437,18 @@ async fn sync_plugin_registers_seed_data() {
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
+    // The plugin also reads the canister's candid:service metadata section and
+    // reports it. No proxy is configured here, so the read is a direct
+    // read_state; this manifest builds the wasm with a plain `cp`, skipping the
+    // example's ic-wasm step, so the section genuinely isn't there — proving the
+    // host performed the round-trip and mapped a proven-absent section to `none`
+    // rather than to an error.
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--environment", "random-environment"])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("candid:service: absent"));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()
@@ -940,6 +947,12 @@ async fn sync_plugin_routes_through_proxy() {
     // Deploy through proxy so the proxy canister becomes a controller of my-canister.
     // deploy also runs the sync step: the plugin routes set_uploader through the proxy
     // (direct: false, proxy is controller), then calls register directly with the user identity.
+    //
+    // Its metadata read is proxied too, so it reaches the canister as the
+    // management canister's `canister_metadata` rather than as a read_state.
+    // This manifest skips the example's ic-wasm step, so the section really is
+    // missing — and the host must report the resulting rejection as an absent
+    // section, the same answer a direct read proves from the certificate.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -950,7 +963,8 @@ async fn sync_plugin_routes_through_proxy() {
             "random-environment",
         ])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("candid:service: absent"));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()

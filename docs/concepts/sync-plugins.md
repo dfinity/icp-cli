@@ -3,7 +3,7 @@ title: Sync Plugins
 description: How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
 ---
 
-A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced (plus the project's canister ID table), and lets it make canister calls and read declared files — nothing more. By default it can call only the canister being synced; it may call other canisters it lists in the sync step's `canisters:` list.
+A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced (plus the project's canister ID table), and lets it make canister calls, read canister metadata, and read declared files — nothing more. By default it can call only the canister being synced; it may call other canisters it lists in the sync step's `canisters:` list.
 
 You declare a sync plugin in your manifest with a `plugin` sync step. For the exact manifest fields, see [Plugin Sync in the Configuration Reference](../reference/configuration.md#plugin-sync). To author your own plugin, see [Writing a Sync Plugin](../guides/writing-sync-plugins.md).
 
@@ -39,18 +39,22 @@ icp sync
        │    dirs/files/fields  = what you declared in the manifest
        │
        └─ plugin makes canister-call({ target, ... }) (× N)
+          and get-metadata-section({ target, name })
             target = host (the canister being synced), or a
                      canister from `canisters:` by name
 ```
 
 ## The Plugin Interface
 
-The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides one import (`canister-call`); the plugin provides one export (`exec`):
+The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides two imports (`canister-call` and `get-metadata-section`); the plugin provides one export (`exec`):
 
 ```wit
 world sync-plugin {
     // Host import: call the canister being synced or one listed in `canisters:`.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    // Host import: read a metadata section from one of those same canisters.
+    import get-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
 
     // Plugin export: run the sync step.
     export exec: func(input: sync-exec-input) -> result<_, string>;
@@ -93,6 +97,25 @@ The plugin calls methods through the `canister-call` import. It picks a `target`
 
 The `host` target always resolves to `sync-exec-input.canister-id` and is always permitted. A `name` target is permitted only if that canister appears in the sync step's [`canisters:`](../reference/configuration.md#plugin-sync) list; the host rejects any other target without making a call. A name is the only way to address another canister — the host owns the name→principal mapping, which differs per environment.
 
+### Reading canister metadata — `get-metadata-section`
+
+The plugin reads a canister's [metadata sections](../reference/cli.md#icp-canister-metadata) — `candid:service`, for instance — through the `get-metadata-section` import:
+
+| Request field | Meaning |
+|---------------|---------|
+| `target` | Which canister to read from: `host`, or a canister declared in `canisters:` addressed by `name` — the same targets, and the same enforcement, as `canister-call` |
+| `name` | The section name, without the `icp:public `/`icp:private ` prefix the wasm custom section carries (e.g. `candid:service`) |
+| `direct` | When `false` (default), the read is routed through the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, it always goes straight to the target |
+
+A successful read returns the section's raw bytes, or **absent** when the target reports it has no section by that name — so a plugin can probe for an optional section without matching on error text. Anything else (an unreachable canister, a section the caller may not read) is an error.
+
+The two routes differ in who the target sees asking, which decides what a **private** section will yield:
+
+- **Direct** — a certified `read_state` request signed by the sync identity. A private section requires that identity to control the target.
+- **Proxied** — a call to the management canister's `canister_metadata` method made by the proxy, because `read_state` is not a canister method and cannot be forwarded. A private section requires the *proxy* to control the target — the same arrangement proxied update calls rely on.
+
+With no proxy configured, both settings read directly.
+
 ### Logging — stdout and stderr
 
 The plugin's stdout and stderr are captured by the host (no logging import is needed — use ordinary `println!` / `eprintln!`):
@@ -122,6 +145,7 @@ The plugin runs with a deliberately narrow capability surface.
 | Clocks, RNG, `wasi:io` | yes | Rust's `HashMap`, `chrono`, etc. work normally |
 | `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
 | Canister calls | yes | to the canister being synced, and to canisters declared in `canisters:` |
+| Canister metadata reads | yes | the same set of canisters as calls |
 | Environment variables / args | no | the WASI environment is empty; use `sync-exec-input.environment` |
 | Network sockets / DNS | blocked | treat the network as unavailable |
 | Filesystem writes | blocked | no writable preopens |
@@ -136,7 +160,7 @@ The plugin runs with a deliberately narrow capability surface.
 | Linear memory | wasm32 address space (≤ 4 GiB) |
 | stdout / stderr per stream | 1 MiB |
 
-The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a `canister-call` to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `get-metadata-section`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
 
 ## Next Steps
 

@@ -136,11 +136,32 @@ interface types {
         /// for query calls.
         cycles: u64,
     }
+
+    /// A request to read a canister's metadata section.
+    record metadata-section-request {
+        /// Which canister to read from. The same rule as
+        /// `canister-call-request.target` applies: `host` is always permitted,
+        /// a `name` must appear in the sync step's `canisters` list.
+        target: call-target,
+        /// Name of the metadata section, as spelled in the wasm module's custom
+        /// section minus the `icp:public `/`icp:private ` prefix — e.g.
+        /// `candid:service`.
+        name: string,
+        /// When true, the section is read straight from the target canister
+        /// with a certified `read_state` request signed by the sync identity,
+        /// which reaches a private section only if that identity controls the
+        /// target. When false (the default), the read is routed through the
+        /// proxy canister configured via `--proxy` — as a call to the
+        /// management canister's `canister_metadata` method, so a private
+        /// section gated on the proxy's control is readable. With no proxy
+        /// configured the read goes directly either way.
+        direct: bool,
+    }
 }
 
 /// The complete interface of a sync plugin.
 world sync-plugin {
-    use types.{sync-exec-input, canister-call-request, call-target, canister-id-entry, dir-input, file-input, field-input};
+    use types.{sync-exec-input, canister-call-request, metadata-section-request, call-target, canister-id-entry, dir-input, file-input, field-input};
 
     // -------------------------------------------------------------------------
     // Host functions (imports) — provided by icp-cli, called by the plugin
@@ -153,6 +174,19 @@ world sync-plugin {
     /// Returns the raw Candid-encoded response bytes on success or an error
     /// message on failure. The plugin is responsible for decoding.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    /// Read a metadata section from a canister.
+    /// The `req.target` selects the canister under the same rule as
+    /// `canister-call`: the canister being synced (`host`), or one listed in
+    /// the sync step's `canisters` list, by name.
+    /// A direct read is a certified `read_state` request signed by the sync
+    /// identity; a proxied read (`direct` false, with `--proxy` configured) is
+    /// a call to the management canister's `canister_metadata` method made by
+    /// the proxy, which reaches sections private to the proxy's control.
+    /// Returns the section's raw bytes on success, `none` when the target
+    /// reports it has no section by that name, or an error message on failure.
+    /// The plugin is responsible for interpreting the bytes.
+    import get-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
 
     // The plugin's stdout is captured and shown as transient progress in
     // the rolling step view of icp-cli; it is discarded when the step ends.

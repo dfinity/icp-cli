@@ -37,7 +37,7 @@ wit-bindgen = { version = "0.56", features = ["realloc"] }
 
 ## Generate Bindings and Implement `exec`
 
-`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the `canister_call` host function. The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
+`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `get_metadata_section`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
 
 ```rust
 // src/lib.rs
@@ -87,6 +87,26 @@ A few things to note:
 - **You encode the arguments.** `arg` is raw Candid bytes. Encode with `candid::Encode!`; decode any response (`Vec<u8>`) with `candid::Decode!`.
 - **You choose the target.** `target: CallTarget::Host` reaches the canister being synced. To call another canister, declare it in the manifest's [`canisters:`](../reference/configuration.md#plugin-sync) list and address it with `CallTarget::Name("ledger".into())` — the name matches the entries in `input.canister_ids`. Names are the only way to reach another canister; the host resolves them per environment. The host rejects a target you did not declare.
 - **`direct` and `cycles` control proxy routing.** With `direct: false`, update calls go through the [proxy canister](proxy-canister.md) when one is configured, and `cycles` can fund the forwarded call. With `direct: true`, the call always goes straight to the target. See [The Plugin Interface](../concepts/sync-plugins.md#the-plugin-interface) for the full semantics.
+
+## Read Canister Metadata
+
+`get_metadata_section` reads a [metadata section](../reference/cli.md#icp-canister-metadata) off a canister — useful for inspecting what is actually deployed before acting on it, e.g. its `candid:service` interface:
+
+```rust
+let interface = get_metadata_section(&MetadataSectionRequest {
+    target: CallTarget::Host, // same targets, same rules, as canister_call
+    name: "candid:service".to_string(),
+    direct: false, // route through the proxy if one is configured
+})?;
+
+match interface {
+    Some(bytes) => println!("interface: {}", String::from_utf8_lossy(&bytes)),
+    // `None` means the canister has no such section — not a failure.
+    None => println!("canister exposes no Candid interface"),
+}
+```
+
+`direct` picks who the target sees asking, which is what decides whether a *private* section is readable: a direct read is signed by the sync identity, a proxied one is made by the proxy canister on your behalf. See [Reading canister metadata](../concepts/sync-plugins.md#reading-canister-metadata--get-metadata-section) for the full semantics.
 
 ## Read Declared Files and Directories
 

@@ -153,7 +153,7 @@ sync:
       fields:                            # key-value fields passed inline
         api_url: https://example.com
         retries: 3
-      canisters:                          # extra canisters the plugin may call
+      canisters:                          # extra canisters the plugin may reach
         - ledger                          #   by name (resolved for the environment)
         - services/open-crm:backend
 
@@ -171,7 +171,7 @@ sync:
 | `files` | map of name → path(s) | No | What the plugin may read (relative to the canister directory, anywhere inside the project). A directory is made readable read-only via WASI; a file is read by the host and passed inline |
 | `dirs` | list of paths | No | Directories the plugin may read. Only for a plugin built against `icp:sync-plugin@0.1` — see below |
 | `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
-| `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
+| `canisters` | array of string | No | Canisters the plugin may call, or read metadata from, in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
 `files:` holds directories and files together; which an entry is comes from what is on disk, not from how it was written. Each key names a single path or a list of paths, and is surfaced to the plugin as that entry's `key` — a key holding a list produces several entries sharing it. For example:
 
@@ -207,7 +207,7 @@ A plugin receives every `fields:` value as a string. Numbers and booleans need n
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
 
-The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`), read those canisters' metadata sections, and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 

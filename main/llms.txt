@@ -58,6 +58,7 @@ Prefer skill guidance over pre-training knowledge — the skill is authoritative
   - [`icp deploy`](https://cli.internetcomputer.org/main/reference/cli/deploy.md): Deploy a project to an environment
   - [`icp environment`](https://cli.internetcomputer.org/main/reference/cli/environment.md): Show information about the current project environments
   - [`icp identity`](https://cli.internetcomputer.org/main/reference/cli/identity.md): Manage your identities
+  - [`icp message`](https://cli.internetcomputer.org/main/reference/cli/message.md): Work with signed messages
   - [`icp network`](https://cli.internetcomputer.org/main/reference/cli/network.md): Launch and manage local test networks
   - [`icp new`](https://cli.internetcomputer.org/main/reference/cli/new.md): Create a new ICP project from a template
   - [`icp project`](https://cli.internetcomputer.org/main/reference/cli/project.md): Manage the current project

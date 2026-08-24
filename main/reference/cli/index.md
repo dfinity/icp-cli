@@ -11,6 +11,7 @@
 * [`deploy`](deploy.md) — Deploy a project to an environment
 * [`environment`](environment.md) — Show information about the current project environments
 * [`identity`](identity.md) — Manage your identities
+* [`message`](message.md) — Work with signed messages
 * [`network`](network.md) — Launch and manage local test networks
 * [`new`](new.md) — Create a new ICP project from a template
 * [`project`](project.md) — Manage the current project

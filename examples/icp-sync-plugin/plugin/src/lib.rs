@@ -20,7 +20,7 @@ impl Guest for Plugin {
         // 1. Report the canister's Candid interface, read from its metadata.
         //    Reported rather than required: the section is only there if the
         //    build embedded it (this project's build does, via ic-wasm).
-        let interface = get_metadata_section(&MetadataSectionRequest {
+        let interface = canister_metadata_section(&MetadataSectionRequest {
             target: CallTarget::Host,
             name: "candid:service".to_string(),
             direct: false,

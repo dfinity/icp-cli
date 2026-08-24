@@ -107,7 +107,7 @@ pub struct CallableCanisters {
 /// metadata read for a section the target does not have ("The canister <id> has
 /// no metadata section with the name <name>."). A proxied read reaches the
 /// plugin as reject text, not as a code, so recognizing absence — which
-/// [`HostState::do_get_metadata_section`] reports as `Ok(None)`, matching what
+/// [`HostState::do_canister_metadata_section`] reports as `Ok(None)`, matching what
 /// a direct read proves from the certificate — means matching that text. A
 /// reword upstream turns absence back into an error rather than into a wrong
 /// answer.
@@ -235,7 +235,7 @@ impl HostState {
     /// management canister's `canister_metadata` on the plugin's behalf, which
     /// checks the *proxy* against the target's controllers and so reaches
     /// sections private to it.
-    fn do_get_metadata_section(
+    fn do_canister_metadata_section(
         &mut self,
         target: Principal,
         name: String,
@@ -323,12 +323,12 @@ impl v2::SyncPluginImports for HostState {
         )
     }
 
-    fn get_metadata_section(
+    fn canister_metadata_section(
         &mut self,
         req: v2::icp::sync_plugin::types::MetadataSectionRequest,
     ) -> Result<Option<Vec<u8>>, String> {
         let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
-        self.do_get_metadata_section(target, req.name, req.direct)
+        self.do_canister_metadata_section(target, req.name, req.direct)
     }
 }
 

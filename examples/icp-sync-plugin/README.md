@@ -27,7 +27,7 @@ A simple Rust canister with three methods:
 
 A Rust Wasm component that implements the `sync-plugin` world defined in
 `crates/icp-sync-plugin/sync-plugin.wit`. The host runtime calls its `exec`
-export and provides the `canister-call` and `get-metadata-section` imports the
+export and provides the `canister-call` and `canister-metadata-section` imports the
 plugin uses to reach the canister.
 
 ## How the plugin system is exercised
@@ -79,7 +79,7 @@ icp sync
        │    identity-principal = <user>
        │    proxy-canister-id  = <proxy>
        │
-       ├─ get-metadata-section candid:service  direct=false → proxy → mgmt canister
+       ├─ canister-metadata-section candid:service  direct=false → proxy → mgmt canister
        │    reports the section's size, or "absent"
        │
        ├─ canister-call set_uploader(<user>)   direct=false → proxy → canister

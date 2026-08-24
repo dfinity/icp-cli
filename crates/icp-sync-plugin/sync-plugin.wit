@@ -186,7 +186,7 @@ world sync-plugin {
     /// Returns the section's raw bytes on success, `none` when the target
     /// reports it has no section by that name, or an error message on failure.
     /// The plugin is responsible for interpreting the bytes.
-    import get-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
+    import canister-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
 
     // The plugin's stdout is captured and shown as transient progress in
     // the rolling step view of icp-cli; it is discarded when the step ends.

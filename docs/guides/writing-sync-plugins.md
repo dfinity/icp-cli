@@ -37,7 +37,7 @@ wit-bindgen = { version = "0.56", features = ["realloc"] }
 
 ## Generate Bindings and Implement `exec`
 
-`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `get_metadata_section`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
+`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `canister_metadata_section`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
 
 ```rust
 // src/lib.rs
@@ -90,10 +90,10 @@ A few things to note:
 
 ## Read Canister Metadata
 
-`get_metadata_section` reads a [metadata section](../reference/cli.md#icp-canister-metadata) off a canister — useful for inspecting what is actually deployed before acting on it, e.g. its `candid:service` interface:
+`canister_metadata_section` reads a [metadata section](../reference/cli.md#icp-canister-metadata) off a canister — useful for inspecting what is actually deployed before acting on it, e.g. its `candid:service` interface:
 
 ```rust
-let interface = get_metadata_section(&MetadataSectionRequest {
+let interface = canister_metadata_section(&MetadataSectionRequest {
     target: CallTarget::Host, // same targets, same rules, as canister_call
     name: "candid:service".to_string(),
     direct: false, // route through the proxy if one is configured
@@ -106,7 +106,7 @@ match interface {
 }
 ```
 
-`direct` picks who the target sees asking, which is what decides whether a *private* section is readable: a direct read is signed by the sync identity, a proxied one is made by the proxy canister on your behalf. See [Reading canister metadata](../concepts/sync-plugins.md#reading-canister-metadata--get-metadata-section) for the full semantics.
+`direct` picks who the target sees asking, which is what decides whether a *private* section is readable: a direct read is signed by the sync identity, a proxied one is made by the proxy canister on your behalf. See [Reading canister metadata](../concepts/sync-plugins.md#reading-canister-metadata--canister-metadata-section) for the full semantics.
 
 ## Read Declared Files and Directories
 

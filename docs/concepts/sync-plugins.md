@@ -107,9 +107,9 @@ The plugin reads a canister's [metadata sections](../reference/cli.md#icp-canist
 | `name` | The section name, without the `icp:public `/`icp:private ` prefix the wasm custom section carries (e.g. `candid:service`) |
 | `direct` | When `false` (default), the read is routed through the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, it always goes straight to the target |
 
-A successful read returns the section's raw bytes, or **absent** when the target reports it has no section by that name — so a plugin can probe for an optional section without matching on error text. Anything else (an unreachable canister, a section the caller may not read) is an error.
+A successful read returns the section's raw bytes, or **absent** when the target provably has no section by that name — including when it has no module installed at all — so a plugin can probe for an optional section without matching on error text. Everything else is an error: a section the reader may not have, a canister that does not exist, a read that fails.
 
-The two routes differ in who the target sees asking, which decides what a **private** section will yield:
+The two routes differ in who the target sees asking, which decides whether a **private** section reads as its bytes or as an error:
 
 - **Direct** — a certified `read_state` request signed by the sync identity. A private section requires that identity to control the target.
 - **Proxied** — a call to the management canister's `canister_metadata` method made by the proxy, because `read_state` is not a canister method and cannot be forwarded. A private section requires the *proxy* to control the target — the same arrangement proxied update calls rely on.

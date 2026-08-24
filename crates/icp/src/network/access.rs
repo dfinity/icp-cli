@@ -160,7 +160,7 @@ async fn fetch_root_key(
         "fetching the root key from {api_url}; its provenance is not verified (trust-on-first-use)"
     );
     let bootstrap = agent
-        .create(Arc::new(AnonymousIdentity), api_url.as_str())
+        .create(Arc::new(AnonymousIdentity), api_url.as_str(), None)
         .await
         .context(CreateBootstrapAgentSnafu {
             url: api_url.clone(),

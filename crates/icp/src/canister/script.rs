@@ -76,6 +76,7 @@ pub(super) async fn execute_commands(
     // Iterate over configured commands
     for input_cmd in cmds {
         let input_cmd = input_cmd.as_str();
+        reporter.command(input_cmd);
         let mut cmd = shell_command(input_cmd, cwd)?;
 
         // Environment Variables

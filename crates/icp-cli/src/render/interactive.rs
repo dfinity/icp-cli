@@ -29,7 +29,12 @@ struct TaskView {
     log: TaskLog,
     bar: ProgressBar,
     /// Header of the step currently running, shown above the live window.
+    /// While a script command runs this is the step headline plus that
+    /// command, so output is attributed to the command producing it.
     header: String,
+    /// First line of the current step's full header, used to rebuild the
+    /// live header when a command starts.
+    headline: String,
     /// Rolling window over the current step's most recent output lines.
     window: RollingLines,
 }
@@ -77,6 +82,7 @@ impl InteractiveRenderer {
                         log: TaskLog::new(task),
                         bar,
                         header: String::new(),
+                        headline: String::new(),
                         window: RollingLines::new(LIVE_WINDOW_LINES),
                     },
                 );
@@ -97,11 +103,29 @@ impl InteractiveRenderer {
                     return;
                 };
                 view.header = step_header(view.log.kind(), number, total, &label);
+                view.headline = view
+                    .header
+                    .lines()
+                    .find(|line| !line.is_empty())
+                    .unwrap_or_default()
+                    .to_owned();
                 view.window = RollingLines::new(LIVE_WINDOW_LINES);
                 view.log.start_step(view.header.clone());
                 // The bar is deliberately not updated here: the header shows
                 // once the step's first output line arrives (the Output
                 // branch), so silent steps draw nothing.
+            }
+
+            EventKind::CommandStarted { command } => {
+                let Some(view) = self.tasks.get_mut(&event.task_id) else {
+                    return;
+                };
+                // Show only the running command under the step headline, and
+                // reset the live window so a previous command's output isn't
+                // attributed to this one. The captured log is unaffected.
+                view.header = format!("{}\n$ {command}", view.headline);
+                view.window = RollingLines::new(LIVE_WINDOW_LINES);
+                view.bar.set_message(view.header.clone());
             }
 
             EventKind::Output { line, .. } => {

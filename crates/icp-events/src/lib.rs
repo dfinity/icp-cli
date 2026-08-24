@@ -50,6 +50,11 @@ pub enum EventKind {
         label: String,
     },
 
+    /// A shell command within the task's current step began executing.
+    /// Script steps run their commands in order; renderers can use this to
+    /// attribute the output that follows to the command producing it.
+    CommandStarted { command: String },
+
     /// One line of output produced while the task's current step runs.
     Output { stream: OutputStream, line: String },
 
@@ -330,6 +335,14 @@ impl StepReporter {
                 kind,
             });
         }
+    }
+
+    /// Report that a shell command within the step began executing, emitting
+    /// [`EventKind::CommandStarted`].
+    pub fn command(&self, command: impl Into<String>) {
+        self.send(EventKind::CommandStarted {
+            command: command.into(),
+        });
     }
 
     /// Emit one line of output.

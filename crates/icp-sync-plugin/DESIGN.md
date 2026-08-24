@@ -193,13 +193,13 @@ exactly as `canister-call` chooses one:
   the same shape the CLI's own management calls take through
   `update_or_proxy_raw`; the runtime inlines it rather than depending on the CLI.
 
-The routes disagree on how absence arrives: the management canister *rejects*
-("The canister `<id>` has no metadata section with the name `<name>`.") and the
-proxy hands the plugin a reason string with no reject code attached, so the host
-matches `NO_SUCH_SECTION_REJECT` against it to produce the same `Ok(None)` a
-direct read proves. Matching replica text is the price of one uniform contract;
-it fails in the safe direction — a reword upstream turns absence back into an
-error rather than into a wrong answer.
+Only a certificate can make a read `none`. The management canister answers a
+section that isn't there and one private to someone else with the same
+rejection, so the proxied route treats that rejection as a claim to check rather
+than an answer, and confirms it with a certified read before reporting absence.
+A plugin then sees one answer either way: no section by that name and no module
+installed at all are `none`; a private section it may not have, a canister that
+does not exist, and any other failure are errors.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 

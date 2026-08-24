@@ -101,7 +101,8 @@ let interface = canister_metadata_section(&MetadataSectionRequest {
 
 match interface {
     Some(bytes) => println!("interface: {}", String::from_utf8_lossy(&bytes)),
-    // `None` means the canister has no such section — not a failure.
+    // `None` means the canister provably has no such section — not a failure.
+    // A section you may not read, or a canister that does not exist, is an error.
     None => println!("canister exposes no Candid interface"),
 }
 ```

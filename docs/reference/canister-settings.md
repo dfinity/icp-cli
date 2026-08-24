@@ -172,7 +172,7 @@ the running state, cycles balance, memory usage, and the settings themselves.
 | Default | `controllers` |
 
 ```yaml
-# Only controllers can read the status (default)
+# The canister's controllers can read the status (default)
 settings:
   status_visibility: controllers
 
@@ -187,6 +187,12 @@ settings:
       - "aaaaa-aa"
       - "2vxsx-fae"
 ```
+
+Two callers are always allowed, whatever the setting says: the administrators of
+the subnet the canister runs on, and the canister itself reading its own status.
+Unlike [`log_visibility`](#log_visibility), which grants access to the
+controllers and listed viewers alone, `controllers` here is a floor rather than
+an exhaustive list.
 
 A caller that is not allowed to read the status still sees the canister's
 controllers and module hash, which the replica publishes in the state tree and

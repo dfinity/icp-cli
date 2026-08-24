@@ -118,14 +118,14 @@ macro_rules! candid_conversions {
 candid_conversions!(LogVisibility);
 candid_conversions!(StatusVisibility);
 
-fn visibility_schema(description: &str, subject: &str) -> schemars::Schema {
+fn visibility_schema(description: &str, subject: &str, controllers: &str) -> schemars::Schema {
     schemars::json_schema!({
         "description": description,
         "oneOf": [
             {
                 "type": "string",
                 "enum": ["controllers", "public"],
-                "description": format!("'controllers' (only the canister's controllers can {subject}) or 'public' (anyone can)"),
+                "description": format!("'controllers' ({controllers}) or 'public' (anyone can {subject})"),
             },
             {
                 "type": "object",
@@ -155,7 +155,8 @@ macro_rules! visibility_setting {
         setting = $setting:literal,
         schema = $schema:literal,
         description = $description:literal,
-        subject = $subject:literal $(,)?
+        subject = $subject:literal,
+        controllers = $controllers:literal $(,)?
     ) => {
         #[doc = $description]
         #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -177,7 +178,7 @@ macro_rules! visibility_setting {
             }
 
             fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                visibility_schema($description, $subject)
+                visibility_schema($description, $subject, $controllers)
             }
         }
 
@@ -195,6 +196,7 @@ visibility_setting!(
     schema = "LogVisibility",
     description = "Controls who can read canister logs.",
     subject = "read the logs",
+    controllers = "only the canister's controllers can read the logs",
 );
 
 visibility_setting!(
@@ -203,6 +205,7 @@ visibility_setting!(
     schema = "StatusVisibility",
     description = "Controls who can read the canister's status.",
     subject = "read the status",
+    controllers = "the canister's controllers, plus any subnet administrators and the canister itself, can read the status",
 );
 
 #[cfg(test)]

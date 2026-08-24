@@ -472,7 +472,7 @@
       "description": "Controls who can read canister logs.",
       "oneOf": [
         {
-          "description": "'controllers' (only the canister's controllers can read the logs) or 'public' (anyone can)",
+          "description": "'controllers' (only the canister's controllers can read the logs) or 'public' (anyone can read the logs)",
           "enum": [
             "controllers",
             "public"
@@ -989,7 +989,7 @@
       "description": "Controls who can read the canister's status.",
       "oneOf": [
         {
-          "description": "'controllers' (only the canister's controllers can read the status) or 'public' (anyone can)",
+          "description": "'controllers' (the canister's controllers, plus any subnet administrators and the canister itself, can read the status) or 'public' (anyone can read the status)",
           "enum": [
             "controllers",
             "public"

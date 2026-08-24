@@ -12,7 +12,8 @@ use crate::{
 /// Show the settings of a canister.
 ///
 /// Queries the canister_status endpoint of the management canister and
-/// displays only the settings fields. Requires the caller to be a controller.
+/// displays only the settings fields. Requires the caller to be allowed to read
+/// the canister's status, which by default means being one of its controllers.
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
     #[command(flatten)]

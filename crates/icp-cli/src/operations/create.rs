@@ -3,19 +3,16 @@ use std::time::Duration;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{Agent, AgentError, agent::RejectCode, agent::SubnetType};
+use ic_agent::{
+    Agent, AgentError,
+    agent::{CallResponse, EffectiveId, RejectCode, SubnetType},
+};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use ic_management_canister_types::{
-    CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs, LogVisibility,
-    SnapshotVisibility,
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
-use ic_utils::interfaces::ManagementCanister;
-use ic_utils::interfaces::management_canister::{
-    LogVisibility as IcUtilsLogVisibility, builders as ic_utils_mgmt,
-};
-use ic_utils_mgmt::SnapshotVisibility as IcUtilsSnapshotVisibility;
 use icp::parsers::to_token_unit_amount;
 use icp::signal::stop_signal;
 use icp_canister_interfaces::{
@@ -57,6 +54,21 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to get subnet for canister: {source}"))]
     GetSubnet { source: AgentError },
+
+    #[snafu(display("failed to sign the subnet-scoped create_canister call: {source}"))]
+    SignSubnetCreate { source: AgentError },
+
+    #[snafu(display("failed to submit create_canister to subnet {subnet}: {source}"))]
+    SubmitSubnetCreate {
+        source: AgentError,
+        subnet: Principal,
+    },
+
+    #[snafu(display("failed to await create_canister on subnet {subnet}: {source}"))]
+    AwaitSubnetCreate {
+        source: AgentError,
+        subnet: Principal,
+    },
 
     #[snafu(display("invalid engine-canister id: {message}"))]
     EngineCanisterId { message: String },
@@ -413,15 +425,45 @@ impl CreateOperation {
         settings: &CanisterSettings,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let mgmt = ManagementCanister::create(&self.inner.agent);
-        let (canister_id,) = mgmt
-            .create_canister()
-            .with_effective_subnet_id(subnet)
-            .with_canister_settings(to_ic_utils_settings(settings))
-            .call_and_wait()
+        let args = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        };
+        let arg = Encode!(&args).context(CandidEncodeSnafu)?;
+
+        // Subnet-scoped routing is its own endpoint rather than an effective
+        // canister id, so this cannot go through `update_or_proxy`.
+        let agent = &self.inner.agent;
+        let effective_id = EffectiveId::Subnet(subnet);
+        let signed = agent
+            .update(&Principal::management_canister(), "create_canister")
+            .with_arg(arg)
+            .sign()
+            .context(SignSubnetCreateSnafu)?;
+        let response = agent
+            .update_signed(effective_id, signed.signed_update)
             .await
-            .context(AgentSnafu)?;
-        Ok(canister_id)
+            .context(SubmitSubnetCreateSnafu { subnet })?;
+        let bytes = match response {
+            CallResponse::Response(bytes) => bytes,
+            CallResponse::Poll(request_id) => {
+                let signed_status = agent
+                    .sign_request_status(effective_id, request_id)
+                    .context(AwaitSubnetCreateSnafu { subnet })?;
+                agent
+                    .wait_signed(
+                        &request_id,
+                        effective_id,
+                        signed_status.signed_request_status,
+                    )
+                    .await
+                    .context(AwaitSubnetCreateSnafu { subnet })?
+                    .0
+            }
+        };
+        let (record,): (CanisterIdRecord,) =
+            candid::decode_args(&bytes).context(CandidDecodeSnafu)?;
+        Ok(record.canister_id)
     }
 
     async fn create_proxy(
@@ -701,46 +743,32 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
     Ok(resp)
 }
 
-/// `ic-utils` still builds against `ic-management-canister-types` 0.8, so its
-/// `CanisterSettings` is a distinct type from the one the rest of the CLI uses.
-/// Settings introduced after 0.8 cannot be sent on this path; `sync_settings`
-/// applies them right after creation.
-fn to_ic_utils_settings(settings: &CanisterSettings) -> ic_utils_mgmt::CanisterSettings {
-    ic_utils_mgmt::CanisterSettings {
-        controllers: settings.controllers.clone(),
-        compute_allocation: settings.compute_allocation.clone(),
-        memory_allocation: settings.memory_allocation.clone(),
-        freezing_threshold: settings.freezing_threshold.clone(),
-        reserved_cycles_limit: settings.reserved_cycles_limit.clone(),
-        log_visibility: settings.log_visibility.clone().map(|v| match v {
-            LogVisibility::Controllers => IcUtilsLogVisibility::Controllers,
-            LogVisibility::Public => IcUtilsLogVisibility::Public,
-            LogVisibility::AllowedViewers(viewers) => IcUtilsLogVisibility::AllowedViewers(viewers),
-        }),
-        log_memory_limit: settings.log_memory_limit.clone(),
-        snapshot_visibility: settings.snapshot_visibility.clone().map(|v| match v {
-            SnapshotVisibility::Controllers => IcUtilsSnapshotVisibility::Controllers,
-            SnapshotVisibility::Public => IcUtilsSnapshotVisibility::Public,
-            SnapshotVisibility::AllowedViewers(viewers) => {
-                IcUtilsSnapshotVisibility::AllowedViewers(viewers)
-            }
-        }),
-        wasm_memory_limit: settings.wasm_memory_limit.clone(),
-        wasm_memory_threshold: settings.wasm_memory_threshold.clone(),
-        environment_variables: settings.environment_variables.clone().map(|vars| {
-            vars.into_iter()
-                .map(|v| ic_utils_mgmt::EnvironmentVariable {
-                    name: v.name,
-                    value: v.value,
-                })
-                .collect()
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `create_canister` takes `record { settings : opt canister_settings }`, not
+    /// a bare `canister_settings`. Encoding the latter decodes as "no settings"
+    /// and the canister is created with defaults.
+    #[test]
+    fn subnet_create_encodes_settings_inside_the_argument_record() {
+        let settings = CanisterSettings {
+            controllers: Some(vec![Principal::anonymous()]),
+            ..Default::default()
+        };
+        let arg = Encode!(&MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        })
+        .unwrap();
+
+        let (decoded,): (MgmtCreateCanisterArgs,) = candid::decode_args(&arg).unwrap();
+        assert_eq!(decoded.settings, Some(settings));
+
+        let bare = Encode!(&CanisterSettings::default()).unwrap();
+        let (as_args,): (MgmtCreateCanisterArgs,) = candid::decode_args(&bare).unwrap();
+        assert!(as_args.settings.is_none());
+    }
 
     #[test]
     fn recovery_command_preserves_all_settings() {

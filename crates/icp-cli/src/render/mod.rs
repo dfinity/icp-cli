@@ -6,19 +6,23 @@
 //! with [`Renderer::for_ctx`] and drive it with [`Renderer::run`] alongside
 //! the operation.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use icp_events::{Event, Reporter, TaskId, TaskKind, TaskOutcome, TaskReporter, TransferBlob};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
-use crate::progress::{MAX_LINES_PER_STEP, RollingLines};
-
 mod interactive;
 mod plain;
+mod spinner;
+mod style;
 
 pub(crate) use interactive::InteractiveRenderer;
 pub(crate) use plain::PlainRenderer;
+pub(crate) use spinner::{ProgressManager, ProgressManagerSettings};
+
+/// The maximum number of lines to display for a step output
+const MAX_LINES_PER_STEP: usize = 10_000;
 
 pub(crate) enum Renderer {
     Interactive(InteractiveRenderer),
@@ -245,6 +249,40 @@ struct StepLog {
 struct Failure {
     message: String,
     causes: Vec<String>,
+}
+
+/// A fixed-capacity rolling buffer that always holds the last `capacity` items.
+#[derive(Debug)]
+struct RollingLines {
+    buf: VecDeque<String>,
+    capacity: usize,
+}
+
+impl RollingLines {
+    /// Create a new buffer with a fixed capacity.
+    fn new(capacity: usize) -> Self {
+        let buf = VecDeque::with_capacity(capacity);
+        Self { buf, capacity }
+    }
+
+    /// Push a new line, evicting the oldest if full.
+    fn push(&mut self, line: String) {
+        if self.buf.len() == self.capacity {
+            self.buf.pop_front();
+        }
+
+        self.buf.push_back(line);
+    }
+
+    /// Get an iterator over the current contents (in order).
+    fn iter(&self) -> impl Iterator<Item = &str> {
+        self.buf.iter().map(|s| s.as_str())
+    }
+
+    /// Whether no lines have been pushed.
+    fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
 }
 
 impl TaskLog {

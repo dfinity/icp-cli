@@ -9,13 +9,12 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tracing::debug;
 
-use crate::progress::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, RollingLines, TICK_EMPTY, TICK_FAILURE,
-    TICK_SUCCESS, make_style,
+use super::style::{
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
 };
-
 use super::{
-    TaskLog, dump_failures, failure_message, step_header, success_message, transfer_label,
+    RollingLines, TaskLog, dump_failures, failure_message, step_header, success_message,
+    transfer_label,
 };
 
 /// Number of output lines shown live under a task's progress bar.

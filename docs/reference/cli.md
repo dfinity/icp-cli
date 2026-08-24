@@ -526,6 +526,10 @@ Change a canister's settings to specified values
 * `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list
 * `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list
 * `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--status-visibility <STATUS_VISIBILITY>` — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer. Use --add-status-viewer / --set-status-viewer to grant access to specific principals instead
+* `--add-status-viewer <ADD_STATUS_VIEWER>` — Add a principal to the allowed status viewers list
+* `--remove-status-viewer <REMOVE_STATUS_VIEWER>` — Remove a principal from the allowed status viewers list
+* `--set-status-viewer <SET_STATUS_VIEWER>` — Replace the allowed status viewers list with the specified principals
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>` — Add a canister environment variable in KEY=VALUE format
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>` — Remove a canister environment variable by key name
 * `--proxy <PROXY>` — Principal of a proxy canister to route the management canister calls through
@@ -728,7 +732,7 @@ Start a canister on a network
 
 Show the status of canister(s).
 
-By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
+By default this queries the status endpoint of the management canister. If the caller may not read the status, falls back on fetching public information from the state tree.
 
 **Usage:** `icp canister status [OPTIONS] [CANISTER]`
 

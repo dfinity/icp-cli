@@ -222,6 +222,7 @@ fn resolve_manifest_settings(
 ) -> Result<(Settings, BTreeMap<String, PathBuf>), ConsolidateManifestError> {
     let ManifestSettings {
         log_visibility,
+        status_visibility,
         compute_allocation,
         memory_allocation,
         freezing_threshold,
@@ -261,6 +262,7 @@ fn resolve_manifest_settings(
 
     let settings = Settings {
         log_visibility: log_visibility.clone(),
+        status_visibility: status_visibility.clone(),
         compute_allocation: *compute_allocation,
         memory_allocation: memory_allocation.clone(),
         freezing_threshold: freezing_threshold.clone(),

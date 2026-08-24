@@ -56,7 +56,7 @@ httptest = "0.16.3"
 ic-agent = { version = "0.49.1" }
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
-ic-management-canister-types = { version = "0.8.0" }
+ic-management-canister-types = { version = "0.9.0" }
 ic-utils = { version = "0.49.1" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }

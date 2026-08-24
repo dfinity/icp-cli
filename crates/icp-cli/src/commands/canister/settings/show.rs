@@ -1,10 +1,13 @@
 use clap::Args;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings, LogVisibility};
+use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings};
 use icp::context::Context;
 use std::fmt::Write;
 
-use crate::{commands::args::CanisterCommandArgs, operations::proxy_management};
+use crate::{
+    commands::{args::CanisterCommandArgs, canister::format_visibility},
+    operations::proxy_management,
+};
 
 /// Show the settings of a canister.
 ///
@@ -90,20 +93,18 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     .unwrap();
     writeln!(&mut buf, "Log memory limit: {}", s.log_memory_limit).unwrap();
 
-    let log_visibility = match &s.log_visibility {
-        LogVisibility::Controllers => "Controllers".to_string(),
-        LogVisibility::Public => "Public".to_string(),
-        LogVisibility::AllowedViewers(viewers) => {
-            if viewers.is_empty() {
-                "Allowed viewers list is empty".to_string()
-            } else {
-                let mut v: Vec<String> = viewers.iter().map(|p| p.to_string()).collect();
-                v.sort();
-                format!("Allowed viewers: {}", v.join(", "))
-            }
-        }
-    };
-    writeln!(&mut buf, "Log visibility: {log_visibility}").unwrap();
+    writeln!(
+        &mut buf,
+        "Log visibility: {}",
+        format_visibility(&s.log_visibility.clone().into())
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "Status visibility: {}",
+        format_visibility(&s.status_visibility.clone().into())
+    )
+    .unwrap();
 
     if s.environment_variables.is_empty() {
         writeln!(&mut buf, "Environment variables: N/A").unwrap();

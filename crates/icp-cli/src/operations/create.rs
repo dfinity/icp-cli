@@ -8,9 +8,14 @@ use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use ic_management_canister_types::{
-    CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
+    CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs, LogVisibility,
+    SnapshotVisibility,
 };
 use ic_utils::interfaces::ManagementCanister;
+use ic_utils::interfaces::management_canister::{
+    LogVisibility as IcUtilsLogVisibility, builders as ic_utils_mgmt,
+};
+use ic_utils_mgmt::SnapshotVisibility as IcUtilsSnapshotVisibility;
 use icp::parsers::to_token_unit_amount;
 use icp::signal::stop_signal;
 use icp_canister_interfaces::{
@@ -412,7 +417,7 @@ impl CreateOperation {
         let (canister_id,) = mgmt
             .create_canister()
             .with_effective_subnet_id(subnet)
-            .with_canister_settings(settings.clone())
+            .with_canister_settings(to_ic_utils_settings(settings))
             .call_and_wait()
             .await
             .context(AgentSnafu)?;
@@ -694,6 +699,43 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
     }
 
     Ok(resp)
+}
+
+/// `ic-utils` still builds against `ic-management-canister-types` 0.8, so its
+/// `CanisterSettings` is a distinct type from the one the rest of the CLI uses.
+/// Settings introduced after 0.8 cannot be sent on this path; `sync_settings`
+/// applies them right after creation.
+fn to_ic_utils_settings(settings: &CanisterSettings) -> ic_utils_mgmt::CanisterSettings {
+    ic_utils_mgmt::CanisterSettings {
+        controllers: settings.controllers.clone(),
+        compute_allocation: settings.compute_allocation.clone(),
+        memory_allocation: settings.memory_allocation.clone(),
+        freezing_threshold: settings.freezing_threshold.clone(),
+        reserved_cycles_limit: settings.reserved_cycles_limit.clone(),
+        log_visibility: settings.log_visibility.clone().map(|v| match v {
+            LogVisibility::Controllers => IcUtilsLogVisibility::Controllers,
+            LogVisibility::Public => IcUtilsLogVisibility::Public,
+            LogVisibility::AllowedViewers(viewers) => IcUtilsLogVisibility::AllowedViewers(viewers),
+        }),
+        log_memory_limit: settings.log_memory_limit.clone(),
+        snapshot_visibility: settings.snapshot_visibility.clone().map(|v| match v {
+            SnapshotVisibility::Controllers => IcUtilsSnapshotVisibility::Controllers,
+            SnapshotVisibility::Public => IcUtilsSnapshotVisibility::Public,
+            SnapshotVisibility::AllowedViewers(viewers) => {
+                IcUtilsSnapshotVisibility::AllowedViewers(viewers)
+            }
+        }),
+        wasm_memory_limit: settings.wasm_memory_limit.clone(),
+        wasm_memory_threshold: settings.wasm_memory_threshold.clone(),
+        environment_variables: settings.environment_variables.clone().map(|vars| {
+            vars.into_iter()
+                .map(|v| ic_utils_mgmt::EnvironmentVariable {
+                    name: v.name,
+                    value: v.value,
+                })
+                .collect()
+        }),
+    }
 }
 
 #[cfg(test)]

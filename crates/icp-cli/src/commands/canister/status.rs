@@ -2,10 +2,9 @@ use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError, export::Principal};
-use ic_management_canister_types::{
-    CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
-};
+use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
+    canister::Visibility,
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
 };
@@ -14,20 +13,25 @@ use std::fmt::Write;
 use tracing::debug;
 
 use crate::{
-    commands::args,
+    commands::{args, canister::format_visibility},
     operations::{proxy::UpdateOrProxyError, proxy_management},
     options,
 };
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";
-/// Error code returned by the replica if the caller is not a controller
-const E_NOT_A_CONTROLLER: &str = "IC0512";
+
+/// Error codes the replica returns when the caller may not read the status.
+///
+/// Which one comes back depends on the replica version and on whether the
+/// subnet has administrators: `IC0542` since status visibility was introduced,
+/// `IC0541` on subnets with administrators before that, and `IC0512` otherwise.
+const E_STATUS_ACCESS_DENIED: [&str; 3] = ["IC0512", "IC0541", "IC0542"];
 
 /// Show the status of canister(s).
 ///
 /// By default this queries the status endpoint of the management canister.
-/// If the caller is not a controller, falls back on fetching public
+/// If the caller may not read the status, falls back on fetching public
 /// information from the state tree.
 #[derive(Debug, Args)]
 #[command(after_long_help = "\
@@ -279,7 +283,11 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             bail!("Canister {cid} was not found.");
                         }
 
-                        if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
+                        if !reject
+                            .error_code
+                            .as_deref()
+                            .is_some_and(|code| E_STATUS_ACCESS_DENIED.contains(&code))
+                        {
                             bail!(
                                 "Error looking up canister {cid}: {:?} - {}",
                                 reject.error_code,
@@ -287,7 +295,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             );
                         }
 
-                        // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status
+                        // Access was denied, so fall back on the public status
                         let status =
                             build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
 
@@ -354,13 +362,19 @@ struct SerializableCanisterSettings {
     wasm_memory_limit: String,
     wasm_memory_threshold: String,
     log_memory_limit: String,
-    log_visibility: SerializableLogVisibility,
+    log_visibility: SerializableVisibility,
+    status_visibility: SerializableVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
 
-#[derive(Serialize, Clone)]
+/// `--json` renders a visibility setting as `{"type": ..., "value": ...}`,
+/// which differs from the manifest form [`Visibility`] serializes to.
+#[derive(Clone)]
+struct SerializableVisibility(Visibility);
+
+#[derive(Serialize)]
 #[serde(tag = "type", content = "value")]
-enum SerializableLogVisibility {
+enum VisibilityRepr {
     Controllers,
     Public,
     AllowedViewers(Vec<String>),
@@ -407,21 +421,23 @@ impl SerializableCanisterSettings {
             wasm_memory_limit: settings.wasm_memory_limit.to_string(),
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
             log_memory_limit: settings.log_memory_limit.to_string(),
-            log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
+            log_visibility: SerializableVisibility(settings.log_visibility.clone().into()),
+            status_visibility: SerializableVisibility(settings.status_visibility.clone().into()),
             environment_variables: settings.environment_variables.clone(),
         }
     }
 }
 
-impl SerializableLogVisibility {
-    fn from(visibility: &LogVisibility) -> Self {
-        match visibility {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                Self::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
+impl Serialize for SerializableVisibility {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let repr = match &self.0 {
+            Visibility::Controllers => VisibilityRepr::Controllers,
+            Visibility::Public => VisibilityRepr::Public,
+            Visibility::AllowedViewers(viewers) => {
+                VisibilityRepr::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
             }
-        }
+        };
+        repr.serialize(serializer)
     }
 }
 
@@ -507,19 +523,16 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         settings.log_memory_limit
     )?;
 
-    let log_visibility = match settings.log_visibility.clone() {
-        SerializableLogVisibility::Controllers => "Controllers".to_string(),
-        SerializableLogVisibility::Public => "Public".to_string(),
-        SerializableLogVisibility::AllowedViewers(mut viewers) => {
-            if viewers.is_empty() {
-                "Allowed viewers list is empty".to_string()
-            } else {
-                viewers.sort();
-                format!("Allowed viewers: {}", viewers.join(", "))
-            }
-        }
-    };
-    writeln!(&mut buf, "  Log visibility: {log_visibility}")?;
+    writeln!(
+        &mut buf,
+        "  Log visibility: {}",
+        format_visibility(&settings.log_visibility.0)
+    )?;
+    writeln!(
+        &mut buf,
+        "  Status visibility: {}",
+        format_visibility(&settings.status_visibility.0)
+    )?;
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister

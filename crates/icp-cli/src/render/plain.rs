@@ -42,7 +42,9 @@ impl PlainRenderer {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;
                 };
-                debug!("{line}");
+                // Prefix with the canister so interleaved concurrent tasks
+                // stay attributable.
+                debug!("[{}] {line}", log.kind().canister());
                 log.push_line(line);
             }
 

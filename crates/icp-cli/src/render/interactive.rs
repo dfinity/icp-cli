@@ -109,7 +109,7 @@ impl InteractiveRenderer {
                     return;
                 };
 
-                debug!("{line}");
+                debug!("[{}] {line}", view.log.kind().canister());
 
                 view.window.push(line.clone());
                 view.log.push_line(line);

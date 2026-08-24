@@ -45,26 +45,27 @@ impl InteractiveRenderer {
     pub(crate) fn handle(&mut self, event: Event) {
         match event.kind {
             EventKind::TaskStarted { task } => {
+                // Bars are configured fully before insertion: adding to the
+                // MultiProgress can draw the initial frame, and it must not
+                // appear unstyled or unlabeled.
                 let bar = match &task {
                     // Quantifiable transfers get a byte bar instead of a
                     // spinner, labeled by the blob rather than the canister.
                     TaskKind::SnapshotTransfer {
                         blob, total_bytes, ..
-                    } => {
-                        let bar = self.multi_progress.add(ProgressBar::new(*total_bytes));
-                        bar.set_style(transfer_style());
-                        bar.set_prefix(transfer_label(blob));
-                        bar
-                    }
+                    } => self.multi_progress.add(
+                        ProgressBar::new(*total_bytes)
+                            .with_style(transfer_style())
+                            .with_prefix(transfer_label(blob)),
+                    ),
                     _ => {
-                        let bar = self.multi_progress.add(
-                            ProgressBar::new_spinner()
-                                .with_style(make_style(TICK_EMPTY, COLOR_REGULAR)),
-                        );
-                        bar.set_prefix(format!("[{}]", task.canister()));
+                        let mut bar = ProgressBar::new_spinner()
+                            .with_style(make_style(TICK_EMPTY, COLOR_REGULAR))
+                            .with_prefix(format!("[{}]", task.canister()));
                         if let Some(message) = super::running_message(&task) {
-                            bar.set_message(message);
+                            bar = bar.with_message(message);
                         }
+                        let bar = self.multi_progress.add(bar);
                         bar.enable_steady_tick(Duration::from_millis(120));
                         bar
                     }
@@ -98,7 +99,9 @@ impl InteractiveRenderer {
                 view.header = step_header(view.log.kind(), number, total, &label);
                 view.window = RollingLines::new(LIVE_WINDOW_LINES);
                 view.log.start_step(view.header.clone());
-                view.bar.set_message(view.header.clone());
+                // The bar is deliberately not updated here: the header shows
+                // once the step's first output line arrives (the Output
+                // branch), so silent steps draw nothing.
             }
 
             EventKind::Output { line, .. } => {

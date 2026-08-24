@@ -383,6 +383,44 @@ fn rejects_proxy() {
         .stderr(contains("--proxy").and(contains("--sign-only")));
 }
 
+/// `--valid-from` takes any RFC 3339 offset, but the window rebuilt from the
+/// envelope is always UTC. The file has to record one instant, not one instant
+/// written two ways, or the message fails its own validation and nothing is
+/// ever written.
+#[test]
+fn valid_from_in_a_non_utc_offset_records_the_window_in_utc() {
+    let ctx = TestContext::new();
+    let did = ctx.home_path().join("service.did");
+    write_string(&did, GREET_DID).expect("failed to write candid file");
+    let out = ctx.home_path().join("message.json");
+
+    ctx.icp()
+        .args([
+            "canister",
+            "call",
+            "--network",
+            UNREACHABLE,
+            "--root-key",
+            "mainnet",
+            "--candid",
+            did.as_str(),
+            "--sign-only",
+            out.as_str(),
+            // 10:07 at +02:00 is 08:07Z — the same instant the envelope carries.
+            "--valid-from",
+            "2126-08-17T10:07:00+02:00",
+            TARGET,
+            "greet",
+            "(\"world\")",
+        ])
+        .assert()
+        .success();
+
+    let message = read_message(&out);
+    assert_eq!(message["summary"]["valid_from"], "2126-08-17T08:07:00Z");
+    assert_eq!(message["summary"]["valid_until"], "2126-08-17T08:12:00Z");
+}
+
 /// A duration the parser accepts can still reach past the last representable
 /// instant. That has to be a CLI error, not a panic.
 #[test]

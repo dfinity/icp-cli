@@ -27,7 +27,7 @@ use ic_agent::agent::{
 use ic_agent::{AgentError, RequestId};
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
-use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
 use url::Url;
 
 /// The `format` field every version 1 file carries.
@@ -466,8 +466,14 @@ fn timestamp_from_nanos(nanos: u64) -> Result<OffsetDateTime, Error> {
 /// Every timestamp written into a file goes through here, which is what lets
 /// [`SignedMessage::validate`] check the recorded window against the envelope by
 /// comparing rendered strings — no reparsing, and no precision lost either way.
+///
+/// The shift to UTC is what makes that comparison sound: `--valid-from` accepts
+/// any RFC 3339 offset, while the window rebuilt from the envelope's
+/// `ingress_expiry` is always UTC, and the same instant written at two offsets
+/// renders as two different strings.
 pub fn format_timestamp(t: OffsetDateTime) -> String {
-    t.format(&Rfc3339)
+    t.to_offset(UtcOffset::UTC)
+        .format(&Rfc3339)
         .expect("an OffsetDateTime is always representable as RFC 3339")
 }
 
@@ -751,6 +757,19 @@ mod tests {
                 .to_string(),
             message.request.request_id.expect("an update carries one"),
         );
+    }
+
+    /// Every recorded timestamp is UTC whatever offset it came in as. Two
+    /// renderings of one instant would fail the string comparison in
+    /// [`SignedMessage::validate`], which is what makes that comparison cheap.
+    #[test]
+    fn format_timestamp_renders_any_offset_in_utc() {
+        let utc = OffsetDateTime::parse("2126-08-17T08:07:00Z", &Rfc3339).expect("a timestamp");
+        let shifted =
+            OffsetDateTime::parse("2126-08-17T10:07:00+02:00", &Rfc3339).expect("a timestamp");
+        assert_eq!(utc, shifted, "the two spellings name one instant");
+        assert_eq!(format_timestamp(shifted), "2126-08-17T08:07:00Z");
+        assert_eq!(format_timestamp(shifted), format_timestamp(utc));
     }
 
     #[test]

@@ -24,7 +24,8 @@ pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 use bytes::Bytes;
 use camino::{Utf8Path, Utf8PathBuf};
 use candid::{Encode, Principal};
-use ic_agent::{Agent, AgentError};
+use ic_agent::Agent;
+use ic_agent::hash_tree::{Label, LookupResult};
 use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use semver::{Version, VersionReq};
@@ -247,10 +248,49 @@ impl HostState {
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
             let Some(proxy_cid) = proxy else {
-                return match agent.read_state_canister_metadata(target, &name).await {
-                    Ok(bytes) => Ok(Some(bytes)),
-                    Err(AgentError::LookupPathAbsent(_)) => Ok(None),
-                    Err(err) => Err(format!("metadata read failed: {err}")),
+                // A metadata path proven absent is equally what a canister that
+                // was never created looks like, and the certificate error names
+                // only the path asked for, so it cannot tell the two apart.
+                // Read `controllers` in the same request to disambiguate.
+                let metadata_path: Vec<Label<Vec<u8>>> = vec![
+                    "canister".into(),
+                    Label::from_bytes(target.as_slice()),
+                    "metadata".into(),
+                    name.as_str().into(),
+                ];
+                let controllers_path: Vec<Label<Vec<u8>>> = vec![
+                    "canister".into(),
+                    Label::from_bytes(target.as_slice()),
+                    "controllers".into(),
+                ];
+                let cert = agent
+                    .read_state_raw(
+                        vec![metadata_path.clone(), controllers_path.clone()],
+                        target,
+                    )
+                    .await
+                    .map_err(|err| format!("metadata read failed: {err}"))?;
+
+                return match cert.tree.lookup_path(&metadata_path) {
+                    LookupResult::Found(bytes) => Ok(Some(bytes.to_vec())),
+                    // Creation writes `controllers`, so unlike `module_hash` it
+                    // is present for a canister with no module installed — which
+                    // has no sections at all, and so is a genuine `Ok(None)`.
+                    LookupResult::Absent => match cert.tree.lookup_path(&controllers_path) {
+                        LookupResult::Found(_) => Ok(None),
+                        LookupResult::Absent => Err(format!("canister {target} does not exist")),
+                        _ => Err(format!(
+                            "metadata read failed: certificate proves nothing about \
+                             canister {target}"
+                        )),
+                    },
+                    // Not proof of absence, just a certificate that says nothing
+                    // about the path — reporting the section missing off this
+                    // would be a guess.
+                    _ => Err(format!(
+                        "metadata read failed: certificate proves nothing about section \
+                         `{name}` of canister {target}"
+                    )),
                 };
             };
 

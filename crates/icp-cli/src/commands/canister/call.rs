@@ -1,12 +1,8 @@
 use anyhow::{Context as _, anyhow, bail};
-use candid::types::{Type, TypeInner};
-use candid::{IDLArgs, Principal, TypeEnv, types::Function};
+use candid::{IDLArgs, Principal};
 use candid_parser::assist;
 use candid_parser::parse_idl_args;
-use candid_parser::utils::CandidSource;
-use clap::{Args, ValueEnum, ValueHint};
-use dialoguer::console::Term;
-use ic_agent::Agent;
+use clap::{Args, ValueHint};
 use ic_agent::agent::EffectiveId;
 use icp::context::{Context, EnvironmentSelection, NetworkSelection};
 use icp::manifest::ArgsFormat;
@@ -16,33 +12,21 @@ use icp::prelude::*;
 use icp::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
 };
-use serde::Serialize;
 use std::io::{self, Write};
 use std::str::FromStr;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use tracing::{error, warn};
+use tracing::warn;
 use url::Url;
 
 use crate::{
     commands::args::{self, load_args},
-    operations::misc::fetch_canister_metadata,
+    operations::call_output::{
+        CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
+    },
+    operations::create::shell_quote,
     operations::proxy::update_or_proxy_raw,
     operations::wasm::extract_candid_service,
 };
-
-/// How to interpret and display the call response blob.
-#[derive(Debug, Clone, Copy, Default, ValueEnum)]
-pub(crate) enum CallOutputMode {
-    /// Try Candid, then UTF-8, then fall back to hex.
-    #[default]
-    Auto,
-    /// Parse as Candid and pretty-print; error if parsing fails.
-    Candid,
-    /// Parse as UTF-8 text; error if invalid.
-    Text,
-    /// Print raw response as hex.
-    Hex,
-}
 
 /// Make a canister call
 #[derive(Args, Debug)]
@@ -104,9 +88,9 @@ pub(crate) struct CallArgs {
     #[arg(long)]
     pub(crate) json: bool,
 
-    /// Sign the call and write it to FILE instead of submitting it, so it can be
-    /// submitted later from a machine that has network access but not your key.
-    /// `-` writes to stdout.
+    /// Sign the call and write it to FILE instead of submitting it, for
+    /// submission from another machine with `icp message send`. `-` writes to
+    /// stdout.
     ///
     /// Nothing is sent, and nothing is fetched: the interface comes from
     /// `--candid` or the local build artifact rather than from the canister, so
@@ -327,38 +311,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         .await?
     };
 
-    let mut term = Term::buffered_stdout();
-    let decoded = decode_response(&res, args.output, declared_method.as_ref());
-
-    if args.json {
-        let envelope = JsonCallResponse::build(&res, decoded.as_ref().ok());
-        let write_result = serde_json::to_writer(&term, &envelope);
-        match (write_result, decoded) {
-            (Ok(()), decode_result) => {
-                decode_result?;
-            }
-            (Err(write_err), Err(decode_err)) => {
-                // Prefer the decode error; the write failure is incidental.
-                error!("failed to write JSON response: {write_err}");
-                return Err(decode_err);
-            }
-            (Err(write_err), Ok(_)) => {
-                return Err(write_err).context("failed to write JSON response");
-            }
-        }
-    } else {
-        match decoded? {
-            Decoded::Candid(ret) => print_candid_for_term(&mut term, &ret)
-                .context("failed to print candid return value")?,
-            Decoded::Text(s) => writeln!(term, "{s}")?,
-            Decoded::Bytes => writeln!(term, "{}", hex::encode(&res))?,
-        }
-    }
-
-    // term is buffered; this single flush covers all output paths (json and non-json).
-    term.flush()?;
-
-    Ok(())
+    print_response(&res, args.output, declared_method.as_ref(), args.json)
 }
 
 /// Signs the call and writes it out for another machine to submit, instead of
@@ -508,7 +461,7 @@ async fn sign_only(
     }
 
     eprintln!(
-        "Signed a {} call to '{method}' on {cid}, as {sender}.",
+        "Signed the {} call to '{method}' on {cid}, as {sender}.",
         call_type.as_str(),
     );
     eprintln!(
@@ -516,8 +469,13 @@ async fn sign_only(
         signed_message::format_timestamp(valid_from),
         signed_message::format_timestamp(valid_until),
     );
-    if out != "-" {
-        eprintln!("Written to {out}.");
+    match out.as_str() {
+        "-" => eprintln!("Submit it with: icp message send <FILE>"),
+        // Quoted: a path with a space in it would otherwise paste as two arguments.
+        path => eprintln!(
+            "Written to {path}. Submit it with: icp message send {}",
+            shell_quote(path)
+        ),
     }
     if interface.is_none() {
         warn!(
@@ -583,107 +541,6 @@ fn floor_to_minute(t: OffsetDateTime) -> OffsetDateTime {
         .and_then(|t| t.replace_second(0))
         .expect("0 is a valid second and nanosecond")
 }
-
-/// A response decoded according to the requested `CallOutputMode`.
-enum Decoded {
-    Candid(IDLArgs),
-    Text(String),
-    /// No decoding was attempted or all attempts failed; emit raw bytes as hex.
-    Bytes,
-}
-
-fn decode_response(
-    res: &[u8],
-    mode: CallOutputMode,
-    method: Option<&(TypeEnv, Function)>,
-) -> Result<Decoded, anyhow::Error> {
-    let res_hex = || format!("response (hex): {}", hex::encode(res));
-    match mode {
-        CallOutputMode::Auto => {
-            if let Ok(args) = try_decode_candid(res, method) {
-                Ok(Decoded::Candid(args))
-            } else if let Ok(s) = std::str::from_utf8(res) {
-                Ok(Decoded::Text(s.to_string()))
-            } else {
-                Ok(Decoded::Bytes)
-            }
-        }
-        CallOutputMode::Candid => try_decode_candid(res, method)
-            .map(Decoded::Candid)
-            .with_context(res_hex),
-        CallOutputMode::Text => std::str::from_utf8(res)
-            .map(|s| Decoded::Text(s.to_string()))
-            .with_context(res_hex)
-            .context("response is not valid UTF-8"),
-        CallOutputMode::Hex => Ok(Decoded::Bytes),
-    }
-}
-
-#[derive(Serialize)]
-struct JsonCallResponse {
-    response_bytes: String,
-    response_text: Option<String>,
-    response_candid: Option<String>,
-}
-
-impl JsonCallResponse {
-    fn build(res: &[u8], decoded: Option<&Decoded>) -> Self {
-        Self {
-            response_bytes: hex::encode(res),
-            response_text: match decoded {
-                Some(Decoded::Text(s)) => Some(s.clone()),
-                _ => None,
-            },
-            response_candid: match decoded {
-                Some(Decoded::Candid(args)) => Some(format!("{args}")),
-                _ => None,
-            },
-        }
-    }
-}
-
-/// Tries to decode the response as Candid. Returns `None` if decoding fails.
-fn try_decode_candid(
-    res: &[u8],
-    candid_types: Option<&(TypeEnv, Function)>,
-) -> Result<IDLArgs, anyhow::Error> {
-    match candid_types {
-        Some((type_env, func)) => IDLArgs::from_bytes_with_types(res, type_env, &func.rets)
-            .map_err(|e| anyhow!("failed to parse Candid: {e}")),
-        None => IDLArgs::from_bytes(res).map_err(|e| anyhow!("failed to parse Candid: {e}")),
-    }
-}
-
-/// Pretty-prints IDLArgs detecting the terminal's width to avoid the 80-column default.
-pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Result<()> {
-    if term.is_term() {
-        let width = term.size().1 as usize;
-        let pp_args = candid_parser::pretty::candid::value::pp_args(args);
-        match pp_args.render(width, term) {
-            Ok(()) => {
-                writeln!(term)?;
-            }
-            Err(_) => {
-                writeln!(term, "{args}")?;
-            }
-        }
-    } else {
-        writeln!(term, "{args}")?;
-    }
-    Ok(())
-}
-
-/// Gets the Candid type of a method on a canister by fetching its Candid interface.
-///
-/// This is a best effort function: it will succeed if
-/// - the canister exposes its Candid interface in its metadata;
-/// - the IDL file can be parsed and type checked in Rust parser;
-/// - has an actor in the IDL file. If anything fails, it returns None.
-async fn get_candid_type(agent: &Agent, canister_id: Principal) -> Option<CanisterInterface> {
-    let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
-    CanisterInterface::from_text(candid_interface).ok()
-}
-
 /// Gets the Candid interface a project canister was last built with, from the
 /// `candid:service` metadata of its build artifact.
 ///
@@ -699,128 +556,4 @@ async fn local_candid_type(
     };
     let wasm = ctx.artifacts.lookup(name).await.ok()?;
     CanisterInterface::from_text(extract_candid_service(&wasm)?).ok()
-}
-
-/// Loads a Candid interface from a local `.did` file.
-///
-/// Unlike [`get_candid_type`], failures are surfaced to the caller because the
-/// user explicitly asked for this file to be used.
-fn load_candid_from_file(path: &Path) -> Result<CanisterInterface, anyhow::Error> {
-    // Parsed from the path rather than from the text below, so that a `.did`
-    // file importing another one still resolves.
-    let candid_source = CandidSource::File(path.as_std_path());
-    let (type_env, ty) = candid_source
-        .load()
-        .with_context(|| format!("failed to load Candid interface from {path}"))?;
-    let actor =
-        ty.ok_or_else(|| anyhow!("Candid file {path} does not declare a service interface"))?;
-    Ok(CanisterInterface {
-        env: type_env,
-        ty: actor,
-        source: icp::fs::read_to_string(path)?,
-    })
-}
-
-struct CanisterInterface {
-    env: TypeEnv,
-    ty: Type,
-
-    /// The `.did` text this was parsed from. `--sign-only` embeds it in the
-    /// message file, since the machine that submits the call has no project to
-    /// resolve an interface from.
-    source: String,
-}
-
-impl CanisterInterface {
-    fn from_text(source: String) -> Result<Self, anyhow::Error> {
-        let (env, ty) = CandidSource::Text(&source)
-            .load()
-            .context("failed to parse Candid interface")?;
-        let ty = ty.context("Candid interface does not declare a service")?;
-        Ok(CanisterInterface { env, ty, source })
-    }
-
-    fn methods(&self) -> impl Iterator<Item = &str> {
-        let ty = if let TypeInner::Class(_, t) = &*self.ty.0 {
-            t
-        } else {
-            &self.ty
-        };
-        let TypeInner::Service(methods) = &*ty.0 else {
-            unreachable!("check_prog should verify service type")
-        };
-        methods.iter().map(|(name, _)| name.as_str())
-    }
-    fn get_method<'a>(&'a self, method_name: &'a str) -> Option<&'a Function> {
-        self.env.get_method(&self.ty, method_name).ok()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn typed_decoding_preserves_record_field_names() {
-        // Encode a record — field names become hashes in the Candid binary format
-        let args = candid_parser::parse_idl_args(
-            r#"(record { network = "regtest"; bitcoin_canister_id = "abc" })"#,
-        )
-        .unwrap();
-        let bytes = args.to_bytes().unwrap();
-
-        // Without types: field names are lost, displayed as hash numbers
-        let untyped = IDLArgs::from_bytes(&bytes).unwrap();
-        let untyped_str = format!("{untyped}");
-        assert!(
-            !untyped_str.contains("network"),
-            "untyped decoding should not contain field names: {untyped_str}"
-        );
-
-        // With types: field names are restored from the type environment
-        let did = r#"
-            type config = record { network : text; bitcoin_canister_id : text };
-            service : { "get_config" : () -> (config) query }
-        "#;
-        let source = CandidSource::Text(did);
-        let (type_env, ty) = source.load().unwrap();
-        let actor = ty.unwrap();
-        let func = type_env.get_method(&actor, "get_config").unwrap().clone();
-
-        let typed = IDLArgs::from_bytes_with_types(&bytes, &type_env, &func.rets).unwrap();
-        let typed_str = format!("{typed}");
-        assert!(
-            typed_str.contains("network"),
-            "typed decoding should contain 'network': {typed_str}"
-        );
-        assert!(
-            typed_str.contains("bitcoin_canister_id"),
-            "typed decoding should contain 'bitcoin_canister_id': {typed_str}"
-        );
-    }
-
-    #[test]
-    fn is_query_detects_method_types() {
-        let did = r#"
-            service : {
-                "get_value" : () -> (text) query;
-                "set_value" : (text) -> ()
-            }
-        "#;
-        let source = CandidSource::Text(did);
-        let (type_env, ty) = source.load().unwrap();
-        let actor = ty.unwrap();
-
-        let query_func = type_env.get_method(&actor, "get_value").unwrap();
-        assert!(
-            query_func.is_query(),
-            "get_value should be detected as query"
-        );
-
-        let update_func = type_env.get_method(&actor, "set_value").unwrap();
-        assert!(
-            !update_func.is_query(),
-            "set_value should be detected as update"
-        );
-    }
 }

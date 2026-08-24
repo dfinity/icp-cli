@@ -302,6 +302,14 @@ Print raw response as hex</li>
 <li>
 <p><code>--json</code> — Output command results as JSON</p>
 </li>
+<li>
+<p><code>--sign-only &#x3C;FILE></code> — Sign the call and write it to FILE instead of submitting it, so it can be submitted later from a machine that has network access but not your key. <code>-</code> writes to stdout.</p>
+<p>Nothing is sent, and nothing is fetched: the interface comes from <code>--candid</code> or the local build artifact rather than from the canister, so this works with no network at all. <code>--root-key</code> must name a key rather than <code>fetch</code>, and <code>--proxy</code> is not supported.</p>
+</li>
+<li>
+<p><code>--valid-from &#x3C;WHEN></code> — When the signed message’s five-minute submission window opens: a duration from now (<code>55m</code>, <code>2h</code>) or an RFC 3339 timestamp (<code>2026-08-17T10:07:00Z</code>). Defaults to now.</p>
+<p>The window is always five minutes wide — the IC will not accept an ingress message expiring further ahead than that — so this places it rather than sizing it. It is rounded down to the whole minute, and so may open up to 59 seconds earlier than asked; the file records the window it actually got.</p>
+</li>
 </ul>
 <h2 id="icp-canister-create"><code>icp canister create</code></h2>
 <p>Create a canister on a network</p>

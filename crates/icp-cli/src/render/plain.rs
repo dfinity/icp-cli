@@ -38,6 +38,15 @@ impl PlainRenderer {
                 log.start_step(header);
             }
 
+            EventKind::CommandStarted { command } => {
+                let Some(log) = self.tasks.get_mut(&event.task_id) else {
+                    return;
+                };
+                // Mark command boundaries so interleaved output stays
+                // attributable to the command producing it.
+                debug!("[{}] $ {command}", log.kind().canister());
+            }
+
             EventKind::Output { line, .. } => {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;

@@ -1643,6 +1643,26 @@ async fn canister_status_honours_status_visibility_for_non_controllers() {
     status_as_alice(&ctx, &project_dir)
         .stdout(contains("Status: Running").and(contains("Status visibility: Public")));
 
+    // `--json` reports it in the tagged form, alongside log visibility.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--identity",
+            "alice",
+            "--environment",
+            "random-environment",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains(r#""status_visibility":{"type":"Public"}"#)
+                .and(contains(r#""log_visibility":{"type":"Controllers"}"#)),
+        );
+
     // Revoking it puts the fallback back in place.
     ctx.icp()
         .current_dir(&project_dir)
@@ -1950,6 +1970,7 @@ async fn canister_settings_show() {
                 .and(contains(r#""wasm_memory_threshold""#))
                 .and(contains(r#""log_memory_limit""#))
                 .and(contains(r#""log_visibility""#))
+                .and(contains(r#""status_visibility""#))
                 .and(contains(r#""environment_variables""#)),
         );
 }

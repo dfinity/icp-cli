@@ -581,3 +581,50 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
 
     Ok(buf)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `--json` renders visibility as an externally tagged `{"type", "value"}`
+    /// object. This is a different shape from the manifest form `Visibility`
+    /// serializes to, and from what `canister settings show --json` emits, so it
+    /// is pinned here rather than left to a derive.
+    #[test]
+    fn json_visibility_shape() {
+        let json = |v: Visibility| serde_json::to_string(&SerializableVisibility(v)).unwrap();
+
+        assert_eq!(json(Visibility::Controllers), r#"{"type":"Controllers"}"#);
+        assert_eq!(json(Visibility::Public), r#"{"type":"Public"}"#);
+        assert_eq!(
+            json(Visibility::AllowedViewers(vec![
+                Principal::from_text("aaaaa-aa").unwrap()
+            ])),
+            r#"{"type":"AllowedViewers","value":["aaaaa-aa"]}"#
+        );
+        assert_eq!(
+            json(Visibility::AllowedViewers(vec![])),
+            r#"{"type":"AllowedViewers","value":[]}"#
+        );
+    }
+
+    /// Both visibility settings are reported, under their own keys.
+    #[test]
+    fn json_settings_carry_both_visibilities() {
+        let settings = ic_management_canister_types::DefiniteCanisterSettings {
+            log_visibility: ic_management_canister_types::LogVisibility::Public,
+            status_visibility: ic_management_canister_types::StatusVisibility::Controllers,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&SerializableCanisterSettings::from(&settings)).unwrap();
+
+        assert!(
+            json.contains(r#""log_visibility":{"type":"Public"}"#),
+            "{json}"
+        );
+        assert!(
+            json.contains(r#""status_visibility":{"type":"Controllers"}"#),
+            "{json}"
+        );
+    }
+}

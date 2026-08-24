@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use ic_agent::{Agent, AgentError, export::Principal};
+use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
     canister::Visibility,
@@ -27,6 +27,22 @@ const E_CANISTER_NOT_FOUND: &str = "IC0301";
 /// subnet has administrators: `IC0542` since status visibility was introduced,
 /// `IC0541` on subnets with administrators before that, and `IC0512` otherwise.
 const E_STATUS_ACCESS_DENIED: [&str; 3] = ["IC0512", "IC0541", "IC0542"];
+
+/// The reject carried by a direct update call, however it was delivered.
+///
+/// The replica checks status visibility both when accepting the ingress message
+/// and again during execution, so the same denial arrives uncertified from the
+/// first and certified from the second.
+fn direct_call_reject(err: &UpdateOrProxyError) -> Option<&RejectResponse> {
+    match err {
+        UpdateOrProxyError::DirectUpdateCall {
+            source:
+                AgentError::CertifiedReject { reject, .. }
+                | AgentError::UncertifiedReject { reject, .. },
+        } => Some(reject),
+        _ => None,
+    }
+}
 
 /// Show the status of canister(s).
 ///
@@ -272,13 +288,11 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                                 .expect("Failed to build canister status output"),
                         }
                     }
-                    Err(UpdateOrProxyError::DirectUpdateCall {
-                        source:
-                            AgentError::UncertifiedReject {
-                                reject,
-                                operation: _,
-                            },
-                    }) => {
+                    Err(e) => {
+                        let Some(reject) = direct_call_reject(&e) else {
+                            bail!("Unknown error fetching canister {cid} status: {e}");
+                        };
+
                         if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
                             bail!("Canister {cid} was not found.");
                         }
@@ -305,9 +319,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             false => build_public_output(&status)
                                 .expect("Failed to build canister status output"),
                         }
-                    }
-                    Err(e) => {
-                        bail!("Unknown error fetching canister {cid} status: {e}");
                     }
                 }
             }
@@ -585,6 +596,51 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_agent::agent::RejectCode;
+
+    fn reject(code: &str) -> RejectResponse {
+        RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            reject_message: "denied".to_string(),
+            error_code: Some(code.to_string()),
+        }
+    }
+
+    /// A denial arrives uncertified when ingress inspection catches it and
+    /// certified when execution does, so the fallback must see both.
+    #[test]
+    fn both_reject_forms_are_recognised() {
+        let certified = UpdateOrProxyError::DirectUpdateCall {
+            source: AgentError::CertifiedReject {
+                reject: reject("IC0542"),
+                operation: None,
+            },
+        };
+        let uncertified = UpdateOrProxyError::DirectUpdateCall {
+            source: AgentError::UncertifiedReject {
+                reject: reject("IC0542"),
+                operation: None,
+            },
+        };
+
+        for err in [&certified, &uncertified] {
+            let found = direct_call_reject(err).expect("reject should be extracted");
+            assert_eq!(found.error_code.as_deref(), Some("IC0542"));
+            assert!(
+                E_STATUS_ACCESS_DENIED.contains(&found.error_code.as_deref().unwrap()),
+                "denial code should trigger the public-status fallback"
+            );
+        }
+    }
+
+    /// Anything that is not a reject must keep surfacing as an error.
+    #[test]
+    fn non_reject_errors_are_not_treated_as_denials() {
+        let err = UpdateOrProxyError::ProxyCall {
+            message: "boom".to_string(),
+        };
+        assert!(direct_call_reject(&err).is_none());
+    }
 
     /// `--json` renders visibility as an externally tagged `{"type", "value"}`
     /// object. This is a different shape from the manifest form `Visibility`

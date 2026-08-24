@@ -10,9 +10,14 @@ use serde::{Deserialize, Serialize, Serializer, de};
 /// settings, each with its own Candid type. This is the single form the CLI
 /// parses, compares, and renders; conversions to and from the Candid types are
 /// generated below.
+///
+/// The variants say who a setting grants access to, not the whole access rule:
+/// a setting may admit callers of its own on top, as `status_visibility` does
+/// for subnet administrators and for a canister reading its own status. Each
+/// manifest newtype documents its own rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Visibility {
-    /// Only the canister's controllers.
+    /// The canister's controllers.
     Controllers,
     /// Anyone.
     Public,

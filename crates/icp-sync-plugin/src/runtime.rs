@@ -104,15 +104,86 @@ pub struct CallableCanisters {
     pub by_name: BTreeMap<String, Principal>,
 }
 
-/// The distinguishing phrase in the management canister's rejection of a
-/// metadata read for a section the target does not have ("The canister <id> has
-/// no metadata section with the name <name>."). A proxied read reaches the
-/// plugin as reject text, not as a code, so recognizing absence — which
-/// [`HostState::do_canister_metadata_section`] reports as `Ok(None)`, matching what
-/// a direct read proves from the certificate — means matching that text. A
-/// reword upstream turns absence back into an error rather than into a wrong
-/// answer.
-const NO_SUCH_SECTION_REJECT: &str = "no metadata section";
+/// What a certificate says about a metadata section. A section the reader may
+/// not have is neither of these: the state tree will not certify it, so it
+/// reaches the caller as an error like any other failed read.
+enum CertifiedSection {
+    Present(Vec<u8>),
+    Absent,
+}
+
+/// Ask the target's subnet to certify a metadata section, reporting only what
+/// the certificate proves.
+///
+/// The section path is requested together with `controllers`, because a
+/// metadata path proven absent is equally what a canister that was never created
+/// looks like — `controllers` is written at creation, so its presence is what
+/// separates the two. A canister with no module installed has no sections at
+/// all, which the certificate reports as an absent path under a canister that
+/// exists, and so as [`CertifiedSection::Absent`].
+async fn certified_metadata_section(
+    agent: &Agent,
+    target: Principal,
+    name: &str,
+) -> Result<CertifiedSection, String> {
+    let metadata_path: Vec<Label<Vec<u8>>> = vec![
+        "canister".into(),
+        Label::from_bytes(target.as_slice()),
+        "metadata".into(),
+        name.into(),
+    ];
+    let controllers_path: Vec<Label<Vec<u8>>> = vec![
+        "canister".into(),
+        Label::from_bytes(target.as_slice()),
+        "controllers".into(),
+    ];
+    let cert = agent
+        .read_state_raw(
+            vec![metadata_path.clone(), controllers_path.clone()],
+            target,
+        )
+        .await
+        .map_err(|err| format!("metadata read failed: {err}"))?;
+
+    match cert.tree.lookup_path(&metadata_path) {
+        LookupResult::Found(bytes) => Ok(CertifiedSection::Present(bytes.to_vec())),
+        LookupResult::Absent => match cert.tree.lookup_path(&controllers_path) {
+            LookupResult::Found(_) => Ok(CertifiedSection::Absent),
+            LookupResult::Absent => Err(format!("canister {target} does not exist")),
+            _ => Err(format!(
+                "metadata read failed: certificate proves nothing about canister {target}"
+            )),
+        },
+        // Not proof of absence, just a certificate that says nothing about the
+        // path — reporting the section missing off this would be a guess.
+        _ => Err(format!(
+            "metadata read failed: certificate proves nothing about section `{name}` \
+             of canister {target}"
+        )),
+    }
+}
+
+/// Whether the management canister rejected a metadata read by claiming the
+/// target has no such section, rather than because the read itself failed.
+///
+/// The claim is not proof: the same rejection covers a section private to
+/// someone other than the proxy, so the caller confirms it against a
+/// certificate. A proxied read reaches the plugin as reject text with no code
+/// attached, so recognizing the claim at all means matching the replica's
+/// wording. Both sentences name the canister and one names the section, so the
+/// match is anchored on the values this call supplied rather than on a loose
+/// phrase that text relayed from elsewhere might happen to contain. A reword
+/// upstream turns the claim into an error rather than into a wrong answer.
+fn rejected_as_no_such_section(message: &str, target: Principal, name: &str) -> bool {
+    // A canister with no module installed has no sections at all, so it reports
+    // absence in its own words. The certificate says the same thing about it:
+    // the metadata path is absent while the canister itself is there.
+    message.contains(&format!(
+        "The canister {target} has no Wasm module and hence no metadata is available."
+    )) || message.contains(&format!(
+        "The canister {target} has no metadata section with the name {name}."
+    ))
+}
 
 /// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
 /// that the plugin listed it in `canisters`. The canister being synced (`host`)
@@ -226,16 +297,19 @@ impl HostState {
     }
 
     /// Read a metadata section from an already-resolved target principal.
-    /// `Ok(None)` is the target reporting it has no such section, kept distinct
-    /// from a failed read so a plugin can probe for an optional section without
-    /// inspecting error text (see [`NO_SUCH_SECTION_REJECT`]).
+    /// `Ok(None)` means a certificate proved the target has no such section,
+    /// kept distinct from a failed read so a plugin can probe for an optional
+    /// section without inspecting error text. A section the reader may not have
+    /// is a failed read, not an absent one, whichever route asked.
     ///
     /// A direct read is a certified `read_state` signed by the sync identity —
     /// `read_state` is not a canister method, so it cannot be forwarded. A
     /// proxied read therefore goes the other way around: the proxy calls the
     /// management canister's `canister_metadata` on the plugin's behalf, which
     /// checks the *proxy* against the target's controllers and so reaches
-    /// sections private to it.
+    /// sections private to it. The management canister does not distinguish
+    /// absence from privacy, so a proxied read that comes back claiming absence
+    /// is confirmed against a certificate before it is reported as one.
     fn do_canister_metadata_section(
         &mut self,
         target: Principal,
@@ -248,55 +322,17 @@ impl HostState {
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
             let Some(proxy_cid) = proxy else {
-                // A metadata path proven absent is equally what a canister that
-                // was never created looks like, and the certificate error names
-                // only the path asked for, so it cannot tell the two apart.
-                // Read `controllers` in the same request to disambiguate.
-                let metadata_path: Vec<Label<Vec<u8>>> = vec![
-                    "canister".into(),
-                    Label::from_bytes(target.as_slice()),
-                    "metadata".into(),
-                    name.as_str().into(),
-                ];
-                let controllers_path: Vec<Label<Vec<u8>>> = vec![
-                    "canister".into(),
-                    Label::from_bytes(target.as_slice()),
-                    "controllers".into(),
-                ];
-                let cert = agent
-                    .read_state_raw(
-                        vec![metadata_path.clone(), controllers_path.clone()],
-                        target,
-                    )
+                return certified_metadata_section(&agent, target, &name)
                     .await
-                    .map_err(|err| format!("metadata read failed: {err}"))?;
-
-                return match cert.tree.lookup_path(&metadata_path) {
-                    LookupResult::Found(bytes) => Ok(Some(bytes.to_vec())),
-                    // Creation writes `controllers`, so unlike `module_hash` it
-                    // is present for a canister with no module installed — which
-                    // has no sections at all, and so is a genuine `Ok(None)`.
-                    LookupResult::Absent => match cert.tree.lookup_path(&controllers_path) {
-                        LookupResult::Found(_) => Ok(None),
-                        LookupResult::Absent => Err(format!("canister {target} does not exist")),
-                        _ => Err(format!(
-                            "metadata read failed: certificate proves nothing about \
-                             canister {target}"
-                        )),
-                    },
-                    // Not proof of absence, just a certificate that says nothing
-                    // about the path — reporting the section missing off this
-                    // would be a guess.
-                    _ => Err(format!(
-                        "metadata read failed: certificate proves nothing about section \
-                         `{name}` of canister {target}"
-                    )),
-                };
+                    .map(|section| match section {
+                        CertifiedSection::Present(bytes) => Some(bytes),
+                        CertifiedSection::Absent => None,
+                    });
             };
 
             let metadata_args = Encode!(&CanisterMetadataArgs {
                 canister_id: target,
-                name,
+                name: name.clone(),
             })
             .map_err(|e| format!("metadata encode failed: {e}"))?;
             let proxy_args = ProxyArgs {
@@ -321,10 +357,19 @@ impl HostState {
                 }
                 ProxyResult::Err(err) => {
                     let message = err.format_error();
-                    if message.contains(NO_SUCH_SECTION_REJECT) {
-                        Ok(None)
-                    } else {
-                        Err(message)
+                    if !rejected_as_no_such_section(&message, target, &name) {
+                        return Err(format!("metadata read failed: {message}"));
+                    }
+                    // The management canister says the same thing about a
+                    // section that isn't there and one that is private to
+                    // someone else, so its word alone cannot be reported as
+                    // absence. Only a certificate proves the section absent.
+                    match certified_metadata_section(&agent, target, &name).await? {
+                        CertifiedSection::Absent => Ok(None),
+                        CertifiedSection::Present(_) => Err(format!(
+                            "metadata read failed: canister {target} does not let the proxy \
+                             read section `{name}`"
+                        )),
                     }
                 }
             }
@@ -1609,6 +1654,46 @@ mod tests {
             refusal.contains("not permitted") && refusal.contains("undeclared"),
             "got: {refusal}"
         );
+    }
+
+    /// The replica's own wording for the two ways a target reports it has no
+    /// section, copied from `CanisterManagerError` in the IC repo. Both are
+    /// absence, not failure, so both must reach the plugin as `none`.
+    #[test]
+    fn management_canister_absence_rejects_are_recognized() {
+        let target = Principal::from_text("aaaaa-aa").unwrap();
+        let other = Principal::from_text("2vxsx-fae").unwrap();
+
+        let no_module = format!(
+            "Proxy call failed: The canister {target} has no Wasm module and hence no metadata is available."
+        );
+        let no_section = format!(
+            "Proxy call failed: The canister {target} has no metadata section with the name candid:service."
+        );
+        assert!(rejected_as_no_such_section(
+            &no_module,
+            target,
+            "candid:service"
+        ));
+        assert!(rejected_as_no_such_section(
+            &no_section,
+            target,
+            "candid:service"
+        ));
+
+        // A section by another name, a canister other than the one asked about,
+        // and an unrelated failure are all reads that failed.
+        assert!(!rejected_as_no_such_section(&no_section, target, "dfx"));
+        assert!(!rejected_as_no_such_section(
+            &no_module,
+            other,
+            "candid:service"
+        ));
+        assert!(!rejected_as_no_such_section(
+            &format!("Proxy call failed: Canister {target} not found."),
+            target,
+            "candid:service"
+        ));
     }
 
     #[test]

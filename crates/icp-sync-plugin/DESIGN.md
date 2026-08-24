@@ -184,9 +184,10 @@ method, so a proxy canister has nothing to forward. The two routes are therefore
 different protocols reaching the same data, chosen by the request's `direct` flag
 exactly as `canister-call` chooses one:
 
-- **Direct** — `Agent::read_state_canister_metadata`, signed by the sync
-  identity. Absence is *proven* by the certificate, surfacing as
-  `AgentError::LookupPathAbsent`, which the host maps to `Ok(None)`.
+- **Direct** — a `read_state` signed by the sync identity, so absence is
+  *proven* by the certificate rather than asserted. It requests `controllers`
+  alongside the metadata path, since only that distinguishes a canister with no
+  such section from one that was never created.
 - **Proxied** — `ProxyArgs` aimed at the management canister's
   `canister_metadata`, so the controller check runs against the proxy. This is
   the same shape the CLI's own management calls take through

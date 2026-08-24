@@ -39,14 +39,14 @@ icp sync
        │    dirs/files/fields  = what you declared in the manifest
        │
        └─ plugin makes canister-call({ target, ... }) (× N)
-          and get-metadata-section({ target, name })
+          and canister-metadata-section({ target, name })
             target = host (the canister being synced), or a
                      canister from `canisters:` by name
 ```
 
 ## The Plugin Interface
 
-The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides two imports (`canister-call` and `get-metadata-section`); the plugin provides one export (`exec`):
+The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides two imports (`canister-call` and `canister-metadata-section`); the plugin provides one export (`exec`):
 
 ```wit
 world sync-plugin {
@@ -54,7 +54,7 @@ world sync-plugin {
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
     // Host import: read a metadata section from one of those same canisters.
-    import get-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
+    import canister-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
 
     // Plugin export: run the sync step.
     export exec: func(input: sync-exec-input) -> result<_, string>;
@@ -97,9 +97,9 @@ The plugin calls methods through the `canister-call` import. It picks a `target`
 
 The `host` target always resolves to `sync-exec-input.canister-id` and is always permitted. A `name` target is permitted only if that canister appears in the sync step's [`canisters:`](../reference/configuration.md#plugin-sync) list; the host rejects any other target without making a call. A name is the only way to address another canister — the host owns the name→principal mapping, which differs per environment.
 
-### Reading canister metadata — `get-metadata-section`
+### Reading canister metadata — `canister-metadata-section`
 
-The plugin reads a canister's [metadata sections](../reference/cli.md#icp-canister-metadata) — `candid:service`, for instance — through the `get-metadata-section` import:
+The plugin reads a canister's [metadata sections](../reference/cli.md#icp-canister-metadata) — `candid:service`, for instance — through the `canister-metadata-section` import:
 
 | Request field | Meaning |
 |---------------|---------|
@@ -160,7 +160,7 @@ The plugin runs with a deliberately narrow capability surface.
 | Linear memory | wasm32 address space (≤ 4 GiB) |
 | stdout / stderr per stream | 1 MiB |
 
-The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `get-metadata-section`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `canister-metadata-section`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
 
 ## Next Steps
 

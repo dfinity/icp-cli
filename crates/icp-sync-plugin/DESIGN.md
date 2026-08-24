@@ -36,7 +36,7 @@ docs; the *reasons* behind those choices are recorded here.
   one deployment. (In the earlier `@0.1.0` interface
   `canister-call` had no target and always reached the canister being synced; see
   *Interface versioning* below.)
-- **`get-metadata-section` mirrors `canister-call`'s targeting and routing** — it
+- **`canister-metadata-section` mirrors `canister-call`'s targeting and routing** — it
   takes the same `call-target` (enforced against `canisters:` the same way) and
   the same `direct` flag, so one mental model covers both imports. Its return is
   `result<option<list<u8>>, string>`: a missing section is an ordinary answer for
@@ -153,7 +153,7 @@ straight to the resolved target via `ic-agent`.
 
 ### Metadata reads (two routes, one answer)
 
-`get-metadata-section` cannot reuse the call path: `read_state` is not a canister
+`canister-metadata-section` cannot reuse the call path: `read_state` is not a canister
 method, so a proxy canister has nothing to forward. The two routes are therefore
 different protocols reaching the same data, chosen by the request's `direct` flag
 exactly as `canister-call` chooses one:

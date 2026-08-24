@@ -68,7 +68,7 @@ impl Guest for TestPlugin {
             // declare. The host must reject the target before it touches the
             // network, so this needs no live canister; echo the refusal.
             "metadata-undeclared" => {
-                let err = get_metadata_section(&MetadataSectionRequest {
+                let err = canister_metadata_section(&MetadataSectionRequest {
                     target: CallTarget::Name("undeclared".to_string()),
                     name: "candid:service".to_string(),
                     direct: true,

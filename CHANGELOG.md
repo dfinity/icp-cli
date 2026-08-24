@@ -2,7 +2,8 @@
 Convention: changes to experimental features live in a dedicated
 `## Experimental` subsection under each version. Experimental features
 may receive breaking changes between releases without a major version
-bump. Currently experimental: project bundling, project dependencies
+bump. Currently experimental: project bundling, project dependencies,
+air-gapped signing
 -->
 
 # Unreleased
@@ -10,6 +11,15 @@ bump. Currently experimental: project bundling, project dependencies
 * feat: `script` build steps now receive `ICP_CLI_ENVIRONMENT`, the name of the environment the canisters are being built for, so a build can vary by environment the way a sync step already could.
 * feat: `icp completions <SHELL>` prints a shell completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish` to stdout. See the [installation guide](docs/guides/installation.md#shell-completions) for where to put it.
 * fix: `icp canister logs` output formats are corrected. `--json` now emits machine-readable JSON and the default emits the human-readable lines (the two were swapped), and `--follow --json` emits newline-delimited JSON, one record per line, streamed as each record arrives. This is breaking for scripts: parsing the default output as JSON now requires `--json`, and consumers of `--follow --json` must read one JSON object per line.
+
+## Experimental
+
+* feat(signing): a canister call can now be signed on one machine and submitted from another, restoring what `dfx canister sign` / `dfx canister send` covered. `icp canister call --sign-only <FILE>` composes and signs a call and writes it to a JSON file instead of submitting it; `icp message send <FILE>` submits that file and prints the reply. So a machine that holds the key needs no network, and the machine with the network needs no key — it never resolves an identity at all. `-` writes to stdout and reads from stdin respectively.
+  * Nothing is fetched while signing: the Candid interface comes from `--candid` or from the canister's local build artifact rather than from the canister itself, and `--root-key` must name a key (`mainnet` or a hex-encoded key) rather than `fetch`. `--proxy` is not supported.
+  * `icp message send` shows what the message contains — sender, canister, method, decoded argument, window, and destination — and asks before submitting. `--yes` skips the prompt, and a non-TTY proceeds without one so a scripted courier works. `--dry-run` prints the same summary and stops without touching the network at all, which makes it the file-inspection command. `--candid`, `--output` and `--json` render the reply exactly as `icp canister call` does. Where the message is submitted comes from the file alone — there is no `--network` override, so no environment variable can silently redirect a signed message; a courier who has to change it edits the file's `network` field, which is unauthenticated in either case.
+  * If sending fails after the message may already have gone out, re-run `icp message send` **on the same file**: the request id is a hash of the signed content, so resubmitting the identical message is de-duplicated by the IC and cannot execute twice. Signing again produces a new expiry, hence a different request id, which is *not* de-duplicated — for a transfer, a double spend. Every post-submission failure says so.
+  * `--valid-from <WHEN>` places the message's submission window, as a duration from now (`55m`, `2h`) or an RFC 3339 timestamp; it defaults to now. The window is always five minutes wide, because the IC rejects an ingress message whose expiry is further ahead than that — so this places the window rather than sizing it. Note that this is not dfx's `--expire-after`, which names the window's *end* and leaves you to subtract the five minutes yourself.
+  * The file records the signed envelope, where to submit it, a tagged canister-or-subnet destination, the Candid interface, and a human-readable summary of what was signed. An update also carries a pre-signed `request_status` read, so the submitting machine can await the outcome with no key of its own; it shares the call's expiry, so both live in the same window.
 
 # v1.3.0
 

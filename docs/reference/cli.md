@@ -60,6 +60,8 @@ This document contains the help content for the `icp` command-line program.
 * [`icp identity principal`↴](#icp-identity-principal)
 * [`icp identity reauth`↴](#icp-identity-reauth)
 * [`icp identity rename`↴](#icp-identity-rename)
+* [`icp message`↴](#icp-message)
+* [`icp message send`↴](#icp-message-send)
 * [`icp network`↴](#icp-network)
 * [`icp network list`↴](#icp-network-list)
 * [`icp network ping`↴](#icp-network-ping)
@@ -95,6 +97,7 @@ This document contains the help content for the `icp` command-line program.
 * `deploy` — Deploy a project to an environment
 * `environment` — Show information about the current project environments
 * `identity` — Manage your identities
+* `message` — Work with signed messages
 * `network` — Launch and manage local test networks
 * `new` — Create a new ICP project from a template
 * `project` — Manage the current project
@@ -214,6 +217,12 @@ Make a canister call
     Print raw response as hex
 
 * `--json` — Output command results as JSON
+* `--sign-only <FILE>` — Sign the call and write it to FILE instead of submitting it, for submission from another machine with `icp message send`. `-` writes to stdout.
+
+   Nothing is sent, and nothing is fetched: the interface comes from `--candid` or the local build artifact rather than from the canister, so this works with no network at all. `--root-key` must name a key rather than `fetch`, and `--proxy` is not supported.
+* `--valid-from <WHEN>` — When the signed message's five-minute submission window opens: a duration from now (`55m`, `2h`) or an RFC 3339 timestamp (`2026-08-17T10:07:00Z`). Defaults to now.
+
+   The window is always five minutes wide — the IC will not accept an ingress message expiring further ahead than that — so this places it rather than sizing it. It is rounded down to the whole minute, and so may open up to 59 seconds earlier than asked; the file records the window it actually got.
 
 
 
@@ -1334,6 +1343,55 @@ Rename an identity
 
 * `<OLD_NAME>` — Current name of the identity
 * `<NEW_NAME>` — New name for the identity
+
+
+
+## `icp message`
+
+Work with signed messages
+
+**Usage:** `icp message <COMMAND>`
+
+###### **Subcommands:**
+
+* `send` — Submit a message signed on another machine
+
+
+
+## `icp message send`
+
+Submit a message signed on another machine
+
+Takes a file written by `icp canister call --sign-only`, shows what it contains, submits it, and waits for the reply. No identity is used and none is needed: the message was already signed by whoever composed it, so this machine only has to carry it to the network.
+
+It is submitted to the network the file names. If that has to change — the signing machine recorded a URL this one cannot reach, say — edit `network` in the file: the envelope is signed and carries no URL of its own, so where it goes cannot change what executes.
+
+**Usage:** `icp message send [OPTIONS] <FILE>`
+
+###### **Arguments:**
+
+* `<FILE>` — The signed message file. `-` reads stdin
+
+###### **Options:**
+
+* `--dry-run` — Show what the message contains and exit without submitting it
+* `-y`, `--yes` — Submit without asking for confirmation
+* `--candid <PATH>` — Path to a Candid (`.did`) file describing the canister's interface, overriding the one embedded in the message
+* `-o`, `--output <OUTPUT>` — How to interpret and display the response
+
+  Default value: `auto`
+
+  Possible values:
+  - `auto`:
+    Try Candid, then UTF-8, then fall back to hex
+  - `candid`:
+    Parse as Candid and pretty-print; error if parsing fails
+  - `text`:
+    Parse as UTF-8 text; error if invalid
+  - `hex`:
+    Print raw response as hex
+
+* `--json` — Output command results as JSON
 
 
 

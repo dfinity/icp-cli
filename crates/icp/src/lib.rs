@@ -38,6 +38,7 @@ pub mod prelude;
 pub mod project;
 pub mod settings;
 pub mod signal;
+pub mod signed_message;
 pub mod store_artifact;
 pub mod store_id;
 pub mod telemetry_data;

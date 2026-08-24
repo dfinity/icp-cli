@@ -416,6 +416,13 @@ async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), E
         },
 
         // Network
+        // Message
+        Command::Message(cmd) => match cmd {
+            commands::message::Command::Send(args) => {
+                commands::message::send::exec(ctx, &args).await?
+            }
+        },
+
         Command::Network(cmd) => match cmd {
             commands::network::Command::List(args) => {
                 commands::network::list::exec(ctx, &args).await?

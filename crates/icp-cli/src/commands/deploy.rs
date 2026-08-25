@@ -489,9 +489,10 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             .into_iter()
             .collect();
 
-        let pkg_cache = ctx.dirs.package_cache()?;
+        let resolver = ctx.resource_resolver()?;
         sync_many(
             ctx.syncer.clone(),
+            resolver,
             agent.clone(),
             sync_canisters,
             environment_selection.name().to_owned(),
@@ -499,7 +500,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             canister_ids,
             args.proxy,
             ctx.debug,
-            &pkg_cache,
         )
         .await?;
     }

@@ -111,6 +111,20 @@ pub struct Context {
 }
 
 impl Context {
+    /// Build a resolver for the project's remote resources — recipe templates
+    /// and plugin wasms — backed by the package cache and an HTTP client.
+    pub fn resource_resolver(
+        &self,
+    ) -> Result<Arc<dyn crate::canister::recipe::RemoteResourceResolve>, crate::fs::lock::LockError>
+    {
+        Ok(Arc::new(
+            crate::canister::recipe::resolver::ResourceResolver {
+                http_client: reqwest::Client::new(),
+                pkg_cache: self.dirs.package_cache()?,
+            },
+        ))
+    }
+
     /// Gets an identity based on the provided identity selection.
     // TODO: refactor the whole codebase to use this method instead of directly accessing `ctx.identity.load()`
     pub async fn get_identity(

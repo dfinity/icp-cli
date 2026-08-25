@@ -10,8 +10,8 @@
 //! the cache write waits.
 
 pub use icp_deploy_canister::canister::recipe::{
-    FetchedRecipe, RecipeContext, RemoteResourceResolve, RenderRecipeError, ResolveError,
-    render_recipe,
+    FetchedRecipe, NoResolve, RecipeContext, RemoteResourceResolve, RenderRecipeError,
+    ResolveError, render_recipe,
 };
 
 pub mod resolver;

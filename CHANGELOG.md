@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+* feat: a canister that uses a `recipe` can now declare its own `sync` steps, which previously was rejected outright. They run after the sync steps the recipe renders, so a recipe's post-deployment work stays intact and yours is appended to it. `recipe` and `build` remain mutually exclusive.
+
 # v1.4.0
 
 * feat: a canister can now declare `upgrade_args` alongside `init_args`, in its own manifest and as a per-canister environment override. It is passed when `icp deploy` upgrades the canister, where `init_args` is passed when it installs or reinstalls it. It takes exactly the forms `init_args` does (inline Candid string, or `{ value | path, format }`), and paths resolve against the canister's own directory the same way. A canister that declares no `upgrade_args` is upgraded with its `init_args`, as before, and `--args` / `--args-file` still override whichever applies.

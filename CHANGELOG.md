@@ -9,6 +9,7 @@ air-gapped signing
 # Unreleased
 
 * feat(sync-plugin): `dirs:` and `files:` on a `plugin` sync step may now name anything inside the project, not just paths below the canister's own directory. Entries are still written relative to the canister directory, but may rise out of it — `dirs: ["../shared/assets"]` — so several canisters can be handed the same tree without duplicating it. The project directory is the boundary: an entry that resolves above it is rejected before the plugin runs, as is an absolute one, and an entry that is (or traverses) a symlink is still rejected outright. The plugin sees each directory at the path the manifest wrote, `..` and all.
+* feat: a canister that uses a `recipe` can now declare its own `sync` steps, which previously was rejected outright. They run after the sync steps the recipe renders, so a recipe's post-deployment work stays intact and yours is appended to it. `recipe` and `build` remain mutually exclusive.
 
 # v1.4.0
 

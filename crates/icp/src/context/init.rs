@@ -3,7 +3,7 @@ use std::{env::current_dir, sync::Arc};
 use snafu::prelude::*;
 
 use crate::canister::build::Builder;
-use crate::canister::recipe::fetch::RecipeFetcher;
+use crate::canister::recipe::resolver::ResourceResolver;
 use crate::canister::sync::Syncer;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
@@ -90,7 +90,7 @@ pub fn initialize(
     let pkg_cache = dirs.package_cache().context(PackageCacheSnafu)?;
 
     // Recipes
-    let recipe = Arc::new(RecipeFetcher {
+    let recipe = Arc::new(ResourceResolver {
         http_client,
         pkg_cache,
     });
@@ -99,7 +99,7 @@ pub fn initialize(
     let builder = Arc::new(Builder);
 
     // Canister syncer
-    let syncer = Arc::new(Syncer::host());
+    let syncer = Arc::new(Syncer);
 
     // Project loader
     let pload = ProjectLoadImpl {

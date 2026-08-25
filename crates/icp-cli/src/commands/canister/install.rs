@@ -183,6 +183,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         }
     }
 
+    // Install the bytes read above, not a fresh read of the same source, so the
+    // module installed is the one the Candid check ran against.
     install_canister(
         &agent,
         args.proxy,

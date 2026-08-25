@@ -593,13 +593,14 @@ async fn sync(
         .into_iter()
         .collect();
 
-    let pkg_cache = ctx.dirs.package_cache()?;
+    let resolver = ctx.resource_resolver()?;
     let project_dir = ctx.project.load().await?.dir;
     let urls = ctx.network.urls(&env.network).await?;
 
     let phase = reporter.task(Task::phase("Syncing canisters:"));
     let result = sync_many(
         ctx.syncer.clone(),
+        resolver,
         agent.clone(),
         sync_canisters,
         project_dir,
@@ -608,7 +609,6 @@ async fn sync(
         urls,
         canister_ids,
         proxy,
-        &pkg_cache,
         &phase.reporter(),
     )
     .await;

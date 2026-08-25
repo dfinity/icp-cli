@@ -1,22 +1,19 @@
-//! Stage two of recipe resolution: turn template text into build/sync steps.
-
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use handlebars::{Context, Handlebars, Helper, HelperDef, HelperResult, Output, RenderContext};
 use serde::Deserialize;
 use snafu::prelude::*;
-use tracing::debug;
 
 use crate::manifest::{
+    adapter::prebuilt::SourceField,
     canister::{BuildSteps, SyncSteps},
     recipe::{Recipe, RecipeType},
 };
+use crate::prelude::*;
+use crate::sync_exec::StepProgress;
 
-/// Describes the canister being built, for the render stage.
-///
-/// Belongs to rendering alone: [`Resolve::resolve`](super::Resolve::resolve) no
-/// longer takes it, since fetching a template does not depend on which canister
-/// the template is for. Only [`render_recipe`] consumes it.
+/// Context passed to a recipe resolver, describing the canister being built.
 ///
 /// Serializes to the shape injected into recipe templates under the `_` namespace:
 ///
@@ -44,14 +41,82 @@ impl RecipeContext {
     }
 }
 
+/// Fetches the remote resources a project references — recipe templates and
+/// plugin wasms — retrieving them over HTTP and caching as needed.
+///
+/// The concrete resolver (which owns the HTTP client and the package cache)
+/// lives in the host `icp` crate; this crate defines the interface, and renders
+/// fetched recipe templates itself (see [`render_recipe`]), so that
+/// consolidation and sync can call an injected resolver.
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
+pub trait RemoteResourceResolve: Sync + Send {
+    /// Fetch a recipe's Handlebars template, returning its raw source. Callers
+    /// render it into build/sync steps with [`render_recipe`], then hand the
+    /// result back to [`commit_recipe`](Self::commit_recipe).
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, ResolveError>;
+
+    /// Accept a template from [`resolve_recipe`](Self::resolve_recipe) once it
+    /// has rendered successfully, letting the resolver commit whatever it held
+    /// back — for the host resolver, writing a fresh download to the package
+    /// cache. A resolver that never sets [`FetchedRecipe::deferred`] has nothing
+    /// to commit and implements this as `Ok(())`.
+    async fn commit_recipe(
+        &self,
+        recipe: &Recipe,
+        fetched: &FetchedRecipe,
+    ) -> Result<(), ResolveError>;
+
+    /// Resolve a plugin wasm `source` (relative to `base_dir`) to a location the
+    /// host's [`PluginExecutor`](crate::sync_exec::PluginExecutor) can load,
+    /// verifying `sha256` and caching a remote download. `progress` receives
+    /// status lines.
+    async fn resolve_wasm(
+        &self,
+        source: &SourceField,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        progress: Option<&dyn StepProgress>,
+    ) -> Result<PathBuf, ResolveError>;
+}
+
+/// A recipe template retrieved by a [`RemoteResourceResolve`].
+///
+/// A resolver that caches downloads must not commit one before the template is
+/// known to render: for an unpinned URL a single malformed response would
+/// otherwise become the cached entry that every later project load reuses. Such
+/// a resolver returns the template with `deferred` set and waits for
+/// [`RemoteResourceResolve::commit_recipe`].
+pub struct FetchedRecipe {
+    /// Raw Handlebars template source.
+    pub template: String,
+
+    /// Whether the resolver is holding work back until the caller confirms the
+    /// template renders.
+    pub deferred: bool,
+}
+
+#[derive(Debug, Snafu)]
+pub enum ResolveError {
+    /// The injected resolver failed. The concrete source (e.g. a fetch/cache
+    /// error from the host resolver) is boxed because this crate does not depend
+    /// on the resolver's implementation.
+    #[snafu(display("failed to fetch recipe template"))]
+    Resolve {
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
+
+    #[snafu(display("failed to resolve plugin wasm"))]
+    ResolveWasm {
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
+}
+
 #[derive(Debug, Snafu)]
 pub enum RenderRecipeError {
     #[snafu(display("recipe template for '{recipe}' failed to render"))]
     Render {
-        // Boxed to keep `Result<_, RenderRecipeError>` small; `RenderError`
-        // alone is well over a hundred bytes.
-        #[snafu(source(from(handlebars::RenderError, Box::new)))]
-        source: Box<handlebars::RenderError>,
+        source: handlebars::RenderError,
         recipe: RecipeType,
     },
 
@@ -67,6 +132,7 @@ pub enum RenderRecipeError {
 /// The template is rendered with the recipe's `configuration` plus the reserved
 /// `_` namespace (the `_` key always overrides any user-supplied value), then the
 /// resulting YAML is parsed. A recipe may only produce `build` and `sync`.
+#[allow(clippy::result_large_err)]
 pub fn render_recipe(
     template: &str,
     recipe: &Recipe,
@@ -84,18 +150,11 @@ pub fn render_recipe(
     let mut render_context: HashMap<String, serde_yaml::Value> = recipe.configuration.clone();
     render_context.insert("_".to_string(), recipe_context.to_yaml());
 
-    debug!("Rendering recipe template:\n------\n{template}\n------");
-
     let out = reg
         .render_template(template, &render_context)
         .context(RenderSnafu {
             recipe: recipe.recipe_type.clone(),
         })?;
-
-    // Logged rather than carried in `Parse` below: a recipe author debugging a
-    // malformed render needs the whole document, which is too much for an error
-    // message.
-    debug!("Rendered recipe template:\n------\n{out}\n------");
 
     // Recipes can only render `build`/`sync`.
     #[derive(Deserialize)]
@@ -125,14 +184,9 @@ impl HelperDef for ReplaceHelper {
         _: &mut RenderContext<'reg, 'rc>,
         out: &mut dyn Output,
     ) -> HelperResult {
-        let (from, to) = (
-            h.param(0).unwrap().render(), // from
-            h.param(1).unwrap().render(), // to
-        );
-
+        let (from, to) = (h.param(0).unwrap().render(), h.param(1).unwrap().render());
         let v = h.param(2).unwrap().render();
         out.write(&v.replace(&from, &to))?;
-
         Ok(())
     }
 }

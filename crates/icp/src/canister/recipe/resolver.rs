@@ -1,8 +1,7 @@
-//! Stage one of recipe resolution: get the template text.
-
 use std::{str::FromStr, string::FromUtf8Error};
 
 use async_trait::async_trait;
+use icp_deploy_canister::sync_exec::StepProgress;
 use reqwest::{Method, Request, Url};
 use sha2::{Digest, Sha256};
 use snafu::prelude::*;
@@ -19,51 +18,25 @@ use crate::{
     prelude::*,
 };
 
-use super::{CommitSnafu, FetchSnafu, Resolve, ResolveError};
+use super::{FetchedRecipe, RemoteResourceResolve, ResolveError};
+use crate::manifest::adapter::prebuilt::SourceField;
 
-/// Fetches recipe templates over HTTP, caching downloads in the package cache.
-/// Template *rendering* is a separate stage
-/// ([`render_recipe`](super::render_recipe)); this only produces the raw template
-/// text.
-pub struct RecipeFetcher {
+/// Fetches recipe templates and plugin wasms over HTTP, caching downloads in the
+/// package cache. Template *rendering* is the library's job
+/// ([`icp_deploy_canister::canister::recipe::render_recipe`]); this only produces
+/// the raw template text.
+///
+/// Whether a download is worth keeping is not known until it renders, so an
+/// *unpinned* download is marked [`FetchedRecipe::deferred`] and only written to
+/// the cache when the caller reports back through
+/// [`commit_recipe`](RemoteResourceResolve::commit_recipe). A checksummed
+/// download is cached during the fetch — the checksum already proves the bytes
+/// are the ones that were asked for.
+pub struct ResourceResolver {
     /// Http client for fetching remote recipe templates
     pub http_client: reqwest::Client,
     /// Package cache for caching downloaded recipe templates
     pub pkg_cache: PackageCache,
-}
-
-/// The result of the fetch stage.
-pub struct Fetched {
-    /// Raw Handlebars template source.
-    pub template: String,
-
-    /// A cache write deliberately held back until the template is known to
-    /// render; `None` when there is nothing to cache (a local file or a cache
-    /// hit) or when the download was already cached because it was checksummed.
-    ///
-    /// Pass to [`Resolve::commit`] after [`render_recipe`](super::render_recipe)
-    /// succeeds.
-    pub pending_cache: Option<PendingCache>,
-}
-
-/// A cache write for an unpinned download, held until the template renders.
-///
-/// A checksummed download is cached the moment its checksum verifies: the
-/// checksum is what establishes the bytes are the ones that were asked for, and
-/// refetching would only produce the same bytes again. An unpinned download has
-/// no such guarantee — caching it before it is known good would let a single bad
-/// response become sticky, and every later resolution would read those bytes
-/// back instead of refetching.
-pub struct PendingCache {
-    target: CacheTarget,
-    hash: [u8; 32],
-    template: String,
-}
-
-/// Where a fetched template belongs in the package cache.
-enum CacheTarget {
-    Uri(String),
-    Registry { package: String, version: String },
 }
 
 enum TemplateSource {
@@ -110,27 +83,18 @@ pub enum RecipeFetchError {
     LockCache { source: crate::fs::lock::LockError },
 }
 
-impl RecipeFetcher {
+impl ResourceResolver {
     /// Fetch a recipe's Handlebars template text: read a local file, or fetch a
-    /// remote URL or registry recipe. Verifies `sha256` when set.
+    /// remote URL or registry recipe (serving it from the package cache when
+    /// possible). Verifies `sha256` when set.
     ///
-    /// A checksummed download is cached here. An unpinned one is returned as a
-    /// [`PendingCache`] for the caller to commit once it renders — see
-    /// [`PendingCache`] for why.
-    async fn fetch_recipe(&self, recipe: &Recipe) -> Result<Fetched, RecipeFetchError> {
-        // Determine the template source
-        let tmpl_source = match &recipe.recipe_type {
-            RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
-            RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
-            RecipeType::Registry {
-                name,
-                recipe,
-                version,
-            } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
-        };
-
-        // Retrieve the template, using cache for remote/registry sources
-        let (tmpl, should_cache) = match &tmpl_source {
+    /// A checksummed download is cached here. An unpinned one is returned with
+    /// [`FetchedRecipe::deferred`] set, for the caller to commit once it renders.
+    async fn fetch_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, RecipeFetchError> {
+        // Retrieve the template, using cache for remote/registry sources. The
+        // flag says whether the bytes were freshly downloaded, and so are the
+        // only ones that could still need caching.
+        let (tmpl, downloaded) = match &template_source(&recipe.recipe_type) {
             TemplateSource::LocalPath(path) => {
                 let bytes = read(path).context(ReadFileSnafu)?;
                 (parse_bytes_to_string(bytes)?, false)
@@ -188,69 +152,46 @@ impl RecipeFetcher {
             }
         };
 
-        let hash = if let Some(sha256) = &recipe.sha256 {
-            verify_checksum(tmpl.as_bytes(), sha256)?
-        } else {
-            Sha256::digest(tmpl.as_bytes()).into()
-        };
-
-        // Nothing was downloaded (local file, or a cache hit): nothing to cache.
-        if !should_cache {
-            return Ok(Fetched {
+        if let Some(sha256) = &recipe.sha256 {
+            verify_checksum(tmpl.as_bytes(), sha256)?;
+            // The checksum matched, so refetching could only produce these same
+            // bytes: there is nothing to gain by waiting for a render that may
+            // never succeed.
+            if downloaded {
+                self.cache_recipe(recipe, &tmpl).await?;
+            }
+            return Ok(FetchedRecipe {
                 template: tmpl,
-                pending_cache: None,
+                deferred: false,
             });
         }
 
-        let target = match tmpl_source {
-            TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
-            TemplateSource::RemoteUrl(u) => CacheTarget::Uri(u),
-            TemplateSource::Registry(registry, recipe_name, version) => CacheTarget::Registry {
-                package: format!("@{registry}/{recipe_name}"),
-                version,
-            },
-        };
-
-        let pending = PendingCache {
-            target,
-            hash,
+        Ok(FetchedRecipe {
             template: tmpl,
-        };
-
-        // A checksummed download is trustworthy the moment the checksum matches,
-        // so cache it now. An unpinned one waits for a successful render.
-        if recipe.sha256.is_some() {
-            self.write_cache(&pending).await?;
-            return Ok(Fetched {
-                template: pending.template,
-                pending_cache: None,
-            });
-        }
-
-        Ok(Fetched {
-            template: pending.template.clone(),
-            pending_cache: Some(pending),
+            deferred: downloaded,
         })
     }
 
-    /// Write a fetched template into the package cache.
-    async fn write_cache(&self, pending: &PendingCache) -> Result<(), RecipeFetchError> {
-        let hash = hex::encode(pending.hash);
-        let bytes = pending.template.as_bytes();
-        match &pending.target {
-            CacheTarget::Uri(u) => {
+    /// Cache a template downloaded by [`Self::fetch_recipe`]. For an unpinned
+    /// download this runs only after the caller has rendered it, so a malformed
+    /// response never becomes the entry that later project loads reuse.
+    async fn cache_recipe(&self, recipe: &Recipe, tmpl: &str) -> Result<(), RecipeFetchError> {
+        let hash = hex::encode(Sha256::digest(tmpl.as_bytes()));
+        match template_source(&recipe.recipe_type) {
+            TemplateSource::LocalPath(_) => unreachable!("local files are never cached"),
+            TemplateSource::RemoteUrl(u) => {
                 self.pkg_cache
                     .with_write(async |w| {
-                        cache_uri_recipe(w, u, &hash, bytes).context(CacheRecipeSnafu)?;
-                        Ok(())
+                        cache_uri_recipe(w, &u, &hash, tmpl.as_bytes()).context(CacheRecipeSnafu)
                     })
                     .await
                     .context(LockCacheSnafu)??;
             }
-            CacheTarget::Registry { package, version } => {
+            TemplateSource::Registry(registry, recipe_name, version) => {
+                let package = format!("@{registry}/{recipe_name}");
                 self.pkg_cache
                     .with_write(async |w| {
-                        cache_registry_recipe(w, package, version, &hash, bytes)
+                        cache_registry_recipe(w, &package, &version, &hash, tmpl.as_bytes())
                             .context(CacheRecipeSnafu)
                     })
                     .await
@@ -284,24 +225,61 @@ impl RecipeFetcher {
 }
 
 #[async_trait]
-impl Resolve for RecipeFetcher {
-    async fn resolve(&self, recipe: &Recipe) -> Result<Fetched, ResolveError> {
-        self.fetch_recipe(recipe).await.context(FetchSnafu)
+impl RemoteResourceResolve for ResourceResolver {
+    async fn resolve_recipe(&self, recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
+        self.fetch_recipe(recipe)
+            .await
+            .map_err(|source| ResolveError::Resolve {
+                source: Box::new(source),
+            })
     }
 
-    async fn commit(&self, pending: PendingCache) -> Result<(), ResolveError> {
-        self.write_cache(&pending).await.context(CommitSnafu)
+    async fn commit_recipe(
+        &self,
+        recipe: &Recipe,
+        fetched: &FetchedRecipe,
+    ) -> Result<(), ResolveError> {
+        if !fetched.deferred {
+            return Ok(());
+        }
+        self.cache_recipe(recipe, &fetched.template)
+            .await
+            .map_err(|source| ResolveError::Resolve {
+                source: Box::new(source),
+            })
+    }
+
+    async fn resolve_wasm(
+        &self,
+        source: &SourceField,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        progress: Option<&dyn StepProgress>,
+    ) -> Result<PathBuf, ResolveError> {
+        crate::canister::wasm::resolve(source, base_dir, sha256, progress, &self.pkg_cache)
+            .await
+            .map_err(|source| ResolveError::ResolveWasm {
+                source: Box::new(source),
+            })
+    }
+}
+
+/// Classify where a recipe's template comes from.
+fn template_source(recipe_type: &RecipeType) -> TemplateSource {
+    match recipe_type {
+        RecipeType::File(path) => TemplateSource::LocalPath(Path::new(&path).into()),
+        RecipeType::Url(url) => TemplateSource::RemoteUrl(url.to_owned()),
+        RecipeType::Registry {
+            name,
+            recipe,
+            version,
+        } => TemplateSource::Registry(name.to_owned(), recipe.to_owned(), version.to_owned()),
     }
 }
 
 /// Helper function to verify sha256 checksum of recipe template bytes
-fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], RecipeFetchError> {
-    let actual_hash = {
-        let mut h = Sha256::new();
-        h.update(bytes);
-        h.finalize()
-    };
-    let actual = hex::encode(actual_hash);
+fn verify_checksum(bytes: &[u8], expected: &str) -> Result<(), RecipeFetchError> {
+    let actual = hex::encode(Sha256::digest(bytes));
     if actual != expected {
         return ChecksumMismatchSnafu {
             expected: expected.to_string(),
@@ -309,7 +287,7 @@ fn verify_checksum(bytes: &[u8], expected: &str) -> Result<[u8; 32], RecipeFetch
         }
         .fail();
     }
-    Ok(actual_hash.into())
+    Ok(())
 }
 
 /// Helper function to parse bytes into a UTF-8 string
@@ -320,10 +298,11 @@ fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, RecipeFetchError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canister::recipe::{RecipeContext, render_recipe};
     use crate::manifest::recipe::{Recipe, RecipeType};
 
-    fn fetcher(cache_dir: &Path) -> RecipeFetcher {
-        RecipeFetcher {
+    fn resolver(cache_dir: &Path) -> ResourceResolver {
+        ResourceResolver {
             http_client: reqwest::Client::new(),
             pkg_cache: PackageCache::new(cache_dir.to_owned()).unwrap(),
         }
@@ -349,15 +328,12 @@ mod tests {
             sha256: None,
         };
 
-        let fetched = fetcher(&tmp.path().join("pkg"))
+        let fetched = resolver(&tmp.path().join("pkg"))
             .fetch_recipe(&recipe)
             .await
             .unwrap();
         assert_eq!(fetched.template, body);
-        assert!(
-            fetched.pending_cache.is_none(),
-            "local files are never cached"
-        );
+        assert!(!fetched.deferred, "a local file has nothing to cache");
     }
 
     /// A sha256 that does not match the template contents is rejected.
@@ -374,7 +350,9 @@ mod tests {
         };
 
         assert!(matches!(
-            fetcher(&tmp.path().join("pkg")).fetch_recipe(&recipe).await,
+            resolver(&tmp.path().join("pkg"))
+                .fetch_recipe(&recipe)
+                .await,
             Err(RecipeFetchError::ChecksumMismatch { .. })
         ));
     }
@@ -431,7 +409,7 @@ mod tests {
 
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let cache_dir = tmp.path().join("pkg");
-        let f = fetcher(&cache_dir);
+        let r = resolver(&cache_dir);
         let recipe = Recipe {
             recipe_type: RecipeType::Url(url),
             configuration: Default::default(),
@@ -439,18 +417,18 @@ mod tests {
         };
 
         // Fetch succeeds and hands back a held-back cache write.
-        let fetched = f.fetch_recipe(&recipe).await.expect("first fetch");
+        let fetched = r.fetch_recipe(&recipe).await.expect("first fetch");
         assert!(
-            fetched.pending_cache.is_some(),
+            fetched.deferred,
             "an unpinned download must defer its cache write"
         );
 
         // Rendering fails, so the caller never commits.
-        let ctx = super::super::RecipeContext {
+        let ctx = RecipeContext {
             canister_name: "c".to_owned(),
         };
         assert!(
-            super::super::render_recipe(&fetched.template, &recipe, &ctx).is_err(),
+            render_recipe(&fetched.template, &recipe, &ctx).is_err(),
             "fixture template must fail to render"
         );
 
@@ -463,7 +441,7 @@ mod tests {
         // bad bytes from cache.
         assert!(
             matches!(
-                f.fetch_recipe(&recipe).await,
+                r.fetch_recipe(&recipe).await,
                 Err(RecipeFetchError::HttpStatus { status: 500, .. })
             ),
             "second resolution must refetch, not read the uncommitted template back"
@@ -484,26 +462,23 @@ mod tests {
 
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let cache_dir = tmp.path().join("pkg");
-        let f = fetcher(&cache_dir);
+        let r = resolver(&cache_dir);
         let recipe = Recipe {
             recipe_type: RecipeType::Url(url),
             configuration: Default::default(),
             sha256: None,
         };
 
-        let fetched = f.fetch_recipe(&recipe).await.expect("first fetch");
-        let pending = fetched.pending_cache.expect("unpinned defers its write");
-        f.write_cache(&pending).await.expect("commit");
+        let fetched = r.fetch_recipe(&recipe).await.expect("first fetch");
+        assert!(fetched.deferred, "unpinned defers its write");
+        r.commit_recipe(&recipe, &fetched).await.expect("commit");
 
         assert!(cache_has_template(&cache_dir));
 
         // Served from cache now, even though the server would answer 500.
-        let again = f.fetch_recipe(&recipe).await.expect("second fetch");
+        let again = r.fetch_recipe(&recipe).await.expect("second fetch");
         assert_eq!(again.template, fetched.template);
-        assert!(
-            again.pending_cache.is_none(),
-            "a cache hit has nothing to commit"
-        );
+        assert!(!again.deferred, "a cache hit has nothing to commit");
     }
 
     /// A checksummed download is cached during the fetch: the checksum already
@@ -516,16 +491,16 @@ mod tests {
 
         let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
         let cache_dir = tmp.path().join("pkg");
-        let f = fetcher(&cache_dir);
+        let r = resolver(&cache_dir);
         let recipe = Recipe {
             recipe_type: RecipeType::Url(url),
             configuration: Default::default(),
             sha256: Some(hex::encode(Sha256::digest(UNRENDERABLE.as_bytes()))),
         };
 
-        let fetched = f.fetch_recipe(&recipe).await.expect("first fetch");
+        let fetched = r.fetch_recipe(&recipe).await.expect("first fetch");
         assert!(
-            fetched.pending_cache.is_none(),
+            !fetched.deferred,
             "a checksummed download is cached during the fetch"
         );
         assert!(cache_has_template(&cache_dir));

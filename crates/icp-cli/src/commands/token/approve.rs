@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
 use crate::commands::token::format_expiry;
-use crate::operations::token::approve::approve;
+use icp::operations::token::approve::approve;
 
 /// Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
 ///

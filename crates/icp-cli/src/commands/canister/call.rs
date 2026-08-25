@@ -18,14 +18,15 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::warn;
 use url::Url;
 
+use icp::operations::{
+    create::shell_quote, proxy::update_or_proxy_raw, wasm::extract_candid_service,
+};
+
 use crate::{
-    commands::args::{self, load_args},
-    operations::call_output::{
+    call_output::{
         CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
     },
-    operations::create::shell_quote,
-    operations::proxy::update_or_proxy_raw,
-    operations::wasm::extract_candid_service,
+    commands::args::{self, load_args},
 };
 
 /// Make a canister call

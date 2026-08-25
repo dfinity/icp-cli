@@ -9,7 +9,7 @@ use wasmparser::{Parser, Payload};
 /// `icp:public candid:service` or `icp:private candid:service`. This function
 /// parses the module (decompressing gzip if needed) and returns the interface
 /// text if found.
-pub(crate) fn extract_candid_service(wasm: &[u8]) -> Option<String> {
+pub fn extract_candid_service(wasm: &[u8]) -> Option<String> {
     let wasm = maybe_decompress_gzip(wasm)?;
     for payload in Parser::new(0).parse_all(&wasm) {
         if let Ok(Payload::CustomSection(reader)) = payload {

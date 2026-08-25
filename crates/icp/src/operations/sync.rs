@@ -1,12 +1,12 @@
-use candid::Principal;
-use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::Agent;
-use icp::{
+use crate::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
     package::PackageCache,
     prelude::PathBuf,
 };
+use candid::Principal;
+use futures::{StreamExt, stream::FuturesOrdered};
+use ic_agent::Agent;
 use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
 use snafu::prelude::*;
 use std::collections::BTreeMap;
@@ -79,7 +79,7 @@ fn error_causes(error: &dyn std::error::Error) -> Vec<String> {
 }
 
 /// Orchestrates syncing multiple canisters concurrently.
-pub(crate) async fn sync_many(
+pub async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,

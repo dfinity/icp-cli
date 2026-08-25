@@ -9,8 +9,9 @@ use icp::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 
+use icp::operations::{proxy_management, sync::sync_many};
+
 use crate::{
-    operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
     render::rendered,
 };

@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 
+use crate::Canister;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
-use icp::Canister;
 use icp_events::{Reporter, TaskKind, TaskOutcome};
 use snafu::Snafu;
 use tracing::error;
@@ -29,7 +29,7 @@ pub struct SetBindingEnvVarsManyError {
     names: Vec<String>,
 }
 
-pub(crate) async fn set_env_vars_for_canister(
+pub async fn set_env_vars_for_canister(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: &Principal,
@@ -70,7 +70,7 @@ pub(crate) async fn set_env_vars_for_canister(
 }
 
 /// Orchestrates setting environment variables for multiple canisters concurrently.
-pub(crate) async fn set_binding_env_vars_many(
+pub async fn set_binding_env_vars_many(
     agent: Agent,
     proxy: Option<Principal>,
     environment_name: &str,

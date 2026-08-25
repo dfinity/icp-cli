@@ -14,7 +14,8 @@ use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
-use crate::{commands::args, operations::proxy_management};
+use crate::commands::args;
+use icp::operations::proxy_management;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {

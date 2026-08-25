@@ -47,8 +47,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let unresolved =
-        crate::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister, &ids)
-            .await?;
+        icp::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister, &ids).await?;
     for controller_name in &unresolved {
         warn!(
             "Controller canister '{controller_name}' for '{name}' has not been created yet; \

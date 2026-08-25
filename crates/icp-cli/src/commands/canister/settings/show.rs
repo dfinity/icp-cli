@@ -4,7 +4,9 @@ use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings, L
 use icp::context::Context;
 use std::fmt::Write;
 
-use crate::{commands::args::CanisterCommandArgs, operations::proxy_management};
+use icp::operations::proxy_management;
+
+use crate::commands::args::CanisterCommandArgs;
 
 /// Show the settings of a canister.
 ///

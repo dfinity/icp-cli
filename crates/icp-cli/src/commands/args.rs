@@ -1,17 +1,14 @@
 use std::fmt::Display;
-use std::str::FromStr;
 
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use ic_ledger_types::AccountIdentifier;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
 use icp::{InitArgs, fs};
-use icrc_ledger_types::icrc1::account::Account;
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
@@ -171,45 +168,7 @@ impl Display for Canister {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum FlexibleAccountId {
-    Icrc1(Account),
-    IcpLedger(AccountIdentifier),
-}
-
-impl FromStr for FlexibleAccountId {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try parsing as ICP ledger account (hex string)
-        if let Ok(bytes) = hex::decode(s) {
-            if bytes.len() == 32 {
-                let mut array = [0u8; 32];
-                array.copy_from_slice(&bytes);
-                return Ok(FlexibleAccountId::IcpLedger(
-                    AccountIdentifier::from_slice(&array).unwrap(),
-                ));
-            } else {
-                return Err(format!("Invalid ICP ledger account hex string: {s}"));
-            }
-        }
-        // Try parsing as ICRC1 account
-        if let Ok(account) = s.parse::<Account>() {
-            return Ok(FlexibleAccountId::Icrc1(account));
-        }
-
-        Err(format!("Invalid principal / account identifier: {s}"))
-    }
-}
-
-impl Display for FlexibleAccountId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FlexibleAccountId::Icrc1(account) => account.fmt(f),
-            FlexibleAccountId::IcpLedger(bytes) => hex::encode(bytes).fmt(f),
-        }
-    }
-}
+pub(crate) use icp::parsers::FlexibleAccountId;
 
 /// Grouped flags for specifying canister install arguments, shared by `canister install`, and `deploy`.
 #[derive(Args, Clone, Debug, Default)]

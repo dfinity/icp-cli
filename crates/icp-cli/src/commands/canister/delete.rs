@@ -4,10 +4,9 @@ use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
 use icp::context::{CanisterSelection, Context};
 
-use crate::{
-    commands::args,
-    operations::{proxy_management, recover_cycles},
-};
+use icp::operations::{proxy_management, recover_cycles};
+
+use crate::commands::args;
 
 /// Delete a canister from a network.
 ///
@@ -50,7 +49,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         let destination = agent
             .get_principal()
             .map_err(|e| anyhow!("could not determine caller principal: {e}"))?;
-        recover_cycles::recover_cycles_before_delete(&agent, args.proxy, cid, destination).await?;
+        recover_cycles::recover_cycles_before_delete(
+            &agent,
+            args.proxy,
+            cid,
+            destination,
+            crate::artifacts::get_recover_cycles_wasm(),
+        )
+        .await?;
     }
 
     // delete_canister requires the canister be stopped; stopping an

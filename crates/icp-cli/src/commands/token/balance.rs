@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use crate::operations::token::balance::get_balance;
+use icp::operations::token::balance::get_balance;
 
 /// Display the token balance on the ledger (default token: icp)
 #[derive(Args, Clone, Debug)]

@@ -20,14 +20,19 @@ cargo fmt && cargo clippy            # Run after changes pass tests
 
 ### Workspace Structure
 
-- **`crates/icp-cli`**: Main CLI binary (`icp`) with command implementations
-- **`crates/icp`**: Core library with project model, manifest loading, canister management, network configuration
+- **`crates/icp-cli`**: Main CLI binary (`icp`): argument parsing, command implementations, and all terminal presentation
+- **`crates/icp`**: Core library with project model, manifest loading, canister management, network configuration, and the operations that do the work
+- **`crates/icp-events`**: Typed progress events passed from operations to the CLI's renderers
 - **`crates/icp-canister-interfaces`**: Canister interface definitions for ICP system canisters
 - **`crates/schema-gen`**: JSON schema generation for manifest validation
 
 ### Command Structure
 
 Commands are in `crates/icp-cli/src/commands/`, each as a module with an `exec()` function receiving a `Context` (from `crates/icp/src/context/`). Dispatched via `clap` in `main.rs`. Traits like `ProjectLoad` and `ProjectRootLocate` enable dependency injection for testing.
+
+### Commands vs. operations
+
+Commands own the user experience: parsing arguments, choosing a renderer, and printing results. The real work lives in `crates/icp/src/operations/` — building, syncing, installing, and so on. Operations never print or draw: they report progress as [`icp-events`](crates/icp-events) events through a `Reporter` and return typed errors, and `crates/icp-cli/src/render/` decides how any of it looks. Anything a command needs to display comes back as event data or a return value, never as a formatted string from an operation.
 
 See `.claude/architecture.md` for detailed subsystem documentation (manifests, build adapters, recipes, networks, identity).
 

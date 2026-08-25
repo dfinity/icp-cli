@@ -5,8 +5,9 @@ use icp::context::{Context, EnvironmentSelection};
 
 use tracing::info;
 
+use icp::operations::build::build_many;
+
 use crate::{
-    operations::build::build_many,
     options::{EnvironmentOpt, arg_struct_change_help},
     render::rendered,
 };

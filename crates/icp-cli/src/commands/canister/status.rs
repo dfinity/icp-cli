@@ -13,11 +13,9 @@ use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
 
-use crate::{
-    commands::args,
-    operations::{proxy::UpdateOrProxyError, proxy_management},
-    options,
-};
+use icp::operations::{proxy::UpdateOrProxyError, proxy_management};
+
+use crate::{commands::args, options};
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";

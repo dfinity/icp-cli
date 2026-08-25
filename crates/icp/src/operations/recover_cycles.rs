@@ -1,9 +1,10 @@
 //! Recover a canister's liquid cycles before `icp canister delete` burns them.
 //!
 //! Deleting a canister destroys its remaining cycles. To avoid this we
-//! force-install the tiny [`recover-cycles-canister`](crate::artifacts::get_recover_cycles_wasm)
-//! module (which deposits the canister's liquid cycles to a destination account
-//! on the cycles ledger), invoke it, then let the caller proceed with deletion.
+//! force-install the tiny recover-cycles-canister module supplied by the
+//! caller (the CLI embeds it at build time; it deposits the canister's liquid
+//! cycles to a destination account on the cycles ledger), invoke it, then let
+//! the caller proceed with deletion.
 //!
 //! Failure handling matches the deliberate policy: a balance too small to
 //! recover is a non-fatal warning (those cycles would burn anyway), while a
@@ -21,7 +22,7 @@ use snafu::{ResultExt, Snafu};
 use tracing::{info, warn};
 
 use super::proxy::UpdateOrProxyError;
-use crate::{artifacts, operations::proxy_management};
+use crate::operations::proxy_management;
 
 /// Total cycle balance (from `canister_status`) at or below which recovery is
 /// skipped as not worth the reinstall. Kept equal to RESERVE_MARGIN: a canister
@@ -30,7 +31,7 @@ use crate::{artifacts, operations::proxy_management};
 const RECOVERY_THRESHOLD: u128 = 50_000_000_000;
 
 #[derive(Debug, Snafu)]
-pub(crate) enum RecoverCyclesError {
+pub enum RecoverCyclesError {
     #[snafu(display("failed to query status of canister {canister_id} before cycle recovery"))]
     QueryStatus {
         canister_id: Principal,
@@ -105,11 +106,12 @@ enum RecoverResult {
 /// (install/start). The `recover_cycles` invocation itself is always a direct
 /// call; the deposit destination is baked into the install argument, so routing
 /// does not affect where the cycles land.
-pub(crate) async fn recover_cycles_before_delete(
+pub async fn recover_cycles_before_delete(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: Principal,
     destination: Principal,
+    recover_cycles_wasm: &[u8],
 ) -> Result<(), RecoverCyclesError> {
     let status = proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id })
         .await
@@ -156,7 +158,7 @@ pub(crate) async fn recover_cycles_before_delete(
         InstallCodeArgs {
             mode: CanisterInstallMode::Reinstall,
             canister_id: CanisterId::from(canister_id),
-            wasm_module: artifacts::get_recover_cycles_wasm().to_vec(),
+            wasm_module: recover_cycles_wasm.to_vec(),
             arg,
             sender_canister_version: None,
         },

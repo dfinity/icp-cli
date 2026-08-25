@@ -5,11 +5,11 @@ use num_bigint::ToBigInt;
 use phf::phf_map;
 use std::fmt;
 
-pub(crate) mod allowance;
-pub(crate) mod approve;
-pub(crate) mod balance;
-pub(crate) mod mint;
-pub(crate) mod transfer;
+pub mod allowance;
+pub mod approve;
+pub mod balance;
+pub mod mint;
+pub mod transfer;
 
 /// A compile-time map of token names to their corresponding ledger canister ID and optional info overrides.
 ///

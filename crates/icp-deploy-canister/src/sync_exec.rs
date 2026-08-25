@@ -11,7 +11,8 @@
 //!
 //! The two executors are separate traits because an environment can support one
 //! without the other. Script steps are host-only, and are rejected by
-//! [`crate::project::verify_sandbox`] before they reach an executor.
+//! [`crate::project::verify_sandbox`] before they reach an executor; [`NoScripts`]
+//! is the ready-made [`ScriptRunner`] for a host that has no subprocesses.
 
 use std::collections::BTreeMap;
 
@@ -327,6 +328,28 @@ pub trait ScriptRunner: Send + Sync {
         invocation: ScriptInvocation,
         progress: Option<&dyn StepProgress>,
     ) -> Result<Vec<String>, ScriptRunError>;
+}
+
+/// A [`ScriptRunner`] that always fails, for environments that don't support
+/// subprocess script sync steps.
+pub struct NoScripts;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("script sync steps are not supported in this environment"))]
+pub struct NoScriptsError;
+
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
+impl ScriptRunner for NoScripts {
+    async fn run_script(
+        &self,
+        _invocation: ScriptInvocation,
+        _progress: Option<&dyn StepProgress>,
+    ) -> Result<Vec<String>, ScriptRunError> {
+        Err(ScriptRunError {
+            source: Box::new(NoScriptsError),
+        })
+    }
 }
 
 #[cfg(test)]

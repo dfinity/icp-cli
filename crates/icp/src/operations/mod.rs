@@ -1,3 +1,4 @@
+pub mod access;
 pub mod binding_env_vars;
 pub mod build;
 pub mod bundle;

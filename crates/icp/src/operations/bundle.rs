@@ -29,8 +29,6 @@ use icp_sync_plugin::{covering_dirs, distinct_paths};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
-use icp_events::StepReporter;
-
 use crate::operations::task::Reporter;
 
 use crate::operations::build::{BuildManyError, build_many};
@@ -753,7 +751,7 @@ async fn prepare_plugin_step(
         &adapter.source,
         canister_path,
         adapter.sha256.as_deref(),
-        &StepReporter::null(),
+        None,
         pkg_cache,
     )
     .await

@@ -1,109 +1,75 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use candid::Principal;
 use ic_agent::Agent;
+use icp_deploy_canister::canister::recipe::RemoteResourceResolve;
+use icp_deploy_canister::sync_exec::{PluginInvocation, ScriptInvocation};
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
-use crate::manifest::canister::SyncStep;
-use crate::package::PackageCache;
-use crate::prelude::*;
-
 mod plugin;
-pub mod script;
-
-use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
-
-pub struct Params {
-    pub path: PathBuf,
-    /// The project (workspace root) directory. It bounds what a sync plugin may
-    /// read: a declared `dirs`/`files` entry may rise out of the canister
-    /// directory into the rest of the project, but not out of the project.
-    pub project_dir: PathBuf,
-    pub cid: Principal,
-    /// Fully-qualified store key of the canister being synced (e.g. `backend`,
-    /// or `services/open-crm:backend` for a canister in a subproject). Its namespace
-    /// prefix identifies which other canisters are in the same subproject.
-    pub name: String,
-    /// Name of the environment being synced (e.g. "local", "production").
-    /// Passed to sync plugin steps via `SyncExecInput`.
-    pub environment: String,
-    /// Name of the network (e.g. "local", "ic").
-    pub network: String,
-    /// IDs of all named canisters in the project for this environment.
-    pub canister_ids: BTreeMap<String, Principal>,
-    /// Proxy canister to route calls through, if `--proxy` was passed.
-    pub proxy: Option<Principal>,
-}
 
 #[derive(Debug, Snafu)]
 pub enum SynchronizeError {
     #[snafu(transparent)]
-    Script { source: ScriptRunError },
+    Script { source: super::script::ScriptError },
 
     #[snafu(transparent)]
     Plugin { source: plugin::PluginError },
 }
 
+/// Host execution of the two sync-step mechanisms that can't run inside a
+/// canister: WASI plugins (wasmtime) and subprocess scripts.
+///
+/// Step dispatch and *all* input derivation (plugin dirs/files, the `ICP_CLI_*`
+/// script environment) live in `icp-deploy-canister`; implementations here
+/// receive a fully-resolved [`PluginInvocation`] / [`ScriptInvocation`] and
+/// perform only the irreducible host action. This trait is the injection seam
+/// the [`crate::context::Context`] carries so tests can stub it out.
 #[async_trait]
 pub trait Synchronize: Sync + Send {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        step: &SyncStep,
-        params: &Params,
+        invocation: &PluginInvocation,
         agent: &Agent,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
+        resolver: &dyn RemoteResourceResolve,
+    ) -> Result<Vec<String>, SynchronizeError>;
+
+    async fn run_script(
+        &self,
+        invocation: &ScriptInvocation,
+        reporter: &StepReporter,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
 
-/// Dispatches each sync step to the machinery that runs it. Plugin steps run in
-/// the wasmtime WASI sandbox, which this drives directly; script steps go through
-/// an injected [`ScriptRunner`], since spawning a subprocess is not available
-/// everywhere.
-pub struct Syncer {
-    scripts: Arc<dyn ScriptRunner>,
-}
-
-impl Syncer {
-    /// A syncer that runs script steps as host subprocesses.
-    pub fn host() -> Self {
-        Self::new(Arc::new(HostScripts))
-    }
-
-    pub fn new(scripts: Arc<dyn ScriptRunner>) -> Self {
-        Self { scripts }
-    }
-}
+pub struct Syncer;
 
 #[async_trait]
 impl Synchronize for Syncer {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        step: &SyncStep,
-        params: &Params,
+        invocation: &PluginInvocation,
         agent: &Agent,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
+        resolver: &dyn RemoteResourceResolve,
     ) -> Result<Vec<String>, SynchronizeError> {
-        match step {
-            SyncStep::Script(adapter) => Ok(self
-                .scripts
-                .run_script(ScriptInvocation::new(adapter, params), reporter)
-                .await?),
-            SyncStep::Plugin(adapter) => Ok(plugin::sync(
-                adapter,
-                params,
-                agent,
-                &params.environment,
-                params.proxy,
-                reporter,
-                pkg_cache,
-            )
-            .await?),
-        }
+        Ok(plugin::run(invocation, agent, reporter, resolver).await?)
+    }
+
+    async fn run_script(
+        &self,
+        invocation: &ScriptInvocation,
+        reporter: &StepReporter,
+    ) -> Result<Vec<String>, SynchronizeError> {
+        let env_refs: Vec<(&str, &str)> = invocation
+            .env
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        super::script::execute_commands(&invocation.commands, &invocation.cwd, &env_refs, reporter)
+            .await?;
+        // Persistent stderr is a sync-plugin feature only; script steps don't
+        // currently retain any output past the rolling step view.
+        Ok(vec![])
     }
 }
 
@@ -115,108 +81,130 @@ pub struct UnimplementedMockSyncer;
 #[cfg(test)]
 #[async_trait]
 impl Synchronize for UnimplementedMockSyncer {
-    async fn sync(
+    async fn run_plugin(
         &self,
-        _step: &SyncStep,
-        _params: &Params,
+        _invocation: &PluginInvocation,
         _agent: &Agent,
         _reporter: &StepReporter,
-        _pkg_cache: &PackageCache,
+        _resolver: &dyn RemoteResourceResolve,
     ) -> Result<Vec<String>, SynchronizeError> {
-        unimplemented!("UnimplementedMockSyncer::sync")
+        unimplemented!("UnimplementedMockSyncer::run_plugin")
+    }
+
+    async fn run_script(
+        &self,
+        _invocation: &ScriptInvocation,
+        _reporter: &StepReporter,
+    ) -> Result<Vec<String>, SynchronizeError> {
+        unimplemented!("UnimplementedMockSyncer::run_script")
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
-    use crate::manifest::adapter::script::{Adapter, CommandField};
+    use tokio::sync::Mutex;
 
     use super::*;
 
-    /// A [`ScriptRunner`] that records what it was asked to run instead of
-    /// running it, so step dispatch can be tested without spawning a shell.
-    #[derive(Default)]
-    struct RecordingScripts {
-        seen: Mutex<Vec<ScriptInvocation>>,
-    }
+    /// Serializes the tests here that mutate the process environment, since
+    /// cargo runs tests in parallel threads. Async-aware because the variable
+    /// has to stay set across the subprocess `await` that reads it.
+    static ENV_MUTEX: Mutex<()> = Mutex::const_new(());
 
-    #[async_trait]
-    impl ScriptRunner for RecordingScripts {
-        async fn run_script(
-            &self,
-            invocation: ScriptInvocation,
-            _reporter: &StepReporter,
-        ) -> Result<Vec<String>, ScriptRunError> {
-            self.seen.lock().unwrap().push(invocation);
-            Ok(vec![])
+    fn invocation(commands: Vec<String>, env: Vec<(String, String)>) -> ScriptInvocation {
+        ScriptInvocation {
+            commands,
+            cwd: "/".into(),
+            env,
         }
     }
 
-    fn dummy_agent() -> Agent {
-        Agent::builder()
-            .with_url("http://127.0.0.1:4943")
-            .build()
-            .expect("build test agent")
+    fn network_env() -> Vec<(String, String)> {
+        vec![("ICP_CLI_NETWORK".to_owned(), "ic".to_owned())]
     }
 
-    /// A script step reaches the injected runner fully resolved: the commands
-    /// from the manifest, the canister directory as cwd, and the `ICP_CLI_*`
-    /// environment assembled from the sync params. Nothing is spawned.
+    /// The host runner passes the resolved environment through to the subprocess.
     #[tokio::test]
-    async fn script_steps_are_dispatched_to_the_injected_runner() {
-        let scripts = Arc::new(RecordingScripts::default());
-        let syncer = Syncer::new(scripts.clone());
+    async fn host_runner_applies_the_resolved_environment() {
+        let out = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let invocation = invocation(
+            vec![format!("printenv ICP_CLI_NETWORK > '{}'", out.path())],
+            network_env(),
+        );
 
-        let cid = Principal::from_slice(&[7; 4]);
-        let params = Params {
-            path: "/work/backend".into(),
-            project_dir: "/work".into(),
-            cid,
-            name: "backend".to_owned(),
-            environment: "production".to_owned(),
-            network: "ic".to_owned(),
-            canister_ids: BTreeMap::from([(
-                "my-frontend".to_owned(),
-                Principal::from_slice(&[8; 4]),
-            )]),
-            proxy: None,
-        };
-        let step = SyncStep::Script(Adapter {
-            command: CommandField::Command("./deploy.sh".to_owned()),
-        });
+        Syncer
+            .run_script(&invocation, &StepReporter::null())
+            .await
+            .unwrap();
 
-        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
-        let pkg_cache = PackageCache::new(tmp.path().to_owned()).unwrap();
+        assert_eq!(std::fs::read_to_string(out.path()).unwrap(), "ic\n");
+    }
 
-        let retained = syncer
-            .sync(
-                &step,
-                &params,
-                &dummy_agent(),
+    /// A step's `env` is an overlay, not the whole environment: the script still
+    /// sees variables the parent process had. Pins the contract documented on
+    /// [`ScriptInvocation::env`].
+    ///
+    /// Deliberately avoids two things that are not portable across the shells
+    /// this runs under. `printenv` accepts only one operand on BSD (macOS) and
+    /// so silently drops later names, hence one `echo` — a shell builtin
+    /// everywhere — per variable. And the inherited variable is one this test
+    /// sets rather than `PATH`, because Git-for-Windows bash rewrites `PATH`
+    /// into POSIX form, so its value there never equals the `PATH` the Rust side
+    /// reads.
+    #[tokio::test]
+    async fn host_runner_overlays_rather_than_replaces_the_environment() {
+        const AMBIENT: &str = "ICP_CLI_TEST_AMBIENT_VAR";
+        const AMBIENT_VALUE: &str = "inherited-from-parent";
+
+        let _guard = ENV_MUTEX.lock().await;
+        // SAFETY: ENV_MUTEX serializes the tests in this module that mutate the
+        // process environment, and the name is used by this test alone.
+        unsafe { std::env::set_var(AMBIENT, AMBIENT_VALUE) };
+
+        let overlaid = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let inherited = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let invocation = invocation(
+            vec![
+                format!("echo \"$ICP_CLI_NETWORK\" > '{}'", overlaid.path()),
+                format!("echo \"${AMBIENT}\" > '{}'", inherited.path()),
+            ],
+            network_env(),
+        );
+
+        let run = Syncer.run_script(&invocation, &StepReporter::null()).await;
+
+        // SAFETY: as above; the guard is still held.
+        unsafe { std::env::remove_var(AMBIENT) };
+        run.expect("script must run");
+
+        assert_eq!(
+            std::fs::read_to_string(overlaid.path()).unwrap().trim(),
+            "ic",
+            "the overlaid variable must be set"
+        );
+        assert_eq!(
+            std::fs::read_to_string(inherited.path()).unwrap().trim(),
+            AMBIENT_VALUE,
+            "a variable the parent process had must still reach the script"
+        );
+    }
+
+    /// A command that exits non-zero surfaces as a `SynchronizeError` whose
+    /// source still names the command and its status, so the `caused by:` line
+    /// the CLI prints stays specific.
+    #[tokio::test]
+    async fn host_runner_reports_a_failing_command() {
+        let err = Syncer
+            .run_script(
+                &invocation(vec!["exit 3".to_owned()], vec![]),
                 &StepReporter::null(),
-                &pkg_cache,
             )
             .await
-            .expect("script step should dispatch");
-        assert!(retained.is_empty());
+            .expect_err("a non-zero exit must fail the step");
 
-        let seen = scripts.seen.lock().unwrap();
-        assert_eq!(seen.len(), 1);
-        assert_eq!(seen[0].commands, vec!["./deploy.sh"]);
-        assert_eq!(seen[0].cwd, PathBuf::from("/work/backend"));
         assert_eq!(
-            seen[0].env,
-            vec![
-                ("ICP_CLI_ENVIRONMENT".to_owned(), "production".to_owned()),
-                ("ICP_CLI_NETWORK".to_owned(), "ic".to_owned()),
-                ("ICP_CLI_CID".to_owned(), cid.to_text()),
-                (
-                    "ICP_CLI_CID_MY_FRONTEND".to_owned(),
-                    Principal::from_slice(&[8; 4]).to_text()
-                ),
-            ]
+            err.to_string(),
+            "command 'exit 3' failed with status code 3"
         );
     }
 }

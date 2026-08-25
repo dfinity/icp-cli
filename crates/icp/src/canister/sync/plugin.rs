@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
-
 use camino::Utf8PathBuf;
-use candid::Principal;
 use ic_agent::Agent;
+use icp_deploy_canister::canister::recipe::{RemoteResourceResolve, ResolveError};
+use icp_deploy_canister::sync_exec;
 use icp_events::StepReporter;
 use icp_sync_plugin::{
     CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV,
@@ -10,31 +9,12 @@ use icp_sync_plugin::{
 };
 use snafu::prelude::*;
 
-use crate::{
-    canister::wasm,
-    manifest::adapter::plugin::{Adapter, NamedPaths},
-    package::PackageCache,
-};
-
-use super::Params;
-
-/// Convert a manifest [`NamedPaths`] (or its absence) into the runtime's
-/// key-tagged path list. A missing setting yields an empty list.
-fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
-    paths
-        .into_iter()
-        .flat_map(NamedPaths::entries)
-        .map(|entry| KeyedPath {
-            key: entry.key.map(str::to_string),
-            path: entry.path.to_string(),
-        })
-        .collect()
-}
+use crate::canister::ReporterProgress;
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
-    #[snafu(transparent)]
-    Wasm { source: wasm::WasmError },
+    #[snafu(display("failed to resolve plugin wasm"))]
+    ResolveWasm { source: ResolveError },
 
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },
@@ -46,12 +26,6 @@ pub enum PluginError {
 
     #[snafu(display("failed to run plugin"))]
     Run { source: RunPluginError },
-
-    #[snafu(display(
-        "sync plugin lists canister '{name}' as callable, but no canister by that name \
-         is known in environment '{environment}'"
-    ))]
-    UnknownCallableCanister { name: String, environment: String },
 }
 
 /// Resolve the plugin compute-time limit, honoring the
@@ -82,14 +56,29 @@ fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
     }
 }
 
-pub(super) async fn sync(
-    adapter: &Adapter,
-    params: &Params,
+/// Restate the library's key-tagged paths as the runtime's. The two types are
+/// identical by construction and separate only because the runtime crate cannot
+/// be depended on from `icp-deploy-canister`.
+fn keyed_paths(paths: &[sync_exec::KeyedPath]) -> Vec<KeyedPath> {
+    paths
+        .iter()
+        .map(|entry| KeyedPath {
+            key: entry.key.clone(),
+            path: entry.path.clone(),
+        })
+        .collect()
+}
+
+/// Fetch and run a WASI plugin against a canister for a fully-resolved
+/// [`sync_exec::PluginInvocation`]. Dispatch and input derivation — the
+/// key-tagged paths, the fields, the exposed canister-id table and the resolved
+/// `canisters:` list — happen in `icp-deploy-canister`; this only performs the
+/// host-only wasm resolution and wasmtime execution.
+pub(super) async fn run(
+    invocation: &sync_exec::PluginInvocation,
     agent: &Agent,
-    environment: &str,
-    proxy: Option<Principal>,
     reporter: &StepReporter,
-    pkg_cache: &PackageCache,
+    resolver: &dyn RemoteResourceResolve,
 ) -> Result<Vec<String>, PluginError> {
     // 0. Resolve the compute-time limit up front so a malformed
     //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
@@ -100,136 +89,48 @@ pub(super) async fn sync(
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
     //      stable cache path is returned — no temp file needed.
-    let wasm_path = wasm::resolve(
-        &adapter.source,
-        &params.path,
-        adapter.sha256.as_deref(),
-        reporter,
-        pkg_cache,
-    )
-    .await?;
+    let wasm_path = resolver
+        .resolve_wasm(
+            &invocation.source,
+            &invocation.base_dir,
+            invocation.sha256.as_deref(),
+            Some(&ReporterProgress(reporter)),
+        )
+        .await
+        .context(ResolveWasmSnafu)?;
 
-    // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
-    //    and reads the `files` itself — both anchored at `base_dir`, confined to
-    //    `project_dir`, and subject to the runtime's path-safety checks (no
-    //    escaping or symlinked paths).
-    let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let project_dir = Utf8PathBuf::from(params.project_dir.as_str());
-    let dirs = keyed_paths(adapter.dirs.as_ref());
-    let files = keyed_paths(adapter.files.as_ref());
-    let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
+    // 2. `run_plugin` preopens the `dirs` and reads the `files` itself — both
+    //    anchored at `base_dir`, confined to `project_dir`, and subject to the
+    //    runtime's path-safety checks (no escaping or symlinked paths).
+    let base_dir = Utf8PathBuf::from(invocation.base_dir.as_str());
+    let project_dir = Utf8PathBuf::from(invocation.project_dir.as_str());
 
-    // 3. Build the canister ID table exposed to the plugin, then resolve the
-    //    step's `canisters` list against it.
-    let canister_ids = exposed_canister_ids(params);
-    let callable = resolve_callable(adapter, &canister_ids, environment)?;
-
-    // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
+    // 3. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent
         .get_principal()
         .map_err(|err| PluginError::GetIdentityPrincipal { err })?;
 
-    let agent_clone = agent.clone();
-    let environment_owned = environment.to_owned();
-    let reporter_clone = reporter.clone();
-
-    tokio::task::block_in_place(|| {
-        run_plugin(PluginInvocation {
-            wasm_path,
-            base_dir,
-            project_dir,
-            dirs,
-            files,
-            fields,
-            host_canister_id: params.cid,
-            agent: agent_clone,
-            proxy,
-            identity_principal,
-            environment: environment_owned,
-            compute_limit_secs,
-            canister_ids,
-            callable,
-            reporter: reporter_clone,
-        })
-    })
-    .context(RunSnafu)
-}
-
-/// The canister ID table exposed to a sync plugin: every named canister in the
-/// project, plus — for every canister in the subproject the synced canister
-/// belongs to, or in a subproject nested below it — a duplicate entry under the
-/// name that subproject itself uses. A store key is `<subproject>:<local>` for a
-/// canister in a subproject and a bare local name for a canister defined
-/// directly in the app root (see the WIT `canister-id-entry` docs), so the
-/// syncing canister's namespace is the prefix of its own key.
-///
-/// The aliases exist so a subproject's manifest and plugins keep working when it
-/// is vendored into a workspace: both the step's `canisters:` list and the name a
-/// plugin passes back as a call target are written where the subproject's own
-/// names apply, but store keys are relative to the app root, which moves. See
-/// [`member_relative_alias`] for the names produced.
-///
-/// The aliases take precedence over a canister elsewhere in the workspace whose
-/// store key happens to be spelled the same way: a plugin resolving such a name
-/// is naming what its own subproject calls it.
-fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
-    // A canister in the app root is in the subproject the store keys are already
-    // relative to, so its names need no translation.
-    let Some((syncing_namespace, _)) = params.name.rsplit_once(':') else {
-        return params.canister_ids.clone();
+    let runtime_invocation = PluginInvocation {
+        wasm_path,
+        base_dir,
+        project_dir,
+        dirs: keyed_paths(&invocation.dirs),
+        files: keyed_paths(&invocation.files),
+        fields: invocation.fields.clone(),
+        host_canister_id: invocation.canister_id,
+        agent: agent.clone(),
+        proxy: invocation.proxy,
+        identity_principal,
+        environment: invocation.environment.clone(),
+        compute_limit_secs,
+        canister_ids: invocation.canister_ids.clone(),
+        callable: CallableCanisters {
+            by_name: invocation.callable.clone(),
+        },
+        reporter: reporter.clone(),
     };
 
-    let mut table = params.canister_ids.clone();
-    for (key, id) in &params.canister_ids {
-        if let Some(alias) = member_relative_alias(syncing_namespace, key) {
-            table.insert(alias.to_owned(), *id);
-        }
-    }
-    table
-}
-
-/// The name a canister has *within* the subproject at `namespace`: its store key
-/// with that subproject's prefix removed. A canister of the subproject itself
-/// comes back under its bare local name; one belonging to a subproject nested
-/// below it comes back under the `<path>:<local>` key it would have if that
-/// subproject were the app root. `None` for a canister the subproject has no name
-/// of its own for.
-///
-/// A local name never contains a colon but a subproject directory may, so a key
-/// splits on its *last* colon.
-fn member_relative_alias<'a>(namespace: &str, key: &'a str) -> Option<&'a str> {
-    let (key_namespace, _) = key.rsplit_once(':')?;
-    let rest = key.strip_prefix(namespace)?;
-    match key_namespace == namespace {
-        // The colon separating the subproject from a local name of its own.
-        true => rest.strip_prefix(':'),
-        // Otherwise the key's subproject must sit *below* this one. Demanding
-        // the path separator is what keeps `services/crm-legacy:backend` out of
-        // `services/crm`, which it merely shares a spelling prefix with.
-        false => rest.strip_prefix('/'),
-    }
-}
-
-/// Resolve the step's `canisters` list into a [`CallableCanisters`] enforcement
-/// set. Each listed name is looked up in `canister_ids`; a name that does not
-/// resolve is a manifest error.
-fn resolve_callable(
-    adapter: &Adapter,
-    canister_ids: &BTreeMap<String, Principal>,
-    environment: &str,
-) -> Result<CallableCanisters, PluginError> {
-    let mut by_name = BTreeMap::new();
-    for name in adapter.canisters.iter().flatten() {
-        let principal = canister_ids
-            .get(name)
-            .copied()
-            .context(UnknownCallableCanisterSnafu {
-                name: name.clone(),
-                environment: environment.to_owned(),
-            })?;
-        by_name.insert(name.clone(), principal);
-    }
-    Ok(CallableCanisters { by_name })
+    tokio::task::block_in_place(|| run_plugin(runtime_invocation)).context(RunSnafu)
 }
 
 #[cfg(test)]
@@ -253,256 +154,5 @@ mod tests {
                 "unexpected error for '{bad}': {err}"
             );
         }
-    }
-
-    use crate::manifest::adapter::prebuilt::{LocalSource, SourceField};
-
-    fn principal(byte: u8) -> Principal {
-        Principal::from_slice(&[byte; 4])
-    }
-
-    fn params_named(name: &str, ids: &[(&str, Principal)]) -> Params {
-        Params {
-            path: "/work".into(),
-            project_dir: "/work".into(),
-            cid: principal(0),
-            name: name.to_owned(),
-            environment: "demo".to_owned(),
-            network: "ic".to_owned(),
-            canister_ids: ids.iter().map(|(n, p)| ((*n).to_owned(), *p)).collect(),
-            proxy: None,
-        }
-    }
-
-    fn adapter_with(canisters: Option<Vec<String>>) -> Adapter {
-        Adapter {
-            source: SourceField::Local(LocalSource {
-                path: "plugin.wasm".into(),
-            }),
-            sha256: None,
-            dirs: None,
-            files: None,
-            fields: None,
-            canisters,
-        }
-    }
-
-    /// Canisters sharing the syncing canister's subproject are additionally
-    /// exposed under their bare local name; canisters in other subprojects are
-    /// not.
-    #[test]
-    fn exposed_ids_add_bare_names_for_same_subproject() {
-        let backend = principal(1);
-        let frontend = principal(2);
-        let foreign = principal(3);
-        let params = params_named(
-            "services/open-accounts:backend",
-            &[
-                ("services/open-accounts:backend", backend),
-                ("services/open-accounts:frontend", frontend),
-                ("services/open-crm:backend", foreign),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        // Same-subproject canisters gain a bare-local duplicate...
-        assert_eq!(table.get("backend"), Some(&backend));
-        assert_eq!(table.get("frontend"), Some(&frontend));
-        // ...while the fully-qualified keys are still present for everyone.
-        assert_eq!(
-            table.get("services/open-accounts:frontend"),
-            Some(&frontend)
-        );
-        assert_eq!(table.get("services/open-crm:backend"), Some(&foreign));
-        // The other subproject's canister is not reachable by a bare name; the
-        // bare "backend" belongs to the syncing canister's own subproject.
-        assert_eq!(table.get("backend"), Some(&backend));
-    }
-
-    /// A canister of a subproject nested below the syncing canister's own is
-    /// exposed under the key that subproject has relative to it — the very key
-    /// its manifest and plugins use when it is built standalone, so vendoring it
-    /// into a workspace leaves both spellings working.
-    #[test]
-    fn exposed_ids_add_member_relative_names_for_nested_subprojects() {
-        let ledger = principal(1);
-        let deep = principal(2);
-        let params = params_named(
-            "services/crm:backend",
-            &[
-                ("services/crm:backend", principal(9)),
-                ("services/crm/vendor/ledger:ledger", ledger),
-                ("services/crm/vendor/ledger/vendor/util:util", deep),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("vendor/ledger:ledger"), Some(&ledger));
-        // Nesting is not limited to one level: the whole subtree below the
-        // syncing canister's subproject is renamed relative to it.
-        assert_eq!(table.get("vendor/ledger/vendor/util:util"), Some(&deep));
-        // The workspace-absolute keys remain.
-        assert_eq!(
-            table.get("services/crm/vendor/ledger:ledger"),
-            Some(&ledger)
-        );
-    }
-
-    /// A subproject whose path merely starts with the same characters is not
-    /// nested below the syncing canister's, so it contributes no alias.
-    #[test]
-    fn exposed_ids_ignore_a_subproject_sharing_a_spelling_prefix() {
-        let legacy = principal(1);
-        let params = params_named(
-            "services/crm:backend",
-            &[
-                ("services/crm:backend", principal(9)),
-                ("services/crm-legacy:backend", legacy),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("services/crm-legacy:backend"), Some(&legacy));
-        // Its local name belongs to the syncing canister, not to it.
-        assert_eq!(table.get("backend"), Some(&principal(9)));
-        assert_eq!(table.get("-legacy:backend"), None);
-    }
-
-    /// A member-relative alias wins over a workspace canister whose store key is
-    /// spelled the same way, for the same reason a bare sibling name does: the
-    /// name is being read where the subproject's own names apply.
-    #[test]
-    fn exposed_ids_member_relative_alias_overrides_a_root_dependency_key() {
-        let root_ledger = principal(1);
-        let own_ledger = principal(2);
-        let params = params_named(
-            "services/crm:backend",
-            &[
-                ("services/crm:backend", principal(9)),
-                ("services/crm/vendor/ledger:ledger", own_ledger),
-                ("vendor/ledger:ledger", root_ledger),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("vendor/ledger:ledger"), Some(&own_ledger));
-        // The root's own dependency is still reachable, by its store key.
-        assert_eq!(
-            table.get("services/crm/vendor/ledger:ledger"),
-            Some(&own_ledger)
-        );
-        assert!(!table.values().any(|id| *id == root_ledger));
-    }
-
-    /// An app-root canister sharing a local name with a sibling of the syncing
-    /// canister does not keep the bare name: the syncing subproject's own
-    /// canister is what that name means to the plugin.
-    #[test]
-    fn exposed_ids_sibling_alias_overrides_the_app_root_name() {
-        let root_backend = principal(1);
-        let sibling_backend = principal(2);
-        let params = params_named(
-            "services/open-accounts:frontend",
-            &[
-                ("backend", root_backend),
-                ("services/open-accounts:backend", sibling_backend),
-                ("services/open-accounts:frontend", principal(3)),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("backend"), Some(&sibling_backend));
-        // The app-root canister's only key was that bare name, so it drops out
-        // of the table entirely rather than answering to a sibling's name.
-        assert!(!table.values().any(|id| *id == root_backend));
-    }
-
-    /// A subproject directory may itself contain a colon, so keys are split on
-    /// their last one — the same rule bundling uses.
-    #[test]
-    fn exposed_ids_split_subproject_prefix_at_the_last_colon() {
-        let backend = principal(1);
-        let frontend = principal(2);
-        let nested = principal(3);
-        let params = params_named(
-            "services/odd:name:backend",
-            &[
-                ("services/odd:name:backend", backend),
-                ("services/odd:name:frontend", frontend),
-                ("services/odd:name/vendor/ledger:ledger", nested),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("backend"), Some(&backend));
-        assert_eq!(table.get("frontend"), Some(&frontend));
-        assert_eq!(table.get("vendor/ledger:ledger"), Some(&nested));
-    }
-
-    /// The mirror image: a directory whose *name* contains a colon is not a
-    /// subproject nested below the part before it. `services/odd:name` holds one
-    /// directory named `odd:name`, so from `services/odd` it is nothing at all.
-    #[test]
-    fn exposed_ids_do_not_read_a_colon_in_a_directory_name_as_nesting() {
-        let odd = principal(1);
-        let params = params_named(
-            "services/odd:backend",
-            &[
-                ("services/odd:backend", principal(9)),
-                ("services/odd:name:frontend", odd),
-            ],
-        );
-
-        let table = exposed_canister_ids(&params);
-
-        assert_eq!(table.get("services/odd:name:frontend"), Some(&odd));
-        assert_eq!(table.get("name:frontend"), None);
-    }
-
-    /// A single-project layout keys canisters by bare local name already, so no
-    /// duplicates are added.
-    #[test]
-    fn exposed_ids_unchanged_without_a_subproject() {
-        let backend = principal(1);
-        let params = params_named("backend", &[("backend", backend)]);
-        let table = exposed_canister_ids(&params);
-        assert_eq!(table.len(), 1);
-        assert_eq!(table.get("backend"), Some(&backend));
-    }
-
-    #[test]
-    fn resolve_callable_resolves_names() {
-        let dep = principal(1);
-        let sibling = principal(2);
-        let table = BTreeMap::from([
-            ("backend".to_owned(), sibling),
-            ("services/open-crm:backend".to_owned(), dep),
-        ]);
-        let adapter = adapter_with(Some(vec![
-            "backend".to_owned(),
-            "services/open-crm:backend".to_owned(),
-        ]));
-
-        let callable = resolve_callable(&adapter, &table, "demo").unwrap();
-
-        assert_eq!(callable.by_name.get("backend"), Some(&sibling));
-        assert_eq!(
-            callable.by_name.get("services/open-crm:backend"),
-            Some(&dep)
-        );
-    }
-
-    #[test]
-    fn resolve_callable_rejects_unknown_name() {
-        let adapter = adapter_with(Some(vec!["nope".to_owned()]));
-        let err = resolve_callable(&adapter, &BTreeMap::new(), "demo")
-            .expect_err("an undeclared name must fail");
-        assert!(matches!(err, PluginError::UnknownCallableCanister { .. }));
     }
 }

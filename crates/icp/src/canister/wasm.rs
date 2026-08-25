@@ -1,5 +1,5 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use icp_events::StepReporter;
+use icp_deploy_canister::sync_exec::StepProgress;
 use reqwest::{Client, Method, Request};
 use sha2::{Digest, Sha256};
 use snafu::prelude::*;
@@ -50,18 +50,22 @@ pub async fn resolve(
     source: &SourceField,
     base_dir: &Utf8Path,
     sha256: Option<&str>,
-    reporter: &StepReporter,
+    progress: Option<&dyn StepProgress>,
     pkg_cache: &PackageCache,
 ) -> Result<crate::prelude::PathBuf, WasmError> {
     match source {
         SourceField::Local(s) => {
             let path = base_dir.join(&s.path);
             if let Some(expected) = sha256 {
-                reporter.info(format!("Reading wasm: {}", s.path));
+                if let Some(p) = progress {
+                    p.line(format!("Reading wasm: {}", s.path));
+                }
                 let bytes = read(&path).context(ReadLocalSnafu {
                     path: s.path.clone(),
                 })?;
-                reporter.info("Verifying checksum");
+                if let Some(p) = progress {
+                    p.line("Verifying checksum".to_string());
+                }
                 let actual = hex::encode(Sha256::digest(&bytes));
                 ensure!(
                     actual == expected,
@@ -90,13 +94,17 @@ pub async fn resolve(
                     .await
                     .context(LockCacheSnafu)?;
                 if let Some(path) = cached {
-                    reporter.info("Using cached file");
+                    if let Some(p) = progress {
+                        p.line("Using cached file".to_string());
+                    }
                     return Ok(path);
                 }
             }
 
             let url = Url::parse(&s.url).context(ParseUrlSnafu)?;
-            reporter.info(format!("Fetching wasm: {url}"));
+            if let Some(p) = progress {
+                p.line(format!("Fetching wasm: {url}"));
+            }
             let resp = Client::new()
                 .execute(Request::new(Method::GET, url))
                 .await
@@ -110,7 +118,9 @@ pub async fn resolve(
             // Use provided sha256 as cache key (after verifying), or compute from bytes.
             let cache_sha = match sha256 {
                 Some(expected) => {
-                    reporter.info("Verifying checksum");
+                    if let Some(p) = progress {
+                        p.line("Verifying checksum".to_string());
+                    }
                     let actual = hex::encode(Sha256::digest(&bytes));
                     ensure!(
                         actual == expected,

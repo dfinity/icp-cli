@@ -376,7 +376,7 @@ async fn build_manifest_canisters(
 
             let registry_recipe = match &m.instructions {
                 Instructions::BuildSync { .. } => None,
-                Instructions::Recipe { recipe } => match &recipe.recipe_type {
+                Instructions::Recipe { recipe, .. } => match &recipe.recipe_type {
                     RecipeType::Registry { .. } => Some(recipe.recipe_type.to_string()),
                     _ => None,
                 },
@@ -393,7 +393,10 @@ async fn build_manifest_canisters(
                 ),
 
                 // Recipe
-                Instructions::Recipe { recipe } => {
+                Instructions::Recipe {
+                    recipe,
+                    sync: extra_sync,
+                } => {
                     let fetched =
                         recipe_resolver
                             .resolve(recipe)
@@ -422,7 +425,12 @@ async fn build_manifest_canisters(
                             })?;
                     }
 
-                    steps
+                    // The manifest's own sync steps run after the recipe's.
+                    let (build, mut sync) = steps;
+                    if let Some(extra_sync) = extra_sync {
+                        sync.steps.extend(extra_sync.steps.iter().cloned());
+                    }
+                    (build, sync)
                 }
             };
 
@@ -1475,6 +1483,112 @@ pub async fn consolidate_manifest(
         environments,
         member_missing_envs,
     })
+}
+
+#[cfg(test)]
+mod recipe_sync_tests {
+    use super::*;
+    use crate::canister::recipe::{Fetched, Resolve, ResolveError};
+    use crate::manifest::canister::SyncStep;
+    use crate::manifest::recipe::Recipe;
+    use camino_tempfile::Utf8TempDir;
+
+    /// Hands back one fixed template for every recipe, without touching the
+    /// network or the cache.
+    struct FixedResolver(&'static str);
+
+    #[async_trait::async_trait]
+    impl Resolve for FixedResolver {
+        async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
+            Ok(Fetched {
+                template: self.0.to_owned(),
+                pending_cache: None,
+            })
+        }
+    }
+
+    const TEMPLATE: &str = indoc::indoc! {r#"
+        build:
+          steps:
+            - type: script
+              command: build.sh
+        sync:
+          steps:
+            - type: script
+              command: echo recipe
+    "#};
+
+    async fn consolidate(pdir: &Path) -> Result<Project, ConsolidateManifestError> {
+        let m: ProjectManifest = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
+            .await
+            .expect("failed to parse project manifest");
+        consolidate_manifest(pdir, &FixedResolver(TEMPLATE), &m).await
+    }
+
+    /// The commands of a canister's sync steps, which are all script steps here.
+    fn sync_commands(p: &Project, key: &str) -> Vec<String> {
+        p.canisters
+            .get(key)
+            .expect("canister not found")
+            .1
+            .sync
+            .steps
+            .iter()
+            .map(|s| match s {
+                SyncStep::Script(adapter) => adapter.command.as_vec().join(" "),
+                other => panic!("expected a script sync step, got {other:?}"),
+            })
+            .collect()
+    }
+
+    /// A canister may add sync steps of its own on top of a recipe's; they run
+    /// after the ones the recipe renders.
+    #[tokio::test]
+    async fn manifest_sync_steps_follow_the_recipes() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+                    sync:
+                      steps:
+                        - type: script
+                          command: echo manifest
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            sync_commands(&p, "backend"),
+            ["echo recipe", "echo manifest"]
+        );
+    }
+
+    /// Without a `sync` section, a recipe canister still gets exactly the
+    /// recipe's own sync steps.
+    #[tokio::test]
+    async fn recipe_sync_steps_alone_when_manifest_has_none() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(sync_commands(&p, "backend"), ["echo recipe"]);
+    }
 }
 
 #[cfg(test)]

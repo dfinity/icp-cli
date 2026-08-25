@@ -44,29 +44,6 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
-      "properties": {
-        "sha256": {
-          "description": "Optional sha256 checksum of the WASM",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "Adapter3": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/LocalSource",
-          "description": "Local path on-disk to read a WASM file from"
-        },
-        {
-          "$ref": "#/$defs/RemoteSource",
-          "description": "Remote url to fetch a WASM file from"
-        }
-      ],
       "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin). Both are written relative to the canister directory\nand may name anything inside the project, but nothing outside it.\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n  fields:                             # key-value fields passed inline\n    api_url: https://example.com\n    retries: 3\n```\n\n`dirs` and `files` may instead be written as a map, tagging each entry with a\n`key` surfaced to the plugin; a key may map to a single path or a list:\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  dirs:\n    seed: assets/seed-data           # keyed single path\n    migrations:                      # keyed list — entries share the key\n      - migrations/2025\n      - migrations/2026\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
       "properties": {
         "canisters": {
@@ -125,6 +102,29 @@
       },
       "type": "object"
     },
+    "Adapter3": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LocalSource",
+          "description": "Local path on-disk to read a WASM file from"
+        },
+        {
+          "$ref": "#/$defs/RemoteSource",
+          "description": "Remote url to fetch a WASM file from"
+        }
+      ],
+      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
+      "properties": {
+        "sha256": {
+          "description": "Optional sha256 checksum of the WASM",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ArgsFormat": {
       "description": "Format specifier for canister call/install args content.",
       "oneOf": [
@@ -163,7 +163,7 @@
           "type": "object"
         },
         {
-          "$ref": "#/$defs/Adapter2",
+          "$ref": "#/$defs/Adapter3",
           "description": "Represents a pre-built canister.\nThis variant allows for retrieving a canister WASM from various sources.",
           "properties": {
             "type": {
@@ -199,6 +199,17 @@
           "properties": {
             "recipe": {
               "$ref": "#/$defs/Recipe"
+            },
+            "sync": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SyncSteps"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Additional sync steps, run after the ones the recipe renders."
             }
           },
           "required": [
@@ -1065,7 +1076,7 @@
           "type": "object"
         },
         {
-          "$ref": "#/$defs/Adapter3",
+          "$ref": "#/$defs/Adapter2",
           "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
           "properties": {
             "type": {

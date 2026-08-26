@@ -15,7 +15,9 @@ use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
 };
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::TaskOutcome;
+
+use crate::operations::task::{Reporter, Task};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
@@ -224,10 +226,7 @@ pub async fn sync_settings_many(
     let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
-        let task = reporter.task(TaskKind::UpdateSettings {
-            canister: info.name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::update_settings(info.name.clone(), cid));
         let agent = agent.clone();
         let ids = ids.clone();
 

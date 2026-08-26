@@ -4,10 +4,12 @@
 
 use std::collections::BTreeMap;
 
-use icp_events::{Event, EventKind, TaskId, TaskOutcome};
+use icp_events::{EventKind, TaskId, TaskOutcome};
 use tracing::debug;
 
-use super::{TaskLog, dump_failures, step_header};
+use icp::operations::task::Event;
+
+use super::{TaskLog, dump_failures};
 
 pub(crate) struct PlainRenderer {
     tasks: BTreeMap<TaskId, TaskLog>,
@@ -34,7 +36,7 @@ impl PlainRenderer {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;
                 };
-                let header = step_header(log.kind(), number, total, &label);
+                let header = log.presentation().step_header(number, total, &label);
                 log.start_step(header);
             }
 
@@ -44,7 +46,7 @@ impl PlainRenderer {
                 };
                 // Mark command boundaries so interleaved output stays
                 // attributable to the command producing it.
-                debug!("[{}] $ {command}", log.kind().canister());
+                debug!("[{}] $ {command}", log.presentation().canister());
             }
 
             EventKind::Output { line, .. } => {
@@ -53,7 +55,7 @@ impl PlainRenderer {
                 };
                 // Prefix with the canister so interleaved concurrent tasks
                 // stay attributable.
-                debug!("[{}] {line}", log.kind().canister());
+                debug!("[{}] {line}", log.presentation().canister());
                 log.push_line(line);
             }
 
@@ -72,7 +74,7 @@ impl PlainRenderer {
                 };
                 match outcome {
                     TaskOutcome::Succeeded { retained_output } => {
-                        super::print_retained(log.kind(), &retained_output);
+                        super::print_retained(log.task(), &retained_output);
                     }
                     TaskOutcome::Failed { message, causes } => {
                         log.fail(message, causes);

@@ -1,45 +1,56 @@
 //! Typed progress events passed from operations to the presentation layer.
 //!
-//! Operations (and the core library underneath them) emit [`Event`]s through
-//! cheap-to-clone reporter handles ([`Reporter`] → [`TaskReporter`] →
-//! [`StepReporter`]); the CLI's renderers consume the event stream and decide
-//! how to display it. Events carry data, not prose — wording, layout, and
-//! color are the renderer's job.
+//! Operations emit [`Event`]s through cheap-to-clone reporter handles
+//! ([`Reporter`] → [`TaskReporter`] → [`StepReporter`]); a consumer reads the
+//! event stream and decides how to display it. Events carry data, not prose —
+//! wording, layout, and color belong to the consumer.
+//!
+//! The crate is deliberately ignorant of *what* a task is. [`Event`] is
+//! generic over a task payload `T` supplied by the caller, so the vocabulary
+//! of operations (build, sync, install, …) lives with the code that renders
+//! it rather than here. [`StepReporter`], by contrast, is **not** generic: it
+//! erases `T` behind [`StepSink`] so that ports in the core library — which
+//! are stored as `Arc<dyn Build>` / `Arc<dyn Synchronize>` — can accept one
+//! without naming the consumer's task type.
 //!
 //! Sends never block and never fail: the channel is unbounded, and with no
 //! receiver events are simply dropped, so tests and headless callers get
 //! silence for free. Errors do not travel on this stream — an operation's
 //! `Result` remains the source of truth; [`TaskOutcome::Failed`] exists only
-//! so a renderer can paint the failure state.
+//! so a consumer can paint the failure state.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    fmt,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
-use candid::Principal;
 use serde::Serialize;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-/// Identifies one task (one canister-level unit of work) within an event
-/// stream. Ids are assigned in task-creation order, so renderers can use them
-/// to present tasks in a stable order regardless of completion order.
+/// Identifies one task (one unit of work) within an event stream. Ids are
+/// assigned in task-creation order, so consumers can use them to present
+/// tasks in a stable order regardless of completion order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct TaskId(u64);
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Event {
+pub struct Event<T> {
     pub task_id: TaskId,
     #[serde(flatten)]
-    pub kind: EventKind,
+    pub kind: EventKind<T>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
-pub enum EventKind {
-    /// The task began. Emitted once per task, before any of its steps.
-    TaskStarted { task: TaskKind },
+pub enum EventKind<T> {
+    /// The task began. Emitted once per task, before any of its steps. `task`
+    /// is the caller's own description of the work — this crate never
+    /// inspects it.
+    TaskStarted { task: T },
 
     /// A step of the task began. Steps within a task are sequential;
     /// `number` is 1-based. `label` describes the step (it may span
@@ -51,16 +62,15 @@ pub enum EventKind {
     },
 
     /// A shell command within the task's current step began executing.
-    /// Script steps run their commands in order; renderers can use this to
+    /// Script steps run their commands in order; consumers can use this to
     /// attribute the output that follows to the command producing it.
     CommandStarted { command: String },
 
     /// One line of output produced while the task's current step runs.
     Output { stream: OutputStream, line: String },
 
-    /// How far a quantifiable task has come, in the unit its [`TaskKind`]
-    /// declares (e.g. bytes out of [`TaskKind::SnapshotTransfer`]'s
-    /// `total_bytes`).
+    /// How far a quantifiable task has come, in whatever unit its task
+    /// payload declares (e.g. bytes).
     Progress { position: u64 },
 
     /// The task's current step finished.
@@ -70,79 +80,8 @@ pub enum EventKind {
     TaskCompleted { outcome: TaskOutcome },
 }
 
-/// What a task is doing, and to which canister.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum TaskKind {
-    Build {
-        canister: String,
-    },
-    Sync {
-        canister: String,
-        canister_id: Principal,
-    },
-    Create {
-        canister: String,
-    },
-    Install {
-        canister: String,
-        canister_id: Principal,
-    },
-    UpdateSettings {
-        canister: String,
-        canister_id: Principal,
-    },
-    UpdateEnvironmentVariables {
-        canister: String,
-        canister_id: Principal,
-    },
-    CandidCheck {
-        canister: String,
-        canister_id: Principal,
-    },
-    SnapshotTransfer {
-        canister: String,
-        direction: TransferDirection,
-        blob: TransferBlob,
-        total_bytes: u64,
-    },
-}
-
-impl TaskKind {
-    /// The canister this task operates on.
-    pub fn canister(&self) -> &str {
-        match self {
-            TaskKind::Build { canister }
-            | TaskKind::Sync { canister, .. }
-            | TaskKind::Create { canister }
-            | TaskKind::Install { canister, .. }
-            | TaskKind::UpdateSettings { canister, .. }
-            | TaskKind::UpdateEnvironmentVariables { canister, .. }
-            | TaskKind::CandidCheck { canister, .. }
-            | TaskKind::SnapshotTransfer { canister, .. } => canister,
-        }
-    }
-}
-
-/// Which way a snapshot blob is moving relative to the local machine.
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TransferDirection {
-    Upload,
-    Download,
-}
-
-/// The snapshot blob being transferred.
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TransferBlob {
-    WasmModule,
-    WasmMemory,
-    StableMemory,
-}
-
 /// Where an output line came from.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputStream {
     Stdout,
@@ -151,7 +90,7 @@ pub enum OutputStream {
     Info,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepOutcome {
     Succeeded,
@@ -163,8 +102,8 @@ pub enum StepOutcome {
 pub enum TaskOutcome {
     Succeeded {
         /// Output lines that belong on the persistent output channel after
-        /// success — e.g. sync-plugin stderr, which the rolling step view
-        /// would otherwise discard. Most tasks retain nothing.
+        /// success — e.g. sync-plugin stderr, which a rolling step view would
+        /// otherwise discard. Most tasks retain nothing.
         #[serde(skip_serializing_if = "Vec::is_empty")]
         retained_output: Vec<String>,
     },
@@ -198,23 +137,9 @@ impl TaskOutcome {
     }
 }
 
-/// Create a lone [`StepReporter`] wired to its own receiver, for callers that
-/// need to observe a single step's output without the task/step ceremony —
-/// primarily tests.
-pub fn step_channel() -> (StepReporter, UnboundedReceiver<Event>) {
-    let (tx, rx) = unbounded_channel();
-    (
-        StepReporter {
-            tx: Some(tx),
-            task_id: TaskId(0),
-        },
-        rx,
-    )
-}
-
 /// Create a connected reporter/receiver pair. The receiver yields `None` once
 /// the reporter and every handle derived from it have been dropped.
-pub fn channel() -> (Reporter, UnboundedReceiver<Event>) {
+pub fn channel<T: Send + 'static>() -> (Reporter<T>, UnboundedReceiver<Event<T>>) {
     let (tx, rx) = unbounded_channel();
     let reporter = Reporter {
         inner: Some(ReporterInner {
@@ -225,26 +150,63 @@ pub fn channel() -> (Reporter, UnboundedReceiver<Event>) {
     (reporter, rx)
 }
 
-/// Entry point handed to an operation; spawns [`TaskReporter`]s.
-#[derive(Debug, Clone)]
-pub struct Reporter {
-    inner: Option<ReporterInner>,
+/// Create a lone [`StepReporter`] wired to its own receiver, for callers that
+/// need to observe a single step's output without the task/step ceremony —
+/// primarily tests. The task payload type is never constructed, so it is
+/// usually left as `()`.
+pub fn step_channel<T: Send + 'static>() -> (StepReporter, UnboundedReceiver<Event<T>>) {
+    let (tx, rx) = unbounded_channel();
+    let sink = TaskSink {
+        tx,
+        task_id: TaskId(0),
+    };
+    (
+        StepReporter {
+            sink: Some(Arc::new(sink)),
+        },
+        rx,
+    )
 }
 
-#[derive(Debug, Clone)]
-struct ReporterInner {
-    tx: UnboundedSender<Event>,
+/// Entry point handed to an operation; spawns [`TaskReporter`]s.
+pub struct Reporter<T> {
+    inner: Option<ReporterInner<T>>,
+}
+
+struct ReporterInner<T> {
+    tx: UnboundedSender<Event<T>>,
     next_task_id: Arc<AtomicU64>,
 }
 
-impl Reporter {
+// Hand-written so cloning a reporter does not require the task payload to be
+// `Clone` — only the channel handle is duplicated.
+impl<T> Clone for ReporterInner<T> {
+    fn clone(&self) -> Self {
+        Self {
+            tx: self.tx.clone(),
+            next_task_id: self.next_task_id.clone(),
+        }
+    }
+}
+
+impl<T> Clone for Reporter<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<T> Reporter<T> {
     /// A reporter whose events go nowhere.
     pub fn null() -> Self {
         Self { inner: None }
     }
+}
 
+impl<T: Send + 'static> Reporter<T> {
     /// Begin a task, emitting [`EventKind::TaskStarted`].
-    pub fn task(&self, task: TaskKind) -> TaskReporter {
+    pub fn task(&self, task: T) -> TaskReporter<T> {
         let Some(inner) = &self.inner else {
             return TaskReporter::null();
         };
@@ -261,13 +223,21 @@ impl Reporter {
 }
 
 /// Reports the lifecycle of one task.
-#[derive(Debug, Clone)]
-pub struct TaskReporter {
-    tx: Option<UnboundedSender<Event>>,
+pub struct TaskReporter<T> {
+    tx: Option<UnboundedSender<Event<T>>>,
     task_id: TaskId,
 }
 
-impl TaskReporter {
+impl<T> Clone for TaskReporter<T> {
+    fn clone(&self) -> Self {
+        Self {
+            tx: self.tx.clone(),
+            task_id: self.task_id,
+        }
+    }
+}
+
+impl<T> TaskReporter<T> {
     /// A task reporter whose events go nowhere.
     pub fn null() -> Self {
         Self {
@@ -276,7 +246,7 @@ impl TaskReporter {
         }
     }
 
-    fn send(&self, kind: EventKind) {
+    fn send(&self, kind: EventKind<T>) {
         if let Some(tx) = &self.tx {
             let _ = tx.send(Event {
                 task_id: self.task_id,
@@ -285,22 +255,8 @@ impl TaskReporter {
         }
     }
 
-    /// Begin the task's next step, emitting [`EventKind::StepStarted`].
-    /// `number` is 1-based.
-    pub fn step(&self, number: usize, total: usize, label: impl Into<String>) -> StepReporter {
-        self.send(EventKind::StepStarted {
-            number,
-            total,
-            label: label.into(),
-        });
-        StepReporter {
-            tx: self.tx.clone(),
-            task_id: self.task_id,
-        }
-    }
-
     /// Report how far the task has come, emitting [`EventKind::Progress`].
-    /// The unit is whatever the task's [`TaskKind`] declares.
+    /// The unit is whatever the task payload declares.
     pub fn progress(&self, position: u64) {
         self.send(EventKind::Progress { position });
     }
@@ -312,45 +268,102 @@ impl TaskReporter {
     }
 }
 
-/// Reports output produced during one step of a task.
-#[derive(Debug, Clone)]
-pub struct StepReporter {
-    tx: Option<UnboundedSender<Event>>,
+impl<T: Send + 'static> TaskReporter<T> {
+    /// Begin the task's next step, emitting [`EventKind::StepStarted`].
+    /// `number` is 1-based.
+    ///
+    /// The returned handle has the task payload type erased, so it can be
+    /// passed to code that must not know the task vocabulary.
+    pub fn step(&self, number: usize, total: usize, label: impl Into<String>) -> StepReporter {
+        self.send(EventKind::StepStarted {
+            number,
+            total,
+            label: label.into(),
+        });
+        StepReporter {
+            sink: self.tx.clone().map(|tx| {
+                Arc::new(TaskSink {
+                    tx,
+                    task_id: self.task_id,
+                }) as Arc<dyn StepSink>
+            }),
+        }
+    }
+}
+
+/// The step-scoped half of an event sink, with the task payload type erased.
+///
+/// This is the whole reason [`StepReporter`] is not generic: the core
+/// library's ports take a step reporter but must not name the task
+/// vocabulary, and they are held as trait objects (`Arc<dyn Build>`), which
+/// rules out threading a type parameter through them.
+trait StepSink: Send + Sync {
+    fn command_started(&self, command: String);
+    fn output(&self, stream: OutputStream, line: String);
+    fn step_completed(&self, outcome: StepOutcome);
+}
+
+struct TaskSink<T> {
+    tx: UnboundedSender<Event<T>>,
     task_id: TaskId,
+}
+
+impl<T: Send + 'static> StepSink for TaskSink<T> {
+    fn command_started(&self, command: String) {
+        let _ = self.tx.send(Event {
+            task_id: self.task_id,
+            kind: EventKind::CommandStarted { command },
+        });
+    }
+
+    fn output(&self, stream: OutputStream, line: String) {
+        let _ = self.tx.send(Event {
+            task_id: self.task_id,
+            kind: EventKind::Output { stream, line },
+        });
+    }
+
+    fn step_completed(&self, outcome: StepOutcome) {
+        let _ = self.tx.send(Event {
+            task_id: self.task_id,
+            kind: EventKind::StepCompleted { outcome },
+        });
+    }
+}
+
+/// Reports output produced during one step of a task.
+#[derive(Clone)]
+pub struct StepReporter {
+    sink: Option<Arc<dyn StepSink>>,
+}
+
+impl fmt::Debug for StepReporter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StepReporter")
+            .field("connected", &self.sink.is_some())
+            .finish()
+    }
 }
 
 impl StepReporter {
     /// A step reporter whose events go nowhere.
     pub fn null() -> Self {
-        Self {
-            tx: None,
-            task_id: TaskId(0),
-        }
-    }
-
-    fn send(&self, kind: EventKind) {
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(Event {
-                task_id: self.task_id,
-                kind,
-            });
-        }
+        Self { sink: None }
     }
 
     /// Report that a shell command within the step began executing, emitting
     /// [`EventKind::CommandStarted`].
     pub fn command(&self, command: impl Into<String>) {
-        self.send(EventKind::CommandStarted {
-            command: command.into(),
-        });
+        if let Some(sink) = &self.sink {
+            sink.command_started(command.into());
+        }
     }
 
     /// Emit one line of output.
     pub fn output(&self, stream: OutputStream, line: impl Into<String>) {
-        self.send(EventKind::Output {
-            stream,
-            line: line.into(),
-        });
+        if let Some(sink) = &self.sink {
+            sink.output(stream, line.into());
+        }
     }
 
     /// Emit one line of tool stdout.
@@ -370,6 +383,268 @@ impl StepReporter {
 
     /// Finish the step, emitting [`EventKind::StepCompleted`].
     pub fn done(&self, outcome: StepOutcome) {
-        self.send(EventKind::StepCompleted { outcome });
+        if let Some(sink) = &self.sink {
+            sink.step_completed(outcome);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stand-in task payload. Real callers use their own vocabulary; this
+    /// crate only ever moves it across the channel.
+    #[derive(Debug, Clone, Serialize)]
+    #[serde(tag = "kind", rename = "demo")]
+    struct DemoTask {
+        name: String,
+    }
+
+    fn demo(name: &str) -> DemoTask {
+        DemoTask {
+            name: name.to_owned(),
+        }
+    }
+
+    fn drain<T>(rx: &mut UnboundedReceiver<Event<T>>) -> Vec<Event<T>> {
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn null_reporters_emit_nothing_and_never_panic() {
+        let reporter: Reporter<DemoTask> = Reporter::null();
+        let task = reporter.task(demo("a"));
+        let step = task.step(1, 1, "only");
+
+        // Every method must be safe to call with no receiver attached.
+        step.command("echo hi");
+        step.stdout("out");
+        step.stderr("err");
+        step.info("note");
+        step.done(StepOutcome::Succeeded);
+        task.progress(42);
+        task.finish(TaskOutcome::succeeded());
+
+        // Handles derived from a null reporter are themselves null.
+        assert!(TaskReporter::<DemoTask>::null().tx.is_none());
+        assert!(StepReporter::null().sink.is_none());
+    }
+
+    #[tokio::test]
+    async fn task_ids_follow_creation_order() {
+        let (reporter, mut rx) = channel::<DemoTask>();
+        let first = reporter.task(demo("a"));
+        let second = reporter.task(demo("b"));
+        let third = reporter.task(demo("c"));
+
+        // Finishing out of order must not disturb the ids.
+        third.finish(TaskOutcome::succeeded());
+        first.finish(TaskOutcome::succeeded());
+        second.finish(TaskOutcome::succeeded());
+
+        let started: Vec<TaskId> = drain(&mut rx)
+            .into_iter()
+            .filter(|e| matches!(e.kind, EventKind::TaskStarted { .. }))
+            .map(|e| e.task_id)
+            .collect();
+        assert_eq!(started, vec![TaskId(0), TaskId(1), TaskId(2)]);
+    }
+
+    #[tokio::test]
+    async fn events_arrive_in_emission_order_and_carry_their_task_id() {
+        let (reporter, mut rx) = channel::<DemoTask>();
+        let task = reporter.task(demo("a"));
+        let step = task.step(1, 2, "compile");
+        step.command("make");
+        step.stdout("line one");
+        step.stderr("line two");
+        step.done(StepOutcome::Succeeded);
+        task.finish(TaskOutcome::succeeded());
+
+        let events = drain(&mut rx);
+        assert!(events.iter().all(|e| e.task_id == TaskId(0)));
+
+        let shape: Vec<String> = events
+            .iter()
+            .map(|e| match &e.kind {
+                EventKind::TaskStarted { .. } => "started".to_owned(),
+                EventKind::StepStarted {
+                    number,
+                    total,
+                    label,
+                } => {
+                    format!("step {number}/{total} {label}")
+                }
+                EventKind::CommandStarted { command } => format!("$ {command}"),
+                EventKind::Output { stream, line } => format!("{stream:?} {line}"),
+                EventKind::Progress { position } => format!("progress {position}"),
+                EventKind::StepCompleted { .. } => "step done".to_owned(),
+                EventKind::TaskCompleted { .. } => "task done".to_owned(),
+            })
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                "started",
+                "step 1/2 compile",
+                "$ make",
+                "Stdout line one",
+                "Stderr line two",
+                "step done",
+                "task done",
+            ]
+        );
+    }
+
+    /// A step reporter keeps its own channel handle, so output emitted after
+    /// the task reporter is gone still arrives. This is what makes the
+    /// spawned stdout/stderr readers in the core library safe.
+    #[tokio::test]
+    async fn step_reporter_outlives_its_task_reporter() {
+        let (reporter, mut rx) = channel::<DemoTask>();
+        let step = {
+            let task = reporter.task(demo("a"));
+            task.step(1, 1, "run")
+        };
+        step.stdout("after the task handle dropped");
+
+        let lines: Vec<String> = drain(&mut rx)
+            .into_iter()
+            .filter_map(|e| match e.kind {
+                EventKind::Output { line, .. } => Some(line),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lines, vec!["after the task handle dropped".to_owned()]);
+    }
+
+    /// The receiver must close once every handle is gone, otherwise a
+    /// consumer driving the stream to completion would hang.
+    #[tokio::test]
+    async fn stream_closes_when_all_handles_drop() {
+        let (reporter, mut rx) = channel::<DemoTask>();
+        let task = reporter.task(demo("a"));
+        let step = task.step(1, 1, "run");
+
+        drop(reporter);
+        drop(task);
+        assert!(rx.recv().await.is_some(), "buffered events still deliver");
+
+        drop(step);
+        while rx.recv().await.is_some() {}
+        // Reaching here means recv() returned None rather than hanging.
+    }
+
+    /// The `--json` renderer planned in #493 depends on this wire format, so
+    /// the tags and field names are pinned here rather than left to chance.
+    /// The task payload's own shape is the caller's business and is asserted
+    /// where that payload is defined.
+    #[test]
+    fn event_wire_format_is_stable() {
+        let event = |kind| {
+            serde_json::to_value(Event {
+                task_id: TaskId(7),
+                kind,
+            })
+            .expect("event should serialize")
+        };
+
+        assert_eq!(
+            event(EventKind::TaskStarted { task: demo("a") }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_started",
+                // The payload nests under `task`; its inner shape is the
+                // caller's to define.
+                "task": { "kind": "demo", "name": "a" },
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::StepStarted {
+                number: 1,
+                total: 3,
+                label: "compile".to_owned(),
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "step_started",
+                "number": 1, "total": 3, "label": "compile",
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::CommandStarted {
+                command: "make build".to_owned(),
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "command_started", "command": "make build",
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::Output {
+                stream: OutputStream::Stderr,
+                line: "boom".to_owned(),
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "output", "stream": "stderr", "line": "boom",
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::Progress { position: 1024 }),
+            serde_json::json!({ "task_id": 7, "event": "progress", "position": 1024 })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::StepCompleted {
+                outcome: StepOutcome::Failed,
+            }),
+            serde_json::json!({ "task_id": 7, "event": "step_completed", "outcome": "failed" })
+        );
+
+        // Task outcomes nest under `outcome`, internally tagged by `result`.
+        assert_eq!(
+            event(EventKind::<DemoTask>::TaskCompleted {
+                outcome: TaskOutcome::succeeded(),
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_completed",
+                "outcome": { "result": "succeeded" },
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::TaskCompleted {
+                outcome: TaskOutcome::Succeeded {
+                    retained_output: vec!["kept".to_owned()],
+                },
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_completed",
+                "outcome": { "result": "succeeded", "retained_output": ["kept"] },
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::TaskCompleted {
+                outcome: TaskOutcome::Failed {
+                    message: "no".to_owned(),
+                    causes: vec!["because".to_owned()],
+                },
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_completed",
+                "outcome": { "result": "failed", "message": "no", "causes": ["because"] },
+            })
+        );
+        assert_eq!(
+            event(EventKind::<DemoTask>::TaskCompleted {
+                outcome: TaskOutcome::Skipped {
+                    reason: "not an upgrade".to_owned(),
+                },
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_completed",
+                "outcome": { "result": "skipped", "reason": "not an upgrade" },
+            })
+        );
     }
 }

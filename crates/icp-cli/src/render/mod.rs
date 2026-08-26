@@ -1,14 +1,20 @@
 //! Presentation layer for [`icp_events`] streams.
 //!
-//! Operations emit typed events through a [`icp_events::Reporter`]; a
-//! [`Renderer`] consumes the stream and owns everything user-facing: wording,
-//! progress bars, and the deferred failure dumps. Commands pick a renderer
-//! with [`Renderer::for_ctx`] and drive it with [`Renderer::run`] alongside
-//! the operation.
+//! Operations emit typed events through a [`Reporter`]; a [`Renderer`]
+//! consumes the stream and owns everything user-facing: wording, progress
+//! bars, and the deferred failure dumps. Commands pick a renderer with
+//! [`Renderer::for_ctx`] and drive it with [`Renderer::run`] alongside the
+//! operation.
+//!
+//! `icp_events` is generic over the task payload and knows nothing about what
+//! is being run; the vocabulary comes from [`icp::operations::task`], where
+//! each kind of work describes itself. What lives here is only how those
+//! descriptions are drawn on a terminal.
 
 use std::collections::{BTreeMap, VecDeque};
 
-use icp_events::{Event, Reporter, TaskId, TaskKind, TaskOutcome, TaskReporter, TransferBlob};
+use icp::operations::task::{Failure, Presentation, Task};
+use icp_events::{TaskId, TaskOutcome};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
@@ -20,6 +26,8 @@ mod style;
 pub(crate) use interactive::InteractiveRenderer;
 pub(crate) use plain::PlainRenderer;
 pub(crate) use spinner::{ProgressManager, ProgressManagerSettings};
+
+use icp::operations::task::{Event, Reporter, TaskReporter};
 
 /// The maximum number of lines to display for a step output
 const MAX_LINES_PER_STEP: usize = 10_000;
@@ -77,16 +85,16 @@ pub(crate) async fn rendered<T>(debug: bool, op: impl AsyncFnOnce(&Reporter) -> 
     result
 }
 
-/// Run a single task under its own renderer: starts a task of `kind`, hands
-/// its reporter to `op`, and finishes the task from the result before the
+/// Run a single task under its own renderer: starts `task`, hands its
+/// reporter to `op`, and finishes the task from the result before the
 /// renderer flushes.
 pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
     debug: bool,
-    kind: TaskKind,
+    task: Task,
     op: impl AsyncFnOnce(&TaskReporter) -> Result<T, E>,
 ) -> Result<T, E> {
     rendered(debug, async |reporter| {
-        let task = reporter.task(kind);
+        let task = reporter.task(task);
         let result = op(&task).await;
 
         match &result {
@@ -99,143 +107,18 @@ pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
     .await
 }
 
-// Wording for each task kind. Events carry data; these helpers own the words.
-
-/// Message shown while a task runs, before any step reports in. Multi-step
-/// tasks (build, sync) have none — their step headers take over.
-fn running_message(kind: &TaskKind) -> Option<&'static str> {
-    match kind {
-        // Build and sync step headers take over; a transfer's byte bar has no
-        // message slot at all.
-        TaskKind::Build { .. } | TaskKind::Sync { .. } | TaskKind::SnapshotTransfer { .. } => None,
-        TaskKind::Create { .. } => Some("Creating..."),
-        TaskKind::Install { .. } => Some("Installing..."),
-        TaskKind::UpdateSettings { .. } => Some("Updating canister settings..."),
-        TaskKind::UpdateEnvironmentVariables { .. } => Some("Updating environment variables..."),
-        TaskKind::CandidCheck { .. } => Some("Checking compatibility..."),
-    }
-}
-
-/// Prefix label for a snapshot-transfer byte bar.
-fn transfer_label(blob: &TransferBlob) -> &'static str {
-    match blob {
-        TransferBlob::WasmModule => "WASM module",
-        TransferBlob::WasmMemory => "WASM memory",
-        TransferBlob::StableMemory => "Stable memory",
-    }
-}
-
-/// Live header shown while a step runs, e.g. "Building: step 1 of 3 (script)…".
-/// `label` may span multiple lines.
-fn step_header(kind: &TaskKind, number: usize, total: usize, label: &str) -> String {
-    match kind {
-        TaskKind::Sync { .. } => format!("\nSyncing: {label} {number} of {total}"),
-        // Only build and sync report steps; a generic header for the rest.
-        _ => format!("Building: step {number} of {total} {label}"),
-    }
-}
-
-/// Label for the captured-output header, e.g. "[name] Build output:".
-fn output_label(kind: &TaskKind) -> &'static str {
-    match kind {
-        TaskKind::Sync { .. } => "Sync",
-        // Only build and sync capture step output; a generic label for the rest.
-        _ => "Build",
-    }
-}
-
-/// Final progress-bar message for a task that succeeded.
-fn success_message(kind: &TaskKind) -> String {
-    match kind {
-        TaskKind::Build { .. } => "Built successfully".to_owned(),
-        TaskKind::Sync { canister_id, .. } => format!("Synced successfully: {canister_id}"),
-        TaskKind::Create { .. } => "Created successfully".to_owned(),
-        TaskKind::Install { .. } => "Installed successfully".to_owned(),
-        TaskKind::UpdateSettings { .. } => "Canister settings updated successfully".to_owned(),
-        TaskKind::UpdateEnvironmentVariables { .. } => {
-            "Environment variables updated successfully".to_owned()
-        }
-        TaskKind::CandidCheck { .. } => "Compatible".to_owned(),
-        // A transfer's byte bar has no message slot; nothing to show.
-        TaskKind::SnapshotTransfer { .. } => "done".to_owned(),
-    }
-}
-
-/// Final progress-bar message for a task that failed.
-fn failure_message(kind: &TaskKind, message: &str) -> String {
-    match kind {
-        TaskKind::Build { .. } => format!("Failed to build canister: {message}"),
-        TaskKind::Sync { .. } => format!("Failed to sync canister: {message}"),
-        // Create failures surface through the command's returned error; the
-        // bar shows the bare message.
-        TaskKind::Create { .. } => message.to_owned(),
-        TaskKind::Install { .. } => format!("Failed to install canister: {message}"),
-        TaskKind::UpdateSettings { .. } => {
-            format!("Failed to update canister settings: {message}")
-        }
-        TaskKind::UpdateEnvironmentVariables { .. } => {
-            format!("Failed to update environment variables: {message}")
-        }
-        TaskKind::CandidCheck { .. } => "Incompatible".to_owned(),
-        // Transfer failures surface through the command's returned error.
-        TaskKind::SnapshotTransfer { .. } => message.to_owned(),
-    }
-}
-
-/// First line of a task's failure dump, or `None` for kinds that don't get a
-/// deferred dump (their failure travels on the command's returned error).
-fn failure_header(kind: &TaskKind) -> Option<String> {
-    match kind {
-        TaskKind::Build { canister } => {
-            Some(format!("----- Failed to build canister '{canister}' -----"))
-        }
-        TaskKind::Sync {
-            canister,
-            canister_id,
-        } => Some(format!(
-            "----- Failed to sync canister '{canister}': {canister_id} -----"
-        )),
-        TaskKind::Create { .. } => None,
-        TaskKind::Install {
-            canister,
-            canister_id,
-        } => Some(format!(
-            "----- Failed to install canister '{canister}': {canister_id} -----"
-        )),
-        TaskKind::UpdateSettings {
-            canister,
-            canister_id,
-        } => Some(format!(
-            "----- Failed to update settings for canister '{canister}': {canister_id} -----"
-        )),
-        TaskKind::UpdateEnvironmentVariables {
-            canister,
-            canister_id,
-        } => Some(format!(
-            "----- Failed to update environment variables for canister '{canister}': {canister_id} -----"
-        )),
-        TaskKind::CandidCheck {
-            canister,
-            canister_id,
-        } => Some(format!(
-            " ----- Candid interface compatibility check failed: '{canister}' ({canister_id}) -----"
-        )),
-        TaskKind::SnapshotTransfer { .. } => None,
-    }
-}
-
 /// Print output lines a task retained past its rolling step view (e.g.
 /// sync-plugin stderr), prefixed with the canister name.
-fn print_retained(kind: &TaskKind, lines: &[String]) {
+fn print_retained(task: &Task, lines: &[String]) {
     for line in lines {
-        eprintln!("[{}] {line}", kind.canister());
+        eprintln!("[{}] {line}", task.presentation().canister());
     }
 }
 
 /// Captured output of one task, kept so a failure can be replayed after the
 /// live view is gone.
 pub(super) struct TaskLog {
-    kind: TaskKind,
+    task: Task,
     finished_steps: Vec<StepLog>,
     current_step: Option<StepLog>,
     failure: Option<Failure>,
@@ -244,11 +127,6 @@ pub(super) struct TaskLog {
 struct StepLog {
     title: String,
     lines: RollingLines,
-}
-
-struct Failure {
-    message: String,
-    causes: Vec<String>,
 }
 
 /// A fixed-capacity rolling buffer that always holds the last `capacity` items.
@@ -286,17 +164,21 @@ impl RollingLines {
 }
 
 impl TaskLog {
-    fn new(kind: TaskKind) -> Self {
+    fn new(task: Task) -> Self {
         Self {
-            kind,
+            task,
             finished_steps: Vec::new(),
             current_step: None,
             failure: None,
         }
     }
 
-    fn kind(&self) -> &TaskKind {
-        &self.kind
+    fn task(&self) -> &Task {
+        &self.task
+    }
+
+    fn presentation(&self) -> &dyn Presentation {
+        self.task.presentation()
     }
 
     fn start_step(&mut self, title: String) {
@@ -333,10 +215,13 @@ impl TaskLog {
             return Vec::new();
         }
 
-        let name = self.kind.canister();
+        let name = self.presentation().canister();
         let mut lines = Vec::new();
 
-        lines.push(format!("[{name}] {} output:", output_label(&self.kind)));
+        lines.push(format!(
+            "[{name}] {} output:",
+            self.presentation().output_label()
+        ));
 
         let steps: &[StepLog] = if all_steps {
             &self.finished_steps
@@ -366,40 +251,31 @@ impl TaskLog {
 }
 
 /// Print the failure dump for every failed task, in task-creation order.
+/// A task whose failure the caller could have proceeded past gets the CLI's
+/// wording for how to do that, once, at the end.
 fn dump_failures(logs: &BTreeMap<TaskId, TaskLog>, all_steps: bool) {
-    let mut candid_failures = false;
+    let mut bypassable = false;
 
     for log in logs.values() {
         let Some(failure) = &log.failure else {
             continue;
         };
-        let Some(header) = failure_header(&log.kind) else {
+        let presentation = log.presentation();
+        let Some(dump) = presentation.failure_dump(failure) else {
             continue;
         };
 
-        error!("{header}");
-        match &log.kind {
-            TaskKind::CandidCheck { .. } => {
-                candid_failures = true;
-                error!(
-                    "You are making a BREAKING change. Other canisters or frontend clients \
-                     relying on your canister may stop working.\n\n{}",
-                    failure.message,
-                );
-            }
-            _ => {
-                error!("'{}'", failure.message);
-                for cause in &failure.causes {
-                    error!("  caused by: {cause}");
-                }
-            }
+        for line in dump {
+            error!("{line}");
         }
         for line in log.dump(all_steps) {
             error!("{line}");
         }
+
+        bypassable |= presentation.failure_is_bypassable();
     }
 
-    if candid_failures {
+    if bypassable {
         error!("Use --yes to bypass this check.");
     }
 }

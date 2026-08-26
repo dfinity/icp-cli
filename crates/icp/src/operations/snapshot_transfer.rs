@@ -15,11 +15,11 @@ use ic_management_canister_types::{
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
+use crate::operations::task::TaskReporter;
 use crate::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
-use icp_events::TaskReporter;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::{

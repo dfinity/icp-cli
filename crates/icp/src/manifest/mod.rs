@@ -25,7 +25,7 @@ pub use {
         SyncStep, SyncSteps,
     },
     dependency::DependencyManifest,
-    environment::EnvironmentManifest,
+    environment::{CanisterSelection, EnvironmentManifest},
     network::{ManagedMode, Mode, NetworkManifest},
     project::ProjectManifest,
 };

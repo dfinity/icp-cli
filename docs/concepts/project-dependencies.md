@@ -25,7 +25,7 @@ dependencies:
 
 `icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` here is an **exposure** filter (which IDs your canisters see), not a deployment filter.
 
-"Exactly as it would deploy on its own" includes its own environments: if the dependency's environment [selects a subset of its own canisters](#environments-across-a-workspace), only those are deployed to that environment.
+"Exactly as it would deploy on its own" includes its own environments: if the dependency's environment [names a subset of its canisters](#which-canisters-an-environment-holds), only those are deployed to that environment.
 
 ## Canister ID injection
 
@@ -104,15 +104,43 @@ Force the workspace root with the `--project-root-override` flag or the `ICP_PRO
 
 The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
 
-A dependency's own same-named environment still contributes its **canister selection** and its **per-canister settings, init args, and upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
+A dependency's own same-named environment still contributes its **per-canister settings**, **init args**, and **upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
 
 1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
 2. the dependency's own environment configuration
 3. the canister's base settings
 
-A dependency's `canisters:` selection applies to **its own** canisters, and prunes them from the environment just as it would when the dependency is deployed on its own — a canister openemail's `staging` leaves out is not deployed to the workspace's `staging` either, and `canisters: []` keeps openemail out of that environment entirely. A namespaced name in that list (`libfoo:util`) addresses one of openemail's *own* dependencies, which prunes itself through its own same-named environment. Either form is rejected if it names nothing openemail can address — a canister it does not declare, or a path that is not one of its dependencies — exactly as it is standalone.
+### Which canisters an environment holds
 
-The precedence above governs membership too: if the root's environment names its canisters explicitly, that list is the environment, and a member's selection does not narrow it further.
+`canisters:` is not an override, so it does not follow that precedence. Each project's environment block decides **its own** canisters, and a project that writes no list contributes all of them:
+
+```yaml
+# app/icp.yaml — the workspace root, whose canisters are `app` and `worker`
+environments:
+  - name: staging
+    canisters: [app]
+```
+
+```yaml
+# app/vendor/openemail/icp.yaml — canisters `backend` and `frontend`
+environments:
+  - name: staging
+    canisters: [backend]
+```
+
+`staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project, and `canisters: []` keeps a project out of the environment entirely. This is what the dependency would deploy on its own, which is the point: vendoring does not change it.
+
+A list may also name **another** project's canisters, by the path-based name used to address them (`"vendor/openemail:frontend"`, or `"libfoo:util"` from inside openemail, relative to the project writing it). That decides *that* project's canisters for the environment — useful when a dependency has no opinion of its own:
+
+```yaml
+# the root deploys only openemail's frontend to staging; openemail's own
+# staging block writes no `canisters:` list, so it leaves the choice open
+environments:
+  - name: staging
+    canisters: [app, "vendor/openemail:frontend"]
+```
+
+Deciding one project's canisters in **two** places for one environment is an error, not a precedence — remove the `canisters:` list from one of them. Lists in different projects that each name only their own canisters never collide, and neither do lists for different environments. A name that resolves to nothing the writing project can address — a canister it does not declare, or a path that is not one of its dependencies — is rejected, exactly as it is standalone.
 
 Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
 

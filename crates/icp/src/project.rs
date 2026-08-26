@@ -13,7 +13,7 @@ use crate::{
         Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
         ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
-        environment::CanisterSelection,
+        environment::{CanisterExclusion, CanisterSelection},
         load_manifest_from_path,
         network::RootKeySpec,
         recipe::RecipeType,
@@ -39,6 +39,15 @@ pub enum EnvironmentError {
     InvalidCanister {
         environment: String,
         canister: String,
+    },
+
+    #[snafu(display(
+        "environment '{environment}' excludes '{exclusion}', which matches no canister in the \
+         project"
+    ))]
+    InvalidExclusion {
+        environment: String,
+        exclusion: String,
     },
 }
 
@@ -1063,14 +1072,16 @@ pub fn member_scoped_canisters(
     Some(names)
 }
 
-/// Build one environment's canister map: select from `canisters`, then apply the
-/// member overrides for this environment (standalone-equivalence), then
-/// the root's own overrides (highest precedence). Precedence is therefore
-/// root-explicit > member-env > canister-base.
+/// Build one environment's canister map: select from `canisters` and drop the
+/// `exclusions` from that selection, then apply the member overrides for this
+/// environment (standalone-equivalence), then the root's own overrides (highest
+/// precedence). Precedence is therefore root-explicit > member-env >
+/// canister-base.
 fn build_environment_canisters(
     canisters: &IndexMap<String, (PathBuf, Canister)>,
     env_name: &str,
     selection: &CanisterSelection,
+    exclusions: &[CanisterExclusion],
     member_overrides: Option<&HashMap<String, MemberCanisterOverride>>,
     root_settings: Option<&HashMap<String, ManifestSettings>>,
     root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
@@ -1093,6 +1104,22 @@ fn build_environment_canisters(
             cs
         }
     };
+
+    // Exclusions are checked against every canister in the project rather than
+    // the selection they narrow: excluding one the selection already leaves out
+    // is a harmless no-op, while an entry that matches nothing anywhere is a
+    // typo worth reporting.
+    for exclusion in exclusions {
+        if !canisters.keys().any(|key| exclusion.matches(key)) {
+            return Err(InvalidExclusionSnafu {
+                environment: env_name.to_owned(),
+                exclusion: exclusion.to_string(),
+            }
+            .build()
+            .into());
+        }
+    }
+    cs.retain(|key, _| !exclusions.iter().any(|e| e.matches(key)));
 
     // Member overrides first (lower precedence than the root's own overrides).
     if let Some(overrides) = member_overrides {
@@ -1388,6 +1415,7 @@ pub async fn consolidate_manifest(
                         &canisters,
                         &m.name,
                         &m.canisters,
+                        &m.exclude_canisters,
                         member_env_overrides.get(&m.name),
                         m.settings.as_ref(),
                         m.init_args.as_ref(),
@@ -1417,6 +1445,7 @@ pub async fn consolidate_manifest(
                 &canisters,
                 LOCAL,
                 &CanisterSelection::Everything,
+                &[],
                 member_env_overrides.get(LOCAL),
                 None,
                 None,
@@ -1441,6 +1470,7 @@ pub async fn consolidate_manifest(
                 &canisters,
                 IC,
                 &CanisterSelection::Everything,
+                &[],
                 member_env_overrides.get(IC),
                 None,
                 None,
@@ -1775,6 +1805,130 @@ environments:
         // Implicit environments are never recorded as missing.
         assert!(!p.member_missing_envs.contains_key("local"));
         assert!(!p.member_missing_envs.contains_key("ic"));
+    }
+
+    /// Sorted store keys of an environment's canisters, for comparing selections.
+    fn env_canisters(p: &Project, env: &str) -> Vec<String> {
+        let mut keys: Vec<String> = p
+            .environments
+            .get(env)
+            .unwrap_or_else(|| panic!("environment '{env}' not found"))
+            .canisters
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort();
+        keys
+    }
+
+    /// A workspace whose root declares `app` and `extra`, depends on
+    /// `openemail` (`backend`, `frontend`), which in turn vendors `ledger`.
+    fn nested_workspace(tmp: &Path, root_environments: &str) {
+        write(
+            tmp,
+            "openemail/vendor/ledger/icp.yaml",
+            &manifest(&["ledger"], ""),
+        );
+        write(
+            tmp,
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "dependencies:\n  - name: ledger\n    path: ./vendor/ledger\n",
+            ),
+        );
+        let mut root = manifest(
+            &["app", "extra"],
+            "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+        );
+        root.push_str(root_environments);
+        write(tmp, "icp.yaml", &root);
+    }
+
+    #[tokio::test]
+    async fn environment_excludes_canisters_and_whole_subprojects() {
+        let tmp = Utf8TempDir::new().unwrap();
+        nested_workspace(
+            tmp.path(),
+            "environments:\n  - name: staging\n    exclude-canisters:\n      - extra\n      - openemail:\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        // The excluded subproject takes its own canisters and its vendored
+        // dependency's with it; the named canister is dropped on its own.
+        assert_eq!(env_canisters(&p, "staging"), vec!["app".to_string()]);
+
+        // Other environments are untouched — exclusion is per-environment.
+        assert_eq!(
+            env_canisters(&p, LOCAL),
+            vec![
+                "app".to_string(),
+                "extra".to_string(),
+                "openemail/vendor/ledger:ledger".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn environment_exclusion_narrows_an_explicit_selection() {
+        let tmp = Utf8TempDir::new().unwrap();
+        nested_workspace(
+            tmp.path(),
+            "environments:\n  - name: staging\n    canisters: [app, extra, openemail:backend]\n    \
+             exclude-canisters: [extra]\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            env_canisters(&p, "staging"),
+            vec!["app".to_string(), "openemail:backend".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn environment_exclusion_may_name_an_unselected_canister() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // `extra` exists in the project but is not selected, so excluding it is
+        // a no-op rather than an error.
+        nested_workspace(
+            tmp.path(),
+            "environments:\n  - name: staging\n    canisters: [app]\n    \
+             exclude-canisters: [extra]\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(env_canisters(&p, "staging"), vec!["app".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn unknown_environment_exclusion_is_rejected() {
+        for entry in ["nope", "openemail:nope", "nope:", "openemai:"] {
+            let tmp = Utf8TempDir::new().unwrap();
+            nested_workspace(
+                tmp.path(),
+                &format!(
+                    "environments:\n  - name: staging\n    exclude-canisters:\n      - {entry}\n"
+                ),
+            );
+
+            let err = consolidate(tmp.path())
+                .await
+                .expect_err("an exclusion matching no canister should be rejected");
+            assert!(
+                matches!(
+                    err,
+                    ConsolidateManifestError::Environment {
+                        source: EnvironmentError::InvalidExclusion { ref exclusion, .. }
+                    } if exclusion == entry
+                ),
+                "unexpected error for '{entry}': {err}"
+            );
+        }
     }
 
     #[tokio::test]

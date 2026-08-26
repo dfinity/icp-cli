@@ -563,3 +563,74 @@ fn build_all_canisters_in_environment() {
         .stderr(contains("DEBUG icp::progress: building canister-b"))
         .stderr(contains("DEBUG icp::progress: building canister-c").not()); // not in test-env
 }
+
+#[test]
+fn build_excludes_canisters_from_environment() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Create temporary file
+    let f = NamedTempFile::new().expect("failed to create temporary file");
+    let path = f.path();
+
+    // Project manifest whose environment names what it leaves out instead of
+    // what it includes.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: canister-a
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-a" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-b
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-b" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
+          - name: canister-c
+            build:
+              steps:
+                - type: script
+                  command: echo "building canister-c" && cp '{path}' "$ICP_WASM_OUTPUT_PATH"
+
+        environments:
+          - name: test-env
+            exclude-canisters:
+              - canister-c
+    "#};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        &pm,                           // contents
+    )
+    .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args(["--debug", "build", "--environment", "test-env"])
+        .assert()
+        .success()
+        .stderr(contains("DEBUG icp::progress: building canister-a"))
+        .stderr(contains("DEBUG icp::progress: building canister-b"))
+        .stderr(contains("DEBUG icp::progress: building canister-c").not()); // excluded
+
+    // A misspelled exclusion is rejected when the project is loaded.
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &pm.replace("- canister-c", "- canister-d"),
+    )
+    .expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args(["build", "--environment", "test-env"])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "environment 'test-env' excludes 'canister-d', which matches no canister in the project",
+        ));
+}

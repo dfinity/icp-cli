@@ -354,6 +354,9 @@ environments:
     canisters:
       - frontend
       - backend
+    exclude-canisters:
+      - services/crm:worker      # one canister
+      - "services/legacy:"       # a whole subproject
     settings:
       frontend:
         memory_allocation: 2gib
@@ -370,8 +373,28 @@ environments:
 | `name` | string | Yes | Environment identifier |
 | `network` | string | Yes | Network to deploy to |
 | `canisters` | array | No | Canisters to include (default: all) |
+| `exclude-canisters` | array | No | Canisters to leave out (default: none) |
 | `settings` | object | No | Per-canister setting overrides |
 | `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
+
+### Excluding Canisters
+
+`exclude-canisters:` is applied after `canisters:`, so it narrows either the whole project (when `canisters:` is absent) or the explicit selection. Each entry is one of:
+
+- A canister name, spelled as it is elsewhere in the project — a bare local name such as `backend`, or a `subproject:canister` key such as `services/crm:worker`.
+- A subproject, written as its key followed by `:` with no canister name — `services/crm:`. This covers the subproject's own canisters *and* those of the subprojects nested beneath it.
+
+An entry that matches no canister in the project is an error, so a typo fails at load time rather than silently deploying everything. Excluding a canister that `canisters:` already leaves out is allowed and does nothing.
+
+Note the YAML quoting: a subproject entry ends in `:`, so inside a flow sequence it must be quoted — `exclude-canisters: ["services/crm:"]`. In a block list both spellings work:
+
+```yaml
+environments:
+  - name: staging
+    exclude-canisters:
+      - services/crm:
+      - "services/legacy:"
+```
 
 ## Canister Settings
 

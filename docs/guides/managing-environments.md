@@ -39,6 +39,38 @@ environments:
     canisters: [frontend, backend]
 ```
 
+## Excluding Canisters
+
+Instead of listing everything an environment deploys, you can list what it leaves out. `exclude-canisters:` works with or without `canisters:` — with no `canisters:` it starts from the whole project, and alongside one it narrows that selection further:
+
+```yaml
+environments:
+  # Everything except the mock ledger, which only local development needs.
+  - name: production
+    network: ic
+    exclude-canisters: [mock-ledger]
+
+  # An explicit selection, minus one of its subproject's canisters.
+  - name: staging
+    network: ic
+    canisters: [frontend, backend, "services/crm:worker"]
+    exclude-canisters: ["services/crm:worker"]
+```
+
+An entry names a canister the same way the rest of the project does: a bare local name such as `backend`, or a `subproject:canister` key such as `services/crm:worker`. To leave out a whole subproject — its own canisters and those of any subprojects nested beneath it — name it with a trailing `:` and no canister name:
+
+```yaml
+environments:
+  - name: production
+    network: ic
+    exclude-canisters:
+      - services/crm:
+```
+
+Because such an entry ends in `:`, YAML needs it quoted inside a bracketed list: `exclude-canisters: ["services/crm:"]`.
+
+An entry that matches no canister in the project is an error, so a misspelled name fails at load time.
+
 ## Environment-Specific Settings
 
 Override canister settings per environment:

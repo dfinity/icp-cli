@@ -167,6 +167,22 @@
       ],
       "type": "object"
     },
+    "CanisterExclusion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "additionalProperties": {
+            "type": "null"
+          },
+          "maxProperties": 1,
+          "minProperties": 1,
+          "type": "object"
+        }
+      ],
+      "description": "A canister to exclude: a canister name as used elsewhere in the project (e.g. 'backend' or 'services/crm:backend'), or a subproject and everything nested beneath it, written with a trailing ':' and no canister name (e.g. 'services/crm:')"
+    },
     "CanisterManifest": {
       "anyOf": [
         {
@@ -346,6 +362,16 @@
           "description": "An optional list of the canisters to be included in this environments.\nDefaults to all the canisters if not specified.",
           "items": {
             "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exclude-canisters": {
+          "description": "An optional list of the canisters to leave out of this environment.\nApplied after `canisters`, so it narrows either the whole project or an\nexplicit selection. Empty when the manifest names none.",
+          "items": {
+            "$ref": "#/$defs/CanisterExclusion"
           },
           "type": [
             "array",

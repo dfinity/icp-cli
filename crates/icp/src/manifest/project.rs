@@ -38,7 +38,7 @@ mod tests {
             ArgsFormat, ManifestInitArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
-            environment::CanisterSelection,
+            environment::{CanisterExclusion, CanisterSelection},
             network::{Managed, ManagedMode, Mode},
         },
     };
@@ -329,6 +329,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                    exclude_canisters: vec![],
                     settings: None,
                     init_args: None,
                 })],
@@ -353,6 +354,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "my-network".to_string(),
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                    exclude_canisters: vec![],
                     settings: None,
                     init_args: None,
                 })],
@@ -380,6 +382,7 @@ mod tests {
                         name: "environment-1".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::None,
+                        exclude_canisters: vec![],
                         settings: None,
                         init_args: None,
                     }),
@@ -387,6 +390,7 @@ mod tests {
                         name: "environment-2".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
+                        exclude_canisters: vec![],
                         settings: None,
                         init_args: None,
                     }),
@@ -394,6 +398,52 @@ mod tests {
                         name: "environment-3".to_string(),
                         network: "local".to_string(),
                         canisters: CanisterSelection::Everything,
+                        exclude_canisters: vec![],
+                        settings: None,
+                        init_args: None,
+                    }),
+                ],
+            },
+        );
+    }
+
+    #[test]
+    fn environment_canister_exclusion() {
+        assert_eq!(
+            validate_project_yaml(indoc! {r#"
+                    environments:
+                      - name: environment-1
+                        exclude-canisters: [my-canister, "subproject:"]
+                      - name: environment-2
+                        canisters: [my-canister, subproject:their-canister]
+                        exclude-canisters: [subproject:their-canister]
+                "#}),
+            ProjectManifest {
+                dependencies: vec![],
+                canisters: vec![],
+                networks: vec![],
+                environments: vec![
+                    Item::Manifest(EnvironmentManifest {
+                        name: "environment-1".to_string(),
+                        network: "local".to_string(),
+                        canisters: CanisterSelection::Everything,
+                        exclude_canisters: vec![
+                            CanisterExclusion::Canister("my-canister".to_string()),
+                            CanisterExclusion::Subproject("subproject".to_string()),
+                        ],
+                        settings: None,
+                        init_args: None,
+                    }),
+                    Item::Manifest(EnvironmentManifest {
+                        name: "environment-2".to_string(),
+                        network: "local".to_string(),
+                        canisters: CanisterSelection::Named(vec![
+                            "my-canister".to_string(),
+                            "subproject:their-canister".to_string(),
+                        ]),
+                        exclude_canisters: vec![CanisterExclusion::Canister(
+                            "subproject:their-canister".to_string()
+                        )],
                         settings: None,
                         init_args: None,
                     }),
@@ -422,6 +472,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "local".to_string(),
                     canisters: CanisterSelection::Everything,
+                    exclude_canisters: vec![],
                     settings: Some(HashMap::from([
                         (
                             "canister-1".to_string(),
@@ -464,6 +515,7 @@ mod tests {
                     name: "my-environment".to_string(),
                     network: "local".to_string(),
                     canisters: CanisterSelection::Everything,
+                    exclude_canisters: vec![],
                     settings: None,
                     init_args: Some(HashMap::from([
                         (

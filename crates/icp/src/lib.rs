@@ -190,6 +190,13 @@ pub struct Project {
     /// Empty for standalone projects and workspaces whose members are complete.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub member_missing_envs: HashMap<String, Vec<String>>,
+
+    /// Environments whose `canisters` lists disagree about some project's
+    /// canisters, keyed by environment name. Reported when the environment is
+    /// selected, so an ambiguous environment does not stop the others from
+    /// loading. Empty unless two lists in a workspace decide one project.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env_selection_conflicts: HashMap<String, project::EnvSelectionConflict>,
 }
 
 impl Project {
@@ -419,6 +426,7 @@ impl MockProjectLoader {
             networks,
             environments,
             member_missing_envs: HashMap::new(),
+            env_selection_conflicts: HashMap::new(),
         };
 
         Self::new(project)
@@ -654,6 +662,7 @@ impl MockProjectLoader {
             networks,
             environments,
             member_missing_envs: HashMap::new(),
+            env_selection_conflicts: HashMap::new(),
         };
 
         Self::new(project)

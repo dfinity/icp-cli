@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+* feat(sync-plugin): `dirs:` and `files:` on a `plugin` sync step may now name anything inside the project, not just paths below the canister's own directory. Entries are still written relative to the canister directory, but may rise out of it — `dirs: ["../shared/assets"]` — so several canisters can be handed the same tree without duplicating it. The project directory is the boundary: an entry that resolves above it is rejected before the plugin runs, as is an absolute one, and an entry that is (or traverses) a symlink is still rejected outright. The plugin sees each directory at the path the manifest wrote, `..` and all.
+
 # v1.4.0
 
 * feat: a canister can now declare `upgrade_args` alongside `init_args`, in its own manifest and as a per-canister environment override. It is passed when `icp deploy` upgrades the canister, where `init_args` is passed when it installs or reinstalls it. It takes exactly the forms `init_args` does (inline Candid string, or `{ value | path, format }`), and paths resolve against the canister's own directory the same way. A canister that declares no `upgrade_args` is upgraded with its `init_args`, as before, and `--args` / `--args-file` still override whichever applies.

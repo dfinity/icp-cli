@@ -2,7 +2,7 @@ use crate::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
     package::PackageCache,
-    prelude::PathBuf,
+    prelude::{Path, PathBuf},
 };
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
@@ -26,6 +26,7 @@ async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
     canister_path: PathBuf,
+    project_dir: &Path,
     canister_id: Principal,
     canister_info: &Canister,
     environment: &str,
@@ -46,6 +47,7 @@ async fn sync_canister(
                 step,
                 &Params {
                     path: canister_path.clone(),
+                    project_dir: project_dir.to_path_buf(),
                     cid: canister_id,
                     name: canister_info.name.clone(),
                     environment: environment.to_owned(),
@@ -86,6 +88,7 @@ pub async fn sync_many(
     syncer: Arc<dyn Synchronize>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    project_dir: PathBuf,
     environment: String,
     network: String,
     canister_ids: BTreeMap<String, Principal>,
@@ -104,12 +107,14 @@ pub async fn sync_many(
             let environment = environment.clone();
             let network = network.clone();
             let canister_ids = canister_ids.clone();
+            let project_dir = project_dir.clone();
 
             async move {
                 let result = sync_canister(
                     &syncer,
                     &agent,
                     canister_path,
+                    &project_dir,
                     cid,
                     &canister_info,
                     &environment,

@@ -114,7 +114,7 @@ for file in &input.files {
 
 Declaring `dirs:`/`files:` as a map instead of a list tags each entry with a `key`, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A key that maps to a list of paths yields several entries sharing that key.
 
-Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
+Open each entry at the `path` it arrives with, whatever it looks like: a manifest may declare a directory elsewhere in the project (`../shared/assets`), and the preopen carries that same spelling. Writes, and paths that escape a preopen, are rejected by the sandbox at runtime. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
 ## Read Declared Fields
 

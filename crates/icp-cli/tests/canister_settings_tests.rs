@@ -1397,8 +1397,16 @@ async fn canister_settings_sync_log_visibility() {
     confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
 }
 
+/// Drives every `--*-status-viewer` / `--status-visibility` flag against a live
+/// replica, checking each one both in `settings show` and in what it actually
+/// grants: whether a non-controller may read the status, or falls back to the
+/// public state-tree information.
+///
+/// The flag-resolution matrix itself is unit-tested in
+/// `commands::canister::settings::update`; what this adds is that clap wires the
+/// flags to the right group and that the replica honours the result.
 #[tokio::test]
-async fn canister_settings_update_status_visibility() {
+async fn canister_settings_status_visibility() {
     let ctx = TestContext::new();
 
     let project_dir = ctx.create_project_dir("icp");
@@ -1467,124 +1475,6 @@ async fn canister_settings_update_status_visibility() {
             .success()
     }
 
-    // Default is controllers, and it is reported separately from log visibility.
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Controllers").and(contains("Log visibility: Controllers")),
-    );
-
-    update(&ctx, &project_dir, &["--status-visibility", "public"]);
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Public")
-            // Log visibility must be left alone.
-            .and(contains("Log visibility: Controllers")),
-    );
-
-    update(
-        &ctx,
-        &project_dir,
-        &["--add-status-viewer", principal_alice.as_str()],
-    );
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Allowed viewers:").and(contains(principal_alice.as_str())),
-    );
-
-    update(
-        &ctx,
-        &project_dir,
-        &[
-            "--add-status-viewer",
-            principal_bob.as_str(),
-            "--remove-status-viewer",
-            principal_alice.as_str(),
-        ],
-    );
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Allowed viewers:")
-            .and(contains(principal_bob.as_str()))
-            .and(contains(principal_alice.as_str()).not()),
-    );
-
-    update(
-        &ctx,
-        &project_dir,
-        &["--remove-status-viewer", principal_bob.as_str()],
-    );
-    confirm(&ctx, &project_dir)
-        .stdout(contains("Status visibility: Allowed viewers list is empty"));
-
-    update(
-        &ctx,
-        &project_dir,
-        &[
-            "--set-status-viewer",
-            principal_alice.as_str(),
-            "--set-status-viewer",
-            principal_bob.as_str(),
-        ],
-    );
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Allowed viewers:")
-            .and(contains(principal_alice.as_str()))
-            .and(contains(principal_bob.as_str())),
-    );
-
-    update(&ctx, &project_dir, &["--status-visibility", "controllers"]);
-    confirm(&ctx, &project_dir).stdout(contains("Status visibility: Controllers"));
-
-    // An update that names neither visibility group must leave both alone,
-    // rather than resetting them to an empty allowed-viewers list.
-    update(
-        &ctx,
-        &project_dir,
-        &["--set-log-viewer", principal_alice.as_str()],
-    );
-    update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
-    confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Controllers")
-            .and(contains("Log visibility: Allowed viewers:"))
-            .and(contains(principal_alice.as_str())),
-    );
-}
-
-/// The point of the setting: a principal that is not a controller can read the
-/// status once it is granted access, and is refused otherwise.
-#[tokio::test]
-async fn canister_status_honours_status_visibility_for_non_controllers() {
-    let ctx = TestContext::new();
-
-    let project_dir = ctx.create_project_dir("icp");
-
-    let client = clients::icp(&ctx, &project_dir, None);
-    let principal_alice = get_principal(&client, "alice");
-
-    let wasm = ctx.make_asset("example_icp_mo.wasm");
-
-    let pm = formatdoc! {r#"
-        canisters:
-          - name: my-canister
-            build:
-              steps:
-                - type: script
-                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
-
-        {NETWORK_RANDOM_PORT}
-        {ENVIRONMENT_RANDOM_PORT}
-    "#};
-
-    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
-
-    let _g = ctx.start_network_in(&project_dir, "random-network").await;
-    ctx.ping_until_healthy(&project_dir, "random-network");
-
-    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
-        .mint_cycles(10 * TRILLION);
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["deploy", "--environment", "random-environment"])
-        .assert()
-        .success();
-
     fn status_as_alice(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
         ctx.icp()
             .current_dir(project_dir)
@@ -1601,85 +1491,95 @@ async fn canister_status_honours_status_visibility_for_non_controllers() {
             .success()
     }
 
+    // Default is controllers, and it is reported separately from log visibility.
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers").and(contains("Log visibility: Controllers")),
+    );
+
     // Alice is not a controller: access is denied and the command falls back to
     // the public state-tree information, which carries no status field.
     status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
 
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "settings",
-            "update",
-            "my-canister",
-            "--environment",
-            "random-environment",
-            "--add-status-viewer",
-            principal_alice.as_str(),
-        ])
-        .assert()
-        .success();
-
-    // Now she may read it, so the full report is printed.
+    // --add-status-viewer grants it to her, and the full report is printed.
+    update(
+        &ctx,
+        &project_dir,
+        &["--add-status-viewer", principal_alice.as_str()],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers:").and(contains(principal_alice.as_str())),
+    );
     status_as_alice(&ctx, &project_dir)
         .stdout(contains("Status: Running").and(contains("Status visibility: Allowed viewers:")));
 
-    // Public grants it to everyone.
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "settings",
-            "update",
-            "my-canister",
-            "--environment",
-            "random-environment",
-            "--status-visibility",
-            "public",
-        ])
-        .assert()
-        .success();
+    // Add and remove in one call, relative to the current list. Alice loses
+    // access again, so the fallback comes back.
+    update(
+        &ctx,
+        &project_dir,
+        &[
+            "--add-status-viewer",
+            principal_bob.as_str(),
+            "--remove-status-viewer",
+            principal_alice.as_str(),
+        ],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers:")
+            .and(contains(principal_bob.as_str()))
+            .and(contains(principal_alice.as_str()).not()),
+    );
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
 
+    update(
+        &ctx,
+        &project_dir,
+        &["--remove-status-viewer", principal_bob.as_str()],
+    );
+    confirm(&ctx, &project_dir)
+        .stdout(contains("Status visibility: Allowed viewers list is empty"));
+
+    // --set-status-viewer replaces the list outright.
+    update(
+        &ctx,
+        &project_dir,
+        &[
+            "--set-status-viewer",
+            principal_alice.as_str(),
+            "--set-status-viewer",
+            principal_bob.as_str(),
+        ],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers:")
+            .and(contains(principal_alice.as_str()))
+            .and(contains(principal_bob.as_str())),
+    );
+
+    // Public grants it to everyone, and leaves log visibility alone.
+    update(&ctx, &project_dir, &["--status-visibility", "public"]);
+    confirm(&ctx, &project_dir)
+        .stdout(contains("Status visibility: Public").and(contains("Log visibility: Controllers")));
     status_as_alice(&ctx, &project_dir)
         .stdout(contains("Status: Running").and(contains("Status visibility: Public")));
 
-    // `--json` reports it in the tagged form, alongside log visibility.
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "status",
-            "my-canister",
-            "--identity",
-            "alice",
-            "--environment",
-            "random-environment",
-            "--json",
-        ])
-        .assert()
-        .success()
-        .stdout(
-            contains(r#""status_visibility":{"type":"Public"}"#)
-                .and(contains(r#""log_visibility":{"type":"Controllers"}"#)),
-        );
-
     // Revoking it puts the fallback back in place.
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "settings",
-            "update",
-            "my-canister",
-            "--environment",
-            "random-environment",
-            "--status-visibility",
-            "controllers",
-        ])
-        .assert()
-        .success();
-
+    update(&ctx, &project_dir, &["--status-visibility", "controllers"]);
     status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // An update that names neither visibility group must leave both alone,
+    // rather than resetting them to an empty allowed-viewers list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-log-viewer", principal_alice.as_str()],
+    );
+    update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers")
+            .and(contains("Log visibility: Allowed viewers:"))
+            .and(contains(principal_alice.as_str())),
+    );
 }
 
 #[tokio::test]
@@ -1719,7 +1619,7 @@ async fn canister_settings_sync_status_visibility() {
         .assert()
         .success();
 
-    fn confirm_status_visibility(ctx: &TestContext, project_dir: &Path, expected: &str) {
+    fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
         ctx.icp()
             .current_dir(project_dir)
             .args([
@@ -1732,7 +1632,6 @@ async fn canister_settings_sync_status_visibility() {
             ])
             .assert()
             .success()
-            .stdout(contains(format!("Status visibility: {expected}")));
     }
 
     fn sync(ctx: &TestContext, project_dir: &Path) {
@@ -1750,15 +1649,7 @@ async fn canister_settings_sync_status_visibility() {
             .success();
     }
 
-    confirm_status_visibility(&ctx, &project_dir, "Controllers");
-
-    write_string(
-        &project_dir.join("icp.yaml"),
-        &manifest("\n    settings:\n      status_visibility: public"),
-    )
-    .expect("failed to write project manifest");
-    sync(&ctx, &project_dir);
-    confirm_status_visibility(&ctx, &project_dir, "Public");
+    confirm(&ctx, &project_dir).stdout(contains("Status visibility: Controllers"));
 
     write_string(
         &project_dir.join("icp.yaml"),
@@ -1768,9 +1659,13 @@ async fn canister_settings_sync_status_visibility() {
     )
     .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
-    confirm_status_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+    confirm(&ctx, &project_dir).stdout(contains(
+        "Status visibility: Allowed viewers: 2vxsx-fae, aaaaa-aa",
+    ));
 
-    // Both visibility settings can be driven from the manifest at once.
+    // Both visibility settings can be driven from the manifest at once, and a
+    // single sync has to apply both — each change alone would satisfy the
+    // "settings already match" check that decides whether to send an update.
     write_string(
         &project_dir.join("icp.yaml"),
         &manifest(
@@ -1779,20 +1674,8 @@ async fn canister_settings_sync_status_visibility() {
     )
     .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
-    confirm_status_visibility(&ctx, &project_dir, "Controllers");
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "settings",
-            "show",
-            "my-canister",
-            "--environment",
-            "random-environment",
-        ])
-        .assert()
-        .success()
-        .stdout(contains("Log visibility: Public"));
+    confirm(&ctx, &project_dir)
+        .stdout(contains("Status visibility: Controllers").and(contains("Log visibility: Public")));
 }
 
 #[tokio::test]

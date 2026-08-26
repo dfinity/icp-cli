@@ -425,11 +425,7 @@ impl CreateOperation {
         settings: &CanisterSettings,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let args = MgmtCreateCanisterArgs {
-            settings: Some(settings.clone()),
-            sender_canister_version: None,
-        };
-        let arg = Encode!(&args).context(CandidEncodeSnafu)?;
+        let arg = encode_create_canister_arg(settings).context(CandidEncodeSnafu)?;
 
         // Subnet-scoped routing is its own endpoint rather than an effective
         // canister id, so this cannot go through `update_or_proxy`.
@@ -743,28 +739,38 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
     Ok(resp)
 }
 
+/// Encodes the argument of the management canister's `create_canister`.
+///
+/// The interface defines it as `record { settings : opt canister_settings }`, so
+/// the settings have to be wrapped: encoding a bare `canister_settings` decodes
+/// as "no settings" and the canister is created with defaults.
+fn encode_create_canister_arg(settings: &CanisterSettings) -> candid::Result<Vec<u8>> {
+    Encode!(&MgmtCreateCanisterArgs {
+        settings: Some(settings.clone()),
+        sender_canister_version: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     /// `create_canister` takes `record { settings : opt canister_settings }`, not
     /// a bare `canister_settings`. Encoding the latter decodes as "no settings"
-    /// and the canister is created with defaults.
+    /// and the canister is created with defaults, which is what the `ic-utils`
+    /// builder this path used to go through did.
     #[test]
     fn subnet_create_encodes_settings_inside_the_argument_record() {
         let settings = CanisterSettings {
             controllers: Some(vec![Principal::anonymous()]),
             ..Default::default()
         };
-        let arg = Encode!(&MgmtCreateCanisterArgs {
-            settings: Some(settings.clone()),
-            sender_canister_version: None,
-        })
-        .unwrap();
 
+        let arg = encode_create_canister_arg(&settings).unwrap();
         let (decoded,): (MgmtCreateCanisterArgs,) = candid::decode_args(&arg).unwrap();
         assert_eq!(decoded.settings, Some(settings));
 
+        // The encoding this replaced, decoded the way the replica decodes it.
         let bare = Encode!(&CanisterSettings::default()).unwrap();
         let (as_args,): (MgmtCreateCanisterArgs,) = candid::decode_args(&bare).unwrap();
         assert!(as_args.settings.is_none());

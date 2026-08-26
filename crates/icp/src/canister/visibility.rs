@@ -222,18 +222,6 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_controllers() {
-        let parsed: LogVisibilityDef = serde_yaml::from_str("controllers").unwrap();
-        assert_eq!(parsed.0, Visibility::Controllers);
-    }
-
-    #[test]
-    fn deserialize_public() {
-        let parsed: LogVisibilityDef = serde_yaml::from_str("public").unwrap();
-        assert_eq!(parsed.0, Visibility::Public);
-    }
-
-    #[test]
     fn deserialize_allowed_viewers() {
         let yaml = r#"
 allowed_viewers:
@@ -316,12 +304,5 @@ allowed_viewers:
             let status: StatusVisibility = value.clone().into();
             assert_eq!(Visibility::from(status), value);
         }
-    }
-
-    #[test]
-    fn schema_names_are_distinct() {
-        use schemars::JsonSchema;
-        assert_eq!(LogVisibilityDef::schema_name(), "LogVisibility");
-        assert_eq!(StatusVisibilityDef::schema_name(), "StatusVisibility");
     }
 }

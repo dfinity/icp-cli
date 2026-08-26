@@ -128,9 +128,11 @@ environments:
     canisters: [backend]
 ```
 
-`staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project, and `canisters: []` keeps a project out of the environment entirely. This is what the dependency would deploy on its own, which is the point: vendoring does not change it.
+`staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project: this is what the dependency would deploy on its own, which is the point — vendoring does not change it.
 
-A list may also name **another** project's canisters, by the path-based name used to address them (`"vendor/openemail:frontend"`, or `"libfoo:util"` from inside openemail, relative to the project writing it). That decides *that* project's canisters for the environment — useful when a dependency has no opinion of its own:
+`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: from the root, it deploys none of the root's own canisters while every dependency still deploys all of its own. To keep a dependency out from the root, exclude it — [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) takes `vendor/openemail:` to drop a whole subproject, so the root can empty an environment without every member agreeing to it.
+
+A list may also name **another** project's canisters — any project in its own dependency subtree, never a sibling or a parent — by the path-based name used to address them (`"vendor/openemail:frontend"` from the root, or `"libfoo:util"` from inside openemail, always relative to the project writing the list). That decides *that* project's canisters for the environment — useful when a dependency has no opinion of its own:
 
 ```yaml
 # the root deploys only openemail's frontend to staging; openemail's own
@@ -140,7 +142,9 @@ environments:
     canisters: [app, "vendor/openemail:frontend"]
 ```
 
-Deciding one project's canisters in **two** places for one environment is an error, not a precedence — remove the `canisters:` list from one of them. Lists in different projects that each name only their own canisters never collide, and neither do lists for different environments. A name that resolves to nothing the writing project can address — a canister it does not declare, or a path that is not one of its dependencies — is rejected, exactly as it is standalone.
+Deciding one project's canisters in **two** places for one environment is an error, not a precedence — remove the `canisters:` list from one of them, or subtract with [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) instead, which never decides a project's canisters and so never collides. Two parents that each name a [shared dependency's](#shared-dependencies) canisters collide even if they name the same ones. Lists in different projects that each name only their own canisters never collide, and neither do lists for different environments.
+
+A name that resolves to nothing the writing project can address — a canister it does not declare, or a path that is not one of its dependencies — is rejected, exactly as it is standalone.
 
 Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
 

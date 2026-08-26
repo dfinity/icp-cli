@@ -12,6 +12,7 @@ use icp::{
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
+use tracing::info;
 
 use crate::options::EnvironmentOpt;
 use crate::{
@@ -98,8 +99,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     let canisters = resolve_targets(ctx, &environment_selection, &args.names).await?;
 
-    // Skip doing any work if no canisters are targeted
+    // Skip doing any work if no canisters are targeted. Say so: an environment
+    // whose `canisters` lists leave out everything in scope is otherwise an
+    // `icp deploy` that succeeds in silence.
     if canisters.is_empty() {
+        info!(
+            "Environment '{}' contains no canisters to deploy",
+            environment_selection.name()
+        );
         return Ok(());
     }
 

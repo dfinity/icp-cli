@@ -315,6 +315,7 @@ pub async fn deploy(
         params.proxy,
         target_canisters,
         canister_list,
+        &env,
         &phase.reporter(),
     )
     .await;

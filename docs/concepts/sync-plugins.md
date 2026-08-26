@@ -112,7 +112,8 @@ The plugin runs with a deliberately narrow capability surface.
 - Entries may name the same directory under several keys, or name a directory inside another entry's, and the plugin is told about each entry as written. The preopens behind them are one per distinct tree: an entry nested inside another is read through the preopen covering it, which grants nothing extra.
 - Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
 - Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.
-- Paths in `dirs:`/`files:` must be relative and may not contain `..`. They also may not be — or traverse — a symlink: each declared entry is rejected if it or any of its parent components is a symlink, so a declared path cannot resolve to a target outside the canister directory. (This restriction may be relaxed later if a safe use case emerges.)
+- Paths in `dirs:`/`files:` are relative to the canister directory and may rise out of it with `..` to reach the rest of the project (`dirs: ["../shared/assets"]`). The project directory is the boundary: an entry that resolves above it — or that is absolute — is rejected before the plugin runs.
+- A declared entry may not be, or traverse, a symlink: it is rejected if it or any component it traverses below the project root is a symlink, so a declared path cannot resolve to a target outside the project. (This restriction may be relaxed later if a safe use case emerges.)
 
 ### Capabilities
 

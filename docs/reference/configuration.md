@@ -195,6 +195,8 @@ A plugin receives every `fields:` value as a string. Numbers and booleans need n
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
 
+Names are always written from this project's point of view, so they keep working when the project is vendored into a workspace as a subproject: a plugin on a canister in `services/crm` reaches a canister of its own `vendor/ledger` dependency as `vendor/ledger:ledger` either way, even though the workspace keys that canister `services/crm/vendor/ledger:ledger`. Both spellings resolve; if a canister elsewhere in the workspace happens to be keyed `vendor/ledger:ledger`, the name means your own.
+
 The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`), read those canisters' metadata sections, and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes

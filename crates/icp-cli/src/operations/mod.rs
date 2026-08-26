@@ -5,6 +5,7 @@ pub(crate) mod call_output;
 pub(crate) mod candid_compat;
 pub(crate) mod canister_migration;
 pub(crate) mod create;
+pub(crate) mod deploy;
 pub(crate) mod install;
 pub(crate) mod proxy;
 pub(crate) mod proxy_management;

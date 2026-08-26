@@ -132,8 +132,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.names.clone()
     };
 
-    // Skip doing any work if no canisters are targeted
+    // Skip doing any work if no canisters are targeted. Say so: an environment
+    // whose `canisters` lists leave out everything in scope is otherwise an
+    // `icp deploy` that succeeds in silence.
     if cnames.is_empty() {
+        info!(
+            "Environment '{}' contains no canisters to deploy",
+            environment_selection.name()
+        );
         return Ok(());
     }
 
@@ -342,6 +348,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.proxy,
         target_canisters,
         canister_list,
+        &env,
         ctx.debug,
     )
     .await

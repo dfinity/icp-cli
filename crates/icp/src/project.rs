@@ -558,27 +558,26 @@ struct MemberEnvContribution {
 /// targeting one environment merge into a single entry.
 type MemberEnvContributions = HashMap<String, MemberEnvContribution>;
 
-/// One canister a member environment selects from the member's own dependencies,
-/// by the path-based name the member addresses it with. Only resolvable once
-/// every instance has been imported, so it is validated after the walk.
+/// One canister a project's environment selects from its own dependencies, by the
+/// path-based name it addresses it with. The instance it names is imported after
+/// the environment is read, so it is checked once that project's subtree is
+/// complete.
 struct NestedSelection {
     environment: String,
 
-    /// The name as the member's manifest wrote it, for the error message.
+    /// The name as the manifest wrote it, for the error message.
     name: String,
 
-    /// The workspace store key it should resolve to.
+    /// The workspace store key it resolves to.
     key: String,
 }
 
-/// A member's identity (alias and store-key prefix) and the environment names it
-/// defines, used to enforce that a member declares every environment the root
-/// targets (strict rule), plus the nested canisters its environments select.
+/// A member's identity (store-key prefix) and the environment names it defines,
+/// used to enforce that a member declares every environment the root targets
+/// (strict rule).
 struct MemberEnvInfo {
-    alias: String,
     prefix: String,
     defined: HashSet<String>,
-    nested_selections: Vec<NestedSelection>,
 }
 
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
@@ -1118,10 +1117,8 @@ async fn import_dependency(
         }
     }
     members.push(MemberEnvInfo {
-        alias: dep.name.clone(),
         prefix: prefix.clone(),
         defined: defined_envs,
-        nested_selections,
     });
 
     // Recurse into the dependency's own dependencies.
@@ -1161,6 +1158,23 @@ async fn import_dependency(
         }
         let exposed = select_exposed(&inst.own, &nested.canisters, &nested.name)?;
         edges.push((nested.name.clone(), exposed));
+    }
+
+    // The subtree is complete, so what this instance's environments select from
+    // its dependencies can be checked. Only the subtree counts: a project can
+    // address its own canisters and its dependencies' and nothing else, so a path
+    // leading out of it — to a sibling of this instance, say — is as invalid here
+    // as it is when the project is loaded on its own.
+    let addressable: HashSet<&str> = subtree.iter().map(|(key, _, _)| key.as_str()).collect();
+    for sel in &nested_selections {
+        if !addressable.contains(sel.key.as_str()) {
+            return InvalidDependencyEnvironmentCanisterSnafu {
+                alias: dep.name.clone(),
+                environment: sel.environment.clone(),
+                canister: sel.name.clone(),
+            }
+            .fail();
+        }
     }
 
     // Assign env-var bindings for this instance's own canisters.
@@ -1410,22 +1424,6 @@ pub async fn consolidate_manifest(
         .await?;
         let exposed = select_exposed(&inst.own, &dep.canisters, &dep.name)?;
         app_edges.push((dep.name.clone(), exposed));
-    }
-
-    // Every canister a member environment selects from its own dependencies must
-    // exist. The walk is over, so the instance it named has been imported if it
-    // is part of the workspace at all.
-    for member in &members {
-        for sel in &member.nested_selections {
-            if !canisters.contains_key(&sel.key) {
-                return InvalidDependencyEnvironmentCanisterSnafu {
-                    alias: member.alias.clone(),
-                    environment: sel.environment.clone(),
-                    canister: sel.name.clone(),
-                }
-                .fail();
-            }
-        }
     }
 
     // Assign env-var bindings for this project's own canisters (own canisters by
@@ -2307,6 +2305,44 @@ environments:
                 "unexpected error for {selection}: {err}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn member_env_naming_a_canister_outside_its_subtree_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // `a` and `b` are siblings: both are the root's dependencies, and neither
+        // is the other's. `b:x` exists in the workspace, but `a` cannot address
+        // it — standalone, `a` has no such canister — so `a` may not decide it.
+        write(tmp.path(), "b/icp.yaml", &manifest(&["x"], ""));
+        write(
+            tmp.path(),
+            "a/icp.yaml",
+            &manifest(
+                &["backend"],
+                "environments:\n  - name: staging\n    canisters: [backend, \"../b:x\"]\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                r#"dependencies:
+  - name: a
+    path: ./a
+  - name: b
+    path: ./b
+"#,
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+        assert!(
+            err.contains("dependency 'a'")
+                && err.contains("staging")
+                && err.contains("invalid canister '../b:x'"),
+            "unexpected error: {err}"
+        );
     }
 
     #[tokio::test]

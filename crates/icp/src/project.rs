@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map::Entry};
 
 use indexmap::{IndexMap, map::Entry as IndexEntry};
 
@@ -176,6 +176,17 @@ pub enum ConsolidateManifestError {
 
     #[snafu(display("dependency '{alias}' declares two environments named '{environment}'"))]
     DuplicateDependencyEnvironment { alias: String, environment: String },
+
+    #[snafu(display(
+        "environment '{environment}' has the canisters of '{target}' selected in two places, \
+         by {first} and by {second}; remove the `canisters` list from one of them"
+    ))]
+    ConflictingEnvironmentSelection {
+        environment: String,
+        target: String,
+        first: String,
+        second: String,
+    },
 
     #[snafu(display("dependency cycle detected: {chain}"))]
     CircularDependency { chain: String },
@@ -495,6 +506,41 @@ struct MemberCanisterOverride {
     init_args: Option<ManifestInitArgs>,
 }
 
+/// One project's `canisters` list for one environment.
+///
+/// A list decides which canisters of the projects it names are in the
+/// environment; it says nothing about projects it does not name. A project that
+/// writes no list for an environment therefore contributes all of its canisters,
+/// unless a project above it names some of them.
+#[derive(Clone)]
+struct EnvSelection {
+    /// Store-key prefix of the project whose manifest wrote the list. Empty for
+    /// the workspace root, whose canisters are keyed by their bare names.
+    owner: String,
+
+    /// How to name that project when two lists collide.
+    label: String,
+
+    /// The store keys the list names. Empty for `canisters: []`.
+    keys: BTreeSet<String>,
+}
+
+impl EnvSelection {
+    /// The projects whose membership this list decides: the writer's own, plus
+    /// every project it names a canister of.
+    fn targets(&self) -> BTreeSet<&str> {
+        let mut targets = BTreeSet::from([self.owner.as_str()]);
+        targets.extend(self.keys.iter().map(|key| owning_prefix(key)));
+        targets
+    }
+}
+
+/// The store-key prefix of the project owning `key`: everything before the last
+/// `:`, or empty for a root canister, which is keyed by its bare name.
+fn owning_prefix(key: &str) -> &str {
+    key.rsplit_once(':').map_or("", |(prefix, _)| prefix)
+}
+
 /// What the members contribute to one of the root's environments.
 #[derive(Default, Clone)]
 struct MemberEnvContribution {
@@ -502,9 +548,9 @@ struct MemberEnvContribution {
     /// store key.
     overrides: HashMap<String, MemberCanisterOverride>,
 
-    /// Store keys of member canisters this environment leaves out, because the
-    /// declaring member's own `canisters` selection does not name them.
-    excluded: HashSet<String>,
+    /// The `canisters` lists the members wrote for this environment, one per
+    /// member that wrote one.
+    selections: Vec<EnvSelection>,
 }
 
 /// Per-environment member contributions, keyed by environment name. Every member
@@ -986,18 +1032,17 @@ async fn import_dependency(
             .fail();
         }
 
-        // The canisters this environment leaves out of the member: whatever its
-        // selection does not name, exactly as when the member deploys on its own.
-        let excluded: Vec<String> = match &em.canisters {
-            CanisterSelection::Everything => vec![],
-            CanisterSelection::None => local_to_key.values().cloned().collect(),
-            CanisterSelection::Named(names) => {
+        // A `canisters` list is the member's statement about which canisters are
+        // in this environment, translated from the names the member writes to
+        // workspace store keys. Writing no list is no statement at all.
+        if let CanisterSelection::None | CanisterSelection::Named(_) = &em.canisters {
+            let mut keys: BTreeSet<String> = BTreeSet::new();
+            if let CanisterSelection::Named(names) = &em.canisters {
                 // Every name must resolve to a canister the member can address,
                 // as standalone. A bare name is one of its own canisters. A
-                // namespaced `<path>:<canister>` is one of its own dependencies',
-                // whose membership that dependency's environment decides for
-                // itself — resolve the path to the instance's store key here and
-                // check the key once the walk has imported it.
+                // namespaced `<path>:<canister>` is one of its own dependencies' —
+                // resolve the path to that instance's store key here, and check
+                // the key itself once the walk has imported the instance.
                 for name in names {
                     let invalid = || {
                         InvalidDependencyEnvironmentCanisterSnafu {
@@ -1009,40 +1054,35 @@ async fn import_dependency(
                     };
                     match name.rsplit_once(':') {
                         None => {
-                            if !local_to_key.contains_key(name) {
-                                return Err(invalid());
-                            }
+                            let key = local_to_key.get(name).ok_or_else(invalid)?;
+                            keys.insert(key.clone());
                         }
                         Some((rel, local)) => {
                             if rel.is_empty() || local.is_empty() {
                                 return Err(invalid());
                             }
                             let dir = canonicalize_or(&canonical.join(rel)).ok_or_else(invalid)?;
+                            let key =
+                                format!("{}:{local}", relative_prefix(app_root_canonical, &dir));
                             nested_selections.push(NestedSelection {
                                 environment: em.name.clone(),
                                 name: name.clone(),
-                                key: format!(
-                                    "{}:{local}",
-                                    relative_prefix(app_root_canonical, &dir)
-                                ),
+                                key: key.clone(),
                             });
+                            keys.insert(key);
                         }
                     }
                 }
-                let selected: HashSet<&str> = names.iter().map(String::as_str).collect();
-                local_to_key
-                    .iter()
-                    .filter(|(local, _)| !selected.contains(local.as_str()))
-                    .map(|(_, key)| key.clone())
-                    .collect()
             }
-        };
-        if !excluded.is_empty() {
             member_envs
                 .entry(em.name.clone())
                 .or_default()
-                .excluded
-                .extend(excluded);
+                .selections
+                .push(EnvSelection {
+                    owner: prefix.clone(),
+                    label: format!("dependency '{prefix}'"),
+                    keys,
+                });
         }
 
         if let Some(settings) = &em.settings {
@@ -1179,14 +1219,42 @@ pub fn member_scoped_canisters(
     Some(names)
 }
 
-/// Build one environment's canister map: select from `canisters`, then apply the
-/// member overrides for this environment (standalone-equivalence), then
-/// the root's own overrides (highest precedence). Precedence is therefore
-/// root-explicit > member-env > canister-base.
+/// The store keys the root's own `canisters` list names, or `None` when it wrote
+/// no list. Every name must be one the workspace can address.
+fn root_selection_keys(
+    selection: &CanisterSelection,
+    canisters: &IndexMap<String, (PathBuf, Canister)>,
+    env_name: &str,
+) -> Result<Option<BTreeSet<String>>, ConsolidateManifestError> {
+    let names = match selection {
+        CanisterSelection::Everything => return Ok(None),
+        CanisterSelection::None => return Ok(Some(BTreeSet::new())),
+        CanisterSelection::Named(names) => names,
+    };
+    let mut keys = BTreeSet::new();
+    for name in names {
+        if !canisters.contains_key(name) {
+            return Err(InvalidCanisterSnafu {
+                environment: env_name.to_owned(),
+                canister: name.to_owned(),
+            }
+            .build()
+            .into());
+        }
+        keys.insert(name.to_owned());
+    }
+    Ok(Some(keys))
+}
+
+/// Build one environment's canister map: work out which project decides each
+/// project's membership, then apply the member overrides for this environment
+/// (standalone-equivalence), then the root's own overrides (highest precedence).
+/// Override precedence is therefore root-explicit > member-env > canister-base.
 ///
-/// The same precedence governs membership: a member canister its own same-named
-/// environment leaves out is dropped from the unrestricted (`Everything`)
-/// selection, but a root that names its canisters explicitly gets exactly those.
+/// Membership is not a precedence but a partition: every `canisters` list decides
+/// the projects it names, a project no list names contributes all of its
+/// canisters, and two lists deciding one project collide rather than one quietly
+/// winning.
 fn build_environment_canisters(
     canisters: &IndexMap<String, (PathBuf, Canister)>,
     env_name: &str,
@@ -1195,31 +1263,46 @@ fn build_environment_canisters(
     root_settings: Option<&HashMap<String, ManifestSettings>>,
     root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
 ) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
-    let mut cs = match selection {
-        CanisterSelection::None => IndexMap::new(),
-        CanisterSelection::Everything => match member {
-            Some(m) if !m.excluded.is_empty() => canisters
-                .iter()
-                .filter(|(key, _)| !m.excluded.contains(*key))
-                .map(|(key, v)| (key.clone(), v.clone()))
-                .collect(),
-            _ => canisters.clone(),
-        },
-        CanisterSelection::Named(names) => {
-            let mut cs: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
-            for name in names {
-                let v = canisters.get(name).ok_or(
-                    InvalidCanisterSnafu {
-                        environment: env_name.to_owned(),
-                        canister: name.to_owned(),
-                    }
-                    .build(),
-                )?;
-                cs.insert(name.to_owned(), v.to_owned());
+    let root_selection =
+        root_selection_keys(selection, canisters, env_name)?.map(|keys| EnvSelection {
+            owner: String::new(),
+            label: "the workspace root".to_owned(),
+            keys,
+        });
+    let mut selections: Vec<&EnvSelection> = member
+        .map(|m| m.selections.iter().collect())
+        .unwrap_or_default();
+    selections.extend(&root_selection);
+    // Sorted by writer so a workspace with several colliding lists always reports
+    // the same pair.
+    selections.sort_by(|a, b| a.owner.cmp(&b.owner));
+
+    let mut deciders: BTreeMap<&str, &EnvSelection> = BTreeMap::new();
+    for sel in &selections {
+        for target in sel.targets() {
+            if let Some(first) = deciders.insert(target, sel) {
+                return ConflictingEnvironmentSelectionSnafu {
+                    environment: env_name.to_owned(),
+                    target: match target {
+                        "" => "the workspace root".to_owned(),
+                        prefix => prefix.to_owned(),
+                    },
+                    first: first.label.clone(),
+                    second: sel.label.clone(),
+                }
+                .fail();
             }
-            cs
         }
-    };
+    }
+
+    let mut cs: IndexMap<String, (PathBuf, Canister)> = canisters
+        .iter()
+        .filter(|(key, _)| match deciders.get(owning_prefix(key)) {
+            Some(sel) => sel.keys.contains(*key),
+            None => true,
+        })
+        .map(|(key, v)| (key.clone(), v.clone()))
+        .collect();
 
     // Member overrides first (lower precedence than the root's own overrides).
     if let Some(overrides) = member.map(|m| &m.overrides) {
@@ -1962,12 +2045,178 @@ environments:
             ],
         );
 
-        // A root that names canisters explicitly wins: `openemail:frontend` is in
-        // even though openemail's staging leaves it out, and `openemail:backend`
-        // is out because the root did not name it.
+        // openemail writes no list for `explicit`, so the root's list decides both
+        // projects: its own `app`, and openemail's set as just `frontend`.
         assert_eq!(
             names("explicit"),
             vec!["app".to_string(), "openemail:frontend".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn root_env_list_leaves_a_silent_members_canisters_alone() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "environments:\n  - name: staging\n",
+            ),
+        );
+        // The root's list names only its own canisters, so it says nothing about
+        // openemail — which writes no list of its own and keeps everything.
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app", "worker"],
+                r#"dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    canisters: [app]
+"#,
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        assert_eq!(
+            p.environments
+                .get("staging")
+                .expect("staging environment")
+                .canisters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![
+                "app".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn two_lists_deciding_one_members_canisters_collide() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail decides its own canisters for staging...
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "environments:\n  - name: staging\n    canisters: [backend]\n",
+            ),
+        );
+        // ...and so does the root, for the same environment.
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                r#"dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    canisters: [app, "openemail:frontend"]
+"#,
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+        assert!(
+            err.contains("environment 'staging'")
+                && err.contains("'openemail'")
+                && err.contains("the workspace root"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lists_deciding_different_projects_do_not_collide() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // Both write a list for staging, but each decides only its own canisters.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "environments:\n  - name: staging\n    canisters: [backend]\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app", "worker"],
+                r#"dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    canisters: [app]
+"#,
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        assert_eq!(
+            p.environments
+                .get("staging")
+                .expect("staging environment")
+                .canisters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec!["app".to_string(), "openemail:backend".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn nested_lists_deciding_one_project_collide() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // libfoo decides its own canisters for staging, and its parent openemail
+        // names one of them for the same environment.
+        write(
+            tmp.path(),
+            "openemail/libfoo/icp.yaml",
+            &manifest(
+                &["util", "extra"],
+                "environments:\n  - name: staging\n    canisters: [util]\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend"],
+                r#"dependencies:
+  - name: libfoo
+    path: ./libfoo
+environments:
+  - name: staging
+    canisters: [backend, "libfoo:extra"]
+"#,
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\nenvironments:\n  - name: staging\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+        assert!(
+            err.contains("environment 'staging'")
+                && err.contains("'openemail/libfoo'")
+                && err.contains("dependency 'openemail'"),
+            "unexpected error: {err}"
         );
     }
 

@@ -13,6 +13,12 @@
 //! are stored as `Arc<dyn Build>` / `Arc<dyn Synchronize>` — can accept one
 //! without naming the consumer's task type.
 //!
+//! Tasks form a tree: [`TaskReporter::reporter`] hands back a [`Reporter`]
+//! whose tasks nest under that task. An operation cannot tell such a reporter
+//! from the one a command would have given it, which is what lets a composite
+//! operation forward the progress of the operations it calls onto one stream
+//! without those operations changing at all.
+//!
 //! Sends never block and never fail: the channel is unbounded, and with no
 //! receiver events are simply dropped, so tests and headless callers get
 //! silence for free. Errors do not travel on this stream — an operation's
@@ -50,7 +56,16 @@ pub enum EventKind<T> {
     /// The task began. Emitted once per task, before any of its steps. `task`
     /// is the caller's own description of the work — this crate never
     /// inspects it.
-    TaskStarted { task: T },
+    ///
+    /// `parent` is set when the task was started through a reporter scoped to
+    /// another task, which is how a composite operation (deploy calling
+    /// build, install, sync, …) forwards its children's progress onto one
+    /// stream.
+    TaskStarted {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<TaskId>,
+        task: T,
+    },
 
     /// A step of the task began. Steps within a task are sequential;
     /// `number` is 1-based. `label` describes the step (it may span
@@ -146,6 +161,7 @@ pub fn channel<T: Send + 'static>() -> (Reporter<T>, UnboundedReceiver<Event<T>>
             tx,
             next_task_id: Arc::new(AtomicU64::new(0)),
         }),
+        parent: None,
     };
     (reporter, rx)
 }
@@ -169,8 +185,15 @@ pub fn step_channel<T: Send + 'static>() -> (StepReporter, UnboundedReceiver<Eve
 }
 
 /// Entry point handed to an operation; spawns [`TaskReporter`]s.
+///
+/// A reporter carries the scope it was made in. An operation cannot tell the
+/// difference between the reporter a command handed it and one scoped to a
+/// parent task by a composite operation — which is what lets `deploy` run
+/// `build_many` unmodified and have its tasks nest under the build phase.
 pub struct Reporter<T> {
     inner: Option<ReporterInner<T>>,
+    /// Task the reporter's tasks nest under, if any.
+    parent: Option<TaskId>,
 }
 
 struct ReporterInner<T> {
@@ -189,10 +212,25 @@ impl<T> Clone for ReporterInner<T> {
     }
 }
 
+impl<T: Send + 'static> ReporterInner<T> {
+    fn start(&self, parent: Option<TaskId>, task: T) -> TaskReporter<T> {
+        let task_id = TaskId(self.next_task_id.fetch_add(1, Ordering::Relaxed));
+        let _ = self.tx.send(Event {
+            task_id,
+            kind: EventKind::TaskStarted { parent, task },
+        });
+        TaskReporter {
+            inner: Some(self.clone()),
+            task_id,
+        }
+    }
+}
+
 impl<T> Clone for Reporter<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            parent: self.parent,
         }
     }
 }
@@ -200,38 +238,34 @@ impl<T> Clone for Reporter<T> {
 impl<T> Reporter<T> {
     /// A reporter whose events go nowhere.
     pub fn null() -> Self {
-        Self { inner: None }
-    }
-}
-
-impl<T: Send + 'static> Reporter<T> {
-    /// Begin a task, emitting [`EventKind::TaskStarted`].
-    pub fn task(&self, task: T) -> TaskReporter<T> {
-        let Some(inner) = &self.inner else {
-            return TaskReporter::null();
-        };
-        let task_id = TaskId(inner.next_task_id.fetch_add(1, Ordering::Relaxed));
-        let _ = inner.tx.send(Event {
-            task_id,
-            kind: EventKind::TaskStarted { task },
-        });
-        TaskReporter {
-            tx: Some(inner.tx.clone()),
-            task_id,
+        Self {
+            inner: None,
+            parent: None,
         }
     }
 }
 
-/// Reports the lifecycle of one task.
+impl<T: Send + 'static> Reporter<T> {
+    /// Begin a task, emitting [`EventKind::TaskStarted`]. It nests under
+    /// whatever scope this reporter carries.
+    pub fn task(&self, task: T) -> TaskReporter<T> {
+        match &self.inner {
+            Some(inner) => inner.start(self.parent, task),
+            None => TaskReporter::null(),
+        }
+    }
+}
+
+/// Reports the lifecycle of one task, and spawns the tasks nested under it.
 pub struct TaskReporter<T> {
-    tx: Option<UnboundedSender<Event<T>>>,
+    inner: Option<ReporterInner<T>>,
     task_id: TaskId,
 }
 
 impl<T> Clone for TaskReporter<T> {
     fn clone(&self) -> Self {
         Self {
-            tx: self.tx.clone(),
+            inner: self.inner.clone(),
             task_id: self.task_id,
         }
     }
@@ -241,14 +275,23 @@ impl<T> TaskReporter<T> {
     /// A task reporter whose events go nowhere.
     pub fn null() -> Self {
         Self {
-            tx: None,
+            inner: None,
             task_id: TaskId(0),
         }
     }
 
+    /// A reporter scoped to this task. Hand it to an operation that does not
+    /// know it is being composed: whatever tasks it starts nest here.
+    pub fn reporter(&self) -> Reporter<T> {
+        Reporter {
+            inner: self.inner.clone(),
+            parent: Some(self.task_id),
+        }
+    }
+
     fn send(&self, kind: EventKind<T>) {
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(Event {
+        if let Some(inner) = &self.inner {
+            let _ = inner.tx.send(Event {
                 task_id: self.task_id,
                 kind,
             });
@@ -281,9 +324,9 @@ impl<T: Send + 'static> TaskReporter<T> {
             label: label.into(),
         });
         StepReporter {
-            sink: self.tx.clone().map(|tx| {
+            sink: self.inner.as_ref().map(|inner| {
                 Arc::new(TaskSink {
-                    tx,
+                    tx: inner.tx.clone(),
                     task_id: self.task_id,
                 }) as Arc<dyn StepSink>
             }),
@@ -431,7 +474,8 @@ mod tests {
         task.finish(TaskOutcome::succeeded());
 
         // Handles derived from a null reporter are themselves null.
-        assert!(TaskReporter::<DemoTask>::null().tx.is_none());
+        assert!(TaskReporter::<DemoTask>::null().inner.is_none());
+        assert!(task.reporter().inner.is_none());
         assert!(StepReporter::null().sink.is_none());
     }
 
@@ -501,6 +545,38 @@ mod tests {
         );
     }
 
+    /// A reporter scoped to a task hands that task's id to everything it
+    /// starts, without the operation on the other end knowing. Tasks started
+    /// through the unscoped reporter stay at the root.
+    #[tokio::test]
+    async fn a_scoped_reporter_nests_what_it_starts() {
+        let (reporter, mut rx) = channel::<DemoTask>();
+        let phase = reporter.task(demo("phase"));
+        // What a composed operation receives — indistinguishable, to it, from
+        // the reporter a command would have handed it.
+        let scoped = phase.reporter();
+        scoped.task(demo("child"));
+        scoped.clone().task(demo("sibling"));
+        reporter.task(demo("root"));
+
+        let parents: Vec<(TaskId, Option<TaskId>)> = drain(&mut rx)
+            .into_iter()
+            .filter_map(|e| match e.kind {
+                EventKind::TaskStarted { parent, .. } => Some((e.task_id, parent)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            parents,
+            vec![
+                (TaskId(0), None),
+                (TaskId(1), Some(TaskId(0))),
+                (TaskId(2), Some(TaskId(0))),
+                (TaskId(3), None),
+            ]
+        );
+    }
+
     /// A step reporter keeps its own channel handle, so output emitted after
     /// the task reporter is gone still arrives. This is what makes the
     /// spawned stdout/stderr readers in the core library safe.
@@ -555,11 +631,25 @@ mod tests {
         };
 
         assert_eq!(
-            event(EventKind::TaskStarted { task: demo("a") }),
+            event(EventKind::TaskStarted {
+                parent: None,
+                task: demo("a"),
+            }),
             serde_json::json!({
                 "task_id": 7, "event": "task_started",
+                // A root task carries no `parent` key at all.
                 // The payload nests under `task`; its inner shape is the
                 // caller's to define.
+                "task": { "kind": "demo", "name": "a" },
+            })
+        );
+        assert_eq!(
+            event(EventKind::TaskStarted {
+                parent: Some(TaskId(3)),
+                task: demo("a"),
+            }),
+            serde_json::json!({
+                "task_id": 7, "event": "task_started", "parent": 3,
                 "task": { "kind": "demo", "name": "a" },
             })
         );

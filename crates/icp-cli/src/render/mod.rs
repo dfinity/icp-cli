@@ -10,6 +10,10 @@
 //! is being run; the vocabulary comes from [`icp::operations::task`], where
 //! each kind of work describes itself. What lives here is only how those
 //! descriptions are drawn on a terminal.
+//!
+//! Tasks arrive as a tree — a composite operation forwards the tasks of the
+//! operations it calls as children of its own phase — so a renderer tracks
+//! each task's depth and indents accordingly.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -31,6 +35,9 @@ use icp::operations::task::{Event, Reporter, TaskReporter};
 
 /// The maximum number of lines to display for a step output
 const MAX_LINES_PER_STEP: usize = 10_000;
+
+/// Indentation applied per level of task nesting.
+const INDENT: &str = "  ";
 
 pub(crate) enum Renderer {
     Interactive(InteractiveRenderer),
@@ -107,11 +114,21 @@ pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
     .await
 }
 
+/// Prefix a line with the canister a task is about, so concurrent tasks stay
+/// attributable. A task that names no canister — a phase heading — is left
+/// undecorated.
+fn attributed(task: &Task, text: &str) -> String {
+    match task.presentation().canister() {
+        Some(name) => format!("[{name}] {text}"),
+        None => text.to_owned(),
+    }
+}
+
 /// Print output lines a task retained past its rolling step view (e.g.
-/// sync-plugin stderr), prefixed with the canister name.
+/// sync-plugin stderr), attributed to the task that produced them.
 fn print_retained(task: &Task, lines: &[String]) {
     for line in lines {
-        eprintln!("[{}] {line}", task.presentation().canister());
+        eprintln!("{}", attributed(task, line));
     }
 }
 
@@ -119,6 +136,8 @@ fn print_retained(task: &Task, lines: &[String]) {
 /// live view is gone.
 pub(super) struct TaskLog {
     task: Task,
+    /// Levels of nesting below the root, for indentation.
+    depth: usize,
     finished_steps: Vec<StepLog>,
     current_step: Option<StepLog>,
     failure: Option<Failure>,
@@ -164,9 +183,10 @@ impl RollingLines {
 }
 
 impl TaskLog {
-    fn new(task: Task) -> Self {
+    fn new(task: Task, depth: usize) -> Self {
         Self {
             task,
+            depth,
             finished_steps: Vec::new(),
             current_step: None,
             failure: None,
@@ -177,8 +197,17 @@ impl TaskLog {
         &self.task
     }
 
+    fn depth(&self) -> usize {
+        self.depth
+    }
+
     fn presentation(&self) -> &dyn Presentation {
         self.task.presentation()
+    }
+
+    /// Attribute a line to the canister this task is about.
+    fn line(&self, text: &str) -> String {
+        attributed(&self.task, text)
     }
 
     fn start_step(&mut self, title: String) {
@@ -215,13 +244,7 @@ impl TaskLog {
             return Vec::new();
         }
 
-        let name = self.presentation().canister();
-        let mut lines = Vec::new();
-
-        lines.push(format!(
-            "[{name}] {} output:",
-            self.presentation().output_label()
-        ));
+        let mut lines = vec![self.line(&format!("{} output:", self.presentation().output_label()))];
 
         let steps: &[StepLog] = if all_steps {
             &self.finished_steps
@@ -235,14 +258,18 @@ impl TaskLog {
         for step in steps {
             for line in step.title.lines() {
                 if !line.is_empty() {
-                    lines.push(format!("[{name}] {line}:"));
+                    lines.push(self.line(&format!("{line}:")));
                 }
             }
 
             if step.lines.is_empty() {
-                lines.push(format!("[{name}] <no output>"));
+                lines.push(self.line("<no output>"));
             } else {
-                lines.extend(step.lines.iter().map(|line| format!("[{name}] > {line}")));
+                lines.extend(
+                    step.lines
+                        .iter()
+                        .map(|line| self.line(&format!("> {line}"))),
+                );
             }
         }
 

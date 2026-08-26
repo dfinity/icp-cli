@@ -5,11 +5,11 @@
 use std::collections::BTreeMap;
 
 use icp_events::{EventKind, TaskId, TaskOutcome};
-use tracing::debug;
+use tracing::{debug, info};
 
-use icp::operations::task::Event;
+use icp::operations::task::{Event, Widget};
 
-use super::{TaskLog, dump_failures};
+use super::{INDENT, TaskLog, dump_failures};
 
 pub(crate) struct PlainRenderer {
     tasks: BTreeMap<TaskId, TaskLog>,
@@ -22,10 +22,25 @@ impl PlainRenderer {
         }
     }
 
+    /// How deeply a task nests, from its parent's depth. A task whose parent
+    /// is unknown is treated as top-level.
+    fn depth_of(&self, parent: Option<TaskId>) -> usize {
+        parent
+            .and_then(|id| self.tasks.get(&id))
+            .map(|log| log.depth() + 1)
+            .unwrap_or(0)
+    }
+
     pub(crate) fn handle(&mut self, event: Event) {
         match event.kind {
-            EventKind::TaskStarted { task } => {
-                self.tasks.insert(event.task_id, TaskLog::new(task));
+            EventKind::TaskStarted { parent, task } => {
+                let depth = self.depth_of(parent);
+                // A heading has no live state to animate, so with the bars
+                // gone it is simply a line.
+                if let Widget::Heading { title } = task.presentation().widget() {
+                    info!("{}{title}", INDENT.repeat(depth));
+                }
+                self.tasks.insert(event.task_id, TaskLog::new(task, depth));
             }
 
             EventKind::StepStarted {
@@ -46,7 +61,7 @@ impl PlainRenderer {
                 };
                 // Mark command boundaries so interleaved output stays
                 // attributable to the command producing it.
-                debug!("[{}] $ {command}", log.presentation().canister());
+                debug!("{}", log.line(&format!("$ {command}")));
             }
 
             EventKind::Output { line, .. } => {
@@ -55,7 +70,7 @@ impl PlainRenderer {
                 };
                 // Prefix with the canister so interleaved concurrent tasks
                 // stay attributable.
-                debug!("[{}] {line}", log.presentation().canister());
+                debug!("{}", log.line(&line));
                 log.push_line(line);
             }
 

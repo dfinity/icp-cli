@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    Canister,
+    Canister, Environment,
     canister::{Settings, Visibility, resolve_controllers},
     context::{Context, EnvironmentSelection},
     store_id::IdMapping,
@@ -232,25 +232,41 @@ pub async fn sync_settings_many(
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
+    environment: &Environment,
     reporter: &Reporter,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
     let ids = Arc::new(ids);
+    // What the environment holds, to tell a controller that is merely not created
+    // yet from one this environment will never hold.
+    let env_name = Arc::<str>::from(environment.name.as_str());
+    let env_canisters: Arc<HashSet<String>> =
+        Arc::new(environment.canisters.keys().cloned().collect());
 
     for (cid, info) in target_canisters {
         let task = reporter.task(Task::update_settings(info.name.clone(), cid));
         let agent = agent.clone();
         let ids = ids.clone();
+        let env_name = env_name.clone();
+        let env_canisters = env_canisters.clone();
 
         futs.push_back(async move {
             let result = async {
                 let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
                 for name in &unresolved {
-                    warn!(
-                        "Controller canister '{name}' for '{}' has not been created yet; \
-                         it will be set as a controller once created.",
-                        info.name
-                    );
+                    if env_canisters.contains(name) {
+                        warn!(
+                            "Controller canister '{name}' for '{}' has not been created yet; \
+                             it will be set as a controller once created.",
+                            info.name
+                        );
+                    } else {
+                        warn!(
+                            "Controller canister '{name}' for '{}' is not part of environment \
+                             '{env_name}', so it cannot be set as a controller there.",
+                            info.name
+                        );
+                    }
                 }
                 Ok::<_, SyncSettingsOperationError>(())
             }

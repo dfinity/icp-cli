@@ -144,6 +144,7 @@ mod tests {
     fn params(canister_ids: &[(&str, Principal)]) -> Params {
         Params {
             path: "/work/backend".into(),
+            project_dir: "/work".into(),
             cid: principal(1),
             name: "backend".to_owned(),
             environment: "production".to_owned(),

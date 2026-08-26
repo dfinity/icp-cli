@@ -18,6 +18,10 @@ use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
 
 pub struct Params {
     pub path: PathBuf,
+    /// The project (workspace root) directory. It bounds what a sync plugin may
+    /// read: a declared `dirs`/`files` entry may rise out of the canister
+    /// directory into the rest of the project, but not out of the project.
+    pub project_dir: PathBuf,
     pub cid: Principal,
     /// Fully-qualified store key of the canister being synced (e.g. `backend`,
     /// or `services/open-crm:backend` for a canister in a subproject). Its namespace
@@ -168,6 +172,7 @@ mod tests {
         let cid = Principal::from_slice(&[7; 4]);
         let params = Params {
             path: "/work/backend".into(),
+            project_dir: "/work".into(),
             cid,
             name: "backend".to_owned(),
             environment: "production".to_owned(),

@@ -110,10 +110,11 @@ pub(super) async fn sync(
     .await?;
 
     // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
-    //    and reads the `files` itself — both anchored at `base_dir`, and both
-    //    subject to the runtime's path-safety checks (no escaping or symlinked
-    //    paths).
+    //    and reads the `files` itself — both anchored at `base_dir`, confined to
+    //    `project_dir`, and subject to the runtime's path-safety checks (no
+    //    escaping or symlinked paths).
     let base_dir = Utf8PathBuf::from(params.path.as_str());
+    let project_dir = Utf8PathBuf::from(params.project_dir.as_str());
     let dirs = keyed_paths(adapter.dirs.as_ref());
     let files = keyed_paths(adapter.files.as_ref());
     let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
@@ -136,6 +137,7 @@ pub(super) async fn sync(
         run_plugin(PluginInvocation {
             wasm_path,
             base_dir,
+            project_dir,
             dirs,
             files,
             fields,
@@ -233,6 +235,7 @@ mod tests {
     fn params_named(name: &str, ids: &[(&str, Principal)]) -> Params {
         Params {
             path: "/work".into(),
+            project_dir: "/work".into(),
             cid: principal(0),
             name: name.to_owned(),
             environment: "demo".to_owned(),

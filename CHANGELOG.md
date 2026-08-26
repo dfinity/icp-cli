@@ -10,6 +10,7 @@ air-gapped signing
 
 * feat: `script` build steps now receive `ICP_CLI_ENVIRONMENT`, the name of the environment the canisters are being built for, so a build can vary by environment the way a sync step already could.
 * feat: `icp completions <SHELL>` prints a shell completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish` to stdout. See the [installation guide](docs/guides/installation.md#shell-completions) for where to put it.
+* feat(sync-plugin): `dirs:` and `files:` on a `plugin` sync step may now name anything inside the project, not just paths below the canister's own directory. Entries are still written relative to the canister directory, but may rise out of it — `dirs: ["../shared/assets"]` — so several canisters can be handed the same tree without duplicating it. The project directory is the boundary: an entry that resolves above it is rejected before the plugin runs, as is an absolute one, and an entry that is (or traverses) a symlink is still rejected outright. The plugin sees each directory at the path the manifest wrote, `..` and all.
 * fix: `icp canister logs` output formats are corrected. `--json` now emits machine-readable JSON and the default emits the human-readable lines (the two were swapped), and `--follow --json` emits newline-delimited JSON, one record per line, streamed as each record arrives. This is breaking for scripts: parsing the default output as JSON now requires `--json`, and consumers of `--follow --json` must read one JSON object per line.
 
 ## Experimental

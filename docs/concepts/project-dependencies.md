@@ -142,7 +142,9 @@ environments:
     canisters: [app, "vendor/openemail:frontend"]
 ```
 
-Deciding one project's canisters in **two** places for one environment is an error, not a precedence — remove the `canisters:` list from one of them, or subtract with [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) instead, which never decides a project's canisters and so never collides. Two parents that each name a [shared dependency's](#shared-dependencies) canisters collide even if they name the same ones. Lists in different projects that each name only their own canisters never collide, and neither do lists for different environments.
+Two places **disagreeing** about one project's canisters in one environment is an error, not a precedence — remove the `canisters:` list from one of them, or subtract with [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) instead, which never decides a project's canisters and so never disagrees. Two places that name the *same* canisters of a project agree, so two parents of a [shared dependency](#shared-dependencies) may both select from it as long as they select alike, and neither has to edit the vendored manifest. Lists in different projects that each name only their own canisters never interact, and neither do lists for different environments.
+
+The error is raised when the ambiguous environment is **used**, not when the project is read: `icp deploy -e staging` fails, while `icp deploy`, `icp build -e production`, and `icp canister list` carry on. Only the environment nobody can answer for is unusable.
 
 A name that resolves to nothing the writing project can address — a canister it does not declare, or a path that is not one of its dependencies — is rejected, exactly as it is standalone.
 

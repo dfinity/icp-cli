@@ -386,6 +386,8 @@ environments:
 
 An entry that matches no canister in the project is an error, so a typo fails at load time rather than silently deploying everything. Excluding a canister that `canisters:` already leaves out is allowed and does nothing.
 
+In a workspace, a subproject's same-named environment contributes its exclusions as well. Its entries are written relative to itself and must match a canister in its own subtree; the root's exclusions and every subproject's are all applied.
+
 Note the YAML quoting: a subproject entry ends in `:`, so inside a flow sequence it must be quoted — `exclude-canisters: ["services/crm:"]`. In a block list both spellings work:
 
 ```yaml

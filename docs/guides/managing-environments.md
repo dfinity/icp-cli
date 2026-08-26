@@ -71,6 +71,8 @@ Because such an entry ends in `:`, YAML needs it quoted inside a bracketed list:
 
 An entry that matches no canister in the project is an error, so a misspelled name fails at load time.
 
+A subproject's own environment may exclude canisters too, and its entries hold in the workspace exactly as they do when it is deployed on its own. It writes them relative to itself — a bare name for one of its own canisters, `vendor/ledger:` for a subproject it vendors — and may only reach inside its own subtree, so it can never exclude a canister belonging to the project that vendored it. Exclusions never conflict: the root's and every subproject's simply add up.
+
 ## Environment-Specific Settings
 
 Override canister settings per environment:

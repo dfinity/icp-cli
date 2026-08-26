@@ -174,6 +174,16 @@ pub enum ConsolidateManifestError {
     ))]
     UnknownDependencyCanister { alias: String, canister: String },
 
+    #[snafu(display(
+        "dependency '{alias}' environment '{environment}' excludes '{exclusion}', which matches no \
+         canister of that dependency"
+    ))]
+    InvalidDependencyExclusion {
+        alias: String,
+        environment: String,
+        exclusion: String,
+    },
+
     #[snafu(display("dependency cycle detected: {chain}"))]
     CircularDependency { chain: String },
 
@@ -492,8 +502,22 @@ struct MemberCanisterOverride {
     init_args: Option<ManifestInitArgs>,
 }
 
-/// Per-environment member overrides: env name → store key → override.
-type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride>>;
+/// What the members contribute to one of the root's environments.
+#[derive(Default, Clone)]
+struct MemberEnvContribution {
+    /// Per-canister config to fold in beneath the root's own overrides, keyed by
+    /// store key.
+    overrides: HashMap<String, MemberCanisterOverride>,
+
+    /// The `exclude-canisters` entries the members wrote for this environment,
+    /// translated from the names each member writes to workspace store keys.
+    exclusions: Vec<CanisterExclusion>,
+}
+
+/// Per-environment member contributions, keyed by environment name. Every member
+/// writes under its own store-key prefix, so the contributions of all members
+/// targeting one environment merge into a single entry.
+type MemberEnvContributions = HashMap<String, MemberEnvContribution>;
 
 /// A member's identity (store-key prefix) and the environment names it defines,
 /// used to enforce that a member declares every environment the root targets
@@ -501,6 +525,43 @@ type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride
 struct MemberEnvInfo {
     prefix: String,
     defined: HashSet<String>,
+}
+
+/// Translate one `exclude-canisters` entry from the names a member writes — bare
+/// for its own canisters, path-based for its dependencies' — into the workspace
+/// store keys the environment is built from.
+///
+/// Returns `None` when the entry names nothing the member could be addressing,
+/// which the caller reports; the translated entry is checked against the member's
+/// subtree separately, once that subtree is complete.
+fn translate_member_exclusion(
+    exclusion: &CanisterExclusion,
+    member_canonical: &Path,
+    app_root_canonical: &Path,
+    local_to_key: &BTreeMap<String, String>,
+) -> Option<CanisterExclusion> {
+    // A path is relative to the member, so resolve it the way the import did and
+    // re-derive the instance's prefix from the workspace root.
+    let resolve = |rel: &str| {
+        let dir = canonicalize_or(&member_canonical.join(rel))?;
+        Some(relative_prefix(app_root_canonical, &dir))
+    };
+    match exclusion {
+        CanisterExclusion::Canister(name) => match name.rsplit_once(':') {
+            None => local_to_key
+                .get(name)
+                .cloned()
+                .map(CanisterExclusion::Canister),
+            Some((rel, local)) => match rel.is_empty() || local.is_empty() {
+                true => None,
+                false => Some(CanisterExclusion::Canister(format!(
+                    "{}:{local}",
+                    resolve(rel)?
+                ))),
+            },
+        },
+        CanisterExclusion::Subproject(rel) => Some(CanisterExclusion::Subproject(resolve(rel)?)),
+    }
 }
 
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
@@ -821,7 +882,7 @@ async fn import_dependency(
     canisters: &mut IndexMap<String, (PathBuf, Canister)>,
     registry: &mut HashMap<PathBuf, ImportedInstance>,
     stack: &mut Vec<PathBuf>,
-    member_env_overrides: &mut MemberEnvOverrides,
+    member_envs: &mut MemberEnvContributions,
     members: &mut Vec<MemberEnvInfo>,
     // Alias chain from the workspace root to and including this dependency,
     // used to build friendly-URL subdomains (§17.2).
@@ -919,11 +980,14 @@ async fn import_dependency(
     }
 
     // Capture the member's own environments so the parent can honor its
-    // per-canister settings/init_args for the same-named environment
-    // (standalone-equivalence). The network binding and canister selection are
-    // ignored; only overrides on the member's *own* canisters are
+    // per-canister settings/init_args and exclusions for the same-named
+    // environment (standalone-equivalence). The network binding and canister
+    // selection are ignored; only overrides on the member's *own* canisters are
     // folded in — keys naming its dependencies are left to those dependencies.
     let mut defined_envs: HashSet<String> = HashSet::new();
+    // Translated exclusions awaiting a check against this member's subtree, which
+    // is only complete once its own dependencies have been imported.
+    let mut pending_exclusions: Vec<(String, CanisterExclusion, CanisterExclusion)> = Vec::new();
     for env_item in &dep_manifest.environments {
         let em: EnvironmentManifest = match env_item {
             Item::Manifest(m) => m.clone(),
@@ -942,6 +1006,32 @@ async fn import_dependency(
             }
         };
         defined_envs.insert(em.name.clone());
+
+        // An exclusion the member wrote holds in the workspace exactly as it does
+        // when the member is deployed on its own.
+        for exclusion in &em.exclude_canisters {
+            let translated = translate_member_exclusion(
+                exclusion,
+                &canonical,
+                app_root_canonical,
+                &local_to_key,
+            )
+            .ok_or_else(|| {
+                InvalidDependencyExclusionSnafu {
+                    alias: dep.name.clone(),
+                    environment: em.name.clone(),
+                    exclusion: exclusion.to_string(),
+                }
+                .build()
+            })?;
+            pending_exclusions.push((em.name.clone(), exclusion.clone(), translated.clone()));
+            member_envs
+                .entry(em.name.clone())
+                .or_default()
+                .exclusions
+                .push(translated);
+        }
+
         if let Some(settings) = &em.settings {
             for (local, s) in settings {
                 if let Some(key) = local_to_key.get(local) {
@@ -950,9 +1040,10 @@ async fn import_dependency(
                     // resolve against the workspace id map just like base settings.
                     let mut s = s.clone();
                     translate_settings_controllers(&mut s, &local_to_key);
-                    member_env_overrides
+                    member_envs
                         .entry(em.name.clone())
                         .or_default()
+                        .overrides
                         .entry(key.clone())
                         .or_default()
                         .settings = Some(s);
@@ -962,9 +1053,10 @@ async fn import_dependency(
         if let Some(init_args) = &em.init_args {
             for (local, ia) in init_args {
                 if let Some(key) = local_to_key.get(local) {
-                    member_env_overrides
+                    member_envs
                         .entry(em.name.clone())
                         .or_default()
+                        .overrides
                         .entry(key.clone())
                         .or_default()
                         .init_args = Some(ia.clone());
@@ -1001,7 +1093,7 @@ async fn import_dependency(
             canisters,
             registry,
             stack,
-            member_env_overrides,
+            member_envs,
             members,
             &nested_chain,
         ))
@@ -1014,6 +1106,22 @@ async fn import_dependency(
         }
         let exposed = select_exposed(&inst.own, &nested.canisters, &nested.name)?;
         edges.push((nested.name.clone(), exposed));
+    }
+
+    // The subtree is complete, so what this instance's environments exclude can
+    // be checked. Only the subtree counts: a project can address its own
+    // canisters and its dependencies' and nothing else, so an entry reaching out
+    // of it — a sibling of this instance, say — is as invalid here as it is when
+    // the project is loaded on its own.
+    for (environment, written, translated) in &pending_exclusions {
+        if !subtree.iter().any(|(key, _, _)| translated.matches(key)) {
+            return InvalidDependencyExclusionSnafu {
+                alias: dep.name.clone(),
+                environment: environment.clone(),
+                exclusion: written.to_string(),
+            }
+            .fail();
+        }
     }
 
     // Assign env-var bindings for this instance's own canisters.
@@ -1072,17 +1180,20 @@ pub fn member_scoped_canisters(
     Some(names)
 }
 
-/// Build one environment's canister map: select from `canisters` and drop the
-/// `exclusions` from that selection, then apply the member overrides for this
-/// environment (standalone-equivalence), then the root's own overrides (highest
-/// precedence). Precedence is therefore root-explicit > member-env >
-/// canister-base.
+/// Build one environment's canister map: select from `canisters` and drop both
+/// the root's `exclusions` and the members' own from that selection, then apply
+/// the member overrides for this environment (standalone-equivalence), then the
+/// root's own overrides (highest precedence). Precedence is therefore
+/// root-explicit > member-env > canister-base.
+///
+/// Exclusions do not have a precedence: they only ever remove, so the root's and
+/// each member's simply add up.
 fn build_environment_canisters(
     canisters: &IndexMap<String, (PathBuf, Canister)>,
     env_name: &str,
     selection: &CanisterSelection,
     exclusions: &[CanisterExclusion],
-    member_overrides: Option<&HashMap<String, MemberCanisterOverride>>,
+    member: Option<&MemberEnvContribution>,
     root_settings: Option<&HashMap<String, ManifestSettings>>,
     root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
 ) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
@@ -1119,10 +1230,18 @@ fn build_environment_canisters(
             .into());
         }
     }
-    cs.retain(|key, _| !exclusions.iter().any(|e| e.matches(key)));
+    // A member's exclusions were checked against that member's subtree as it was
+    // imported, so only the root's need checking here.
+    let member_exclusions = member.map_or(&[][..], |m| &m.exclusions);
+    cs.retain(|key, _| {
+        !exclusions
+            .iter()
+            .chain(member_exclusions)
+            .any(|e| e.matches(key))
+    });
 
     // Member overrides first (lower precedence than the root's own overrides).
-    if let Some(overrides) = member_overrides {
+    if let Some(overrides) = member.map(|m| &m.overrides) {
         for (key, ov) in overrides {
             if let Some((cpath, canister)) = cs.get_mut(key) {
                 if let Some(s) = &ov.settings {
@@ -1205,7 +1324,7 @@ pub async fn consolidate_manifest(
     let mut stack: Vec<PathBuf> = Vec::new();
     // Member environment config folded into the root's same-named environments,
     // and the per-member set of declared environment names for the strict rule.
-    let mut member_env_overrides: MemberEnvOverrides = HashMap::new();
+    let mut member_envs: MemberEnvContributions = HashMap::new();
     let mut members: Vec<MemberEnvInfo> = Vec::new();
     let app_own_names: HashSet<String> = app_own.iter().map(|(l, _)| l.clone()).collect();
     validate_dependency_aliases(&m.dependencies, &app_own_names)?;
@@ -1220,7 +1339,7 @@ pub async fn consolidate_manifest(
             &mut canisters,
             &mut registry,
             &mut stack,
-            &mut member_env_overrides,
+            &mut member_envs,
             &mut members,
             std::slice::from_ref(&dep.name),
         )
@@ -1416,7 +1535,7 @@ pub async fn consolidate_manifest(
                         &m.name,
                         &m.canisters,
                         &m.exclude_canisters,
-                        member_env_overrides.get(&m.name),
+                        member_envs.get(&m.name),
                         m.settings.as_ref(),
                         m.init_args.as_ref(),
                     )?,
@@ -1446,7 +1565,7 @@ pub async fn consolidate_manifest(
                 LOCAL,
                 &CanisterSelection::Everything,
                 &[],
-                member_env_overrides.get(LOCAL),
+                member_envs.get(LOCAL),
                 None,
                 None,
             )?,
@@ -1471,7 +1590,7 @@ pub async fn consolidate_manifest(
                 IC,
                 &CanisterSelection::Everything,
                 &[],
-                member_env_overrides.get(IC),
+                member_envs.get(IC),
                 None,
                 None,
             )?,
@@ -1903,6 +2022,117 @@ environments:
         let p = consolidate(tmp.path()).await.unwrap();
 
         assert_eq!(env_canisters(&p, "staging"), vec!["app".to_string()]);
+    }
+
+    /// A workspace whose root declares `app` and depends on `openemail`
+    /// (`backend`, `frontend`), which in turn vendors `ledger`, with the given
+    /// environment block written into openemail's manifest.
+    fn member_with_environments(tmp: &Path, member_environments: &str) {
+        write(
+            tmp,
+            "openemail/vendor/ledger/icp.yaml",
+            &manifest(&["ledger"], ""),
+        );
+        let mut member = manifest(
+            &["backend", "frontend"],
+            "dependencies:\n  - name: ledger\n    path: ./vendor/ledger\n",
+        );
+        member.push_str(member_environments);
+        write(tmp, "openemail/icp.yaml", &member);
+        // The root decides which environments exist, so it declares `staging`
+        // too — with no list or exclusions of its own.
+        write(
+            tmp,
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\nenvironments:\n  \
+                 - name: staging\n",
+            ),
+        );
+    }
+
+    #[tokio::test]
+    async fn member_environment_exclusion_is_honored() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail keeps its own `frontend` and its vendored ledger out of
+        // `staging`, exactly as it would deploying on its own.
+        member_with_environments(
+            tmp.path(),
+            "environments:\n  - name: staging\n    exclude-canisters:\n      - frontend\n      \
+             - vendor/ledger:\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            env_canisters(&p, "staging"),
+            vec!["app".to_string(), "openemail:backend".to_string()],
+        );
+
+        // Exclusion is per-environment: `local`, which openemail says nothing
+        // about, still holds everything.
+        assert_eq!(
+            env_canisters(&p, LOCAL),
+            vec![
+                "app".to_string(),
+                "openemail/vendor/ledger:ledger".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn member_environment_exclusion_may_name_a_nested_canister() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // A path-based entry is written relative to the member, and resolves to
+        // the same canister the workspace keys as `openemail/vendor/ledger:ledger`.
+        member_with_environments(
+            tmp.path(),
+            "environments:\n  - name: staging\n    exclude-canisters: [\"vendor/ledger:ledger\"]\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            env_canisters(&p, "staging"),
+            vec![
+                "app".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_member_environment_exclusion_is_rejected() {
+        // A canister openemail does not declare, a subproject it does not vendor,
+        // and a path that leads out of its subtree entirely.
+        for entry in ["nope", "vendor/ledger:nope", "nope:", "..:app"] {
+            let tmp = Utf8TempDir::new().unwrap();
+            member_with_environments(
+                tmp.path(),
+                &format!(
+                    "environments:\n  - name: staging\n    exclude-canisters: [\"{entry}\"]\n"
+                ),
+            );
+
+            let err = consolidate(tmp.path())
+                .await
+                .expect_err("an exclusion the member cannot address should be rejected");
+            assert!(
+                matches!(
+                    err,
+                    ConsolidateManifestError::InvalidDependencyExclusion {
+                        ref alias,
+                        ref exclusion,
+                        ..
+                    } if alias == "openemail" && exclusion == entry
+                ),
+                "unexpected error for '{entry}': {err}"
+            );
+        }
     }
 
     #[tokio::test]

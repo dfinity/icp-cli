@@ -51,11 +51,19 @@ interface types {
         /// defined directly in the app root has no subproject prefix and appears
         /// as its bare local name, e.g. "backend".
         ///
-        /// Every canister in the same subproject as the canister being synced is
-        /// additionally listed under its bare local name (a duplicate entry with
-        /// the same `id`), so a plugin can address a sibling by the same local
-        /// name the manifest uses. A bare name always means the sibling, so an
-        /// app-root canister sharing that local name is not listed.
+        /// Every canister the subproject being synced can name for itself is
+        /// additionally listed under that name (a duplicate entry with the same
+        /// `id`): its own canisters under their bare local names, and the
+        /// canisters of subprojects nested below it under the
+        /// `subproject:local` key those would have if it were the app root —
+        /// e.g. for "services/crm:backend", the canister
+        /// "services/crm/vendor/ledger:ledger" is also listed as
+        /// "vendor/ledger:ledger". These are the keys the subproject's own
+        /// manifest uses, so a plugin addresses the same canister by the same
+        /// name whether the subproject is deployed standalone or vendored into
+        /// a workspace. Such a name always means what the subproject means by
+        /// it, so a canister elsewhere in the workspace whose key is spelled
+        /// the same way is not listed under it.
         name: string,
         /// Textual principal the name resolves to for this environment.
         id: string,
@@ -71,10 +79,10 @@ interface types {
         /// permitted, whether or not it also appears in `canisters`.
         host,
         /// A canister from the `canisters` list, identified by name, spelled
-        /// exactly as it appears in `sync-exec-input.canister-ids` — a bare
-        /// local name for a canister in the same subproject, or a
-        /// `subproject:local` key otherwise. The host resolves it against that
-        /// mapping table.
+        /// exactly as it appears in `sync-exec-input.canister-ids` — for a
+        /// canister the synced canister's own subproject names, the name that
+        /// subproject uses; otherwise the app-root-relative `subproject:local`
+        /// key. The host resolves it against that mapping table.
         name(string),
     }
 

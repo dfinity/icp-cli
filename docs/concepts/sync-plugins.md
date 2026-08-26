@@ -78,7 +78,9 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
-Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
+Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject.
+
+Every canister the subproject being synced can name for itself is additionally listed under that name, so a plugin looks a canister up by the name that subproject's own manifest uses. For a canister in `services/crm`, that means its siblings under their bare local names, and the canisters of its own dependencies under keys relative to it — `services/crm/vendor/ledger:ledger` is also listed as `vendor/ledger:ledger`. Those are the names the subproject uses when it is deployed on its own, so a plugin written against them keeps working once the subproject is vendored into a workspace. Such a name always means what the subproject means by it: a canister elsewhere in the workspace whose key is spelled the same way is not listed under it for that sync.
 
 The manifest declares directories and files together under `files:`; the host splits them into these two lists by what is on disk, so a plugin never has to say up front which an entry will turn out to be.
 

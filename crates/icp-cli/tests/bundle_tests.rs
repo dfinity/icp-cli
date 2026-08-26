@@ -1565,7 +1565,8 @@ fn bundle_carries_only_the_environments_canisters() {
     // Each project names its own: staging is the root's `frontend` and
     // openemail's `registry`, prod the root's `backend` and openemail's
     // `archive`. `frontend` names `backend` as a controller, which staging does
-    // not contain.
+    // not contain — in its base settings and again in staging's own override of
+    // them.
     write_string(
         &project_dir.join("icp.yaml"),
         &formatdoc! {r#"
@@ -1585,8 +1586,14 @@ fn bundle_carries_only_the_environments_canisters() {
             environments:
               - name: staging
                 canisters: [frontend]
+                settings:
+                  frontend:
+                    controllers: [backend, "vendor/openemail:registry"]
               - name: prod
                 canisters: [backend]
+                settings:
+                  backend:
+                    compute_allocation: 1
         "#},
     )
     .expect("failed to write project manifest");
@@ -1669,6 +1676,18 @@ fn bundle_carries_only_the_environments_canisters() {
         root["environments"][1]["canisters"],
         serde_yaml::Value::Sequence(vec![]),
         "prod named only canisters the bundle left out",
+    );
+    // An override the bundle keeps still has to lose the controllers it names
+    // that the bundle does not carry.
+    assert_eq!(
+        root["environments"][0]["settings"]["frontend"]["controllers"],
+        serde_yaml::Value::Sequence(vec!["vendor/openemail:registry".into()]),
+    );
+    // An override *of* a left-out canister goes entirely.
+    assert!(
+        root["environments"][1]["settings"]["backend"].is_null(),
+        "prod's override of a left-out canister should be dropped: {:?}",
+        root["environments"][1]["settings"]
     );
 
     let dep: serde_yaml::Value = serde_yaml::from_str(&manifests["vendor/openemail/icp.yaml"])

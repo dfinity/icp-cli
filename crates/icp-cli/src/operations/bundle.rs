@@ -1086,8 +1086,9 @@ async fn inline_environments(
 }
 
 /// Drop from one environment every reference to a canister the selected
-/// environment leaves out of the bundle: the canisters it lists, and the
-/// per-canister settings and init_args it overrides.
+/// environment leaves out of the bundle: the canisters it lists, the
+/// per-canister settings and init_args it overrides, and the controllers those
+/// settings name.
 ///
 /// The environment being pruned is not necessarily the one the bundle was built
 /// for — a bundle keeps every environment its manifests declare, and each of
@@ -1098,6 +1099,25 @@ fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned:
     });
     if let Some(settings) = &mut env.settings {
         settings.retain(|name, _| !pruned.drops(instance, name));
+        // An override's own controller list survives the pruning above, which
+        // only reaches the canister an override configures: a kept canister can
+        // still be handed a controller the bundle does not carry.
+        for (canister, overrides) in settings.iter_mut() {
+            let Some(controllers) = &mut overrides.controllers else {
+                continue;
+            };
+            controllers.retain(|cref| match cref {
+                ControllerRef::CanisterName(name) if pruned.drops(instance, name) => {
+                    warn!(
+                        "Environment '{}' names '{name}' as a controller of '{canister}', which \
+                         environment '{}' does not contain; the bundle drops the reference.",
+                        env.name, pruned.environment,
+                    );
+                    false
+                }
+                _ => true,
+            });
+        }
     }
     if let Some(init_args) = &mut env.init_args {
         init_args.retain(|name, _| !pruned.drops(instance, name));

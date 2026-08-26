@@ -145,7 +145,7 @@ environments:
         freezing_threshold: 90d
 ```
 
-`canisters:` names this project's own canisters. In a [workspace](project-dependencies.md#environments-across-a-workspace), each dependency's same-named environment selects its own canisters the same way.
+`canisters:` names this project's own canisters. In a [workspace](project-dependencies.md#which-canisters-an-environment-holds), each dependency decides its own the same way, through its same-named environment.
 
 ### Environment-Specific Settings
 

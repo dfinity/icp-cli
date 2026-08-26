@@ -16,6 +16,7 @@ use crate::{
 use candid::Principal;
 use ic_agent::{Agent, Identity};
 use snafu::{OptionExt, ResultExt, Snafu};
+use time::OffsetDateTime;
 
 mod init;
 
@@ -413,7 +414,7 @@ impl Context {
     ) -> Result<Agent, CreateAgentError> {
         let agent = self
             .agent
-            .create(id, network_access.api_url.as_str())
+            .create(id, network_access.api_url.as_str(), None)
             .await?;
         agent.set_root_key(network_access.root_key);
         Ok(agent)
@@ -426,8 +427,32 @@ impl Context {
         url: &Url,
     ) -> Result<Agent, GetAgentForUrlError> {
         let id = self.get_identity(identity, None).await?;
-        let agent = self.agent.create(id, url.as_str()).await?;
+        let agent = self.agent.create(id, url.as_str(), None).await?;
         Ok(agent)
+    }
+
+    /// Creates an agent for signing a message that a different machine will submit.
+    ///
+    /// Unlike the other constructors this resolves no root key: nothing is
+    /// verified on this side, and resolving one can mean a network round trip the
+    /// signing machine is unable to make. The agent's ingress expiry is pinned so
+    /// that the expiry it derives on its own — for the pre-signed
+    /// `request_status` that accompanies an update — lands exactly on
+    /// `expire_at`, the instant the call envelope itself expires.
+    pub async fn get_agent_for_signing(
+        &self,
+        identity: &IdentitySelection,
+        url: &Url,
+        expire_at: OffsetDateTime,
+    ) -> Result<Agent, GetAgentForSigningError> {
+        // Loading the identity can block on a password prompt or a hardware
+        // token, so measure what is left of the window only once it is in hand.
+        let id = self.get_identity(identity, None).await?;
+        let remaining = (expire_at - OffsetDateTime::now_utc())
+            .try_into()
+            .ok()
+            .context(SigningWindowClosedSnafu { expire_at })?;
+        Ok(self.agent.create(id, url.as_str(), Some(remaining)).await?)
     }
 
     pub async fn get_agent(
@@ -777,6 +802,22 @@ pub enum GetAgentForNetworkError {
 pub enum GetAgentForUrlError {
     #[snafu(transparent)]
     GetIdentity { source: GetIdentityError },
+
+    #[snafu(transparent)]
+    AgentCreate {
+        source: crate::agent::CreateAgentError,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum GetAgentForSigningError {
+    #[snafu(transparent)]
+    GetIdentity { source: GetIdentityError },
+
+    #[snafu(display(
+        "the submission window closed at {expire_at} before the message could be signed"
+    ))]
+    SigningWindowClosed { expire_at: OffsetDateTime },
 
     #[snafu(transparent)]
     AgentCreate {

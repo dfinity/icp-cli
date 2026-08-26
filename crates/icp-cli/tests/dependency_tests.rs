@@ -524,3 +524,114 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
             );
     }
 }
+
+/// A member's own environment `canisters:` selection prunes the workspace
+/// environment: openemail deploys only `backend` to `random-environment`, so the
+/// workspace environment does not contain its `frontend` either. Deploying from
+/// inside the member likewise skips it.
+#[tokio::test]
+async fn member_environment_canister_selection_prunes_the_workspace_environment() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+              - name: frontend
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            environments:
+              - name: random-environment
+                canisters: [backend]
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // The environment holds the app's canister and openemail's `backend` only.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "list",
+            "--environment",
+            "random-environment",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains(r#"["backend","vendor/openemail:backend"]"#)
+                .and(contains("vendor/openemail:frontend").not()),
+        );
+
+    // The member's own canisters keep the same selection when addressed from
+    // inside it, so a member-scoped deploy cannot pick up `frontend` either.
+    ctx.icp()
+        .current_dir(&dep_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "vendor/openemail:frontend",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "environment 'random-environment' does not contain a canister named 'vendor/openemail:frontend'",
+        ));
+
+    // `local` is unrestricted by openemail, so both of its canisters are in it.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "list", "--json"])
+        .assert()
+        .success()
+        .stdout(contains("vendor/openemail:frontend"));
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    // A member-scoped deploy still works: `backend` is wired to its sibling
+    // `frontend`, but that sibling is excluded from this environment, so it is
+    // not a dependency awaiting deployment — the wiring is simply left unset, as
+    // it would be when openemail deploys on its own.
+    ctx.icp()
+        .current_dir(&dep_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stdout(
+            contains("vendor/openemail:backend").and(contains("vendor/openemail:frontend").not()),
+        );
+}

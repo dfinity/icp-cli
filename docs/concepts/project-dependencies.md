@@ -23,7 +23,9 @@ dependencies:
 
 ## What gets deployed
 
-`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` here is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+
+"Exactly as it would deploy on its own" includes its own environments: if the dependency's environment [selects a subset of its own canisters](#environments-across-a-workspace), only those are deployed to that environment.
 
 ## Canister ID injection
 
@@ -102,11 +104,15 @@ Force the workspace root with the `--project-root-override` flag or the `ICP_PRO
 
 The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
 
-A dependency's own same-named environment still contributes its **per-canister settings, init args, and upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
+A dependency's own same-named environment still contributes its **canister selection** and its **per-canister settings, init args, and upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
 
 1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
 2. the dependency's own environment configuration
 3. the canister's base settings
+
+A dependency's `canisters:` selection applies to **its own** canisters, and prunes them from the environment just as it would when the dependency is deployed on its own — a canister openemail's `staging` leaves out is not deployed to the workspace's `staging` either, and `canisters: []` keeps openemail out of that environment entirely. A namespaced name in that list (`libfoo:util`) addresses one of openemail's *own* dependencies, which prunes itself through its own same-named environment; a bare name openemail does not declare is rejected, exactly as it is standalone.
+
+The precedence above governs membership too: if the root's environment names its canisters explicitly, that list is the environment, and a member's selection does not narrow it further.
 
 Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
 

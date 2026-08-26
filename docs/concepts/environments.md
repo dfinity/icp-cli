@@ -145,6 +145,8 @@ environments:
         freezing_threshold: 90d
 ```
 
+`canisters:` names this project's own canisters. In a [workspace](project-dependencies.md#environments-across-a-workspace), each dependency's same-named environment selects its own canisters the same way.
+
 ### Environment-Specific Settings
 
 Settings cascade with environment overrides taking precedence:

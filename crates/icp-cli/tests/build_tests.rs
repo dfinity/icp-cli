@@ -175,9 +175,9 @@ fn build_adapter_display_failing_build_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR ----- Failed to build canister 'my-canister' -----
+        ERR ----- Building failed: 'my-canister' -----
         ERR 'command 'for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1' failed with status code 1'
-        ERR [my-canister] Build output:
+        ERR [my-canister] Building output:
         ERR [my-canister] Building: step 3 of 3 (script):
         ERR [my-canister] for i in $(seq 1 5); do echo "failing build step $i"; done; exit 1:
         ERR [my-canister] > failing build step 1
@@ -228,9 +228,9 @@ fn build_adapter_display_failing_middle_step_output() {
 
     // Only step 2 output should be shown, not step 1 or step 3
     let expected_output = indoc! {r#"
-        ERR ----- Failed to build canister 'my-canister' -----
+        ERR ----- Building failed: 'my-canister' -----
         ERR 'command 'echo "step 2 failing"; exit 1' failed with status code 1'
-        ERR [my-canister] Build output:
+        ERR [my-canister] Building output:
         ERR [my-canister] Building: step 2 of 3 (script):
         ERR [my-canister] echo "step 2 failing"; exit 1:
         ERR [my-canister] > step 2 failing
@@ -275,9 +275,9 @@ fn build_adapter_display_failing_prebuilt_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR ----- Failed to build canister 'my-canister' -----
+        ERR ----- Building failed: 'my-canister' -----
         ERR 'failed to read wasm file at '/nonexistent/path/to/wasm.wasm''
-        ERR [my-canister] Build output:
+        ERR [my-canister] Building output:
         ERR [my-canister] Building: step 2 of 2 (pre-built):
         ERR [my-canister] path: /nonexistent/path/to/wasm.wasm, sha: invalid:
         ERR [my-canister] > Reading wasm: /nonexistent/path/to/wasm.wasm
@@ -319,9 +319,9 @@ fn build_adapter_display_failing_build_output_no_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR ----- Failed to build canister 'my-canister' -----
+        ERR ----- Building failed: 'my-canister' -----
         ERR 'command 'exit 1' failed with status code 1'
-        ERR [my-canister] Build output:
+        ERR [my-canister] Building output:
         ERR [my-canister] Building: step 2 of 2 (script):
         ERR [my-canister] exit 1:
         ERR [my-canister] <no output>
@@ -405,9 +405,9 @@ fn build_adapter_display_script_multiple_commands_output() {
 
     // Invoke build
     let expected_output = indoc! {r#"
-        ERR ----- Failed to build canister 'my-canister' -----
+        ERR ----- Building failed: 'my-canister' -----
         ERR 'build did not produce a wasm output file'
-        ERR [my-canister] Build output:
+        ERR [my-canister] Building output:
         ERR [my-canister] Building: step 1 of 1 (script):
         ERR [my-canister] echo "command 1":
         ERR [my-canister] echo "command 2":

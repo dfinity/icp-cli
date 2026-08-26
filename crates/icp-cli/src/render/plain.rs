@@ -4,10 +4,10 @@
 
 use std::collections::BTreeMap;
 
-use icp_events::{Event, EventKind, TaskId, TaskOutcome};
-use tracing::debug;
+use icp_events::{Event, EventKind, Shape, TaskId, TaskOutcome};
+use tracing::{debug, info};
 
-use super::{TaskLog, dump_failures, step_header};
+use super::{INDENT, TaskInfo, TaskLog, dump_failures, retained_lines};
 
 pub(crate) struct PlainRenderer {
     tasks: BTreeMap<TaskId, TaskLog>,
@@ -20,10 +20,35 @@ impl PlainRenderer {
         }
     }
 
+    /// How deeply a task nests, from its parent's depth. A task whose parent
+    /// is unknown is treated as top-level.
+    fn depth_of(&self, parent: Option<TaskId>) -> usize {
+        parent
+            .and_then(|id| self.tasks.get(&id))
+            .map(|log| log.info().depth + 1)
+            .unwrap_or(0)
+    }
+
     pub(crate) fn handle(&mut self, event: Event) {
         match event.kind {
-            EventKind::TaskStarted { task } => {
-                self.tasks.insert(event.task_id, TaskLog::new(task));
+            EventKind::TaskStarted {
+                parent,
+                subject,
+                title,
+                shape,
+            } => {
+                let info = TaskInfo {
+                    subject,
+                    title,
+                    shape,
+                    depth: self.depth_of(parent),
+                };
+                // A heading has no live state to animate, so with the bars
+                // gone it is simply a line.
+                if matches!(info.shape, Shape::Group) {
+                    info!("{}{}", INDENT.repeat(info.depth), info.title);
+                }
+                self.tasks.insert(event.task_id, TaskLog::new(info));
             }
 
             EventKind::StepStarted {
@@ -34,7 +59,7 @@ impl PlainRenderer {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;
                 };
-                let header = step_header(log.kind(), number, total, &label);
+                let header = log.info().step_header(number, total, &label);
                 log.start_step(header);
             }
 
@@ -44,16 +69,22 @@ impl PlainRenderer {
                 };
                 // Mark command boundaries so interleaved output stays
                 // attributable to the command producing it.
-                debug!("[{}] $ {command}", log.kind().canister());
+                debug!("{}", log.info().line(&format!("$ {command}")));
             }
 
             EventKind::Output { line, .. } => {
                 let Some(log) = self.tasks.get_mut(&event.task_id) else {
                     return;
                 };
-                // Prefix with the canister so interleaved concurrent tasks
+                // A group's output is a notice rather than tool output, so it
+                // stays on the user-facing channel.
+                if matches!(log.info().shape, Shape::Group) {
+                    info!("{}", log.info().line(&line));
+                    return;
+                }
+                // Prefix with the subject so interleaved concurrent tasks
                 // stay attributable.
-                debug!("[{}] {line}", log.kind().canister());
+                debug!("{}", log.info().line(&line));
                 log.push_line(line);
             }
 
@@ -71,11 +102,15 @@ impl PlainRenderer {
                     return;
                 };
                 match outcome {
-                    TaskOutcome::Succeeded { retained_output } => {
-                        super::print_retained(log.kind(), &retained_output);
+                    TaskOutcome::Succeeded {
+                        retained_output, ..
+                    } => {
+                        for line in retained_lines(log.info(), &retained_output) {
+                            eprintln!("{line}");
+                        }
                     }
-                    TaskOutcome::Failed { message, causes } => {
-                        log.fail(message, causes);
+                    TaskOutcome::Failed(failure) => {
+                        log.fail(failure);
                     }
                     TaskOutcome::Skipped { .. } => {}
                 }

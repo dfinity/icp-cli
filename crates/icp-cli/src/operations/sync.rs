@@ -7,7 +7,7 @@ use icp::{
     package::PackageCache,
     prelude::PathBuf,
 };
-use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
+use icp_events::{Failure, Reporter, StepOutcome, Task, TaskOutcome, TaskReporter};
 use snafu::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -93,10 +93,7 @@ pub(crate) async fn sync_many(
     let mut futs = FuturesOrdered::new();
 
     for (cid, canister_path, canister_info) in canisters {
-        let task = reporter.task(TaskKind::Sync {
-            canister: canister_info.name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::new("Syncing").on(&canister_info.name));
 
         let fut = {
             let agent = agent.clone();
@@ -126,12 +123,12 @@ pub(crate) async fn sync_many(
                     // rolling step view discards them on success, but they
                     // belong on the persistent output channel.
                     Ok(stderr_lines) => task.finish(TaskOutcome::Succeeded {
+                        message: Some(format!("Synced successfully: {cid}")),
                         retained_output: stderr_lines.clone(),
                     }),
-                    Err(error) => task.finish(TaskOutcome::Failed {
-                        message: error.to_string(),
-                        causes: error_causes(error),
-                    }),
+                    Err(error) => task.finish(TaskOutcome::Failed(
+                        Failure::new(error.to_string()).with_causes(error_causes(error)),
+                    )),
                 }
 
                 result.map(|_| ()).map_err(|_| canister_info.name.clone())

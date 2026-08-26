@@ -4,7 +4,7 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
 use icp::Canister;
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::{Reporter, Task, TaskOutcome};
 use snafu::Snafu;
 use tracing::error;
 
@@ -111,10 +111,7 @@ pub(crate) async fn set_binding_env_vars_many(
     let mut futs = FuturesOrdered::new();
 
     for (cid, info) in target_canisters {
-        let task = reporter.task(TaskKind::UpdateEnvironmentVariables {
-            canister: info.name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::new("Updating environment variables").on(&info.name));
 
         // Each canister receives only the ids it is wired to (its own project's
         // canisters by their local names, plus any declared dependencies under
@@ -139,7 +136,9 @@ pub(crate) async fn set_binding_env_vars_many(
             let result = set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Ok(()) => task.finish(TaskOutcome::succeeded_with(
+                    "Environment variables updated successfully",
+                )),
                 Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
             }
 

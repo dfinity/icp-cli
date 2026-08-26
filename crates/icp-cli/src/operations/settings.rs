@@ -15,7 +15,7 @@ use icp::{
     context::{Context, EnvironmentSelection},
     store_id::IdMapping,
 };
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::{Reporter, Task, TaskOutcome};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
@@ -224,10 +224,7 @@ pub(crate) async fn sync_settings_many(
     let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
-        let task = reporter.task(TaskKind::UpdateSettings {
-            canister: info.name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::new("Updating canister settings").on(&info.name));
         let agent = agent.clone();
         let ids = ids.clone();
 
@@ -246,7 +243,9 @@ pub(crate) async fn sync_settings_many(
             .await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Ok(()) => task.finish(TaskOutcome::succeeded_with(
+                    "Canister settings updated successfully",
+                )),
                 Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
             }
 

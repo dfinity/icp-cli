@@ -8,8 +8,6 @@ use icp::prelude::*;
 use serde::Serialize;
 use tracing::info;
 
-use icp_events::{TaskKind, TransferBlob, TransferDirection};
-
 use super::SnapshotId;
 use crate::commands::args;
 use crate::operations::misc::format_timestamp;
@@ -18,6 +16,8 @@ use crate::operations::snapshot_transfer::{
     load_metadata, load_upload_progress, save_upload_progress, upload_blob_from_file,
     upload_snapshot_metadata, upload_wasm_chunk,
 };
+use icp_events::Task;
+
 use crate::render::rendered_task;
 
 /// Upload a snapshot from local disk
@@ -131,12 +131,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 if progress.wasm_module_offset < metadata.wasm_module_size {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Upload,
-                            blob: TransferBlob::WasmModule,
-                            total_bytes: metadata.wasm_module_size,
-                        },
+                        Task::counter("WASM module", metadata.wasm_module_size)
+                            .on(name.to_string()),
                         async |task| {
                             upload_blob_from_file(
                                 &agent,
@@ -162,12 +158,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 if progress.wasm_memory_offset < metadata.wasm_memory_size {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Upload,
-                            blob: TransferBlob::WasmMemory,
-                            total_bytes: metadata.wasm_memory_size,
-                        },
+                        Task::counter("WASM memory", metadata.wasm_memory_size)
+                            .on(name.to_string()),
                         async |task| {
                             upload_blob_from_file(
                                 &agent,
@@ -193,12 +185,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 if progress.stable_memory_offset < metadata.stable_memory_size {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Upload,
-                            blob: TransferBlob::StableMemory,
-                            total_bytes: metadata.stable_memory_size,
-                        },
+                        Task::counter("Stable memory", metadata.stable_memory_size)
+                            .on(name.to_string()),
                         async |task| {
                             upload_blob_from_file(
                                 &agent,

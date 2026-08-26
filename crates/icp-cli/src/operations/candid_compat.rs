@@ -8,7 +8,7 @@ use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::CanisterInstallMode;
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::{Failure, Reporter, Task, TaskOutcome};
 use snafu::Snafu;
 use tracing::debug;
 
@@ -25,10 +25,7 @@ pub(crate) async fn check_candid_compatibility_many(
     let mut check_futs = FuturesOrdered::new();
 
     for (name, cid, mode) in canisters {
-        let task = reporter.task(TaskKind::CandidCheck {
-            canister: name.to_owned(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::new("Checking Candid compatibility").on(name));
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
@@ -44,10 +41,20 @@ pub(crate) async fn check_candid_compatibility_many(
             let result = check_canister_candid_compat(&agent, &cid, name, &*artifacts).await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::succeeded()),
-                // The renderer words the breaking-change dump; the incompatibility
-                // details ride as the failure message.
-                Err(failure) => task.finish(TaskOutcome::failed(failure.details.clone())),
+                Ok(()) => task.finish(TaskOutcome::succeeded_with("Compatible")),
+                // The incompatibility report is far too long for a progress
+                // bar, so the bar gets the verdict and the report is what the
+                // deferred dump prints. Both are this check's own words: only
+                // it knows a breaking interface change is what went wrong.
+                Err(failure) => task.finish(TaskOutcome::Failed(
+                    Failure::new("incompatible interface")
+                        .with_detail(vec![format!(
+                            "You are making a BREAKING change. Other canisters or frontend \
+                             clients relying on your canister may stop working.\n\n{}",
+                            failure.details,
+                        )])
+                        .with_epilogue("Use --yes to bypass this check."),
+                )),
             }
 
             result.map_err(|failure| failure.canister_name)

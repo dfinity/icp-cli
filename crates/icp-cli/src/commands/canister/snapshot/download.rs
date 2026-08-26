@@ -5,8 +5,6 @@ use icp::context::Context;
 use icp::prelude::*;
 use tracing::info;
 
-use icp_events::{TaskKind, TransferBlob, TransferDirection};
-
 use super::SnapshotId;
 use crate::commands::args;
 use crate::operations::misc::format_timestamp;
@@ -15,6 +13,8 @@ use crate::operations::snapshot_transfer::{
     download_blob_to_file, download_wasm_chunk, load_download_progress, load_metadata,
     read_snapshot_metadata, save_metadata,
 };
+use icp_events::Task;
+
 use crate::render::rendered_task;
 
 /// Download a snapshot to local disk
@@ -126,12 +126,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                 if !progress.wasm_module.is_complete(metadata.wasm_module_size) {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Download,
-                            blob: TransferBlob::WasmModule,
-                            total_bytes: metadata.wasm_module_size,
-                        },
+                        Task::counter("WASM module", metadata.wasm_module_size)
+                            .on(name.to_string()),
                         async |task| {
                             download_blob_to_file(
                                 &agent,
@@ -158,12 +154,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                 if !progress.wasm_memory.is_complete(metadata.wasm_memory_size) {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Download,
-                            blob: TransferBlob::WasmMemory,
-                            total_bytes: metadata.wasm_memory_size,
-                        },
+                        Task::counter("WASM memory", metadata.wasm_memory_size)
+                            .on(name.to_string()),
                         async |task| {
                             download_blob_to_file(
                                 &agent,
@@ -193,12 +185,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                 {
                     rendered_task(
                         ctx.debug,
-                        TaskKind::SnapshotTransfer {
-                            canister: name.to_string(),
-                            direction: TransferDirection::Download,
-                            blob: TransferBlob::StableMemory,
-                            total_bytes: metadata.stable_memory_size,
-                        },
+                        Task::counter("Stable memory", metadata.stable_memory_size)
+                            .on(name.to_string()),
                         async |task| {
                             download_blob_to_file(
                                 &agent,

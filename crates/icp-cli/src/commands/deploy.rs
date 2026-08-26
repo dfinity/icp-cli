@@ -12,7 +12,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
-use icp_events::{TaskKind, TaskOutcome};
+use icp_events::{Task, TaskOutcome};
 use itertools::Itertools;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -238,17 +238,17 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         rendered(ctx.debug, async |reporter| {
             let mut futs = FuturesOrdered::new();
             for name in canisters_to_create.iter() {
-                let task = reporter.task(TaskKind::Create {
-                    canister: (*name).clone(),
-                });
+                let task = reporter.task(Task::new("Creating").on(*name));
                 let create_op = create_operation.clone();
                 let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
                 futs.push_back(async move {
                     let result = create_op.create(&canister_info.settings.into()).await;
 
                     match &result {
-                        Ok(_) => task.finish(TaskOutcome::succeeded()),
-                        Err(err) => task.finish(TaskOutcome::failed(err.to_string())),
+                        Ok(_) => task.finish(TaskOutcome::succeeded_with("Created successfully")),
+                        // The command's returned error reports this; a
+                        // deferred dump would only say it twice.
+                        Err(err) => task.finish(TaskOutcome::failed_silently(err.to_string())),
                     }
 
                     result

@@ -8,7 +8,7 @@ use icp::{
     package::PackageCache,
     prelude::*,
 };
-use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
+use icp_events::{Reporter, StepOutcome, Task, TaskOutcome, TaskReporter};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
@@ -99,9 +99,7 @@ pub(crate) async fn build_many(
     let mut futs = FuturesOrdered::new();
 
     for (canister_path, canister) in canisters {
-        let task = reporter.task(TaskKind::Build {
-            canister: canister.name.clone(),
-        });
+        let task = reporter.task(Task::new("Building").on(&canister.name));
         let builder = builder.clone();
         let artifacts = artifacts.clone();
 
@@ -118,7 +116,7 @@ pub(crate) async fn build_many(
             .await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Ok(()) => task.finish(TaskOutcome::succeeded_with("Built successfully")),
                 Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
             }
 

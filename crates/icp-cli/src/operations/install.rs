@@ -6,7 +6,7 @@ use ic_management_canister_types::{
     ClearChunkStoreArgs, InstallChunkedCodeArgs, InstallCodeArgs, UpgradeFlags, UploadChunkArgs,
     WasmMemoryPersistence,
 };
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::{Reporter, Task, TaskOutcome};
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
@@ -360,10 +360,7 @@ pub(crate) async fn install_many(
     let mut futs = FuturesOrdered::new();
 
     for (name, cid, mode, status, init_args) in canisters {
-        let task = reporter.task(TaskKind::Install {
-            canister: name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::new("Installing").on(&name));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
 
@@ -391,7 +388,7 @@ pub(crate) async fn install_many(
             .await;
 
             match &result {
-                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Ok(()) => task.finish(TaskOutcome::succeeded_with("Installed successfully")),
                 Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
             }
 

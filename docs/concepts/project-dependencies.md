@@ -110,7 +110,7 @@ A dependency's own same-named environment still contributes its **canister selec
 2. the dependency's own environment configuration
 3. the canister's base settings
 
-A dependency's `canisters:` selection applies to **its own** canisters, and prunes them from the environment just as it would when the dependency is deployed on its own — a canister openemail's `staging` leaves out is not deployed to the workspace's `staging` either, and `canisters: []` keeps openemail out of that environment entirely. A namespaced name in that list (`libfoo:util`) addresses one of openemail's *own* dependencies, which prunes itself through its own same-named environment; a bare name openemail does not declare is rejected, exactly as it is standalone.
+A dependency's `canisters:` selection applies to **its own** canisters, and prunes them from the environment just as it would when the dependency is deployed on its own — a canister openemail's `staging` leaves out is not deployed to the workspace's `staging` either, and `canisters: []` keeps openemail out of that environment entirely. A namespaced name in that list (`libfoo:util`) addresses one of openemail's *own* dependencies, which prunes itself through its own same-named environment. Either form is rejected if it names nothing openemail can address — a canister it does not declare, or a path that is not one of its dependencies — exactly as it is standalone.
 
 The precedence above governs membership too: if the root's environment names its canisters explicitly, that list is the environment, and a member's selection does not narrow it further.
 

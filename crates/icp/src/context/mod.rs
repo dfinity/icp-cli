@@ -159,6 +159,19 @@ impl Context {
             .fail();
         }
 
+        // Likewise for two `canisters` lists that disagree about which canisters
+        // of some project this environment holds: there is no answer to give for
+        // this environment, but the others are unaffected.
+        if let Some(conflict) = p.env_selection_conflicts.get(environment.name()) {
+            return ConflictingEnvironmentSelectionSnafu {
+                environment: environment.name().to_owned(),
+                target: conflict.target.clone(),
+                first: conflict.first.clone(),
+                second: conflict.second.clone(),
+            }
+            .fail();
+        }
+
         let network_type = match &env.network.configuration {
             NetworkConfiguration::Managed { .. } => NetworkType::Managed,
             NetworkConfiguration::Connected { .. } => NetworkType::Connected,
@@ -665,6 +678,17 @@ pub enum GetEnvironmentError {
          a dependency must declare every environment the workspace targets"
     ))]
     MissingDependencyEnvironment { environment: String, member: String },
+
+    #[snafu(display(
+        "environment '{environment}' has the canisters of '{target}' selected in two places, \
+         by {first} and by {second}; remove the `canisters` list from one of them"
+    ))]
+    ConflictingEnvironmentSelection {
+        environment: String,
+        target: String,
+        first: String,
+        second: String,
+    },
 }
 
 #[derive(Debug, Snafu)]

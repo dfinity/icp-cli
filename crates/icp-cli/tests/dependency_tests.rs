@@ -525,6 +525,83 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
     }
 }
 
+/// Two `canisters` lists that disagree about one project's canisters make that
+/// one environment unusable, and nothing else: the project still loads, so every
+/// other environment — and every command that does not select the ambiguous one —
+/// works as before. Reported when that environment is selected.
+#[tokio::test]
+async fn conflicting_environment_lists_only_affect_that_environment() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+              - name: frontend
+                build:
+                  steps:
+                    - type: script
+                      command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            environments:
+              - name: random-environment
+                canisters: [backend]
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    // The root decides openemail's canisters for the same environment, differently.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: app
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        environments:
+          - name: random-environment
+            network: random-network
+            canisters: [app, "vendor/openemail:frontend"]
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // The ambiguous environment names both writers and what they disagree about.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "list", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("vendor/openemail")
+                .and(contains("the workspace root"))
+                .and(contains("selected in two places")),
+        );
+
+    // `local`, which neither list mentions, is untouched.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["canister", "list", "--json"])
+        .assert()
+        .success()
+        .stdout(contains(
+            r#"["app","vendor/openemail:backend","vendor/openemail:frontend"]"#,
+        ));
+}
+
 /// A member's own environment `canisters:` selection prunes the workspace
 /// environment: openemail deploys only `backend` to `random-environment`, so the
 /// workspace environment does not contain its `frontend` either. Deploying from

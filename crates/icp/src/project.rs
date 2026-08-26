@@ -543,12 +543,27 @@ struct MemberEnvContribution {
 /// targeting one environment merge into a single entry.
 type MemberEnvContributions = HashMap<String, MemberEnvContribution>;
 
-/// A member's identity (store-key prefix) and the environment names it defines,
-/// used to enforce that a member declares every environment the root targets
-/// (strict rule).
+/// One canister a member environment selects from the member's own dependencies,
+/// by the path-based name the member addresses it with. Only resolvable once
+/// every instance has been imported, so it is validated after the walk.
+struct NestedSelection {
+    environment: String,
+
+    /// The name as the member's manifest wrote it, for the error message.
+    name: String,
+
+    /// The workspace store key it should resolve to.
+    key: String,
+}
+
+/// A member's identity (alias and store-key prefix) and the environment names it
+/// defines, used to enforce that a member declares every environment the root
+/// targets (strict rule), plus the nested canisters its environments select.
 struct MemberEnvInfo {
+    alias: String,
     prefix: String,
     defined: HashSet<String>,
+    nested_selections: Vec<NestedSelection>,
 }
 
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
@@ -972,6 +987,9 @@ async fn import_dependency(
     // root owns it). Only the member's *own* canisters are affected — names
     // resolving to its dependencies are left to those dependencies.
     let mut defined_envs: HashSet<String> = HashSet::new();
+    // Selections awaiting a check against this member's subtree, which is only
+    // complete once its own dependencies have been imported.
+    let mut nested_selections: Vec<NestedSelection> = Vec::new();
     for env_item in &dep_manifest.environments {
         let em: EnvironmentManifest = match env_item {
             Item::Manifest(m) => m.clone(),
@@ -1005,19 +1023,41 @@ async fn import_dependency(
             CanisterSelection::Everything => vec![],
             CanisterSelection::None => local_to_key.values().cloned().collect(),
             CanisterSelection::Named(names) => {
-                // A bare name always addresses one of the member's own canisters,
-                // so an unknown one is the same misconfiguration the member would
-                // be rejected for standalone. A namespaced name addresses one of
-                // the member's *own* dependencies, whose canisters that
-                // dependency's environment selects for itself.
+                // Every name must resolve to a canister the member can address,
+                // as standalone. A bare name is one of its own canisters. A
+                // namespaced `<path>:<canister>` is one of its own dependencies',
+                // whose membership that dependency's environment decides for
+                // itself — resolve the path to the instance's store key here and
+                // check the key once the walk has imported it.
                 for name in names {
-                    if !name.contains(':') && !local_to_key.contains_key(name) {
-                        return InvalidDependencyEnvironmentCanisterSnafu {
+                    let invalid = || {
+                        InvalidDependencyEnvironmentCanisterSnafu {
                             alias: dep.name.clone(),
                             environment: em.name.clone(),
                             canister: name.clone(),
                         }
-                        .fail();
+                        .build()
+                    };
+                    match name.rsplit_once(':') {
+                        None => {
+                            if !local_to_key.contains_key(name) {
+                                return Err(invalid());
+                            }
+                        }
+                        Some((rel, local)) => {
+                            if rel.is_empty() || local.is_empty() {
+                                return Err(invalid());
+                            }
+                            let dir = canonicalize_or(&canonical.join(rel)).ok_or_else(invalid)?;
+                            nested_selections.push(NestedSelection {
+                                environment: em.name.clone(),
+                                name: name.clone(),
+                                key: format!(
+                                    "{}:{local}",
+                                    relative_prefix(app_root_canonical, &dir)
+                                ),
+                            });
+                        }
                     }
                 }
                 let selected: HashSet<&str> = names.iter().map(String::as_str).collect();
@@ -1082,8 +1122,10 @@ async fn import_dependency(
         }
     }
     members.push(MemberEnvInfo {
+        alias: dep.name.clone(),
         prefix: prefix.clone(),
         defined: defined_envs,
+        nested_selections,
     });
 
     // Recurse into the dependency's own dependencies.
@@ -1343,6 +1385,22 @@ pub async fn consolidate_manifest(
         .await?;
         let exposed = select_exposed(&inst.own, &dep.canisters, &dep.name)?;
         app_edges.push((dep.name.clone(), exposed));
+    }
+
+    // Every canister a member environment selects from its own dependencies must
+    // exist. The walk is over, so the instance it named has been imported if it
+    // is part of the workspace at all.
+    for member in &members {
+        for sel in &member.nested_selections {
+            if !canisters.contains_key(&sel.key) {
+                return InvalidDependencyEnvironmentCanisterSnafu {
+                    alias: member.alias.clone(),
+                    environment: sel.environment.clone(),
+                    canister: sel.name.clone(),
+                }
+                .fail();
+            }
+        }
     }
 
     // Assign env-var bindings for this project's own canisters (own canisters by
@@ -2014,6 +2072,57 @@ environments:
     }
 
     #[tokio::test]
+    async fn member_env_naming_an_unknown_nested_canister_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/libfoo/icp.yaml",
+            &manifest(&["util"], ""),
+        );
+        // `libfo` is a typo for the `libfoo` directory, and `libfoo:utl` for its
+        // canister. Either would be rejected standalone, so neither may silently
+        // prune openemail out of staging.
+        for selection in [r#"["libfo:util"]"#, r#"["libfoo:utl"]"#] {
+            write(
+                tmp.path(),
+                "openemail/icp.yaml",
+                &format!(
+                    r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+dependencies:
+  - name: libfoo
+    path: ./libfoo
+environments:
+  - name: staging
+    canisters: {selection}
+"#
+                ),
+            );
+            write(
+                tmp.path(),
+                "icp.yaml",
+                &manifest(
+                    &["app"],
+                    "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+                ),
+            );
+
+            let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+            assert!(
+                err.contains("openemail")
+                    && err.contains("staging")
+                    && err.contains("invalid canister"),
+                "unexpected error for {selection}: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn member_env_may_name_its_own_dependencys_canister() {
         let tmp = Utf8TempDir::new().unwrap();
         // A namespaced name addresses one of openemail's own dependencies. It is
@@ -2094,7 +2203,7 @@ environments:
 
         let err = consolidate(tmp.path()).await.unwrap_err().to_string();
         assert!(
-            err.contains("openemail") && err.contains("staging"),
+            err.contains("openemail") && err.contains("two environments named 'staging'"),
             "unexpected error: {err}"
         );
     }

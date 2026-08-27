@@ -3,7 +3,7 @@ use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 
-use crate::operations::bundle::create_bundle;
+use crate::{operations::bundle::create_bundle, render::rendered};
 
 /// Bundle a project into a self-contained deployable archive.
 ///
@@ -30,16 +30,20 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
 
     let canisters: Vec<_> = project.canisters.into_values().collect();
 
-    create_bundle(
-        &project.dir,
-        canisters,
-        &args.environment,
-        ctx.builder.clone(),
-        ctx.artifacts.clone(),
-        &ctx.dirs.package_cache()?,
-        ctx.debug,
-        &args.output,
-    )
+    let pkg_cache = ctx.dirs.package_cache()?;
+    rendered(ctx.debug, async |reporter| {
+        create_bundle(
+            &project.dir,
+            canisters,
+            &args.environment,
+            ctx.builder.clone(),
+            ctx.artifacts.clone(),
+            &pkg_cache,
+            reporter,
+            &args.output,
+        )
+        .await
+    })
     .await
     .context("failed to create bundle")?;
 

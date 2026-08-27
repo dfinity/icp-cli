@@ -5,14 +5,17 @@ use icp::context::Context;
 use icp::prelude::*;
 use tracing::info;
 
+use icp_events::{TaskKind, TransferBlob, TransferDirection};
+
 use super::SnapshotId;
 use crate::commands::args;
 use crate::operations::misc::format_timestamp;
 use crate::operations::snapshot_transfer::{
-    BlobType, SnapshotPaths, SnapshotTransferError, create_transfer_progress_bar,
-    delete_download_progress, download_blob_to_file, download_wasm_chunk, load_download_progress,
-    load_metadata, read_snapshot_metadata, save_metadata,
+    BlobType, SnapshotPaths, SnapshotTransferError, delete_download_progress,
+    download_blob_to_file, download_wasm_chunk, load_download_progress, load_metadata,
+    read_snapshot_metadata, save_metadata,
 };
+use crate::render::rendered_task;
 
 /// Download a snapshot to local disk
 #[derive(Debug, Args)]
@@ -121,20 +124,30 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
             // Download WASM module
             if metadata.wasm_module_size > 0 {
                 if !progress.wasm_module.is_complete(metadata.wasm_module_size) {
-                    let pb = create_transfer_progress_bar(metadata.wasm_module_size, "WASM module");
-                    download_blob_to_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        snapshot_id,
-                        BlobType::WasmModule,
-                        metadata.wasm_module_size,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Download,
+                            blob: TransferBlob::WasmModule,
+                            total_bytes: metadata.wasm_module_size,
+                        },
+                        async |task| {
+                            download_blob_to_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                snapshot_id,
+                                BlobType::WasmModule,
+                                metadata.wasm_module_size,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("WASM module: already complete");
                 }
@@ -143,20 +156,30 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
             // Download WASM memory
             if metadata.wasm_memory_size > 0 {
                 if !progress.wasm_memory.is_complete(metadata.wasm_memory_size) {
-                    let pb = create_transfer_progress_bar(metadata.wasm_memory_size, "WASM memory");
-                    download_blob_to_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        snapshot_id,
-                        BlobType::WasmMemory,
-                        metadata.wasm_memory_size,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Download,
+                            blob: TransferBlob::WasmMemory,
+                            total_bytes: metadata.wasm_memory_size,
+                        },
+                        async |task| {
+                            download_blob_to_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                snapshot_id,
+                                BlobType::WasmMemory,
+                                metadata.wasm_memory_size,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("WASM memory: already complete");
                 }
@@ -168,21 +191,30 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                     .stable_memory
                     .is_complete(metadata.stable_memory_size)
                 {
-                    let pb =
-                        create_transfer_progress_bar(metadata.stable_memory_size, "Stable memory");
-                    download_blob_to_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        snapshot_id,
-                        BlobType::StableMemory,
-                        metadata.stable_memory_size,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Download,
+                            blob: TransferBlob::StableMemory,
+                            total_bytes: metadata.stable_memory_size,
+                        },
+                        async |task| {
+                            download_blob_to_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                snapshot_id,
+                                BlobType::StableMemory,
+                                metadata.stable_memory_size,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("Stable memory: already complete");
                 }

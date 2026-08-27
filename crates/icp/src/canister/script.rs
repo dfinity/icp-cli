@@ -1,11 +1,11 @@
 use std::process::Stdio;
 
+use icp_events::StepReporter;
 use snafu::prelude::*;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     join,
     process::Command,
-    sync::mpsc::Sender,
 };
 
 use crate::manifest::adapter::script::Adapter;
@@ -53,14 +53,14 @@ pub(super) async fn execute(
     adapter: &Adapter,
     cwd: &Path,
     envs: &[(&str, &str)],
-    stdio: Option<Sender<String>>,
+    reporter: &StepReporter,
 ) -> Result<(), ScriptError> {
     // Normalize `command` field based on whether it's a single command or multiple.
-    execute_commands(&adapter.command.as_vec(), cwd, envs, stdio).await
+    execute_commands(&adapter.command.as_vec(), cwd, envs, reporter).await
 }
 
 /// Run each command in order under a shell, with `envs` set and `cwd` as the
-/// working directory, streaming stdout/stderr lines to `stdio`.
+/// working directory, streaming stdout/stderr lines to `reporter`.
 ///
 /// Takes already-resolved commands rather than an [`Adapter`], so the subprocess
 /// executor needs to know nothing about manifest types. The sync path resolves
@@ -71,11 +71,12 @@ pub(super) async fn execute_commands(
     cmds: &[String],
     cwd: &Path,
     envs: &[(&str, &str)],
-    stdio: Option<Sender<String>>,
+    reporter: &StepReporter,
 ) -> Result<(), ScriptError> {
     // Iterate over configured commands
     for input_cmd in cmds {
         let input_cmd = input_cmd.as_str();
+        reporter.command(input_cmd);
         let mut cmd = shell_command(input_cmd, cwd)?;
 
         // Environment Variables
@@ -113,14 +114,12 @@ pub(super) async fn execute_commands(
             //
             // Stdout
             tokio::spawn({
-                // Clone the stdio sender for use in the stdout handling task
-                let stdio = stdio.clone();
+                // Clone the reporter for use in the stdout handling task
+                let reporter = reporter.clone();
 
                 async move {
                     while let Ok(Some(line)) = stdout.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
-                        }
+                        reporter.stdout(line);
                     }
                     Ok::<(), ScriptError>(())
                 }
@@ -128,14 +127,12 @@ pub(super) async fn execute_commands(
             //
             // Stderr
             tokio::spawn({
-                // Clone the stdio sender for use in the stderr handling task
-                let stdio = stdio.clone();
+                // Clone the reporter for use in the stderr handling task
+                let reporter = reporter.clone();
 
                 async move {
                     while let Ok(Some(line)) = stderr.next_line().await {
-                        if let Some(sender) = &stdio {
-                            let _ = sender.send(line).await;
-                        }
+                        reporter.stderr(line);
                     }
                     Ok::<(), ScriptError>(())
                 }

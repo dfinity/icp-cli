@@ -13,8 +13,8 @@
 //! sync path.
 
 use async_trait::async_trait;
+use icp_events::StepReporter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::adapter::script::Adapter;
 use crate::prelude::*;
@@ -86,12 +86,12 @@ pub struct ScriptRunError {
 /// Executes resolved script sync steps.
 #[async_trait]
 pub trait ScriptRunner: Sync + Send {
-    /// Run a resolved script step, streaming output to `stdio`, and return any
-    /// stderr lines to retain past the streamed view.
+    /// Run a resolved script step, streaming output to `reporter`, and return
+    /// any stderr lines to retain past the streamed view.
     async fn run_script(
         &self,
         invocation: ScriptInvocation,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
     ) -> Result<Vec<String>, ScriptRunError>;
 }
 
@@ -103,14 +103,14 @@ impl ScriptRunner for HostScripts {
     async fn run_script(
         &self,
         invocation: ScriptInvocation,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
     ) -> Result<Vec<String>, ScriptRunError> {
         let env_refs: Vec<(&str, &str)> = invocation
             .env
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        execute_commands(&invocation.commands, &invocation.cwd, &env_refs, stdio)
+        execute_commands(&invocation.commands, &invocation.cwd, &env_refs, reporter)
             .await
             .map_err(|source| ScriptRunError {
                 source: Box::new(source),
@@ -208,7 +208,10 @@ mod tests {
             env: system_env_vars(&params(&[])),
         };
 
-        HostScripts.run_script(invocation, None).await.unwrap();
+        HostScripts
+            .run_script(invocation, &StepReporter::null())
+            .await
+            .unwrap();
 
         assert_eq!(std::fs::read_to_string(out.path()).unwrap(), "ic\n");
     }
@@ -245,7 +248,9 @@ mod tests {
             env: system_env_vars(&params(&[])),
         };
 
-        let run = HostScripts.run_script(invocation, None).await;
+        let run = HostScripts
+            .run_script(invocation, &StepReporter::null())
+            .await;
 
         // SAFETY: as above; the guard is still held.
         unsafe { std::env::remove_var(AMBIENT) };
@@ -275,7 +280,7 @@ mod tests {
         };
 
         let err = HostScripts
-            .run_script(invocation, None)
+            .run_script(invocation, &StepReporter::null())
             .await
             .expect_err("a non-zero exit must fail the step");
 

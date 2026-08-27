@@ -20,7 +20,7 @@ mod dist;
 mod logging;
 pub(crate) mod operations;
 mod options;
-mod progress;
+mod render;
 mod telemetry;
 mod version;
 

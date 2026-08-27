@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
+use icp_events::StepReporter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::BuildStep;
 use crate::package::PackageCache;
@@ -30,7 +30,7 @@ pub trait Build: Sync + Send {
         &self,
         step: &BuildStep,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<(), BuildError>;
 }
@@ -43,14 +43,14 @@ impl Build for Builder {
         &self,
         step: &BuildStep,
         params: &Params,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         match step {
             BuildStep::Prebuilt(adapter) => {
-                Ok(prebuilt::build(adapter, params, stdio, pkg_cache).await?)
+                Ok(prebuilt::build(adapter, params, reporter, pkg_cache).await?)
             }
-            BuildStep::Script(adapter) => Ok(script::build(adapter, params, stdio).await?),
+            BuildStep::Script(adapter) => Ok(script::build(adapter, params, reporter).await?),
         }
     }
 }
@@ -67,7 +67,7 @@ impl Build for UnimplementedMockBuilder {
         &self,
         _step: &BuildStep,
         _params: &Params,
-        _stdio: Option<Sender<String>>,
+        _reporter: &StepReporter,
         _pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         unimplemented!("UnimplementedMockBuilder::build")

@@ -12,6 +12,7 @@ use tracing::info;
 use crate::{
     operations::{proxy_management, sync::sync_many},
     options::{EnvironmentOpt, IdentityOpt},
+    render::rendered,
 };
 
 /// Synchronize canisters
@@ -125,17 +126,21 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .collect();
 
     let pkg_cache = ctx.dirs.package_cache()?;
-    sync_many(
-        ctx.syncer.clone(),
-        agent,
-        sync_canisters,
-        environment_selection.name().to_owned(),
-        env.network.name.clone(),
-        canister_ids,
-        args.proxy,
-        ctx.debug,
-        &pkg_cache,
-    )
+
+    rendered(ctx.debug, async |reporter| {
+        sync_many(
+            ctx.syncer.clone(),
+            agent,
+            sync_canisters,
+            environment_selection.name().to_owned(),
+            env.network.name.clone(),
+            canister_ids,
+            args.proxy,
+            &pkg_cache,
+            reporter,
+        )
+        .await
+    })
     .await?;
 
     Ok(())

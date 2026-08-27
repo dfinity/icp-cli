@@ -1,11 +1,11 @@
 use camino::Utf8PathBuf;
 use candid::Principal;
 use ic_agent::Agent;
+use icp_events::StepReporter;
 use icp_sync_plugin::{
     DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, RunPluginError, run_plugin,
 };
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
 
@@ -62,7 +62,7 @@ pub(super) async fn sync(
     agent: &Agent,
     environment: &str,
     proxy: Option<Principal>,
-    stdio: Option<Sender<String>>,
+    reporter: &StepReporter,
     pkg_cache: &PackageCache,
 ) -> Result<Vec<String>, PluginError> {
     // 0. Resolve the compute-time limit up front so a malformed
@@ -78,7 +78,7 @@ pub(super) async fn sync(
         &adapter.source,
         &params.path,
         adapter.sha256.as_deref(),
-        stdio.as_ref(),
+        reporter,
         pkg_cache,
     )
     .await?;
@@ -98,7 +98,7 @@ pub(super) async fn sync(
 
     let agent_clone = agent.clone();
     let environment_owned = environment.to_owned();
-    let stdio_clone = stdio.clone();
+    let reporter_clone = reporter.clone();
 
     tokio::task::block_in_place(|| {
         run_plugin(
@@ -112,7 +112,7 @@ pub(super) async fn sync(
             identity_principal,
             environment_owned,
             compute_limit_secs,
-            stdio_clone,
+            reporter_clone,
         )
     })
     .context(RunSnafu)

@@ -8,14 +8,17 @@ use icp::prelude::*;
 use serde::Serialize;
 use tracing::info;
 
+use icp_events::{TaskKind, TransferBlob, TransferDirection};
+
 use super::SnapshotId;
 use crate::commands::args;
 use crate::operations::misc::format_timestamp;
 use crate::operations::snapshot_transfer::{
-    BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, create_transfer_progress_bar,
-    delete_upload_progress, load_metadata, load_upload_progress, save_upload_progress,
-    upload_blob_from_file, upload_snapshot_metadata, upload_wasm_chunk,
+    BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, delete_upload_progress,
+    load_metadata, load_upload_progress, save_upload_progress, upload_blob_from_file,
+    upload_snapshot_metadata, upload_wasm_chunk,
 };
+use crate::render::rendered_task;
 
 /// Upload a snapshot from local disk
 #[derive(Debug, Args)]
@@ -126,19 +129,29 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload WASM module
             if metadata.wasm_module_size > 0 {
                 if progress.wasm_module_offset < metadata.wasm_module_size {
-                    let pb = create_transfer_progress_bar(metadata.wasm_module_size, "WASM module");
-                    upload_blob_from_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        &snapshot_id_bytes,
-                        BlobType::WasmModule,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Upload,
+                            blob: TransferBlob::WasmModule,
+                            total_bytes: metadata.wasm_module_size,
+                        },
+                        async |task| {
+                            upload_blob_from_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                &snapshot_id_bytes,
+                                BlobType::WasmModule,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("WASM module: already complete");
                 }
@@ -147,19 +160,29 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload WASM memory
             if metadata.wasm_memory_size > 0 {
                 if progress.wasm_memory_offset < metadata.wasm_memory_size {
-                    let pb = create_transfer_progress_bar(metadata.wasm_memory_size, "WASM memory");
-                    upload_blob_from_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        &snapshot_id_bytes,
-                        BlobType::WasmMemory,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Upload,
+                            blob: TransferBlob::WasmMemory,
+                            total_bytes: metadata.wasm_memory_size,
+                        },
+                        async |task| {
+                            upload_blob_from_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                &snapshot_id_bytes,
+                                BlobType::WasmMemory,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("WASM memory: already complete");
                 }
@@ -168,20 +191,29 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             // Upload stable memory
             if metadata.stable_memory_size > 0 {
                 if progress.stable_memory_offset < metadata.stable_memory_size {
-                    let pb =
-                        create_transfer_progress_bar(metadata.stable_memory_size, "Stable memory");
-                    upload_blob_from_file(
-                        &agent,
-                        args.proxy,
-                        cid,
-                        &snapshot_id_bytes,
-                        BlobType::StableMemory,
-                        paths,
-                        &mut progress,
-                        &pb,
+                    rendered_task(
+                        ctx.debug,
+                        TaskKind::SnapshotTransfer {
+                            canister: name.to_string(),
+                            direction: TransferDirection::Upload,
+                            blob: TransferBlob::StableMemory,
+                            total_bytes: metadata.stable_memory_size,
+                        },
+                        async |task| {
+                            upload_blob_from_file(
+                                &agent,
+                                args.proxy,
+                                cid,
+                                &snapshot_id_bytes,
+                                BlobType::StableMemory,
+                                paths,
+                                &mut progress,
+                                task,
+                            )
+                            .await
+                        },
                     )
                     .await?;
-                    pb.finish_with_message("done");
                 } else {
                     info!("Stable memory: already complete");
                 }

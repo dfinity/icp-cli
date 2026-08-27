@@ -5,14 +5,16 @@ use crate::parsers::to_token_unit_amount;
 use crate::signal::stop_signal;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{Agent, AgentError, agent::RejectCode, agent::SubnetType};
+use ic_agent::{
+    Agent, AgentError,
+    agent::{CallResponse, EffectiveId, RejectCode, SubnetType},
+};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
 use ic_management_canister_types::{
-    CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
-use ic_utils::interfaces::ManagementCanister;
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
@@ -52,6 +54,21 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to get subnet for canister: {source}"))]
     GetSubnet { source: AgentError },
+
+    #[snafu(display("failed to sign the subnet-scoped create_canister call: {source}"))]
+    SignSubnetCreate { source: AgentError },
+
+    #[snafu(display("failed to submit create_canister to subnet {subnet}: {source}"))]
+    SubmitSubnetCreate {
+        source: AgentError,
+        subnet: Principal,
+    },
+
+    #[snafu(display("failed to await create_canister on subnet {subnet}: {source}"))]
+    AwaitSubnetCreate {
+        source: AgentError,
+        subnet: Principal,
+    },
 
     #[snafu(display("invalid engine-canister id: {message}"))]
     EngineCanisterId { message: String },
@@ -408,15 +425,41 @@ impl CreateOperation {
         settings: &CanisterSettings,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let mgmt = ManagementCanister::create(&self.inner.agent);
-        let (canister_id,) = mgmt
-            .create_canister()
-            .with_effective_subnet_id(subnet)
-            .with_canister_settings(settings.clone())
-            .call_and_wait()
+        let arg = encode_create_canister_arg(settings).context(CandidEncodeSnafu)?;
+
+        // Subnet-scoped routing is its own endpoint rather than an effective
+        // canister id, so this cannot go through `update_or_proxy`.
+        let agent = &self.inner.agent;
+        let effective_id = EffectiveId::Subnet(subnet);
+        let signed = agent
+            .update(&Principal::management_canister(), "create_canister")
+            .with_arg(arg)
+            .sign()
+            .context(SignSubnetCreateSnafu)?;
+        let response = agent
+            .update_signed(effective_id, signed.signed_update)
             .await
-            .context(AgentSnafu)?;
-        Ok(canister_id)
+            .context(SubmitSubnetCreateSnafu { subnet })?;
+        let bytes = match response {
+            CallResponse::Response(bytes) => bytes,
+            CallResponse::Poll(request_id) => {
+                let signed_status = agent
+                    .sign_request_status(effective_id, request_id)
+                    .context(AwaitSubnetCreateSnafu { subnet })?;
+                agent
+                    .wait_signed(
+                        &request_id,
+                        effective_id,
+                        signed_status.signed_request_status,
+                    )
+                    .await
+                    .context(AwaitSubnetCreateSnafu { subnet })?
+                    .0
+            }
+        };
+        let (record,): (CanisterIdRecord,) =
+            candid::decode_args(&bytes).context(CandidDecodeSnafu)?;
+        Ok(record.canister_id)
     }
 
     async fn create_proxy(
@@ -696,9 +739,41 @@ async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOp
     Ok(resp)
 }
 
+/// Encodes the argument of the management canister's `create_canister`.
+///
+/// The interface defines it as `record { settings : opt canister_settings; ... }`,
+/// so the settings have to be wrapped: a bare `canister_settings` decodes as "no
+/// settings" and the canister is created with defaults.
+fn encode_create_canister_arg(settings: &CanisterSettings) -> candid::Result<Vec<u8>> {
+    Encode!(&MgmtCreateCanisterArgs {
+        settings: Some(settings.clone()),
+        sender_canister_version: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `create_canister` takes `record { settings : opt canister_settings; ... }`,
+    /// not a bare `canister_settings`. Encoding the latter — which is what the
+    /// `ic-utils` builder this path used to go through does — decodes as "no
+    /// settings", and the canister is created with defaults.
+    #[test]
+    fn subnet_create_encodes_settings_inside_the_argument_record() {
+        let settings = CanisterSettings {
+            controllers: Some(vec![Principal::anonymous()]),
+            ..Default::default()
+        };
+
+        let arg = encode_create_canister_arg(&settings).unwrap();
+        let (decoded,): (MgmtCreateCanisterArgs,) = candid::decode_args(&arg).unwrap();
+        assert_eq!(decoded.settings, Some(settings.clone()));
+
+        let bare = Encode!(&settings).unwrap();
+        let (as_args,): (MgmtCreateCanisterArgs,) = candid::decode_args(&bare).unwrap();
+        assert!(as_args.settings.is_none());
+    }
 
     #[test]
     fn recovery_command_preserves_all_settings() {

@@ -424,7 +424,11 @@ async fn create_canisters(
         });
     }
 
-    // Cache errors until all futures are processed. Otherwise we risk dropping a canister id.
+    // Every creation result must be drained before returning. A create call still
+    // in flight when we bail may already have made its canister on the IC, so
+    // abandoning the remaining futures would lose that id for good — which is the
+    // very loss this loop exists to prevent. So no step below short-circuits the
+    // loop: the first error is held back and returned once the stream is empty.
     let mut error: Option<DeployError> = None;
     let mut idx = 0;
     while let Some(res) = futs.next().await {
@@ -437,24 +441,36 @@ async fn create_canisters(
                 // canister exists from here on, and if either of those fails this
                 // is the only place the user will see the id it was given.
                 created.push(((*canister_name).clone(), id));
-                ctx.set_canister_id_for_env(canister_name, id, &params.environment)
-                    .await?;
-                // Apply controller settings for any already-created canister that was
-                // waiting for this one to exist (e.g. created via `icp canister create`).
-                sync_controller_dependents(
-                    ctx,
-                    agent,
-                    params.proxy,
-                    canister_name,
-                    &params.environment,
-                )
-                .await
-                .context(SyncControllerDependentsSnafu {
-                    canister: (*canister_name).clone(),
-                })?;
+
+                // Scoped to this canister rather than the loop, so a failure here
+                // holds up only its own follow-up work.
+                let result = async {
+                    ctx.set_canister_id_for_env(canister_name, id, &params.environment)
+                        .await?;
+                    // Apply controller settings for any already-created canister that
+                    // was waiting for this one to exist (e.g. created via
+                    // `icp canister create`). Skipped when the id never reached the
+                    // store, since that is what a dependent would be looking it up in.
+                    sync_controller_dependents(
+                        ctx,
+                        agent,
+                        params.proxy,
+                        canister_name,
+                        &params.environment,
+                    )
+                    .await
+                    .context(SyncControllerDependentsSnafu {
+                        canister: (*canister_name).clone(),
+                    })
+                }
+                .await;
+
+                if let Err(err) = result {
+                    error.get_or_insert(err);
+                }
             }
             Err(err) => {
-                error = Some(err.into());
+                error.get_or_insert(err.into());
             }
         }
         idx += 1;

@@ -188,17 +188,26 @@ pub struct DeployParams {
 }
 
 /// What the deploy did, for the command to report.
+///
+/// Filled in as the run progresses rather than returned at the end: a canister
+/// created before a later phase failed still exists, and its id is still what
+/// the caller needs to pick the run back up. So the caller owns this and reads
+/// it whichever way the deploy went.
+#[derive(Debug, Default)]
 pub struct DeployReport {
     /// Canisters created during this deploy, in creation order.
     pub created: Vec<(String, Principal)>,
 }
 
 /// Run a full deploy, reporting progress as one task tree.
+///
+/// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
     ctx: &Context,
     params: &DeployParams,
     reporter: &Reporter,
-) -> Result<DeployReport, DeployError> {
+    report: &mut DeployReport,
+) -> Result<(), DeployError> {
     let environment_selection = &params.environment;
     let cnames = &params.canisters;
 
@@ -234,9 +243,8 @@ pub async fn deploy(
         .filter(|name| !existing_canisters.contains_key(*name))
         .collect::<Vec<_>>();
 
-    let created = if canisters_to_create.is_empty() {
+    if canisters_to_create.is_empty() {
         notice(reporter, "All canisters already exist");
-        Vec::new()
     } else if params.no_create {
         return NoCreateSnafu {
             canisters: canisters_to_create.into_iter().cloned().collect::<Vec<_>>(),
@@ -252,10 +260,11 @@ pub async fn deploy(
             &canisters_to_create,
             existing_canisters.into_values().collect(),
             &phase.reporter(),
+            &mut report.created,
         )
         .await;
-        finish(&phase, result)?
-    };
+        finish(&phase, result)?;
+    }
 
     ctx.update_custom_domains(environment_selection).await;
 
@@ -366,10 +375,14 @@ pub async fn deploy(
 
     sync(ctx, params, &agent, reporter).await?;
 
-    Ok(DeployReport { created })
+    Ok(())
 }
 
 /// Create the missing canisters, recording each id as it lands.
+///
+/// Ids are appended to `created` as each canister comes into existence, before
+/// anything that could still fail, so a partial run still reports what it made.
+#[allow(clippy::too_many_arguments)]
 async fn create_canisters(
     ctx: &Context,
     params: &DeployParams,
@@ -378,7 +391,8 @@ async fn create_canisters(
     canisters_to_create: &[&String],
     existing_ids: Vec<Principal>,
     reporter: &Reporter,
-) -> Result<Vec<(String, Principal)>, DeployError> {
+    created: &mut Vec<(String, Principal)>,
+) -> Result<(), DeployError> {
     let target = match (params.subnet, params.proxy) {
         (Some(subnet), _) => CreateTarget::Subnet(subnet),
         (_, Some(proxy)) => CreateTarget::Proxy(proxy),
@@ -411,7 +425,6 @@ async fn create_canisters(
     }
 
     // Cache errors until all futures are processed. Otherwise we risk dropping a canister id.
-    let mut created = Vec::new();
     let mut error: Option<DeployError> = None;
     let mut idx = 0;
     while let Some(res) = futs.next().await {
@@ -420,6 +433,10 @@ async fn create_canisters(
                 let canister_name = canisters_to_create
                     .get(idx)
                     .expect("should have tried to create every canister");
+                // Report the id before recording it or wiring up dependents: the
+                // canister exists from here on, and if either of those fails this
+                // is the only place the user will see the id it was given.
+                created.push(((*canister_name).clone(), id));
                 ctx.set_canister_id_for_env(canister_name, id, &params.environment)
                     .await?;
                 // Apply controller settings for any already-created canister that was
@@ -435,7 +452,6 @@ async fn create_canisters(
                 .context(SyncControllerDependentsSnafu {
                     canister: (*canister_name).clone(),
                 })?;
-                created.push(((*canister_name).clone(), id));
             }
             Err(err) => {
                 error = Some(err.into());
@@ -445,7 +461,7 @@ async fn create_canisters(
     }
     match error {
         Some(err) => Err(err),
-        None => Ok(created),
+        None => Ok(()),
     }
 }
 

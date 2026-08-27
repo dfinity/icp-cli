@@ -3,7 +3,7 @@ use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError};
-use icp::operations::deploy::{DeployParams, deploy, resolve_targets};
+use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -122,18 +122,22 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // One reporter for the whole deploy: every phase and every canister lands
     // on the same stream, so the renderer can order the run without the
     // command having to await it phase by phase.
-    let report = rendered(ctx.debug, async |reporter| {
-        deploy(ctx, &params, reporter).await
+    let mut report = DeployReport::default();
+    let result = rendered(ctx.debug, async |reporter| {
+        deploy(ctx, &params, reporter, &mut report).await
     })
-    .await?;
+    .await;
 
     // Terminal output is the command's job. The operation reports what it did;
-    // this decides how to say it.
+    // this decides how to say it. Printed before the result is unwrapped: a
+    // canister created before a later phase failed still exists, and the user
+    // needs its id either way.
     if !args.json {
         for (name, id) in &report.created {
             println!("Created canister {name} with ID {id}");
         }
     }
+    result?;
 
     let agent = ctx
         .get_agent_for_env(&identity_selection, &environment_selection)

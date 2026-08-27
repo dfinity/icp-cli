@@ -8,6 +8,7 @@ air-gapped signing
 
 # Unreleased
 
+* feat: a canister can now declare `upgrade_args` alongside `init_args`, in its own manifest and as a per-canister environment override. It is passed when `icp deploy` upgrades the canister, where `init_args` is passed when it installs or reinstalls it. It takes exactly the forms `init_args` does (inline Candid string, or `{ value | path, format }`), and paths resolve against the canister's own directory the same way. A canister that declares no `upgrade_args` is upgraded with its `init_args`, as before, and `--args` / `--args-file` still override whichever applies.
 * feat: `script` build steps now receive `ICP_CLI_ENVIRONMENT`, the name of the environment the canisters are being built for, so a build can vary by environment the way a sync step already could.
 * feat: `icp completions <SHELL>` prints a shell completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish` to stdout. See the [installation guide](docs/guides/installation.md#shell-completions) for where to put it.
 * fix: `icp canister logs` output formats are corrected. `--json` now emits machine-readable JSON and the default emits the human-readable lines (the two were swapped), and `--follow --json` emits newline-delimited JSON, one record per line, streamed as each record arrives. This is breaking for scripts: parsing the default output as JSON now requires `--json`, and consumers of `--follow --json` must read one JSON object per line.

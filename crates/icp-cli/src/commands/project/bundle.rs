@@ -3,7 +3,9 @@ use clap::{Args, ValueHint};
 use icp::context::Context;
 use icp::prelude::*;
 
-use crate::{operations::bundle::create_bundle, render::rendered};
+use icp::operations::bundle::create_bundle;
+
+use crate::render::rendered;
 
 /// Bundle a project into a self-contained deployable archive.
 ///

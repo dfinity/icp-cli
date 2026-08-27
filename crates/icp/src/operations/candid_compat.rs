@@ -16,10 +16,10 @@ use crate::operations::{misc::fetch_canister_metadata, wasm::extract_candid_serv
 
 /// Checks Candid interface compatibility for all canisters that would be
 /// upgraded. Aborts if any canister has an incompatible interface.
-pub(crate) async fn check_candid_compatibility_many(
+pub async fn check_candid_compatibility_many(
     agent: Agent,
     canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
     reporter: &Reporter,
 ) -> Result<(), CandidCheckManyError> {
     let mut check_futs = FuturesOrdered::new();
@@ -78,7 +78,7 @@ async fn check_canister_candid_compat(
     agent: &Agent,
     canister_id: &Principal,
     canister_name: &str,
-    artifacts: &dyn icp::store_artifact::Access,
+    artifacts: &dyn crate::store_artifact::Access,
 ) -> Result<(), CandidCheckFailure> {
     let wasm = match artifacts.lookup(canister_name).await {
         Ok(w) => w,
@@ -104,7 +104,7 @@ async fn check_canister_candid_compat(
 ///
 /// Returns [`CandidCompatibility::Skipped`] if either side lacks a
 /// `candid:service` metadata section or if the interfaces cannot be parsed.
-pub(crate) async fn check_candid_compatibility(
+pub async fn check_candid_compatibility(
     agent: &Agent,
     canister_id: &Principal,
     wasm: &[u8],
@@ -176,7 +176,7 @@ struct CandidCheckFailure {
 }
 
 /// Result of a Candid interface compatibility check.
-pub(crate) enum CandidCompatibility {
+pub enum CandidCompatibility {
     /// Both interfaces present and compatible.
     Compatible,
     /// Both interfaces present but the new one is not a subtype of the old.

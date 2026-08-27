@@ -12,13 +12,13 @@ use icp_events::{TaskKind, TransferBlob, TransferDirection};
 
 use super::SnapshotId;
 use crate::commands::args;
-use crate::operations::misc::format_timestamp;
-use crate::operations::snapshot_transfer::{
+use crate::render::rendered_task;
+use icp::operations::misc::format_timestamp;
+use icp::operations::snapshot_transfer::{
     BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, delete_upload_progress,
     load_metadata, load_upload_progress, save_upload_progress, upload_blob_from_file,
     upload_snapshot_metadata, upload_wasm_chunk,
 };
-use crate::render::rendered_task;
 
 /// Upload a snapshot from local disk
 #[derive(Debug, Args)]

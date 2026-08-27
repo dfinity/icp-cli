@@ -7,9 +7,7 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-use camino::Utf8Component;
-use flate2::{Compression, write::GzEncoder};
-use icp::{
+use crate::{
     Canister, InitArgs,
     canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
     fs,
@@ -25,6 +23,8 @@ use icp::{
     project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
     store_artifact,
 };
+use camino::Utf8Component;
+use flate2::{Compression, write::GzEncoder};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
@@ -323,7 +323,7 @@ struct Instance {
     canisters: Vec<(PathBuf, Canister)>,
 }
 
-pub(crate) async fn create_bundle(
+pub async fn create_bundle(
     project_dir: &Path,
     canisters: Vec<(PathBuf, Canister)>,
     environment: &str,

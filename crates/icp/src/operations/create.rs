@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::parsers::to_token_unit_amount;
+use crate::signal::stop_signal;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
 use ic_agent::{Agent, AgentError, agent::RejectCode, agent::SubnetType};
@@ -11,8 +13,6 @@ use ic_management_canister_types::{
     CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
 use ic_utils::interfaces::ManagementCanister;
-use icp::parsers::to_token_unit_amount;
-use icp::signal::stop_signal;
 use icp_canister_interfaces::{
     cycles_ledger::{
         CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
@@ -662,7 +662,7 @@ fn notify_recovery_command(arg: &NotifyCreateCanisterArg, recovery_flags: &str) 
 
 /// Single-quotes a value for safe pasting into a POSIX shell, escaping embedded
 /// single quotes with the `'\''` idiom.
-pub(crate) fn shell_quote(value: &str) -> String {
+pub fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 

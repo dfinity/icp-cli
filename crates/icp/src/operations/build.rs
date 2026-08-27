@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use camino_tempfile::tempdir;
-use futures::{StreamExt, stream::FuturesOrdered};
-use icp::{
+use crate::{
     Canister,
     canister::build::{Build, BuildError, Params},
     package::PackageCache,
     prelude::*,
 };
+use camino_tempfile::tempdir;
+use futures::{StreamExt, stream::FuturesOrdered};
 use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
 use snafu::{ResultExt, Snafu};
 
@@ -23,11 +23,11 @@ pub enum BuildOperationError {
     MissingWasmOutput,
 
     #[snafu(display("failed to read wasm output file"))]
-    ReadWasmOutput { source: icp::fs::IoError },
+    ReadWasmOutput { source: crate::fs::IoError },
 
     #[snafu(display("failed to save wasm artifact"))]
     SaveWasmArtifact {
-        source: icp::store_artifact::SaveError,
+        source: crate::store_artifact::SaveError,
     },
 }
 
@@ -37,13 +37,13 @@ pub struct BuildManyError {
     names: Vec<String>,
 }
 
-pub(crate) async fn build(
+pub async fn build(
     canister_path: &Path,
     canister: &Canister,
     environment: &str,
     task: &TaskReporter,
     builder: Arc<dyn Build>,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
     pkg_cache: &PackageCache,
 ) -> Result<(), BuildOperationError> {
     let build_dir = tempdir().context(TempDirSnafu)?;
@@ -78,7 +78,7 @@ pub(crate) async fn build(
         return MissingWasmOutputSnafu.fail();
     }
 
-    let wasm = icp::fs::read(&wasm_output_path).context(ReadWasmOutputSnafu)?;
+    let wasm = crate::fs::read(&wasm_output_path).context(ReadWasmOutputSnafu)?;
 
     artifacts
         .save(&canister.name, &wasm)
@@ -88,11 +88,11 @@ pub(crate) async fn build(
     Ok(())
 }
 
-pub(crate) async fn build_many(
+pub async fn build_many(
     canisters: Vec<(PathBuf, Canister)>,
     environment: &str,
     builder: Arc<dyn Build>,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
     pkg_cache: &PackageCache,
     reporter: &Reporter,
 ) -> Result<(), BuildManyError> {

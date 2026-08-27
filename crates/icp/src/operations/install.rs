@@ -17,7 +17,8 @@ use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 /// CLI-facing choice for `wasm_memory_persistence` on EOP upgrades.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum WasmMemoryPersistenceOpt {
     /// Preserve canister main memory across upgrade (normal EOP upgrade).
     Keep,
@@ -37,7 +38,7 @@ impl WasmMemoryPersistenceOpt {
 
 /// Returns true if the canister exposes the `enhanced-orthogonal-persistence`
 /// custom-section metadata (i.e. it is a Motoko EOP canister).
-pub(crate) async fn is_eop_canister(agent: &Agent, canister_id: &Principal) -> bool {
+pub async fn is_eop_canister(agent: &Agent, canister_id: &Principal) -> bool {
     fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
         .await
         .is_some()
@@ -73,7 +74,7 @@ pub struct InstallManyError {
 /// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
 /// a [`CanisterInstallMode`]. For "auto", queries `canister_status` to
 /// determine whether the canister already has code installed.
-pub(crate) async fn resolve_install_mode_and_status(
+pub async fn resolve_install_mode_and_status(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_name: &str,
@@ -105,12 +106,12 @@ pub(crate) async fn resolve_install_mode_and_status(
 
 #[derive(Debug, Snafu)]
 #[snafu(display("Failed to resolve install mode for canister {canister_name}"))]
-pub(crate) struct ResolveInstallModeError {
+pub struct ResolveInstallModeError {
     canister_name: String,
     source: UpdateOrProxyError,
 }
 
-pub(crate) async fn install_canister(
+pub async fn install_canister(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: &Principal,
@@ -342,7 +343,7 @@ async fn stop_and_start_if_upgrade(
 }
 
 /// Installs code to multiple canisters concurrently.
-pub(crate) async fn install_many(
+pub async fn install_many(
     agent: Agent,
     proxy: Option<Principal>,
     canisters: impl IntoIterator<
@@ -354,7 +355,7 @@ pub(crate) async fn install_many(
             Option<Vec<u8>>,
         ),
     >,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
     reporter: &Reporter,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();

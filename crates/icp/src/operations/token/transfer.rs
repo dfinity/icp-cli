@@ -13,7 +13,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 
-use crate::commands::args::FlexibleAccountId;
+use crate::parsers::FlexibleAccountId;
 
 use super::{TOKEN_LEDGER_CIDS, TokenAmount};
 

@@ -9,8 +9,8 @@ use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use crate::operations::token::TokenAmount;
-use crate::operations::token::balance::get_raw_balance;
+use icp::operations::token::TokenAmount;
+use icp::operations::token::balance::get_raw_balance;
 
 /// Display the cycles balance
 #[derive(Args, Clone, Debug)]

@@ -9,6 +9,7 @@ publish.workspace = true
 async-dropper = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+backoff = { workspace = true }
 bigdecimal = { workspace = true }
 bip32 = { workspace = true }
 bollard = { workspace = true }
@@ -49,6 +50,7 @@ num-bigint = { workspace = true }
 num-integer = { workspace = true }
 num-traits = { workspace = true }
 p256 = { workspace = true }
+phf = { workspace = true }
 pathdiff = { workspace = true }
 pem = { workspace = true }
 pkcs8 = { workspace = true }
@@ -78,6 +80,7 @@ tokio = { workspace = true, features = ["sync", "macros", "rt", "time", "io-util
 tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
+wasmparser = { workspace = true }
 wslpath2 = { workspace = true }
 zeroize = { workspace = true }
 

@@ -14,11 +14,11 @@ use crate::{
 };
 
 mod artifacts;
+mod call_output;
 mod commands;
 mod complete;
 mod dist;
 mod logging;
-pub(crate) mod operations;
 mod options;
 mod render;
 mod telemetry;

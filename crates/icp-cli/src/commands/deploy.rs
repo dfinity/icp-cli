@@ -20,18 +20,19 @@ use std::time::Duration;
 use tracing::info;
 
 use crate::options::EnvironmentOpt;
+use icp::operations::{
+    binding_env_vars::set_binding_env_vars_many,
+    build::build_many,
+    candid_compat::check_candid_compatibility_many,
+    create::{CreateFunding, CreateOperation, CreateTarget},
+    install::{install_many, resolve_install_mode_and_status},
+    proxy_management,
+    settings::{sync_controller_dependents, sync_settings_many},
+    sync::sync_many,
+};
+
 use crate::{
     commands::{args::ArgsOpt, canister::create},
-    operations::{
-        binding_env_vars::set_binding_env_vars_many,
-        build::build_many,
-        candid_compat::check_candid_compatibility_many,
-        create::{CreateFunding, CreateOperation, CreateTarget},
-        install::{install_many, resolve_install_mode_and_status},
-        proxy_management,
-        settings::{sync_controller_dependents, sync_settings_many},
-        sync::sync_many,
-    },
     options::{IdentityOpt, arg_struct_change_help},
     render::rendered,
 };

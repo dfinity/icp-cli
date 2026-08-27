@@ -15,10 +15,10 @@ use time::{Duration, OffsetDateTime};
 use tracing::warn;
 use url::Url;
 
-use crate::operations::call_output::{
+use crate::call_output::{
     CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
 };
-use crate::operations::create::shell_quote;
+use icp::operations::create::shell_quote;
 
 /// Submit a message signed on another machine
 ///

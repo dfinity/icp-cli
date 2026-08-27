@@ -3,17 +3,17 @@ use std::{
     sync::Arc,
 };
 
+use crate::{
+    Canister,
+    canister::{Settings, resolve_controllers},
+    context::{Context, EnvironmentSelection},
+    store_id::IdMapping,
+};
 use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
-};
-use icp::{
-    Canister,
-    canister::{Settings, resolve_controllers},
-    context::{Context, EnvironmentSelection},
-    store_id::IdMapping,
 };
 use icp_events::{Reporter, TaskKind, TaskOutcome};
 use itertools::Itertools;
@@ -26,7 +26,7 @@ use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
-pub(crate) enum SyncSettingsOperationError {
+pub enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {
         source: UpdateOrProxyError,
@@ -71,7 +71,7 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
 /// Syncs the manifest settings to the canister. Returns names of any controller canister
 /// references that could not be resolved because the referenced canister has not been created
 /// yet. Resolved controllers are always applied immediately.
-pub(crate) async fn sync_settings(
+pub async fn sync_settings(
     agent: &Agent,
     proxy: Option<Principal>,
     cid: &Principal,
@@ -213,7 +213,7 @@ pub(crate) async fn sync_settings(
     Ok(unresolved_names)
 }
 
-pub(crate) async fn sync_settings_many(
+pub async fn sync_settings_many(
     agent: Agent,
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
@@ -271,22 +271,22 @@ pub(crate) async fn sync_settings_many(
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum SyncControllerDependentsError {
+pub enum SyncControllerDependentsError {
     #[snafu(display("failed to load environment for controller dependent sync"))]
     GetEnvironment {
-        source: icp::context::GetEnvironmentError,
+        source: crate::context::GetEnvironmentError,
     },
 
     #[snafu(display("failed to load canister IDs for controller dependent sync"))]
     GetIds {
-        source: icp::context::GetIdsByEnvironmentError,
+        source: crate::context::GetIdsByEnvironmentError,
     },
 }
 
 /// After `newly_created_name` is registered, scan the project manifest for all other canisters
 /// that list `newly_created_name` as a controller and already have a stored ID. Calls
 /// `sync_settings` for each so the controller is applied now that it can be resolved.
-pub(crate) async fn sync_controller_dependents(
+pub async fn sync_controller_dependents(
     ctx: &Context,
     agent: &Agent,
     proxy: Option<Principal>,

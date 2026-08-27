@@ -7,7 +7,9 @@ use crate::{
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
-use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
+use icp_events::{StepOutcome, TaskOutcome};
+
+use crate::operations::task::{Reporter, Task, TaskReporter};
 use snafu::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -93,10 +95,7 @@ pub async fn sync_many(
     let mut futs = FuturesOrdered::new();
 
     for (cid, canister_path, canister_info) in canisters {
-        let task = reporter.task(TaskKind::Sync {
-            canister: canister_info.name.clone(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::sync(canister_info.name.clone(), cid));
 
         let fut = {
             let agent = agent.clone();

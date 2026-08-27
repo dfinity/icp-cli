@@ -11,6 +11,7 @@ pub mod recover_cycles;
 pub mod settings;
 pub mod snapshot_transfer;
 pub mod sync;
+pub mod task;
 pub mod token;
 
 pub mod misc;

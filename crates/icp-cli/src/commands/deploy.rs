@@ -5,6 +5,7 @@ use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord};
+use icp::operations::task::Task;
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
@@ -12,7 +13,7 @@ use icp::{
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
-use icp_events::{TaskKind, TaskOutcome};
+use icp_events::TaskOutcome;
 use itertools::Itertools;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -239,9 +240,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         rendered(ctx.debug, async |reporter| {
             let mut futs = FuturesOrdered::new();
             for name in canisters_to_create.iter() {
-                let task = reporter.task(TaskKind::Create {
-                    canister: (*name).clone(),
-                });
+                let task = reporter.task(Task::create((*name).clone()));
                 let create_op = create_operation.clone();
                 let (_, canister_info) = env.get_canister_info(name).map_err(|e| anyhow!(e))?;
                 futs.push_back(async move {

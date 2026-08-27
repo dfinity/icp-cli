@@ -28,7 +28,9 @@ use flate2::{Compression, write::GzEncoder};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
-use icp_events::{Reporter, StepReporter};
+use icp_events::StepReporter;
+
+use crate::operations::task::Reporter;
 
 use crate::operations::build::{BuildManyError, build_many};
 

@@ -765,7 +765,7 @@ mod tests {
 
     /// Drain the emitted output events into (stream, line) pairs.
     fn output_lines(
-        rx: &mut tokio::sync::mpsc::UnboundedReceiver<icp_events::Event>,
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<icp_events::Event<()>>,
     ) -> Vec<(EventStream, String)> {
         let mut lines = Vec::new();
         while let Ok(event) = rx.try_recv() {
@@ -781,7 +781,8 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (reporter, mut rx) = icp_events::step_channel();
+        // The task payload type is irrelevant here: only step output is observed.
+        let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),
@@ -813,7 +814,8 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (reporter, mut rx) = icp_events::step_channel();
+        // The task payload type is irrelevant here: only step output is observed.
+        let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
             run_plugin(
                 wasm_path.into(),

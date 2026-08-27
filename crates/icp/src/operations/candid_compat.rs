@@ -8,7 +8,9 @@ use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::CanisterInstallMode;
-use icp_events::{Reporter, TaskKind, TaskOutcome};
+use icp_events::TaskOutcome;
+
+use crate::operations::task::{Reporter, Task};
 use snafu::Snafu;
 use tracing::debug;
 
@@ -25,10 +27,7 @@ pub async fn check_candid_compatibility_many(
     let mut check_futs = FuturesOrdered::new();
 
     for (name, cid, mode) in canisters {
-        let task = reporter.task(TaskKind::CandidCheck {
-            canister: name.to_owned(),
-            canister_id: cid,
-        });
+        let task = reporter.task(Task::candid_check(name, cid));
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();

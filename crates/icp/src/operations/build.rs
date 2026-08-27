@@ -8,7 +8,9 @@ use crate::{
 };
 use camino_tempfile::tempdir;
 use futures::{StreamExt, stream::FuturesOrdered};
-use icp_events::{Reporter, StepOutcome, TaskKind, TaskOutcome, TaskReporter};
+use icp_events::{StepOutcome, TaskOutcome};
+
+use crate::operations::task::{Reporter, Task, TaskReporter};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
@@ -99,9 +101,7 @@ pub async fn build_many(
     let mut futs = FuturesOrdered::new();
 
     for (canister_path, canister) in canisters {
-        let task = reporter.task(TaskKind::Build {
-            canister: canister.name.clone(),
-        });
+        let task = reporter.task(Task::build(canister.name.clone()));
         let builder = builder.clone();
         let artifacts = artifacts.clone();
 

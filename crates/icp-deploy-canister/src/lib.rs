@@ -52,9 +52,9 @@ pub use sync_exec::{
     ScriptRunner, StepProgress, SyncStepContext, system_env_vars,
 };
 
-/// Resolved initialization arguments, with any file references already loaded.
+/// Resolved canister arguments, with any file references already loaded.
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum InitArgs {
+pub enum CanisterArgs {
     /// Text content (inline or loaded from file). Format is always known.
     Text { content: String, format: ArgsFormat },
     /// Raw binary bytes (from a file with `format: bin`). Used directly.
@@ -62,30 +62,30 @@ pub enum InitArgs {
 }
 
 #[derive(Debug, Snafu)]
-pub enum InitArgsToBytesError {
-    #[snafu(display("failed to decode hex init args"))]
+pub enum CanisterArgsToBytesError {
+    #[snafu(display("failed to decode hex args"))]
     HexDecode { source: hex::FromHexError },
 
-    #[snafu(display("failed to parse Candid init args"))]
+    #[snafu(display("failed to parse Candid args"))]
     CandidParse { source: candid_parser::Error },
 
-    #[snafu(display("failed to encode Candid init args to bytes"))]
+    #[snafu(display("failed to encode Candid args to bytes"))]
     CandidEncode { source: candid::Error },
 }
 
-impl InitArgs {
+impl CanisterArgs {
     /// Resolve to raw bytes according to the format.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, InitArgsToBytesError> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, CanisterArgsToBytesError> {
         match self {
-            InitArgs::Binary(bytes) => Ok(bytes.clone()),
-            InitArgs::Text { content, format } => match format {
+            CanisterArgs::Binary(bytes) => Ok(bytes.clone()),
+            CanisterArgs::Text { content, format } => match format {
                 ArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
                 ArgsFormat::Candid => {
                     let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
                     args.to_bytes().context(CandidEncodeSnafu)
                 }
                 ArgsFormat::Bin => {
-                    unreachable!("binary format cannot appear in InitArgs::Text")
+                    unreachable!("binary format cannot appear in CanisterArgs::Text")
                 }
             },
         }
@@ -108,7 +108,12 @@ pub struct Canister {
 
     /// Initialization arguments passed to the canister during installation.
     /// Resolved from the manifest — file contents are already loaded.
-    pub init_args: Option<InitArgs>,
+    pub init_args: Option<CanisterArgs>,
+
+    /// Arguments passed to the canister when it is upgraded, resolved the same
+    /// way as [`Self::init_args`]. `None` means the manifest named none, and an
+    /// upgrade passes the init args instead.
+    pub upgrade_args: Option<CanisterArgs>,
 
     /// If the canister was defined via a recipe reference, this holds the
     /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
@@ -267,6 +272,7 @@ mod bundle_tests {
             build: BuildSteps { steps },
             sync: SyncSteps { steps: vec![] },
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec![],

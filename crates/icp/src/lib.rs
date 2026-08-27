@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 pub use icp_deploy_canister::{
-    Canister, Environment, InitArgs, InitArgsToBytesError, Network, Project,
+    Canister, CanisterArgs, CanisterArgsToBytesError, Environment, Network, Project,
 };
 
 use crate::{
@@ -234,6 +234,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
@@ -321,6 +322,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["backend".to_string()],
@@ -340,6 +342,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["frontend".to_string()],
@@ -359,6 +362,7 @@ impl MockProjectLoader {
             },
             sync: SyncSteps::default(),
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::new(),
             friendly_names: vec!["database".to_string()],

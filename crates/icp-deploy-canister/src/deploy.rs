@@ -23,6 +23,7 @@ use crate::{
     manifest::canister::SyncStep,
     network::Configuration,
     prelude::*,
+    project::ArgsField,
     sync_exec::{
         PluginExecutor, PluginInvocation, ScriptInvocation, ScriptRunner, StepProgress,
         SyncStepContext,
@@ -694,10 +695,11 @@ pub enum DeployCanisterError {
         source: crate::ids::IdStoreError,
     },
 
-    #[snafu(display("failed to encode init args for canister '{canister}'"))]
-    InitArgs {
+    #[snafu(display("failed to encode the {field} of canister '{canister}'"))]
+    InstallArgs {
         canister: String,
-        source: crate::InitArgsToBytesError,
+        field: ArgsField,
+        source: crate::CanisterArgsToBytesError,
     },
 
     #[snafu(transparent)]
@@ -753,23 +755,39 @@ pub async fn deploy_canister(
         .lookup_by_environment(is_cache, environment)
         .unwrap_or_default();
 
-    let init_args = canister
-        .init_args
-        .as_ref()
-        .map(|ia| ia.to_bytes())
-        .transpose()
-        .context(InitArgsSnafu {
-            canister: canister_name,
-        })?;
+    // Resolved up front because the arguments depend on the mode: an upgrade
+    // passes `upgrade_args`, and a canister that declares none is upgraded with
+    // its `init_args`, which its post-upgrade entry point expects anyway. The
+    // field is carried along so a malformed value is reported against the one
+    // the user wrote.
+    let (mode, status) = resolve_mode_and_status(icp, canister_name, canister_id, mode).await?;
+    let init_args = || canister.init_args.as_ref().map(|a| (ArgsField::Init, a));
+    let manifest_args = match mode {
+        CanisterInstallMode::Upgrade(_) => canister
+            .upgrade_args
+            .as_ref()
+            .map(|a| (ArgsField::Upgrade, a))
+            .or_else(init_args),
+        CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args(),
+    };
+    let args = manifest_args
+        .map(|(field, a)| {
+            a.to_bytes().context(InstallArgsSnafu {
+                canister: canister_name,
+                field,
+            })
+        })
+        .transpose()?;
 
     // Environment variables first, then install, then sync steps.
     apply_binding_env_vars(canister, canister_id, &canister_ids, icp).await?;
-    install_canister(
+    install_canister_resolved(
         canister_name,
         canister_id,
         artifact_path,
         mode,
-        init_args.as_deref(),
+        status,
+        args.as_deref(),
         None,
         files,
         icp,
@@ -967,6 +985,7 @@ mod tests {
                 })],
             },
             init_args: None,
+            upgrade_args: None,
             registry_recipe: None,
             bindings: BTreeMap::from([("backend".to_owned(), "backend".to_owned())]),
             friendly_names: vec![],

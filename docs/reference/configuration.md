@@ -59,7 +59,8 @@ canisters:
 | `build` | object | Yes | Build configuration |
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
-| `init_args` | string or object | No | Initialization arguments (see [Init Args](#init-args)) |
+| `init_args` | string or object | No | Initialization arguments (see [Install Args](#install-args)) |
+| `upgrade_args` | string or object | No | Upgrade arguments; defaults to `init_args` (see [Install Args](#install-args)) |
 | `recipe` | object | No | Recipe reference (alternative to build; may be combined with `sync`) |
 
 ## Build Steps
@@ -419,7 +420,8 @@ environments:
 | `network` | string | Yes | Network to deploy to |
 | `canisters` | array | No | Canisters to include (default: all) |
 | `settings` | object | No | Per-canister setting overrides |
-| `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
+| `init_args` | object | No | Per-canister init arg overrides (see [Install Args](#install-args)) |
+| `upgrade_args` | object | No | Per-canister upgrade arg overrides (see [Install Args](#install-args)) |
 
 ## Canister Settings
 
@@ -443,12 +445,18 @@ settings:
 
 Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).
 
-## Init Args
+## Install Args
+
+`init_args` are passed to the canister when its code is installed or
+reinstalled; `upgrade_args` are passed when it is upgraded. A canister that
+omits `upgrade_args` is upgraded with its `init_args`. Both fields take the same
+forms, and `--args` / `--args-file` on `icp deploy` override either of them.
 
 A plain string is shorthand for inline Candid content:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
+upgrade_args: "(record { owner = principal \"aaaaa-aa\"; migrate = true })"
 ```
 
 File reference:
@@ -469,8 +477,8 @@ init_args:
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | Yes* | Path to a file containing init args, relative to the canister directory |
-| `value` | string | Yes* | Inline init args value |
+| `path` | string | Yes* | Path to a file containing the args, relative to the canister directory |
+| `value` | string | Yes* | Inline args value |
 | `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
 
 *Exactly one of `path` or `value` must be specified.

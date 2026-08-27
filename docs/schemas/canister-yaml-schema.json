@@ -266,28 +266,7 @@
         }
       ]
     },
-    "ManifestEnvVar": {
-      "anyOf": [
-        {
-          "description": "The value, written inline.",
-          "type": "string"
-        },
-        {
-          "description": "A file holding the value. Surrounding whitespace is trimmed off the\nfile's contents, so a trailing newline does not become part of the value.",
-          "properties": {
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "path"
-          ],
-          "type": "object"
-        }
-      ],
-      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
-    },
-    "ManifestInitArgs": {
+    "ManifestArgs": {
       "anyOf": [
         {
           "description": "Plain string shorthand — treated as Candid.",
@@ -326,7 +305,28 @@
           "type": "object"
         }
       ],
-      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+      "description": "Install args as specified in a manifest file (canister.yaml or icp.yaml) —\nthe value of `init_args` or of `upgrade_args`.\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+    },
+    "ManifestEnvVar": {
+      "anyOf": [
+        {
+          "description": "The value, written inline.",
+          "type": "string"
+        },
+        {
+          "description": "A file holding the value. Surrounding whitespace is trimmed off the\nfile's contents, so a trailing newline does not become part of the value.",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
     },
     "MemoryAmount": {
       "anyOf": [
@@ -627,7 +627,7 @@
     "init_args": {
       "anyOf": [
         {
-          "$ref": "#/$defs/ManifestInitArgs"
+          "$ref": "#/$defs/ManifestArgs"
         },
         {
           "type": "null"
@@ -645,6 +645,17 @@
         "controllers": null
       },
       "description": "The configuration specifying the various settings when creating the canister."
+    },
+    "upgrade_args": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManifestArgs"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arguments passed to the canister when it is upgraded. When absent, an\nupgrade passes `init_args` instead."
     }
   },
   "required": [

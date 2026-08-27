@@ -130,23 +130,11 @@ environments:
 
 `staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project: this is what the dependency would deploy on its own, which is the point — vendoring does not change it.
 
-`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: from the root, it deploys none of the root's own canisters while every dependency still deploys all of its own. To keep a dependency out from the root, exclude it — [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) takes `vendor/openemail:` to drop a whole subproject, so the root can empty an environment without every member agreeing to it.
+`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: from the root, it deploys none of the root's own canisters while every dependency still deploys all of its own.
 
-A list may also name **another** project's canisters — any project in its own dependency subtree, never a sibling or a parent — by the path-based name used to address them (`"vendor/openemail:frontend"` from the root, or `"libfoo:util"` from inside openemail, always relative to the project writing the list). That decides *that* project's canisters for the environment — useful when a dependency has no opinion of its own:
+A project may name **only** its own canisters — never `"vendor/openemail:frontend"` from the root, nor `"libfoo:util"` from inside openemail, however those names are spelled elsewhere in the manifest. Naming a canister the writing project does not declare is rejected when the project is read, whether it belongs to another project in the workspace or to nobody at all. So the answer to "is this canister in `staging`?" always comes from one manifest — the one that declares the canister — and it is the same answer vendored as standalone. Keeping a dependency's canister out of an environment means editing that dependency, which is what deploying it on its own would already have required.
 
-```yaml
-# the root deploys only openemail's frontend to staging; openemail's own
-# staging block writes no `canisters:` list, so it leaves the choice open
-environments:
-  - name: staging
-    canisters: [app, "vendor/openemail:frontend"]
-```
-
-Two places **disagreeing** about one project's canisters in one environment is an error, not a precedence — remove the `canisters:` list from one of them, or subtract with [`exclude-canisters:`](../guides/managing-environments.md#excluding-canisters) instead, which never decides a project's canisters and so never disagrees. Two places that name the *same* canisters of a project agree, so two parents of a [shared dependency](#shared-dependencies) may both select from it as long as they select alike, and neither has to edit the vendored manifest. Lists in different projects that each name only their own canisters never interact, and neither do lists for different environments.
-
-The error is raised when the ambiguous environment is **used**, not when the project is read: `icp deploy -e staging` fails, while `icp deploy`, `icp build -e production`, and `icp canister list` carry on. Only the environment nobody can answer for is unusable.
-
-A name that resolves to nothing the writing project can address — a canister it does not declare, or a path that is not one of its dependencies — is rejected, exactly as it is standalone.
+Lists in different projects therefore never interact, and neither do lists for different environments. Two parents of a [shared dependency](#shared-dependencies) have nothing to disagree about: the shared instance decides for itself, once.
 
 Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
 

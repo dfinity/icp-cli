@@ -643,7 +643,6 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
         networks,
         environments,
         member_missing_envs: std::collections::HashMap::new(),
-        env_selection_conflicts: std::collections::HashMap::new(),
     };
 
     let ctx = Context {
@@ -717,7 +716,6 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
         networks,
         environments,
         member_missing_envs: std::collections::HashMap::new(),
-        env_selection_conflicts: std::collections::HashMap::new(),
     };
 
     let custom_root_key = vec![1, 2, 3, 4];
@@ -817,7 +815,6 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
         networks,
         environments,
         member_missing_envs: std::collections::HashMap::new(),
-        env_selection_conflicts: std::collections::HashMap::new(),
     };
 
     let local_root_key = vec![1, 2, 3, 4];

@@ -354,7 +354,7 @@
     "EnvironmentManifest": {
       "properties": {
         "canisters": {
-          "description": "An optional list of the canisters to be included in this environments.\nDefaults to all the canisters if not specified.",
+          "description": "An optional list of this project's own canisters to be included in this\nenvironment. Defaults to all of them if not specified.",
           "items": {
             "type": "string"
           },

@@ -145,7 +145,7 @@ environments:
         freezing_threshold: 90d
 ```
 
-`canisters:` names this project's own canisters, and each dependency's same-named environment names its own the same way. A list can also reach across projects — naming another project's canisters decides which of *those* are in the environment — but two places may not disagree about a given project's canisters. See [Which canisters an environment holds](project-dependencies.md#which-canisters-an-environment-holds).
+`canisters:` names this project's own canisters and nothing else. In a workspace, each dependency's same-named environment names its own the same way, so every project decides which of its canisters an environment holds. See [Which canisters an environment holds](project-dependencies.md#which-canisters-an-environment-holds).
 
 ### Environment-Specific Settings
 

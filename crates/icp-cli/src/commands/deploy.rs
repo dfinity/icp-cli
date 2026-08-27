@@ -132,8 +132,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.names.clone()
     };
 
-    // Skip doing any work if no canisters are targeted
+    // Skip doing any work if no canisters are targeted. Say so: an environment
+    // whose `canisters` lists leave out everything in scope is otherwise an
+    // `icp deploy` that succeeds in silence.
     if cnames.is_empty() {
+        info!(
+            "Environment '{}' contains no canisters to deploy",
+            environment_selection.name()
+        );
         return Ok(());
     }
 
@@ -157,6 +163,13 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         for name in &cnames {
             if let Some((_, canister)) = env.canisters.get(name) {
                 for target in canister.bindings.values() {
+                    // A target the environment does not contain at all was
+                    // deliberately left out of it, so no deploy from anywhere in
+                    // the workspace can give it an id here. Waiting on it would
+                    // block this sub-project forever.
+                    if !env.canisters.contains_key(target) {
+                        continue;
+                    }
                     if !scoped.contains(target.as_str()) && !deployed.contains_key(target) {
                         missing.insert(target.clone());
                     }
@@ -335,6 +348,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         args.proxy,
         target_canisters,
         canister_list,
+        &env,
         ctx.debug,
     )
     .await

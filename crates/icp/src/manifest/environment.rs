@@ -45,8 +45,8 @@ pub struct EnvironmentManifest {
     #[schemars(with = "Option<String>")]
     pub network: String,
 
-    /// An optional list of the canisters to be included in this environments.
-    /// Defaults to all the canisters if not specified.
+    /// An optional list of this project's own canisters to be included in this
+    /// environment. Defaults to all of them if not specified.
     #[schemars(with = "Option<Vec<String>>")]
     pub canisters: CanisterSelection,
 

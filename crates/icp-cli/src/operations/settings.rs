@@ -10,7 +10,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
 };
 use icp::{
-    Canister,
+    Canister, Environment,
     canister::{Settings, resolve_controllers},
     context::{Context, EnvironmentSelection},
     store_id::IdMapping,
@@ -221,11 +221,31 @@ pub(crate) async fn sync_settings(
     Ok(unresolved_names)
 }
 
+/// Report a controller reference that stayed unresolved. A controller the
+/// environment holds is merely not created yet, so the reference will take effect
+/// on its own; one the environment does not hold never will, because no deploy
+/// gives it an id here.
+fn warn_unresolved_controller(controller: &str, canister: &str, environment: &Environment) {
+    if environment.canisters.contains_key(controller) {
+        warn!(
+            "Controller canister '{controller}' for '{canister}' has not been created yet; \
+             it will be set as a controller once created."
+        );
+    } else {
+        warn!(
+            "Controller canister '{controller}' for '{canister}' is not part of environment \
+             '{}', so it cannot be set as a controller there.",
+            environment.name
+        );
+    }
+}
+
 pub(crate) async fn sync_settings_many(
     agent: Agent,
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
+    environment: &Environment,
     debug: bool,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
@@ -245,11 +265,7 @@ pub(crate) async fn sync_settings_many(
                 pb.set_message("Updating canister settings...");
                 let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
                 for name in &unresolved {
-                    warn!(
-                        "Controller canister '{name}' for '{}' has not been created yet; \
-                         it will be set as a controller once created.",
-                        info.name
-                    );
+                    warn_unresolved_controller(name, &info.name, environment);
                 }
                 Ok::<_, SyncSettingsOperationError>(())
             }
@@ -347,10 +363,7 @@ pub(crate) async fn sync_controller_dependents(
         match sync_settings(agent, proxy, &cid, canister, &ids).await {
             Ok(unresolved) => {
                 for still_unresolved in &unresolved {
-                    warn!(
-                        "Controller canister '{still_unresolved}' for '{name}' has not been \
-                         created yet; it will be set as a controller once created."
-                    );
+                    warn_unresolved_controller(still_unresolved, name, &env_data);
                 }
             }
             Err(e) => {

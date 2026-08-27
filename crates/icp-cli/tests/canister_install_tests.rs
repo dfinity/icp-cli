@@ -1,9 +1,10 @@
 use indoc::formatdoc;
 #[cfg(unix)]
 use indoc::indoc;
+#[cfg(unix)]
+use predicates::prelude::PredicateBooleanExt;
 use predicates::{
     ord::eq,
-    prelude::PredicateBooleanExt,
     str::{PredicateStrExt, contains},
 };
 

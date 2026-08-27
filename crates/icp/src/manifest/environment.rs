@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{canister::ManifestSettings, prelude::LOCAL};
 
-use super::canister::ManifestInitArgs;
+use super::canister::ManifestArgs;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 pub struct EnvironmentInner {
@@ -17,7 +17,9 @@ pub struct EnvironmentInner {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<HashMap<String, ManifestSettings>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub init_args: Option<HashMap<String, ManifestInitArgs>>,
+    pub init_args: Option<HashMap<String, ManifestArgs>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_args: Option<HashMap<String, ManifestArgs>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, JsonSchema)]
@@ -54,7 +56,10 @@ pub struct EnvironmentManifest {
     pub settings: Option<HashMap<String, ManifestSettings>>,
 
     /// Override init args for specific canisters in this environment
-    pub init_args: Option<HashMap<String, ManifestInitArgs>>,
+    pub init_args: Option<HashMap<String, ManifestArgs>>,
+
+    /// Override upgrade args for specific canisters in this environment
+    pub upgrade_args: Option<HashMap<String, ManifestArgs>>,
 }
 
 impl From<EnvironmentInner> for EnvironmentManifest {
@@ -65,6 +70,7 @@ impl From<EnvironmentInner> for EnvironmentManifest {
             canisters,
             settings,
             init_args,
+            upgrade_args,
         } = v;
 
         // Network
@@ -93,6 +99,7 @@ impl From<EnvironmentInner> for EnvironmentManifest {
             // Keep as-is, setting overrides is optional
             settings,
             init_args,
+            upgrade_args,
         }
     }
 }
@@ -124,6 +131,7 @@ impl From<&EnvironmentManifest> for EnvironmentInner {
             canisters,
             settings: env.settings.clone(),
             init_args: env.init_args.clone(),
+            upgrade_args: env.upgrade_args.clone(),
         }
     }
 }
@@ -153,6 +161,7 @@ mod tests {
                 canisters: CanisterSelection::Everything,
                 settings: None,
                 init_args: None,
+                upgrade_args: None,
             },
         );
     }

@@ -598,6 +598,93 @@ fn bundle_inlines_external_init_args_file() {
     );
 }
 
+/// The files behind an environment's `init_args` and `upgrade_args` overrides are
+/// archived under directories of their own, so a canister that overrides both
+/// keeps two distinct references in the bundled manifest.
+#[test]
+fn bundle_inlines_external_upgrade_args_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write_string(&project_dir.join("init.idl"), "(\"world\")").expect("failed to write args file");
+    write_string(&project_dir.join("upgrade.idl"), "(\"again\")")
+        .expect("failed to write args file");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+
+        environments:
+          - name: random-environment
+            network: random-network
+            init_args:
+              my-canister:
+                path: ./init.idl
+                format: candid
+            upgrade_args:
+              my-canister:
+                path: ./upgrade.idl
+                format: candid
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut entries: Vec<String> = Vec::new();
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+        entries.push(path);
+    }
+
+    for expected in [
+        "init-args/my-canister/init.idl",
+        "upgrade-args/my-canister/upgrade.idl",
+    ] {
+        assert!(
+            entries.iter().any(|e| e == expected),
+            "{expected} not found in bundle; entries: {entries:?}"
+        );
+        assert!(
+            manifest_yaml.contains(expected),
+            "bundle manifest should reference {expected}"
+        );
+    }
+}
+
 /// A canister name that is a reserved Windows device name (e.g. `CON`) must be
 /// sanitized for archive entry names (prefixed with `_`) while the manifest
 /// preserves the original name. (Other characters can no longer need sanitizing
@@ -1991,6 +2078,10 @@ fn bundle_carries_only_the_environments_canisters() {
                 settings:
                   backend:
                     compute_allocation: 1
+                init_args:
+                  backend: "()"
+                upgrade_args:
+                  backend: "()"
         "#},
     )
     .expect("failed to write project manifest");
@@ -2080,11 +2171,22 @@ fn bundle_carries_only_the_environments_canisters() {
         root["environments"][0]["settings"]["frontend"]["controllers"],
         serde_yaml::Value::Sequence(vec!["vendor/openemail:registry".into()]),
     );
-    // An override *of* a left-out canister goes entirely.
+    // An override *of* a left-out canister goes entirely, whichever of the three
+    // maps it was written in.
     assert!(
         root["environments"][1]["settings"]["backend"].is_null(),
         "prod's override of a left-out canister should be dropped: {:?}",
         root["environments"][1]["settings"]
+    );
+    assert!(
+        root["environments"][1]["init_args"]["backend"].is_null(),
+        "prod's init_args for a left-out canister should be dropped: {:?}",
+        root["environments"][1]["init_args"]
+    );
+    assert!(
+        root["environments"][1]["upgrade_args"]["backend"].is_null(),
+        "prod's upgrade_args for a left-out canister should be dropped: {:?}",
+        root["environments"][1]["upgrade_args"]
     );
 
     let dep: serde_yaml::Value = serde_yaml::from_str(&manifests["vendor/openemail/icp.yaml"])

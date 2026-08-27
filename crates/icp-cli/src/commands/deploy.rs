@@ -1,15 +1,16 @@
-use anyhow::{anyhow, bail};
+use anyhow::{Context as _, anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::{CanisterId, CanisterIdRecord};
+use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterInstallMode};
 use icp::parsers::CyclesAmount;
 use icp::{
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
+    project::ArgsField,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use itertools::Itertools;
@@ -94,8 +95,9 @@ pub(crate) struct DeployArgs {
     #[arg(long)]
     pub(crate) json: bool,
 
-    /// Arguments to pass to the canister on install.
-    /// Only valid when deploying a single canister. Takes priority over `init_args` in the manifest.
+    /// Arguments to pass to the canister on install or upgrade.
+    /// Only valid when deploying a single canister. Takes priority over `init_args` and
+    /// `upgrade_args` in the manifest.
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,
 }
@@ -375,18 +377,39 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             let (_canister_path, canister_info) =
                 env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            // CLI --args/--args-file take priority over manifest init_args
-            let init_args_bytes = if args.args_opt.is_some() {
-                args.args_opt.resolve_bytes()?
-            } else {
+            // An upgrade passes `upgrade_args`; a canister that declares none is
+            // upgraded with its `init_args`, which its post-upgrade entry point
+            // expects anyway. The field is carried along so a malformed value is
+            // reported against the one the user wrote.
+            let init_args = || {
                 canister_info
                     .init_args
                     .as_ref()
-                    .map(|ia| ia.to_bytes())
+                    .map(|a| (ArgsField::Init, a))
+            };
+            let manifest_args = match mode {
+                CanisterInstallMode::Upgrade(_) => canister_info
+                    .upgrade_args
+                    .as_ref()
+                    .map(|a| (ArgsField::Upgrade, a))
+                    .or_else(init_args),
+                CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args(),
+            };
+
+            // CLI --args/--args-file take priority over the manifest's
+            let args_bytes = if args.args_opt.is_some() {
+                args.args_opt.resolve_bytes()?
+            } else {
+                manifest_args
+                    .map(|(field, a)| {
+                        a.to_bytes().with_context(|| {
+                            format!("Failed to encode the {field} of canister '{name}'")
+                        })
+                    })
                     .transpose()?
             };
 
-            Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, init_args_bytes))
+            Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, args_bytes))
         }
     }))
     .await?;

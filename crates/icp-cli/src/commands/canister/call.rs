@@ -209,20 +209,20 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         "a positional argument",
     )? {
         None => None,
-        Some(icp::InitArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp::CanisterArgs::Text {
             content,
             format: ArgsFormat::Candid,
         }) => Some(ResolvedArgs::Candid(
             parse_idl_args(&content).context("failed to parse Candid arguments")?,
         )),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Text {
             content,
             format: ArgsFormat::Hex,
         }) => Some(ResolvedArgs::Bytes(
             hex::decode(&content).context("failed to decode hex arguments")?,
         )),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Text {
             format: ArgsFormat::Bin,
             ..
         }) => {

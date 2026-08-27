@@ -5,12 +5,12 @@ use indexmap::{IndexMap, map::Entry as IndexEntry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, InitArgs, Network, Project,
+    Canister, CanisterArgs, Environment, Network, Project,
     canister::{ControllerRef, ManifestEnvVar, ManifestSettings, Settings, recipe},
     fs,
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
-        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
+        Item, LoadManifestFromPathError, ManifestArgs, NetworkManifest, PROJECT_MANIFEST,
         ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
@@ -101,10 +101,11 @@ pub enum ConsolidateManifestError {
     #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
-    #[snafu(display("failed to read init_args file for canister '{canister}'"))]
-    ReadInitArgs {
+    #[snafu(display("failed to read {field} file for canister '{canister}'"))]
+    ReadArgs {
         source: fs::IoError,
         canister: String,
+        field: ArgsField,
     },
 
     #[snafu(display(
@@ -117,10 +118,10 @@ pub enum ConsolidateManifestError {
     },
 
     #[snafu(display(
-        "init_args for canister '{canister}' uses format 'bin' with inline content; \
+        "{field} for canister '{canister}' uses format 'bin' with inline content; \
          binary format requires a file path"
     ))]
-    BinFormatInlineContent { canister: String },
+    BinFormatInlineContent { canister: String, field: ArgsField },
 
     #[snafu(display(
         "canister '{canister}' lists controller '{controller}', but no canister with that \
@@ -188,38 +189,56 @@ pub enum ConsolidateManifestError {
     Environment { source: EnvironmentError },
 }
 
-/// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
+/// Which manifest field a [`ManifestArgs`] value was written under. Both fields
+/// resolve the same way, so the errors carry this to name the one at fault.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgsField {
+    Init,
+    Upgrade,
+}
+
+impl std::fmt::Display for ArgsField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ArgsField::Init => "init_args",
+            ArgsField::Upgrade => "upgrade_args",
+        })
+    }
+}
+
+/// Resolve a [`ManifestArgs`] into a canonical [`CanisterArgs`] by reading
 /// any file references relative to `base_path`.
-fn resolve_manifest_init_args(
-    manifest_init_args: &ManifestInitArgs,
+fn resolve_manifest_args(
+    manifest_args: &ManifestArgs,
     base_path: &Path,
     canister: &str,
-) -> Result<InitArgs, ConsolidateManifestError> {
-    match manifest_init_args {
-        ManifestInitArgs::String(content) => Ok(InitArgs::Text {
+    field: ArgsField,
+) -> Result<CanisterArgs, ConsolidateManifestError> {
+    match manifest_args {
+        ManifestArgs::String(content) => Ok(CanisterArgs::Text {
             content: content.trim().to_owned(),
             format: ArgsFormat::Candid,
         }),
-        ManifestInitArgs::Path { path, format } => {
+        ManifestArgs::Path { path, format } => {
             let file_path = base_path.join(path);
             match format {
                 ArgsFormat::Bin => {
-                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
-                    Ok(InitArgs::Binary(bytes))
+                    let bytes = fs::read(&file_path).context(ReadArgsSnafu { canister, field })?;
+                    Ok(CanisterArgs::Binary(bytes))
                 }
                 fmt => {
-                    let content =
-                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
-                    Ok(InitArgs::Text {
+                    let content = fs::read_to_string(&file_path)
+                        .context(ReadArgsSnafu { canister, field })?;
+                    Ok(CanisterArgs::Text {
                         content: content.trim().to_owned(),
                         format: fmt.clone(),
                     })
                 }
             }
         }
-        ManifestInitArgs::Value { value, format } => match format {
-            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
-            fmt => Ok(InitArgs::Text {
+        ManifestArgs::Value { value, format } => match format {
+            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister, field }.fail(),
+            fmt => Ok(CanisterArgs::Text {
                 content: value.trim().to_owned(),
                 format: fmt.clone(),
             }),
@@ -456,7 +475,13 @@ async fn build_manifest_canisters(
             let init_args = m
                 .init_args
                 .as_ref()
-                .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                .map(|ma| resolve_manifest_args(ma, &cdir, &m.name, ArgsField::Init))
+                .transpose()?;
+
+            let upgrade_args = m
+                .upgrade_args
+                .as_ref()
+                .map(|ma| resolve_manifest_args(ma, &cdir, &m.name, ArgsField::Upgrade))
                 .transpose()?;
 
             result.push((
@@ -468,6 +493,7 @@ async fn build_manifest_canisters(
                     build,
                     sync,
                     init_args,
+                    upgrade_args,
                     registry_recipe,
                     bindings: BTreeMap::new(),
                     // Default to the bare local name; overwritten with the
@@ -504,7 +530,8 @@ struct ImportedInstance {
 #[derive(Default, Clone)]
 struct MemberCanisterOverride {
     settings: Option<ManifestSettings>,
-    init_args: Option<ManifestInitArgs>,
+    init_args: Option<ManifestArgs>,
+    upgrade_args: Option<ManifestArgs>,
 }
 
 /// What the members contribute to one of the root's environments.
@@ -988,10 +1015,10 @@ async fn import_dependency(
     }
 
     // Capture the member's own environments so the parent can honor its canister
-    // selection and per-canister settings/init_args for the same-named
-    // environment (standalone-equivalence). The network binding is ignored (the
-    // root owns it). Only the member's *own* canisters are affected — its
-    // dependencies decide theirs, in their own turn through here.
+    // selection and per-canister settings/init_args/upgrade_args for the
+    // same-named environment (standalone-equivalence). The network binding is
+    // ignored (the root owns it). Only the member's *own* canisters are affected
+    // — its dependencies decide theirs, in their own turn through here.
     let mut defined_envs: HashSet<String> = HashSet::new();
     for env_item in &dep_manifest.environments {
         let em: EnvironmentManifest = match env_item {
@@ -1064,6 +1091,19 @@ async fn import_dependency(
                         .entry(key.clone())
                         .or_default()
                         .init_args = Some(ia.clone());
+                }
+            }
+        }
+        if let Some(upgrade_args) = &em.upgrade_args {
+            for (local, ua) in upgrade_args {
+                if let Some(key) = local_to_key.get(local) {
+                    member_envs
+                        .entry(em.name.clone())
+                        .or_default()
+                        .overrides
+                        .entry(key.clone())
+                        .or_default()
+                        .upgrade_args = Some(ua.clone());
                 }
             }
         }
@@ -1181,7 +1221,8 @@ fn build_environment_canisters(
     root_left_out: &HashSet<String>,
     member: Option<&MemberEnvContribution>,
     root_settings: Option<&HashMap<String, ManifestSettings>>,
-    root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
+    root_init_args: Option<&HashMap<String, ManifestArgs>>,
+    root_upgrade_args: Option<&HashMap<String, ManifestArgs>>,
 ) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
     let member_left_out = member.map(|m| &m.left_out);
     let mut cs: IndexMap<String, (PathBuf, Canister)> = canisters
@@ -1202,7 +1243,12 @@ fn build_environment_canisters(
                         resolve_manifest_settings(s, cpath, key)?;
                 }
                 if let Some(ia) = &ov.init_args {
-                    canister.init_args = Some(resolve_manifest_init_args(ia, cpath, key)?);
+                    canister.init_args =
+                        Some(resolve_manifest_args(ia, cpath, key, ArgsField::Init)?);
+                }
+                if let Some(ua) = &ov.upgrade_args {
+                    canister.upgrade_args =
+                        Some(resolve_manifest_args(ua, cpath, key, ArgsField::Upgrade)?);
                 }
             }
         }
@@ -1220,7 +1266,15 @@ fn build_environment_canisters(
     if let Some(init_args) = root_init_args {
         for (name, ia) in init_args {
             if let Some((cpath, canister)) = cs.get_mut(name) {
-                canister.init_args = Some(resolve_manifest_init_args(ia, cpath, name)?);
+                canister.init_args = Some(resolve_manifest_args(ia, cpath, name, ArgsField::Init)?);
+            }
+        }
+    }
+    if let Some(upgrade_args) = root_upgrade_args {
+        for (name, ua) in upgrade_args {
+            if let Some((cpath, canister)) = cs.get_mut(name) {
+                canister.upgrade_args =
+                    Some(resolve_manifest_args(ua, cpath, name, ArgsField::Upgrade)?);
             }
         }
     }
@@ -1494,6 +1548,7 @@ pub async fn consolidate_manifest(
                     member_envs.get(&m.name),
                     m.settings.as_ref(),
                     m.init_args.as_ref(),
+                    m.upgrade_args.as_ref(),
                 )?;
                 e.insert(Environment {
                     name: m.name.to_owned(),
@@ -1523,6 +1578,7 @@ pub async fn consolidate_manifest(
             member_envs.get(LOCAL),
             None,
             None,
+            None,
         )?;
         vacant_entry.insert(Environment {
             name: LOCAL.to_string(),
@@ -1545,6 +1601,7 @@ pub async fn consolidate_manifest(
             &canisters,
             &HashSet::new(),
             member_envs.get(IC),
+            None,
             None,
             None,
         )?;
@@ -3029,5 +3086,237 @@ canisters:
         let local = p.environments.get("local").unwrap();
         assert!(local.canisters.contains_key("backend"));
         assert!(local.canisters.contains_key("openemail:backend"));
+    }
+
+    fn candid(content: &str) -> CanisterArgs {
+        CanisterArgs::Text {
+            content: content.to_owned(),
+            format: ArgsFormat::Candid,
+        }
+    }
+
+    /// The two fields are carried separately, and a canister that names only
+    /// `init_args` leaves `upgrade_args` unset — the fallback is deploy's, not
+    /// consolidation's.
+    #[tokio::test]
+    async fn init_and_upgrade_args_resolve_independently() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    init_args: "(42)"
+    upgrade_args:
+      value: "4449444c0000"
+      format: hex
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    init_args: "(7)"
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        let backend = &p.canisters.get("backend").unwrap().1;
+        assert_eq!(backend.init_args, Some(candid("(42)")));
+        assert_eq!(
+            backend.upgrade_args,
+            Some(CanisterArgs::Text {
+                content: "4449444c0000".to_string(),
+                format: ArgsFormat::Hex,
+            })
+        );
+
+        let frontend = &p.canisters.get("frontend").unwrap().1;
+        assert_eq!(frontend.init_args, Some(candid("(7)")));
+        assert_eq!(frontend.upgrade_args, None);
+    }
+
+    /// An environment overrides each field on its own: overriding `upgrade_args`
+    /// leaves the canister's `init_args` in place, and vice versa.
+    #[tokio::test]
+    async fn environment_overrides_upgrade_args_independently() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    init_args: "(42)"
+    upgrade_args: "(43)"
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+environments:
+  - name: staging
+    upgrade_args:
+      backend: "(99)"
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+        let backend = &staging.canisters.get("backend").unwrap().1;
+
+        assert_eq!(backend.upgrade_args, Some(candid("(99)")));
+        assert_eq!(backend.init_args, Some(candid("(42)")));
+
+        // The override applies to the environment only.
+        let base = &p.canisters.get("backend").unwrap().1;
+        assert_eq!(base.upgrade_args, Some(candid("(43)")));
+    }
+
+    /// A member's `upgrade_args` override folds in beneath the root's, exactly
+    /// as `settings` and `init_args` do.
+    #[tokio::test]
+    async fn member_upgrade_args_fold_in_with_root_override_winning() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+environments:
+  - name: staging
+    upgrade_args:
+      backend: "(1)"
+      frontend: "(2)"
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters: []
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    upgrade_args:
+      "openemail:backend": "(99)"
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:backend")
+                .unwrap()
+                .1
+                .upgrade_args,
+            Some(candid("(99)")),
+        );
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:frontend")
+                .unwrap()
+                .1
+                .upgrade_args,
+            Some(candid("(2)")),
+        );
+    }
+
+    /// A file reference in an `upgrade_args` override resolves against the
+    /// canister's own directory, the base `init_args` uses.
+    #[tokio::test]
+    async fn upgrade_args_file_resolves_against_canister_dir() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "canisters/backend/canister.yaml",
+            r#"
+name: backend
+build:
+  steps:
+    - type: pre-built
+      path: backend.wasm
+"#,
+        );
+        write(tmp.path(), "canisters/backend/args/upgrade.did", "(99)\n");
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - ./canisters/backend
+environments:
+  - name: staging
+    upgrade_args:
+      backend:
+        path: args/upgrade.did
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            staging.canisters.get("backend").unwrap().1.upgrade_args,
+            Some(candid("(99)")),
+        );
+    }
+
+    /// Errors resolving the args name the field they came from, so a message
+    /// points at what the user wrote.
+    #[tokio::test]
+    async fn upgrade_args_errors_name_the_field() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    upgrade_args:
+      path: does-not-exist.bin
+      format: bin
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+"#,
+        );
+
+        let err = consolidate(tmp.path())
+            .await
+            .expect_err("the upgrade_args file does not exist");
+        assert!(
+            matches!(
+                &err,
+                ConsolidateManifestError::ReadArgs { canister, field, .. }
+                    if canister == "backend" && *field == ArgsField::Upgrade
+            ),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "failed to read upgrade_args file for canister 'backend'"
+        );
     }
 }

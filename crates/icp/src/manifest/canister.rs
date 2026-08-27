@@ -21,7 +21,8 @@ pub enum ArgsFormat {
     Bin,
 }
 
-/// Init args as specified in a manifest file (canister.yaml or icp.yaml).
+/// Install args as specified in a manifest file (canister.yaml or icp.yaml) —
+/// the value of `init_args` or of `upgrade_args`.
 ///
 /// A plain string is shorthand for inline Candid:
 /// ```yaml
@@ -41,7 +42,7 @@ pub enum ArgsFormat {
 /// ```
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
-pub enum ManifestInitArgs {
+pub enum ManifestArgs {
     /// Plain string shorthand — treated as Candid.
     String(String),
     /// File reference with explicit format.
@@ -72,7 +73,12 @@ pub struct CanisterManifest {
 
     /// Initialization arguments passed to the canister during installation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub init_args: Option<ManifestInitArgs>,
+    pub init_args: Option<ManifestArgs>,
+
+    /// Arguments passed to the canister when it is upgraded. When absent, an
+    /// upgrade passes `init_args` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_args: Option<ManifestArgs>,
 
     #[serde(flatten)]
     pub instructions: Instructions,
@@ -109,6 +115,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 let name_key = serde_yaml::Value::String("name".to_string());
                 let settings_key = serde_yaml::Value::String("settings".to_string());
                 let init_args_key = serde_yaml::Value::String("init_args".to_string());
+                let upgrade_args_key = serde_yaml::Value::String("upgrade_args".to_string());
                 let recipe_key = serde_yaml::Value::String("recipe".to_string());
                 let build_key = serde_yaml::Value::String("build".to_string());
                 let sync_key = serde_yaml::Value::String("sync".to_string());
@@ -135,11 +142,23 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     };
 
                 // Extract init_args (optional)
-                let init_args: Option<ManifestInitArgs> =
+                let init_args: Option<ManifestArgs> =
                     if let Some(init_args_value) = temp_map.remove(&init_args_key) {
                         Some(serde_yaml::from_value(init_args_value).map_err(|e| {
                             Error::custom(format!(
                                 "Failed to parse init_args for canister `{name}`: {e}"
+                            ))
+                        })?)
+                    } else {
+                        None
+                    };
+
+                // Extract upgrade_args (optional)
+                let upgrade_args: Option<ManifestArgs> =
+                    if let Some(upgrade_args_value) = temp_map.remove(&upgrade_args_key) {
+                        Some(serde_yaml::from_value(upgrade_args_value).map_err(|e| {
+                            Error::custom(format!(
+                                "Failed to parse upgrade_args for canister `{name}`: {e}"
                             ))
                         })?)
                     } else {
@@ -206,6 +225,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             name,
                             settings,
                             init_args,
+                            upgrade_args,
                             instructions: Instructions::Recipe { recipe, sync },
                         })
                     }
@@ -234,6 +254,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             name,
                             settings,
                             init_args,
+                            upgrade_args,
                             instructions: Instructions::BuildSync {
                                 build: helper.build,
                                 sync: helper.sync,
@@ -618,6 +639,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
@@ -645,6 +667,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Url("http://my-recipe".to_string()),
@@ -673,6 +696,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Registry {
@@ -711,6 +735,7 @@ mod tests {
                     ..Default::default()
                 },
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
@@ -739,6 +764,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
@@ -793,6 +819,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
@@ -855,6 +882,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Script(script::Adapter {
@@ -899,6 +927,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Script(script::Adapter {
@@ -998,14 +1027,14 @@ mod tests {
 
     #[test]
     fn manifest_init_args_path() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             path: ./args.bin
             format: bin
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Path {
+            ManifestArgs::Path {
                 path: "./args.bin".to_string(),
                 format: ArgsFormat::Bin,
             }
@@ -1014,14 +1043,14 @@ mod tests {
 
     #[test]
     fn manifest_init_args_value() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             value: "(42)"
             format: candid
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Value {
+            ManifestArgs::Value {
                 value: "(42)".to_string(),
                 format: ArgsFormat::Candid,
             }
@@ -1030,13 +1059,13 @@ mod tests {
 
     #[test]
     fn manifest_init_args_value_default_format() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             value: "(42)"
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Value {
+            ManifestArgs::Value {
                 value: "(42)".to_string(),
                 format: ArgsFormat::Candid,
             }
@@ -1045,7 +1074,7 @@ mod tests {
 
     #[test]
     fn manifest_init_args_inline_string() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
-        assert_eq!(ia, ManifestInitArgs::String("(42)".to_string()));
+        let ia: ManifestArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
+        assert_eq!(ia, ManifestArgs::String("(42)".to_string()));
     }
 }

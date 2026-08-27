@@ -10,13 +10,13 @@ use sha2::{Digest, Sha256};
 use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
 use icp::{
-    Canister, InitArgs,
+    Canister, CanisterArgs,
     canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
     fs,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, CanisterSelection, DependencyManifest,
         EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
-        ManifestInitArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
+        ManifestArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
         SyncSteps, load_manifest_from_path, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
@@ -115,8 +115,8 @@ pub enum BundleError {
         source: LoadManifestFromPathError,
     },
 
-    #[snafu(display("failed to read init_args file '{path}'"))]
-    ReadInitArgs { path: PathBuf, source: fs::IoError },
+    #[snafu(display("failed to read args file '{path}'"))]
+    ReadArgsFile { path: PathBuf, source: fs::IoError },
 
     #[snafu(display(
         "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
@@ -261,8 +261,8 @@ struct PluginFile {
     orig_file: String,
 }
 
-/// init_args file referenced from an environment manifest.
-struct InitArgsFile {
+/// An `init_args` or `upgrade_args` file referenced from an environment manifest.
+struct ArgsFile {
     src_path: PathBuf,
     archive_path: String,
 }
@@ -422,7 +422,7 @@ pub(crate) async fn create_bundle(
     )
     .await?;
 
-    // A root environment can override a dependency canister's init_args, and
+    // A root environment can override a dependency canister's install args, and
     // that path resolves against the *dependency's* directory, so the file's
     // location in the archive follows the canister's owning instance rather than
     // the manifest that declares the override.
@@ -441,11 +441,11 @@ pub(crate) async fn create_bundle(
         .collect();
 
     let mut bundle_artifacts = BundleArtifacts::default();
-    let mut init_args_files: Vec<InitArgsFile> = Vec::new();
-    // Multiple environments can override the same canister's init_args from the same file,
+    let mut args_files: Vec<ArgsFile> = Vec::new();
+    // Multiple environments can override the same canister's args from the same file,
     // which resolves to an identical archive path (and identical source). Emit each archive
     // entry once so we don't write duplicate tar headers for the same bytes.
-    let mut seen_init_args: HashSet<String> = HashSet::new();
+    let mut seen_args_files: HashSet<String> = HashSet::new();
     let mut manifests: Vec<InstanceManifest> = Vec::with_capacity(instances.len());
 
     for instance in &instances {
@@ -464,8 +464,8 @@ pub(crate) async fn create_bundle(
             &canonical_project_dir,
             &canister_dirs,
             &owner_prefixes,
-            &mut seen_init_args,
-            &mut init_args_files,
+            &mut seen_args_files,
+            &mut args_files,
         )
         .await?;
 
@@ -488,7 +488,7 @@ pub(crate) async fn create_bundle(
         output,
         &manifests,
         &bundle_artifacts,
-        &init_args_files,
+        &args_files,
         app_manifest.as_ref(),
     )
 }
@@ -776,7 +776,8 @@ async fn prepare_canister(
             local_names,
             pruned,
         ),
-        init_args: canister.init_args.as_ref().map(convert_init_args),
+        init_args: canister.init_args.as_ref().map(convert_args),
+        upgrade_args: canister.upgrade_args.as_ref().map(convert_args),
         instructions: Instructions::BuildSync {
             build: BuildSteps {
                 steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
@@ -1001,6 +1002,70 @@ fn override_base_dir<'a>(
         .unwrap_or(instance_dir)
 }
 
+/// Archive directory holding the files an environment's `init_args` overrides
+/// point at, and the one for its `upgrade_args` overrides. Kept apart so the
+/// same canister can override both from same-named files.
+const INIT_ARGS_DIR: &str = "init-args";
+const UPGRADE_ARGS_DIR: &str = "upgrade-args";
+
+/// Relocate the files one environment's args overrides point at into
+/// `archive_dir`, rewriting each override to name the archived copy.
+#[allow(clippy::too_many_arguments)]
+fn relocate_args_overrides(
+    overrides: &mut HashMap<String, ManifestArgs>,
+    archive_dir: &str,
+    instance_prefix: &str,
+    instance_dir: &Path,
+    canonical_project_dir: &Path,
+    canister_dirs: &HashMap<&str, &Path>,
+    owner_prefixes: &HashMap<&str, &str>,
+    seen_archive_paths: &mut HashSet<String>,
+    args_files: &mut Vec<ArgsFile>,
+) -> Result<(), BundleError> {
+    for (canister_name, ma) in overrides.iter_mut() {
+        let ManifestArgs::Path {
+            path: orig_path,
+            format: fmt,
+        } = &*ma
+        else {
+            continue;
+        };
+        let store_key = override_store_key(instance_prefix, canister_name);
+        let base = override_base_dir(&store_key, canister_dirs, instance_dir);
+        let src = base.join(orig_path);
+        // Same containment rule as asset/plugin sources — a malicious manifest
+        // could otherwise point the args at host files outside the project, and
+        // normalize_archive_dir would silently strip any leading `..` from the
+        // rewritten archive path so the escape wouldn't be visible there.
+        canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
+        let manifest_path = format!(
+            "{archive_dir}/{}/{}",
+            path_segment(canister_name),
+            normalize_archive_dir(orig_path)
+        );
+        // The reference is resolved against the canister's directory, so the
+        // file has to be archived under the *canister's* instance — which is not
+        // the declaring instance when the root overrides a dependency's canister.
+        let owner_prefix = owner_prefixes
+            .get(store_key.as_str())
+            .copied()
+            .unwrap_or(instance_prefix);
+        let archive_path = archive_join(owner_prefix, &manifest_path);
+        if seen_archive_paths.insert(archive_path.clone()) {
+            args_files.push(ArgsFile {
+                src_path: src,
+                archive_path,
+            });
+        }
+        *ma = ManifestArgs::Path {
+            path: manifest_path,
+            format: fmt.clone(),
+        };
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn inline_environments(
     instance: &Instance,
@@ -1009,7 +1074,7 @@ async fn inline_environments(
     canister_dirs: &HashMap<&str, &Path>,
     owner_prefixes: &HashMap<&str, &str>,
     seen_archive_paths: &mut HashSet<String>,
-    init_args_files: &mut Vec<InitArgsFile>,
+    args_files: &mut Vec<ArgsFile>,
 ) -> Result<Vec<Item<EnvironmentManifest>>, BundleError> {
     let items = &instance.manifest.environments;
     let instance_prefix = instance.prefix.as_str();
@@ -1028,55 +1093,28 @@ async fn inline_environments(
             }
         };
 
-        // Before the overrides below are followed to the files they name: an
-        // override for a left-out canister resolves its paths against that
-        // canister's directory, which the bundle no longer knows.
         if let Item::Manifest(ref mut env) = inlined {
+            // Before the overrides below are followed to the files they name: an
+            // override for a left-out canister resolves its paths against that
+            // canister's directory, which the bundle no longer knows.
             prune_environment(env, instance, pruned);
-        }
 
-        if let Item::Manifest(ref mut env) = inlined
-            && let Some(ref mut overrides) = env.init_args
-        {
-            for (canister_name, mia) in overrides.iter_mut() {
-                if let ManifestInitArgs::Path {
-                    path: orig_path,
-                    format: fmt,
-                } = &*mia
-                {
-                    let store_key = override_store_key(instance_prefix, canister_name);
-                    let base = override_base_dir(&store_key, canister_dirs, instance_dir);
-                    let src = base.join(orig_path);
-                    // Same containment rule as asset/plugin sources — a malicious manifest
-                    // could otherwise point init_args at host files outside the project, and
-                    // normalize_archive_dir would silently strip any leading `..` from the
-                    // rewritten archive path so the escape wouldn't be visible there.
-                    canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
-                    let manifest_path = format!(
-                        "init-args/{}/{}",
-                        path_segment(canister_name),
-                        normalize_archive_dir(orig_path)
-                    );
-                    // The reference is resolved against the canister's directory,
-                    // so the file has to be archived under the *canister's*
-                    // instance — which is not the declaring instance when the root
-                    // overrides a dependency's canister.
-                    let owner_prefix = owner_prefixes
-                        .get(store_key.as_str())
-                        .copied()
-                        .unwrap_or(instance_prefix);
-                    let archive_path = archive_join(owner_prefix, &manifest_path);
-                    if seen_archive_paths.insert(archive_path.clone()) {
-                        init_args_files.push(InitArgsFile {
-                            src_path: src,
-                            archive_path,
-                        });
-                    }
-                    *mia = ManifestInitArgs::Path {
-                        path: manifest_path,
-                        format: fmt.clone(),
-                    };
-                }
+            for (overrides, archive_dir) in [
+                (env.init_args.as_mut(), INIT_ARGS_DIR),
+                (env.upgrade_args.as_mut(), UPGRADE_ARGS_DIR),
+            ] {
+                let Some(overrides) = overrides else { continue };
+                relocate_args_overrides(
+                    overrides,
+                    archive_dir,
+                    instance_prefix,
+                    instance_dir,
+                    canonical_project_dir,
+                    canister_dirs,
+                    owner_prefixes,
+                    seen_archive_paths,
+                    args_files,
+                )?;
             }
         }
 
@@ -1161,6 +1199,9 @@ fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned:
     }
     if let Some(init_args) = &mut env.init_args {
         init_args.retain(|name, _| !pruned.drops(instance, name));
+    }
+    if let Some(upgrade_args) = &mut env.upgrade_args {
+        upgrade_args.retain(|name, _| !pruned.drops(instance, name));
     }
 }
 
@@ -1340,7 +1381,7 @@ fn write_archive(
     output: &Path,
     manifests: &[InstanceManifest],
     artifacts: &BundleArtifacts,
-    init_args_files: &[InitArgsFile],
+    args_files: &[ArgsFile],
     app_manifest: Option<&AppManifest>,
 ) -> Result<(), BundleError> {
     let paths: Vec<&str> = manifests
@@ -1350,7 +1391,7 @@ fn write_archive(
             std::iter::once(APP_MANIFEST).chain(app.images.iter().map(|i| i.archive_path.as_str()))
         }))
         .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
-        .chain(init_args_files.iter().map(|f| f.archive_path.as_str()))
+        .chain(args_files.iter().map(|f| f.archive_path.as_str()))
         .chain(
             artifacts
                 .plugin_wasms
@@ -1396,8 +1437,8 @@ fn write_archive(
         archive.bytes(&nb.archive_path, &nb.bytes)?;
     }
 
-    for entry in init_args_files {
-        let data = fs::read(&entry.src_path).context(ReadInitArgsSnafu {
+    for entry in args_files {
+        let data = fs::read(&entry.src_path).context(ReadArgsFileSnafu {
             path: entry.src_path.clone(),
         })?;
         archive.bytes(&entry.archive_path, &data)?;
@@ -1764,13 +1805,13 @@ fn path_segment(name: &str) -> String {
     s
 }
 
-fn convert_init_args(args: &InitArgs) -> ManifestInitArgs {
+fn convert_args(args: &CanisterArgs) -> ManifestArgs {
     match args {
-        InitArgs::Text { content, format } => ManifestInitArgs::Value {
+        CanisterArgs::Text { content, format } => ManifestArgs::Value {
             value: content.clone(),
             format: format.clone(),
         },
-        InitArgs::Binary(bytes) => ManifestInitArgs::Value {
+        CanisterArgs::Binary(bytes) => ManifestArgs::Value {
             value: hex::encode(bytes),
             format: ArgsFormat::Hex,
         },

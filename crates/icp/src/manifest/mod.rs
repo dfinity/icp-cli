@@ -21,8 +21,8 @@ pub use {
     adapter::plugin,
     adapter::prebuilt,
     canister::{
-        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestInitArgs,
-        SyncStep, SyncSteps,
+        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, Instructions, ManifestArgs, SyncStep,
+        SyncSteps,
     },
     dependency::DependencyManifest,
     environment::{CanisterSelection, EnvironmentManifest},

@@ -12,6 +12,7 @@ air-gapped signing
 * feat: `script` build steps now receive `ICP_CLI_ENVIRONMENT`, the name of the environment the canisters are being built for, so a build can vary by environment the way a sync step already could.
 * feat: `icp completions <SHELL>` prints a shell completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish` to stdout. See the [installation guide](docs/guides/installation.md#shell-completions) for where to put it.
 * fix: `icp canister logs` output formats are corrected. `--json` now emits machine-readable JSON and the default emits the human-readable lines (the two were swapped), and `--follow --json` emits newline-delimited JSON, one record per line, streamed as each record arrives. This is breaking for scripts: parsing the default output as JSON now requires `--json`, and consumers of `--follow --json` must read one JSON object per line.
+* fix: `icp canister status` again falls back on the publicly readable state-tree information when the caller may not read the status. Replicas now reject those calls with `IC0542`, which the fallback did not recognise, so the command failed with `Error looking up canister <id>` instead of printing the controllers and module hash. `IC0541`, returned on subnets with administrators, is now recognised too, and the fallback no longer depends on whether the rejection arrives certified or uncertified.
 
 ## Experimental
 

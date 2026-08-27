@@ -163,7 +163,12 @@ impl CreateArgs {
                 .or(default.settings.reserved_cycles_limit.clone())
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
-            log_visibility: default.settings.log_visibility.clone().map(Into::into),
+            log_visibility: default.settings.log_visibility.clone().map(|v| v.0.into()),
+            status_visibility: default
+                .settings
+                .status_visibility
+                .clone()
+                .map(|v| v.0.into()),
             memory_allocation: self
                 .settings
                 .memory_allocation
@@ -254,6 +259,7 @@ impl CreateArgs {
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
             log_visibility: None,
+            status_visibility: None,
             memory_allocation: self
                 .settings
                 .memory_allocation

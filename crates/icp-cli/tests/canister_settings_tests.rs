@@ -1395,6 +1395,214 @@ async fn canister_settings_sync_log_visibility() {
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
     confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+
+    // status_visibility takes the same manifest forms, and a single sync has to
+    // apply both settings: either change alone would satisfy the "settings
+    // already match" check that decides whether to send an update at all.
+    let pm_with_both = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              log_visibility: public
+              status_visibility:
+                allowed_viewers:
+                  - "aaaaa-aa"
+                  - "2vxsx-fae"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm_with_both)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_log_visibility(&ctx, &project_dir, "Public");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains(
+            "Status visibility: Allowed viewers: 2vxsx-fae, aaaaa-aa",
+        ));
+}
+
+/// Drives the `--*-status-viewer` / `--status-visibility` flags against a live
+/// replica, checking each one both in `settings show` and in what it actually
+/// grants: whether a non-controller may read the status, or falls back to the
+/// public state-tree information.
+///
+/// The flag-resolution matrix itself is unit-tested in
+/// `commands::canister::settings::update`; what this adds is that clap wires the
+/// flags to the right group and that the replica honours the result.
+#[tokio::test]
+async fn canister_settings_update_status_visibility() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    fn update(ctx: &TestContext, project_dir: &Path, args: &[&str]) {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .success();
+    }
+
+    fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "settings",
+                "show",
+                "my-canister",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success()
+    }
+
+    /// `canister status` as alice, who is not a controller: the full report only
+    /// when she may read the status, the public fallback otherwise.
+    fn status_as_alice(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "status",
+                "my-canister",
+                "--identity",
+                "alice",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success()
+    }
+
+    // The default is controllers, reported separately from log visibility.
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers").and(contains("Log visibility: Controllers")),
+    );
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // --add-status-viewer grants it to alice, relative to the current list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--add-status-viewer", principal_alice.as_str()],
+    );
+    status_as_alice(&ctx, &project_dir)
+        .stdout(contains("Status: Running").and(contains("Status visibility: Allowed viewers:")));
+
+    // Add and remove in one call, again relative to the current list. Alice
+    // loses access, so the fallback comes back.
+    update(
+        &ctx,
+        &project_dir,
+        &[
+            "--add-status-viewer",
+            principal_bob.as_str(),
+            "--remove-status-viewer",
+            principal_alice.as_str(),
+        ],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers:")
+            .and(contains(principal_bob.as_str()))
+            .and(contains(principal_alice.as_str()).not()),
+    );
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // --set-status-viewer replaces the list outright.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-status-viewer", principal_alice.as_str()],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers:")
+            .and(contains(principal_alice.as_str()))
+            .and(contains(principal_bob.as_str()).not()),
+    );
+
+    // Public grants it to everyone, and leaves log visibility alone.
+    update(&ctx, &project_dir, &["--status-visibility", "public"]);
+    confirm(&ctx, &project_dir)
+        .stdout(contains("Status visibility: Public").and(contains("Log visibility: Controllers")));
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
+
+    // Revoking it puts the fallback back in place.
+    update(&ctx, &project_dir, &["--status-visibility", "controllers"]);
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // An update naming neither visibility group must leave both alone, rather
+    // than resetting them to an empty allowed-viewers list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-log-viewer", principal_alice.as_str()],
+    );
+    update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers")
+            .and(contains("Log visibility: Allowed viewers:"))
+            .and(contains(principal_alice.as_str())),
+    );
 }
 
 #[tokio::test]
@@ -1572,6 +1780,7 @@ async fn canister_settings_show() {
                 .and(contains(r#""wasm_memory_threshold""#))
                 .and(contains(r#""log_memory_limit""#))
                 .and(contains(r#""log_visibility""#))
+                .and(contains(r#""status_visibility""#))
                 .and(contains(r#""environment_variables""#)),
         );
 }

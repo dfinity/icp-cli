@@ -5,10 +5,11 @@ use dialoguer::Confirm;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable, LogVisibility,
+    CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable,
     UpdateSettingsArgs,
 };
 use icp::ProjectLoadError;
+use icp::canister::Visibility;
 use icp::context::{CanisterSelection, Context};
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
@@ -51,12 +52,12 @@ pub(crate) struct LogVisibilityOpt {
     /// Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead.
     #[arg(
         long,
-        value_parser = log_visibility_parser,
+        value_parser = visibility_parser,
         conflicts_with("add_log_viewer"),
         conflicts_with("remove_log_viewer"),
         conflicts_with("set_log_viewer"),
     )]
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<Visibility>,
 
     /// Add a principal to the allowed log viewers list
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
@@ -72,8 +73,112 @@ pub(crate) struct LogVisibilityOpt {
 }
 
 impl LogVisibilityOpt {
+    fn flags(&self) -> VisibilityFlags<'_> {
+        VisibilityFlags {
+            fixed: self.log_visibility.as_ref(),
+            add: self.add_log_viewer.as_deref(),
+            remove: self.remove_log_viewer.as_deref(),
+            set: self.set_log_viewer.as_deref(),
+        }
+    }
+
     pub(crate) fn require_current_settings(&self) -> bool {
-        self.add_log_viewer.is_some() || self.remove_log_viewer.is_some()
+        self.flags().require_current_settings()
+    }
+}
+
+#[derive(Clone, Debug, Default, Args)]
+pub(crate) struct StatusVisibilityOpt {
+    /// Set status visibility to a fixed policy [possible values: controllers, public].
+    /// Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer.
+    /// Use --add-status-viewer / --set-status-viewer to grant access to specific principals instead.
+    #[arg(
+        long,
+        value_parser = visibility_parser,
+        conflicts_with("add_status_viewer"),
+        conflicts_with("remove_status_viewer"),
+        conflicts_with("set_status_viewer"),
+    )]
+    status_visibility: Option<Visibility>,
+
+    /// Add a principal to the allowed status viewers list
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_status_viewer"))]
+    add_status_viewer: Option<Vec<Principal>>,
+
+    /// Remove a principal from the allowed status viewers list
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_status_viewer"))]
+    remove_status_viewer: Option<Vec<Principal>>,
+
+    /// Replace the allowed status viewers list with the specified principals
+    #[arg(long, action = ArgAction::Append)]
+    set_status_viewer: Option<Vec<Principal>>,
+}
+
+impl StatusVisibilityOpt {
+    fn flags(&self) -> VisibilityFlags<'_> {
+        VisibilityFlags {
+            fixed: self.status_visibility.as_ref(),
+            add: self.add_status_viewer.as_deref(),
+            remove: self.remove_status_viewer.as_deref(),
+            set: self.set_status_viewer.as_deref(),
+        }
+    }
+
+    pub(crate) fn require_current_settings(&self) -> bool {
+        self.flags().require_current_settings()
+    }
+}
+
+/// The flags of one visibility group, borrowed so the resolution below is
+/// written once for every setting that has such a group.
+struct VisibilityFlags<'a> {
+    fixed: Option<&'a Visibility>,
+    add: Option<&'a [Principal]>,
+    remove: Option<&'a [Principal]>,
+    set: Option<&'a [Principal]>,
+}
+
+impl VisibilityFlags<'_> {
+    /// Adding or removing individual viewers is relative to the canister's
+    /// current list, so it has to be fetched first.
+    fn require_current_settings(&self) -> bool {
+        self.add.is_some() || self.remove.is_some()
+    }
+
+    fn resolve(&self, current: Option<&Visibility>) -> Visibility {
+        if let Some(fixed) = self.fixed {
+            return fixed.clone();
+        }
+
+        if let Some(viewers) = self.set {
+            // TODO(VZ): Warn for switching from public to viewers.
+            return Visibility::AllowedViewers(viewers.to_vec());
+        }
+
+        let mut viewers = match current {
+            Some(Visibility::AllowedViewers(viewers)) => viewers.clone(),
+            _ => vec![],
+        };
+
+        if let Some(to_be_added) = self.add {
+            // TODO(VZ): Warn for switching from public to viewers.
+            for principal in to_be_added {
+                if !viewers.contains(principal) {
+                    viewers.push(*principal);
+                }
+            }
+        }
+
+        if let Some(to_be_removed) = self.remove {
+            // TODO(VZ): Warn for removing from if visibility is public and controllers.
+            for principal in to_be_removed {
+                if let Some(idx) = viewers.iter().position(|x| x == principal) {
+                    viewers.swap_remove(idx);
+                }
+            }
+        }
+
+        Visibility::AllowedViewers(viewers)
     }
 }
 
@@ -142,6 +247,9 @@ pub(crate) struct UpdateArgs {
 
     #[command(flatten)]
     log_visibility: Option<LogVisibilityOpt>,
+
+    #[command(flatten)]
+    status_visibility: Option<StatusVisibilityOpt>,
 
     #[command(flatten)]
     environment_variables: Option<EnvironmentVariableOpt>,
@@ -233,11 +341,19 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
     }
 
-    // Handle log visibility.
-    let mut log_visibility: Option<LogVisibility> = None;
-    if let Some(log_visibility_opt) = args.log_visibility.clone() {
-        log_visibility = get_log_visibility(&log_visibility_opt, current_status.as_ref());
-    }
+    // Handle log and status visibility.
+    let log_visibility = args.log_visibility.as_ref().map(|opt| {
+        let current = current_status
+            .as_ref()
+            .map(|status| Visibility::from(status.settings.log_visibility.clone()));
+        opt.flags().resolve(current.as_ref())
+    });
+    let status_visibility = args.status_visibility.as_ref().map(|opt| {
+        let current = current_status
+            .as_ref()
+            .map(|status| Visibility::from(status.settings.status_visibility.clone()));
+        opt.flags().resolve(current.as_ref())
+    });
 
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
@@ -288,6 +404,11 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             "Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
         );
     }
+    if status_visibility.is_some() && configured_settings.status_visibility.is_some() {
+        warn!(
+            "Status visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
+    }
 
     let settings = CanisterSettings {
         controllers,
@@ -304,12 +425,12 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             .as_ref()
             .map(|m| Nat::from(m.get())),
         log_memory_limit: args.log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
-        log_visibility,
+        log_visibility: log_visibility.map(Into::into),
+        status_visibility: status_visibility.map(Into::into),
         environment_variables,
-        // TODO: expose snapshot_visibility as a `settings update` flag (with
-        // set/add/remove-viewer sub-flags), mirroring log_visibility. Tracked for
-        // a follow-up PR; until then, leave it unchanged.
+        // Not exposed as flags yet; `None` leaves them unchanged.
         snapshot_visibility: None,
+        minimum_incoming_canister_call_cycles: None,
     };
 
     proxy_management::update_settings(
@@ -335,10 +456,10 @@ fn compute_allocation_parser(compute_allocation: &str) -> Result<u8, String> {
     Err("Must be a percent between 0 and 100".to_string())
 }
 
-fn log_visibility_parser(log_visibility: &str) -> Result<LogVisibility, String> {
-    match log_visibility {
-        "public" => Ok(LogVisibility::Public),
-        "controllers" => Ok(LogVisibility::Controllers),
+fn visibility_parser(visibility: &str) -> Result<Visibility, String> {
+    match visibility {
+        "public" => Ok(Visibility::Public),
+        "controllers" => Ok(Visibility::Controllers),
         _ => Err("Must be `controllers` or `public`.".to_string()),
     }
 }
@@ -362,6 +483,12 @@ fn require_current_settings(args: &UpdateArgs) -> bool {
 
     if let Some(log_visibility) = &args.log_visibility
         && log_visibility.require_current_settings()
+    {
+        return true;
+    }
+
+    if let Some(status_visibility) = &args.status_visibility
+        && status_visibility.require_current_settings()
     {
         return true;
     }
@@ -404,48 +531,6 @@ fn get_controllers(
     } else {
         None
     }
-}
-
-fn get_log_visibility(
-    log_visibility: &LogVisibilityOpt,
-    current_status: Option<&CanisterStatusResult>,
-) -> Option<LogVisibility> {
-    if let Some(log_visibility) = log_visibility.log_visibility.as_ref() {
-        return Some(log_visibility.clone());
-    }
-
-    if let Some(viewer) = log_visibility.set_log_viewer.as_ref() {
-        // TODO(VZ): Warn for switching from public to viewers.
-        return Some(LogVisibility::AllowedViewers(viewer.clone()));
-    }
-
-    let mut log_viewers: Vec<Principal> = match current_status {
-        Some(status) => match &status.settings.log_visibility {
-            LogVisibility::AllowedViewers(viewers) => viewers.clone(),
-            _ => vec![],
-        },
-        None => vec![],
-    };
-
-    if let Some(to_be_added) = log_visibility.add_log_viewer.as_ref() {
-        // TODO(VZ): Warn for switching from public to viewers.
-        for principal in to_be_added {
-            if !log_viewers.iter().any(|x| x == principal) {
-                log_viewers.push(*principal);
-            }
-        }
-    }
-
-    if let Some(removed) = log_visibility.remove_log_viewer.as_ref() {
-        // TODO(VZ): Warn for removing from if log visibility is public and controllers.
-        for principal in removed {
-            if let Some(idx) = log_viewers.iter().position(|x| x == principal) {
-                log_viewers.swap_remove(idx);
-            }
-        }
-    }
-
-    Some(LogVisibility::AllowedViewers(log_viewers))
 }
 
 fn get_environment_variables(

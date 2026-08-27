@@ -31,6 +31,9 @@ pub type Event = icp_events::Event<Task>;
 /// The shape of live progress a task can report. How this is drawn — and
 /// how the label is decorated — is the frontend's business.
 pub enum Widget {
+    /// No live progress of its own: an announcement that titles whatever
+    /// nests beneath it. With nothing nested under it, it is just a notice.
+    Heading { title: String },
     /// Work of unknown duration, labeled by the canister it acts on.
     Indeterminate { label: String },
     /// Quantifiable work: `total` bytes, labeled by what is being moved.
@@ -49,13 +52,15 @@ pub struct Failure {
 /// spinner-driven task that reports no steps — so most implementations only
 /// state what makes them different.
 pub trait Presentation {
-    /// The canister this task operates on. Used to prefix captured output.
-    fn canister(&self) -> &str;
+    /// The canister this task operates on, when it is about one. Used to
+    /// attribute captured output; a task that acts on no single canister —
+    /// a phase heading — contributes no attribution.
+    fn canister(&self) -> Option<&str>;
 
     /// The live widget this task drives.
     fn widget(&self) -> Widget {
         Widget::Indeterminate {
-            label: self.canister().to_owned(),
+            label: self.canister().unwrap_or_default().to_owned(),
         }
     }
 
@@ -116,6 +121,51 @@ pub trait Presentation {
 }
 
 // ---------------------------------------------------------------------------
+// Phases
+// ---------------------------------------------------------------------------
+
+/// A step of a composite operation, titling the tasks nested under it.
+///
+/// A phase does no work of its own, so it has nothing to say on either
+/// outcome: whichever child failed has already said what went wrong, and the
+/// error itself is on the operation's return path.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename = "phase")]
+pub struct PhaseTask {
+    pub title: String,
+}
+
+impl Presentation for PhaseTask {
+    /// A phase spans every canister the operation touches, so it attributes
+    /// nothing to any one of them.
+    fn canister(&self) -> Option<&str> {
+        None
+    }
+
+    fn widget(&self) -> Widget {
+        Widget::Heading {
+            title: self.title.clone(),
+        }
+    }
+
+    fn success_message(&self) -> Option<String> {
+        None
+    }
+
+    fn failure_message(&self, _message: &str) -> Option<String> {
+        None
+    }
+}
+
+/// Announce something in passing: a phase with no work under it, finished as
+/// soon as it is started.
+pub fn notice(reporter: &Reporter, text: impl Into<String>) {
+    reporter
+        .task(Task::phase(text))
+        .finish(icp_events::TaskOutcome::succeeded());
+}
+
+// ---------------------------------------------------------------------------
 // Multi-step tasks
 // ---------------------------------------------------------------------------
 
@@ -126,8 +176,8 @@ pub struct BuildTask {
 }
 
 impl Presentation for BuildTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn step_header(&self, number: usize, total: usize, label: &str) -> String {
@@ -162,8 +212,8 @@ pub struct SyncTask {
 }
 
 impl Presentation for SyncTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn step_header(&self, number: usize, total: usize, label: &str) -> String {
@@ -201,8 +251,8 @@ pub struct CreateTask {
 }
 
 impl Presentation for CreateTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn running_message(&self) -> Option<&'static str> {
@@ -228,8 +278,8 @@ pub struct InstallTask {
 }
 
 impl Presentation for InstallTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn running_message(&self) -> Option<&'static str> {
@@ -260,8 +310,8 @@ pub struct UpdateSettingsTask {
 }
 
 impl Presentation for UpdateSettingsTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn running_message(&self) -> Option<&'static str> {
@@ -292,8 +342,8 @@ pub struct UpdateEnvironmentVariablesTask {
 }
 
 impl Presentation for UpdateEnvironmentVariablesTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn running_message(&self) -> Option<&'static str> {
@@ -324,8 +374,8 @@ pub struct CandidCheckTask {
 }
 
 impl Presentation for CandidCheckTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn running_message(&self) -> Option<&'static str> {
@@ -410,8 +460,8 @@ pub struct SnapshotTransferTask {
 }
 
 impl Presentation for SnapshotTransferTask {
-    fn canister(&self) -> &str {
-        &self.canister
+    fn canister(&self) -> Option<&str> {
+        Some(&self.canister)
     }
 
     fn widget(&self) -> Widget {
@@ -445,6 +495,7 @@ impl Presentation for SnapshotTransferTask {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum Task {
+    Phase(PhaseTask),
     Build(BuildTask),
     Sync(SyncTask),
     Create(CreateTask),
@@ -460,6 +511,7 @@ impl Task {
     /// per-task presentation rules.
     pub fn presentation(&self) -> &dyn Presentation {
         match self {
+            Task::Phase(task) => task,
             Task::Build(task) => task,
             Task::Sync(task) => task,
             Task::Create(task) => task,
@@ -469,6 +521,12 @@ impl Task {
             Task::CandidCheck(task) => task,
             Task::SnapshotTransfer(task) => task,
         }
+    }
+
+    pub fn phase(title: impl Into<String>) -> Self {
+        Task::Phase(PhaseTask {
+            title: title.into(),
+        })
     }
 
     pub fn build(canister: impl Into<String>) -> Self {
@@ -553,6 +611,10 @@ mod tests {
         let json = |task: Task| serde_json::to_value(task).expect("task should serialize");
 
         assert_eq!(
+            json(Task::phase("Building canisters:")),
+            serde_json::json!({ "kind": "phase", "title": "Building canisters:" })
+        );
+        assert_eq!(
             json(Task::build("frontend")),
             serde_json::json!({ "kind": "build", "canister": "frontend" })
         );
@@ -625,8 +687,38 @@ mod tests {
         ];
 
         for task in &tasks {
-            assert_eq!(task.presentation().canister(), "c");
+            assert_eq!(task.presentation().canister(), Some("c"));
         }
+
+        // A phase spans all of them, so it names none.
+        assert_eq!(
+            Task::phase("Building canisters:").presentation().canister(),
+            None
+        );
+    }
+
+    /// A phase is a heading and nothing else: no live state, no closing line
+    /// on either outcome, and no deferred dump — whichever child failed has
+    /// already reported, and the error is on the return path.
+    #[test]
+    fn a_phase_is_a_heading_with_nothing_to_say() {
+        let phase = Task::phase("Installing canisters:");
+        let presentation = phase.presentation();
+
+        match presentation.widget() {
+            Widget::Heading { title } => assert_eq!(title, "Installing canisters:"),
+            _ => panic!("a phase must render as a heading"),
+        }
+        assert!(presentation.success_message().is_none());
+        assert!(presentation.failure_message("boom").is_none());
+        assert!(
+            presentation
+                .failure_dump(&Failure {
+                    message: "boom".to_owned(),
+                    causes: vec!["inner".to_owned()],
+                })
+                .is_none()
+        );
     }
 
     /// Only the two multi-step kinds render step headers and captured-output
@@ -668,7 +760,7 @@ mod tests {
                 assert_eq!(label, "WASM memory");
                 assert_eq!(total, 8);
             }
-            Widget::Indeterminate { .. } => panic!("a transfer must use a byte bar"),
+            _ => panic!("a transfer must use a byte bar"),
         }
     }
 

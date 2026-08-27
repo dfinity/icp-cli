@@ -4,6 +4,7 @@ pub mod bundle;
 pub mod candid_compat;
 pub mod canister_migration;
 pub mod create;
+pub mod deploy;
 pub mod install;
 pub mod proxy;
 pub mod proxy_management;

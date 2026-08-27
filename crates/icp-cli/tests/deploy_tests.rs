@@ -1578,3 +1578,44 @@ async fn deploy_starts_stopped_canister_before_sync() {
         .success()
         .stdout(contains("apple"));
 }
+
+/// A canister created before a later phase fails still exists, so its id must
+/// still reach the user — it is the only place the run reports it, and without
+/// it a follow-up deploy is the only way to find out what was made.
+#[tokio::test]
+async fn deploy_prints_created_ids_when_a_later_phase_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Build, create and install all succeed; the sync step then fails.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: exit 1
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stdout(contains("Created canister my-canister with ID"));
+}

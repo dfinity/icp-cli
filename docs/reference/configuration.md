@@ -369,7 +369,7 @@ environments:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Environment identifier |
 | `network` | string | Yes | Network to deploy to |
-| `canisters` | array | No | Canisters to include (default: all) |
+| `canisters` | array | No | This project's own canisters to include (default: all of them) |
 | `settings` | object | No | Per-canister setting overrides |
 | `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
 

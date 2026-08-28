@@ -6,23 +6,47 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Mon, 24 Aug 2026 16:58:47 GMT</lastBuildDate>
-    <pubDate>Mon, 24 Aug 2026 16:57:39 GMT</pubDate>
+    <lastBuildDate>Fri, 28 Aug 2026 15:55:20 GMT</lastBuildDate>
+    <pubDate>Fri, 28 Aug 2026 15:54:11 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Mon, 24 Aug 2026 16:57:39 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <title>Canister Settings Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/canister-settings/</link>
+      <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
+      <pubDate>Fri, 28 Aug 2026 15:54:11 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
       <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Thu, 13 Aug 2026 18:18:58 GMT</pubDate>
+      <pubDate>Fri, 28 Aug 2026 15:54:11 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Managing Environments</title>
+      <link>https://cli.internetcomputer.org/main/guides/managing-environments/</link>
+      <description>Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.</description>
+      <pubDate>Fri, 28 Aug 2026 15:54:11 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-environments/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Dependencies</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
+      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
+      <pubDate>Fri, 28 Aug 2026 15:54:11 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Mon, 24 Aug 2026 16:57:39 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -63,22 +87,6 @@
       <description>Create, import, export, and manage cryptographic identities and principals used for canister ownership and authentication.</description>
       <pubDate>Thu, 06 Aug 2026 16:05:15 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-identities/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Canister Settings Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/canister-settings/</link>
-      <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
-      <pubDate>Wed, 05 Aug 2026 19:15:14 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Dependencies</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
-      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
-      <pubDate>Thu, 30 Jul 2026 21:11:12 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -199,14 +207,6 @@
       <description>Step-by-step guides covering installation, local development, deployment, identity management, and more.</description>
       <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Managing Environments</title>
-      <link>https://cli.internetcomputer.org/main/guides/managing-environments/</link>
-      <description>Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.</description>
-      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-environments/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

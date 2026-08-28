@@ -133,7 +133,7 @@
 <p>Force the workspace root with the <code>--project-root-override</code> flag or the <code>ICP_PROJECT_ROOT</code> environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.</p>
 <h2 id="environments-across-a-workspace">Environments across a workspace</h2>
 <p>The workspace root owns the <strong>network</strong> and the <strong>canister-ID store</strong> for every environment; a dependency’s own network definitions are ignored when it is deployed as part of a workspace.</p>
-<p>A dependency’s own same-named environment still contributes its <strong>per-canister settings and init args</strong>, so a vendored project’s canisters get the configuration their author intended. Precedence, highest first:</p>
+<p>A dependency’s own same-named environment still contributes its <strong>per-canister settings, init args, and upgrade args</strong>, so a vendored project’s canisters get the configuration their author intended. Precedence, highest first:</p>
 <ol>
 <li>the workspace root’s explicit override for that canister, keyed by the same path-based name used to address it (e.g. <code>settings: { "vendor/openemail:backend": … }</code>)</li>
 <li>the dependency’s own environment configuration</li>

@@ -19,7 +19,7 @@ use std::time::Duration;
 use candid::Principal;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
 use ic_agent::{Agent, AgentError};
-use ic_management_canister_types::{CanisterId, CanisterIdRecord};
+use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterInstallMode};
 use icp_events::TaskOutcome;
 use itertools::Itertools;
 use snafu::{OptionExt, ResultExt, Snafu};
@@ -48,7 +48,8 @@ use crate::operations::{
     sync::{SyncOperationError, sync_many},
     task::{Reporter, Task, TaskReporter, notice},
 };
-use crate::{InitArgsToBytesError, ProjectLoadError};
+use crate::project::ArgsField;
+use crate::{CanisterArgsToBytesError, ProjectLoadError};
 
 /// Everything that can stop a deploy. Each phase's failure keeps the typed
 /// error of the operation that produced it, so a caller can still tell a
@@ -116,10 +117,11 @@ pub enum DeployError {
     #[snafu(transparent)]
     ResolveInstallMode { source: ResolveInstallModeError },
 
-    #[snafu(display("Failed to encode the init arguments of canister '{canister}'"))]
-    InitArgs {
+    #[snafu(display("Failed to encode the {field} of canister '{canister}'"))]
+    InstallArgs {
         canister: String,
-        source: InitArgsToBytesError,
+        field: ArgsField,
+        source: CanisterArgsToBytesError,
     },
 
     #[snafu(transparent)]
@@ -182,9 +184,10 @@ pub struct DeployParams {
     pub no_create: bool,
     /// Skip the Candid interface compatibility check.
     pub yes: bool,
-    /// Install arguments, already resolved to bytes. Only ever set when a
-    /// single canister is being deployed.
-    pub init_args: Option<Vec<u8>>,
+    /// Install arguments, already resolved to bytes. Used whatever the install
+    /// mode turns out to be. Only ever set when a single canister is being
+    /// deployed.
+    pub args: Option<Vec<u8>>,
 }
 
 /// What the deploy did, for the command to report.
@@ -331,18 +334,36 @@ pub async fn deploy(
                 .get_canister_info(name)
                 .map_err(|message| DeployError::CanisterNotInEnvironment { message })?;
 
-            // Command-line arguments take priority over manifest init_args.
-            let init_args_bytes = match &params.init_args {
-                Some(bytes) => Some(bytes.clone()),
-                None => canister_info
+            // An upgrade passes `upgrade_args`; a canister that declares none is
+            // upgraded with its `init_args`, which its post-upgrade entry point
+            // expects anyway. The field is carried along so a malformed value is
+            // reported against the one the user wrote.
+            let init_args = || {
+                canister_info
                     .init_args
                     .as_ref()
-                    .map(|ia| ia.to_bytes())
-                    .transpose()
-                    .context(InitArgsSnafu { canister: name })?,
+                    .map(|a| (ArgsField::Init, a))
+            };
+            let manifest_args = match mode {
+                CanisterInstallMode::Upgrade(_) => canister_info
+                    .upgrade_args
+                    .as_ref()
+                    .map(|a| (ArgsField::Upgrade, a))
+                    .or_else(init_args),
+                CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args(),
             };
 
-            Ok::<_, DeployError>((name.clone(), cid, mode, status, init_args_bytes))
+            // Command-line arguments take priority over the manifest's.
+            let args_bytes = match (&params.args, manifest_args) {
+                (Some(bytes), _) => Some(bytes.clone()),
+                (None, Some((field, a))) => Some(a.to_bytes().context(InstallArgsSnafu {
+                    canister: name,
+                    field,
+                })?),
+                (None, None) => None,
+            };
+
+            Ok::<_, DeployError>((name.clone(), cid, mode, status, args_bytes))
         }
     }))
     .await?;

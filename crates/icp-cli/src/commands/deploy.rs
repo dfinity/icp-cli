@@ -79,8 +79,9 @@ pub(crate) struct DeployArgs {
     #[arg(long)]
     pub(crate) json: bool,
 
-    /// Arguments to pass to the canister on install.
-    /// Only valid when deploying a single canister. Takes priority over `init_args` in the manifest.
+    /// Arguments to pass to the canister on install or upgrade.
+    /// Only valid when deploying a single canister. Takes priority over `init_args` and
+    /// `upgrade_args` in the manifest.
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,
 }
@@ -116,7 +117,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         cycles: args.cycles.get(),
         no_create: args.no_create,
         yes: args.yes,
-        init_args: args.args_opt.resolve_bytes()?,
+        args: args.args_opt.resolve_bytes()?,
     };
 
     // One reporter for the whole deploy: every phase and every canister lands

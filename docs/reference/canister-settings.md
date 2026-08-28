@@ -257,8 +257,8 @@ environments:
             path: ./secrets/production-api-key
 ```
 
-File references inside an override — `environment_variables` values and
-`init_args` alike — resolve against the *referenced canister's* directory, not the
+File references inside an override — `environment_variables` values,
+`init_args`, and `upgrade_args` alike — resolve against the *referenced canister's* directory, not the
 directory of the manifest declaring the override. For a canister that comes from a
 [dependency](../concepts/project-dependencies.md), that is the dependency's own
 directory.

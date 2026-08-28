@@ -8,7 +8,7 @@ use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
-use icp::{InitArgs, fs};
+use icp::{CanisterArgs, fs};
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
@@ -207,7 +207,7 @@ impl ArgsOpt {
     }
 }
 
-/// Load args from an inline value or a file, returning the intermediate [`InitArgs`]
+/// Load args from an inline value or a file, returning the intermediate [`CanisterArgs`]
 /// representation. Returns `None` if neither was provided.
 ///
 /// `inline_arg_name` is used in the error message when `--args-format bin` is given
@@ -217,13 +217,13 @@ pub(crate) fn load_args(
     args_file: Option<&PathBuf>,
     args_format: &ArgsFormat,
     inline_arg_name: &str,
-) -> Result<Option<InitArgs>, anyhow::Error> {
+) -> Result<Option<CanisterArgs>, anyhow::Error> {
     match (inline_value, args_file) {
         (Some(value), None) => {
             if *args_format == ArgsFormat::Bin {
                 bail!("--args-format bin requires --args-file, not {inline_arg_name}");
             }
-            Ok(Some(InitArgs::Text {
+            Ok(Some(CanisterArgs::Text {
                 content: value.to_owned(),
                 format: args_format.clone(),
             }))
@@ -231,11 +231,11 @@ pub(crate) fn load_args(
         (None, Some(file_path)) => Ok(Some(match args_format {
             ArgsFormat::Bin => {
                 let bytes = fs::read(file_path).context("failed to read args file")?;
-                InitArgs::Binary(bytes)
+                CanisterArgs::Binary(bytes)
             }
             fmt => {
                 let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                InitArgs::Text {
+                CanisterArgs::Text {
                     content: content.trim().to_owned(),
                     format: fmt.clone(),
                 }

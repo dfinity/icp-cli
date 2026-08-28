@@ -131,3 +131,80 @@ async fn canister_status_through_proxy() {
                 .and(contains(&proxy_cid)),
         );
 }
+
+/// A caller that may not read the status falls back on the state-tree
+/// information, rather than failing.
+#[tokio::test]
+async fn canister_status_falls_back_when_access_is_denied() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    client.create_identity("alice");
+    let principal_alice = client.get_principal("alice").to_string();
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Hand sole controllership to alice, so the default identity may no longer
+    // read the status.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--force",
+            "--remove-all-controllers",
+            "--add-controller",
+            principal_alice.as_str(),
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains(format!("Controllers: {principal_alice}"))
+                .and(contains("Module hash:"))
+                .and(contains("Status:").not()),
+        );
+}

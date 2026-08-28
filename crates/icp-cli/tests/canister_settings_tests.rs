@@ -503,7 +503,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:").and(contains(principal_alice.as_str())),
+            contains("Log visibility: Allowed viewers").and(contains(principal_alice.as_str())),
         );
 
     // Add and remove log viewer.
@@ -538,7 +538,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -606,7 +606,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -676,7 +676,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -1394,7 +1394,11 @@ async fn canister_settings_sync_log_visibility() {
     write_string(&project_dir.join("icp.yaml"), &pm_with_allowed_viewers)
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
-    confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+    confirm_log_visibility(
+        &ctx,
+        &project_dir,
+        "Allowed viewers\n  viewer: 2vxsx-fae\n  viewer: aaaaa-aa",
+    );
 
     // status_visibility takes the same manifest forms, and a single sync has to
     // apply both settings: either change alone would satisfy the "settings
@@ -1434,7 +1438,7 @@ async fn canister_settings_sync_log_visibility() {
         .assert()
         .success()
         .stdout(contains(
-            "Status visibility: Allowed viewers: 2vxsx-fae, aaaaa-aa",
+            "Status visibility: Allowed viewers\n  viewer: 2vxsx-fae\n  viewer: aaaaa-aa",
         ));
 }
 
@@ -1547,7 +1551,7 @@ async fn canister_settings_update_status_visibility() {
         &["--add-status-viewer", principal_alice.as_str()],
     );
     status_as_alice(&ctx, &project_dir)
-        .stdout(contains("Status: Running").and(contains("Status visibility: Allowed viewers:")));
+        .stdout(contains("Status: Running").and(contains("Status visibility: Allowed viewers")));
 
     // Add and remove in one call, again relative to the current list. Alice
     // loses access, so the fallback comes back.
@@ -1562,7 +1566,7 @@ async fn canister_settings_update_status_visibility() {
         ],
     );
     confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Allowed viewers:")
+        contains("Status visibility: Allowed viewers")
             .and(contains(principal_bob.as_str()))
             .and(contains(principal_alice.as_str()).not()),
     );
@@ -1575,7 +1579,7 @@ async fn canister_settings_update_status_visibility() {
         &["--set-status-viewer", principal_alice.as_str()],
     );
     confirm(&ctx, &project_dir).stdout(
-        contains("Status visibility: Allowed viewers:")
+        contains("Status visibility: Allowed viewers")
             .and(contains(principal_alice.as_str()))
             .and(contains(principal_bob.as_str()).not()),
     );
@@ -1600,7 +1604,7 @@ async fn canister_settings_update_status_visibility() {
     update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
     confirm(&ctx, &project_dir).stdout(
         contains("Status visibility: Controllers")
-            .and(contains("Log visibility: Allowed viewers:"))
+            .and(contains("Log visibility: Allowed viewers"))
             .and(contains(principal_alice.as_str())),
     );
 }

@@ -96,13 +96,13 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     writeln!(
         &mut buf,
         "Log visibility: {}",
-        format_visibility(&s.log_visibility.clone().into())
+        format_visibility(&s.log_visibility.clone().into(), "")
     )
     .unwrap();
     writeln!(
         &mut buf,
         "Status visibility: {}",
-        format_visibility(&s.status_visibility.clone().into())
+        format_visibility(&s.status_visibility.clone().into(), "")
     )
     .unwrap();
 

@@ -537,12 +537,12 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     writeln!(
         &mut buf,
         "  Log visibility: {}",
-        format_visibility(&settings.log_visibility.0)
+        format_visibility(&settings.log_visibility.0, "  ")
     )?;
     writeln!(
         &mut buf,
         "  Status visibility: {}",
-        format_visibility(&settings.status_visibility.0)
+        format_visibility(&settings.status_visibility.0, "  ")
     )?;
 
     // Display environment variables configured for this canister

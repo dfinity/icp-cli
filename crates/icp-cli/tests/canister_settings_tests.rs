@@ -1492,7 +1492,7 @@ async fn canister_settings_update_status_visibility() {
         .assert()
         .success();
 
-    fn update(ctx: &TestContext, project_dir: &Path, args: &[&str]) {
+    fn update(ctx: &TestContext, project_dir: &Path, args: &[&str]) -> assert_cmd::assert::Assert {
         let mut all = vec![
             "canister",
             "settings",
@@ -1506,7 +1506,7 @@ async fn canister_settings_update_status_visibility() {
             .current_dir(project_dir)
             .args(all)
             .assert()
-            .success();
+            .success()
     }
 
     fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
@@ -1593,6 +1593,28 @@ async fn canister_settings_update_status_visibility() {
     confirm(&ctx, &project_dir)
         .stdout(contains("Status visibility: Public").and(contains("Log visibility: Controllers")));
     status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
+
+    // Naming a viewer while the status is public takes access away from
+    // everyone else, which is warned about but not prompted for.
+    update(
+        &ctx,
+        &project_dir,
+        &["--add-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is currently public; listing allowed viewers revokes access for everyone else",
+    ));
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // So does removing the last viewer, which leaves the controllers alone with it.
+    update(
+        &ctx,
+        &project_dir,
+        &["--remove-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is left with no allowed viewers; only the controllers keep access",
+    ));
 
     // Revoking it puts the fallback back in place.
     update(&ctx, &project_dir, &["--status-visibility", "controllers"]);

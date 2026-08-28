@@ -59,11 +59,17 @@ pub(crate) struct LogVisibilityOpt {
     )]
     log_visibility: Option<Visibility>,
 
-    /// Add a principal to the allowed log viewers list
+    /// Add a principal to the allowed log viewers list.
+    ///
+    /// Rejected while log visibility is public, which has no viewers list to
+    /// add to; use --set-log-viewer to replace the public policy with a list.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     add_log_viewer: Option<Vec<Principal>>,
 
-    /// Remove a principal from the allowed log viewers list
+    /// Remove a principal from the allowed log viewers list.
+    ///
+    /// Rejected while log visibility is public, which has no viewers list to
+    /// remove from; use --log-visibility controllers to revoke public access.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_log_viewer"))]
     remove_log_viewer: Option<Vec<Principal>>,
 
@@ -75,6 +81,8 @@ pub(crate) struct LogVisibilityOpt {
 impl LogVisibilityOpt {
     fn flags(&self) -> VisibilityFlags<'_> {
         VisibilityFlags {
+            label: "Log visibility",
+            stem: "log",
             fixed: self.log_visibility.as_ref(),
             add: self.add_log_viewer.as_deref(),
             remove: self.remove_log_viewer.as_deref(),
@@ -101,11 +109,17 @@ pub(crate) struct StatusVisibilityOpt {
     )]
     status_visibility: Option<Visibility>,
 
-    /// Add a principal to the allowed status viewers list
+    /// Add a principal to the allowed status viewers list.
+    ///
+    /// Rejected while status visibility is public, which has no viewers list to
+    /// add to; use --set-status-viewer to replace the public policy with a list.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_status_viewer"))]
     add_status_viewer: Option<Vec<Principal>>,
 
-    /// Remove a principal from the allowed status viewers list
+    /// Remove a principal from the allowed status viewers list.
+    ///
+    /// Rejected while status visibility is public, which has no viewers list to
+    /// remove from; use --status-visibility controllers to revoke public access.
     #[arg(long, action = ArgAction::Append, conflicts_with("set_status_viewer"))]
     remove_status_viewer: Option<Vec<Principal>>,
 
@@ -117,6 +131,8 @@ pub(crate) struct StatusVisibilityOpt {
 impl StatusVisibilityOpt {
     fn flags(&self) -> VisibilityFlags<'_> {
         VisibilityFlags {
+            label: "Status visibility",
+            stem: "status",
             fixed: self.status_visibility.as_ref(),
             add: self.add_status_viewer.as_deref(),
             remove: self.remove_status_viewer.as_deref(),
@@ -132,6 +148,10 @@ impl StatusVisibilityOpt {
 /// The flags of one visibility group, borrowed so the resolution below is
 /// written once for every setting that has such a group.
 struct VisibilityFlags<'a> {
+    /// How the setting reads in prose, e.g. `Log visibility`.
+    label: &'static str,
+    /// The stem its flags share, e.g. `log` for `--add-log-viewer`.
+    stem: &'static str,
     fixed: Option<&'a Visibility>,
     add: Option<&'a [Principal]>,
     remove: Option<&'a [Principal]>,
@@ -146,19 +166,26 @@ impl VisibilityFlags<'_> {
         self.add.is_some() || self.remove.is_some() || self.set.is_some()
     }
 
-    /// Turns the flags of one group into the policy to send. Pure: what the
-    /// change costs the caller is warned about by [`maybe_warn_on_lost_access`].
-    fn resolve(&self, current: Option<&Visibility>) -> Visibility {
+    /// Turns the flags of one group into the policy to send, rejecting the
+    /// edits the group cannot express. Pure: it neither reads the network nor
+    /// prints, and what a legal edit costs the caller is warned about by
+    /// [`maybe_warn_on_lost_access`].
+    fn resolve(&self, current: Option<&Visibility>) -> Result<Visibility, anyhow::Error> {
         if let Some(fixed) = self.fixed {
-            return fixed.clone();
+            return Ok(fixed.clone());
         }
 
         if let Some(viewers) = self.set {
-            return Visibility::AllowedViewers(viewers.to_vec());
+            return Ok(Visibility::AllowedViewers(viewers.to_vec()));
         }
 
         let mut viewers = match current {
             Some(Visibility::AllowedViewers(viewers)) => viewers.clone(),
+            Some(Visibility::Public) if self.add.is_some() || self.remove.is_some() => {
+                return Err(self.public_has_no_viewers_list());
+            }
+            // `controllers` has no list either, but building one from it only
+            // ever grants access on top, so the edits mean what they say.
             _ => vec![],
         };
 
@@ -174,30 +201,62 @@ impl VisibilityFlags<'_> {
             viewers.retain(|principal| !to_be_removed.contains(principal));
         }
 
-        Visibility::AllowedViewers(viewers)
+        Ok(Visibility::AllowedViewers(viewers))
+    }
+
+    /// `public` grants access to everyone, so it carries no viewers list for a
+    /// relative edit to be relative to. The only way to honour one would be to
+    /// start a list from empty, which revokes everyone else's access — a policy
+    /// change these flags do not name, so it is refused in favour of the flags
+    /// that do.
+    fn public_has_no_viewers_list(&self) -> anyhow::Error {
+        let (label, stem) = (self.label, self.stem);
+        let edits = match (self.add.is_some(), self.remove.is_some()) {
+            (true, true) => format!("--add-{stem}-viewer / --remove-{stem}-viewer"),
+            (true, false) => format!("--add-{stem}-viewer"),
+            _ => format!("--remove-{stem}-viewer"),
+        };
+
+        anyhow::anyhow!(
+            "{label} is currently public, so there is no allowed viewers list for {edits} to edit. \
+             Use `--set-{stem}-viewer <PRINCIPAL>` to replace the public policy with an explicit \
+             list, or `--{stem}-visibility controllers` to revoke public access on its own."
+        )
     }
 }
 
-/// Warns when a viewer edit quietly takes access away rather than granting it:
-/// naming viewers on a `public` canister revokes everyone else's access, and
-/// removing the last viewer leaves the controllers alone with it.
+/// Warns when a legal viewer edit still takes access away rather than granting
+/// it: `--set-*-viewer` on a `public` canister revokes everyone else's access,
+/// and removing the last viewer leaves the controllers alone with it.
 ///
-/// A warning rather than a prompt: unlike losing control of a canister, either
-/// change can be undone by any controller, and prompting would break scripted
-/// use.
-fn maybe_warn_on_lost_access(setting: &str, current: Option<&Visibility>, resolved: &Visibility) {
+/// A warning rather than a prompt or a refusal: both edits state outright what
+/// the new list is, so unlike the relative edits [`VisibilityFlags::resolve`]
+/// refuses on a `public` canister, they say what they do. Either is reversible
+/// by any controller, and a prompt would break scripted use.
+fn maybe_warn_on_lost_access(label: &str, current: Option<&Visibility>, resolved: &Visibility) {
     let Visibility::AllowedViewers(viewers) = resolved else {
         return;
     };
 
     if current == Some(&Visibility::Public) {
         warn!(
-            "{setting} is currently public; listing allowed viewers revokes access for everyone else"
+            "{label} is currently public; listing allowed viewers revokes access for everyone else"
         );
     }
     if viewers.is_empty() {
-        warn!("{setting} is left with no allowed viewers; only the controllers keep access");
+        warn!("{label} is left with no allowed viewers; only the controllers keep access");
     }
+}
+
+/// Resolves one visibility group against the policy the canister carries now,
+/// warning about what the result costs.
+fn resolve_visibility(
+    flags: VisibilityFlags<'_>,
+    current: Option<Visibility>,
+) -> Result<Visibility, anyhow::Error> {
+    let resolved = flags.resolve(current.as_ref())?;
+    maybe_warn_on_lost_access(flags.label, current.as_ref(), &resolved);
+    Ok(resolved)
 }
 
 #[derive(Clone, Debug, Default, Args)]
@@ -360,22 +419,26 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     }
 
     // Handle log and status visibility.
-    let log_visibility = args.log_visibility.as_ref().map(|opt| {
-        let current = current_status
-            .as_ref()
-            .map(|status| Visibility::from(status.settings.log_visibility.clone()));
-        let resolved = opt.flags().resolve(current.as_ref());
-        maybe_warn_on_lost_access("Log visibility", current.as_ref(), &resolved);
-        resolved
-    });
-    let status_visibility = args.status_visibility.as_ref().map(|opt| {
-        let current = current_status
-            .as_ref()
-            .map(|status| Visibility::from(status.settings.status_visibility.clone()));
-        let resolved = opt.flags().resolve(current.as_ref());
-        maybe_warn_on_lost_access("Status visibility", current.as_ref(), &resolved);
-        resolved
-    });
+    let log_visibility = args
+        .log_visibility
+        .as_ref()
+        .map(|opt| {
+            let current = current_status
+                .as_ref()
+                .map(|status| Visibility::from(status.settings.log_visibility.clone()));
+            resolve_visibility(opt.flags(), current)
+        })
+        .transpose()?;
+    let status_visibility = args
+        .status_visibility
+        .as_ref()
+        .map(|opt| {
+            let current = current_status
+                .as_ref()
+                .map(|status| Visibility::from(status.settings.status_visibility.clone()));
+            resolve_visibility(opt.flags(), current)
+        })
+        .transpose()?;
 
     // Handle environment variables.
     let mut environment_variables: Option<Vec<EnvironmentVariable>> = None;
@@ -650,6 +713,8 @@ mod tests {
         set: Option<&'a [Principal]>,
     ) -> VisibilityFlags<'a> {
         VisibilityFlags {
+            label: "Log visibility",
+            stem: "log",
             fixed,
             add,
             remove,
@@ -669,7 +734,8 @@ mod tests {
             None,
             Some(&viewers),
         )
-        .resolve(Some(&Visibility::Controllers));
+        .resolve(Some(&Visibility::Controllers))
+        .unwrap();
 
         assert_eq!(resolved, Visibility::Public);
     }
@@ -680,7 +746,9 @@ mod tests {
         let viewers = [carol()];
 
         assert_eq!(
-            flags(None, None, None, Some(&viewers)).resolve(Some(&current)),
+            flags(None, None, None, Some(&viewers))
+                .resolve(Some(&current))
+                .unwrap(),
             Visibility::AllowedViewers(vec![carol()])
         );
     }
@@ -691,29 +759,74 @@ mod tests {
         let to_add = [bob(), carol()];
 
         assert_eq!(
-            flags(None, Some(&to_add), None, None).resolve(Some(&current)),
+            flags(None, Some(&to_add), None, None)
+                .resolve(Some(&current))
+                .unwrap(),
             Visibility::AllowedViewers(vec![alice(), bob(), carol()])
         );
     }
 
-    /// `controllers` and `public` carry no list to build on, so a viewer edit
-    /// against either starts from an empty one — which, for `public`, silently
-    /// revokes the public access that [`maybe_warn_on_lost_access`] warns about.
+    /// `controllers` carries no list to build on, but a list built from it
+    /// grants access on top of the controllers rather than taking any away, so
+    /// the edit means what it says and starts from empty.
     #[test]
-    fn viewer_edits_against_a_fixed_policy_start_from_empty() {
+    fn viewer_edits_against_controllers_start_from_empty() {
         let to_add = [alice()];
-
-        for current in [Visibility::Public, Visibility::Controllers] {
-            assert_eq!(
-                flags(None, Some(&to_add), None, None).resolve(Some(&current)),
-                Visibility::AllowedViewers(vec![alice()])
-            );
-        }
+        assert_eq!(
+            flags(None, Some(&to_add), None, None)
+                .resolve(Some(&Visibility::Controllers))
+                .unwrap(),
+            Visibility::AllowedViewers(vec![alice()])
+        );
 
         let to_remove = [alice()];
         assert_eq!(
-            flags(None, None, Some(&to_remove), None).resolve(Some(&Visibility::Public)),
+            flags(None, None, Some(&to_remove), None)
+                .resolve(Some(&Visibility::Controllers))
+                .unwrap(),
             Visibility::AllowedViewers(vec![])
+        );
+    }
+
+    /// `public` carries no list either, and starting one would revoke everyone
+    /// else's access — which a relative edit does not say to do, so it is
+    /// refused, pointing at the two flags that state a policy outright.
+    #[test]
+    fn relative_viewer_edits_are_refused_while_public() {
+        let viewers = [alice()];
+
+        for (add, remove, named) in [
+            (Some(&viewers[..]), None, "--add-log-viewer"),
+            (None, Some(&viewers[..]), "--remove-log-viewer"),
+            (
+                Some(&viewers[..]),
+                Some(&viewers[..]),
+                "--add-log-viewer / --remove-log-viewer",
+            ),
+        ] {
+            let err = flags(None, add, remove, None)
+                .resolve(Some(&Visibility::Public))
+                .unwrap_err()
+                .to_string();
+
+            assert!(err.contains("Log visibility is currently public"), "{err}");
+            assert!(err.contains(named), "{err}");
+            assert!(err.contains("--set-log-viewer"), "{err}");
+            assert!(err.contains("--log-visibility controllers"), "{err}");
+        }
+    }
+
+    /// Stating the new list outright is still allowed while public: it says
+    /// what the policy becomes, so nothing about it is a surprise.
+    #[test]
+    fn set_is_allowed_while_public() {
+        let viewers = [alice()];
+
+        assert_eq!(
+            flags(None, None, None, Some(&viewers))
+                .resolve(Some(&Visibility::Public))
+                .unwrap(),
+            Visibility::AllowedViewers(vec![alice()])
         );
     }
 
@@ -725,7 +838,9 @@ mod tests {
         let to_remove = [bob()];
 
         assert_eq!(
-            flags(None, None, Some(&to_remove), None).resolve(Some(&current)),
+            flags(None, None, Some(&to_remove), None)
+                .resolve(Some(&current))
+                .unwrap(),
             Visibility::AllowedViewers(vec![alice(), carol()])
         );
     }
@@ -738,7 +853,9 @@ mod tests {
         let to_remove = [alice(), bob()];
 
         assert_eq!(
-            flags(None, None, Some(&to_remove), None).resolve(Some(&current)),
+            flags(None, None, Some(&to_remove), None)
+                .resolve(Some(&current))
+                .unwrap(),
             Visibility::AllowedViewers(vec![])
         );
     }
@@ -751,7 +868,9 @@ mod tests {
         let to_remove = [alice(), bob()];
 
         assert_eq!(
-            flags(None, Some(&to_add), Some(&to_remove), None).resolve(Some(&current)),
+            flags(None, Some(&to_add), Some(&to_remove), None)
+                .resolve(Some(&current))
+                .unwrap(),
             Visibility::AllowedViewers(vec![carol()])
         );
     }

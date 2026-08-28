@@ -473,7 +473,8 @@ async fn canister_settings_update_log_visibility() {
         .success()
         .stdout(contains("Log visibility: Public"));
 
-    // Add log viewer.
+    // Public carries no viewers list, so adding to one is refused rather than
+    // silently revoking public access.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -487,7 +488,30 @@ async fn canister_settings_update_log_visibility() {
             "random-environment",
         ])
         .assert()
-        .success();
+        .failure()
+        .stderr(contains(
+            "Log visibility is currently public, so there is no allowed viewers list for --add-log-viewer to edit",
+        ));
+
+    // Setting the list outright is the way to say it, and warns about what the
+    // public policy it replaces used to grant.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--set-log-viewer",
+            principal_alice.as_str(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains(
+            "Log visibility is currently public; listing allowed viewers revokes access for everyone else",
+        ));
 
     // Query settings
     ctx.icp()
@@ -1509,6 +1533,27 @@ async fn canister_settings_update_status_visibility() {
             .success()
     }
 
+    fn update_fails(
+        ctx: &TestContext,
+        project_dir: &Path,
+        args: &[&str],
+    ) -> assert_cmd::assert::Assert {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .failure()
+    }
+
     fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
         ctx.icp()
             .current_dir(project_dir)
@@ -1594,19 +1639,38 @@ async fn canister_settings_update_status_visibility() {
         .stdout(contains("Status visibility: Public").and(contains("Log visibility: Controllers")));
     status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
 
-    // Naming a viewer while the status is public takes access away from
-    // everyone else, which is warned about but not prompted for.
-    update(
+    // A relative viewer edit has no list to be relative to while the status is
+    // public, and is refused rather than silently revoking public access.
+    update_fails(
         &ctx,
         &project_dir,
         &["--add-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is currently public, so there is no allowed viewers list for --add-status-viewer to edit",
+    ));
+    update_fails(
+        &ctx,
+        &project_dir,
+        &["--remove-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains("--remove-status-viewer"));
+    // Refused, so the canister is untouched and alice still reads the status.
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
+
+    // Stating the list outright is allowed, and warns about what it revokes.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-status-viewer", principal_bob.as_str()],
     )
     .stderr(contains(
         "Status visibility is currently public; listing allowed viewers revokes access for everyone else",
     ));
     status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
 
-    // So does removing the last viewer, which leaves the controllers alone with it.
+    // Removing the last viewer leaves the controllers alone with it, which is
+    // warned about but not refused: the edit says what it does.
     update(
         &ctx,
         &project_dir,

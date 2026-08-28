@@ -532,12 +532,20 @@ Change a canister's settings to specified values
 * `--wasm-memory-threshold <WASM_MEMORY_THRESHOLD>` — Wasm memory threshold in bytes. Supports suffixes: kb, kib, mb, mib, gb, gib (e.g. "4gib" or "2.5kb")
 * `--log-memory-limit <LOG_MEMORY_LIMIT>` — Log memory limit in bytes (max 2 MiB). Oldest logs are purged when usage exceeds this value. Supports suffixes: kb, kib, mb, mib (e.g. "2mib" or "256kib"). Canister default is 4096 bytes
 * `--log-visibility <LOG_VISIBILITY>` — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-log-viewer, --remove-log-viewer, and --set-log-viewer. Use --add-log-viewer / --set-log-viewer to grant access to specific principals instead
-* `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list
-* `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list
+* `--add-log-viewer <ADD_LOG_VIEWER>` — Add a principal to the allowed log viewers list.
+
+   Rejected while log visibility is public, which has no viewers list to add to; use --set-log-viewer to replace the public policy with a list.
+* `--remove-log-viewer <REMOVE_LOG_VIEWER>` — Remove a principal from the allowed log viewers list.
+
+   Rejected while log visibility is public, which has no viewers list to remove from; use --log-visibility controllers to revoke public access.
 * `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
 * `--status-visibility <STATUS_VISIBILITY>` — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer. Use --add-status-viewer / --set-status-viewer to grant access to specific principals instead
-* `--add-status-viewer <ADD_STATUS_VIEWER>` — Add a principal to the allowed status viewers list
-* `--remove-status-viewer <REMOVE_STATUS_VIEWER>` — Remove a principal from the allowed status viewers list
+* `--add-status-viewer <ADD_STATUS_VIEWER>` — Add a principal to the allowed status viewers list.
+
+   Rejected while status visibility is public, which has no viewers list to add to; use --set-status-viewer to replace the public policy with a list.
+* `--remove-status-viewer <REMOVE_STATUS_VIEWER>` — Remove a principal from the allowed status viewers list.
+
+   Rejected while status visibility is public, which has no viewers list to remove from; use --status-visibility controllers to revoke public access.
 * `--set-status-viewer <SET_STATUS_VIEWER>` — Replace the allowed status viewers list with the specified principals
 * `--add-environment-variable <ADD_ENVIRONMENT_VARIABLE>` — Add a canister environment variable in KEY=VALUE format
 * `--remove-environment-variable <REMOVE_ENVIRONMENT_VARIABLE>` — Remove a canister environment variable by key name

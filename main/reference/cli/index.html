@@ -826,7 +826,7 @@ Raw binary (only valid for file references)</li>
 </ul>
 <h2 id="icp-canister-status"><code>icp canister status</code></h2>
 <p>Show the status of canister(s).</p>
-<p>By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.</p>
+<p>By default this queries the status endpoint of the management canister. If the caller may not read the status, falls back on fetching public information from the state tree.</p>
 <p><strong>Usage:</strong> <code>icp canister status [OPTIONS] [CANISTER]</code></p>
 <p>Examples:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="plaintext"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53"># Status of all canisters in the local environment</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">icp canister status</span></div></div><div class="ec-line"><div class="code">

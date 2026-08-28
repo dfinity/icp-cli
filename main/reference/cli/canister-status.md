@@ -2,7 +2,7 @@
 
 Show the status of canister(s).
 
-By default this queries the status endpoint of the management canister. If the caller is not a controller, falls back on fetching public information from the state tree.
+By default this queries the status endpoint of the management canister. If the caller may not read the status, falls back on fetching public information from the state tree.
 
 **Usage:** `icp canister status [OPTIONS] [CANISTER]`
 

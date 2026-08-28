@@ -15,7 +15,10 @@ use tracing::debug;
 use icp::operations::{proxy::UpdateOrProxyError, proxy_management};
 
 use crate::{
-    commands::{args, canister::format_visibility},
+    commands::{
+        args,
+        canister::{format_controllers, format_visibility},
+    },
     options,
 };
 
@@ -471,7 +474,11 @@ fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, an
     }
     writeln!(&mut buf, "Canister Status Report:")?;
 
-    writeln!(&mut buf, "  Controllers: {}", result.controllers.join(", "))?;
+    writeln!(
+        &mut buf,
+        "{}",
+        format_controllers(result.controllers.iter().cloned(), "  ")
+    )?;
     writeln!(
         &mut buf,
         "  Module hash: {}",
@@ -494,8 +501,8 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     let settings = &result.settings;
     writeln!(
         &mut buf,
-        "  Controllers: {}",
-        settings.controllers.join(", ")
+        "{}",
+        format_controllers(settings.controllers.iter().cloned(), "  ")
     )?;
     writeln!(
         &mut buf,
@@ -537,12 +544,12 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     writeln!(
         &mut buf,
         "  Log visibility: {}",
-        format_visibility(&settings.log_visibility.0, "  ")
+        format_visibility(&settings.log_visibility.0, "log viewer", "  ")
     )?;
     writeln!(
         &mut buf,
         "  Status visibility: {}",
-        format_visibility(&settings.status_visibility.0, "  ")
+        format_visibility(&settings.status_visibility.0, "status viewer", "  ")
     )?;
 
     // Display environment variables configured for this canister

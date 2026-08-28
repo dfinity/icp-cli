@@ -75,7 +75,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str()).not()));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_alice.as_str()).not()));
 
     // Add controller
     ctx.icp()
@@ -106,7 +106,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str())));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_alice.as_str())));
 
     // Add and remove controller.
     ctx.icp()
@@ -140,7 +140,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -174,7 +174,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_bob.as_str()).not()));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_bob.as_str()).not()));
 
     // Add multiple controllers
     ctx.icp()
@@ -208,7 +208,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -245,7 +245,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str()).not()),
         );
@@ -572,7 +572,9 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(contains("Log visibility: Allowed viewers list is empty"));
+        .stdout(contains(
+            "Log visibility: Allowed viewers\n  log viewer list is empty",
+        ));
 
     // Add multiple log viewers.
     ctx.icp()
@@ -642,7 +644,9 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(contains("Log visibility: Allowed viewers list is empty"));
+        .stdout(contains(
+            "Log visibility: Allowed viewers\n  log viewer list is empty",
+        ));
 
     // Set multiple log viewers.
     ctx.icp()
@@ -954,7 +958,7 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains("Environment variables:"))
                 .and(contains("PUBLIC_CANISTER_ID:my-canister")),
         );
@@ -1397,7 +1401,7 @@ async fn canister_settings_sync_log_visibility() {
     confirm_log_visibility(
         &ctx,
         &project_dir,
-        "Allowed viewers\n  viewer: 2vxsx-fae\n  viewer: aaaaa-aa",
+        "Allowed viewers\n  log viewer: 2vxsx-fae\n  log viewer: aaaaa-aa",
     );
 
     // status_visibility takes the same manifest forms, and a single sync has to
@@ -1438,7 +1442,7 @@ async fn canister_settings_sync_log_visibility() {
         .assert()
         .success()
         .stdout(contains(
-            "Status visibility: Allowed viewers\n  viewer: 2vxsx-fae\n  viewer: aaaaa-aa",
+            "Status visibility: Allowed viewers\n  status viewer: 2vxsx-fae\n  status viewer: aaaaa-aa",
         ));
 }
 

@@ -6,7 +6,10 @@ use std::fmt::Write;
 
 use icp::operations::proxy_management;
 
-use crate::commands::{args::CanisterCommandArgs, canister::format_visibility};
+use crate::commands::{
+    args::CanisterCommandArgs,
+    canister::{format_controllers, format_visibility},
+};
 
 /// Show the settings of a canister.
 ///
@@ -67,12 +70,8 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     let mut buf = String::new();
     writeln!(
         &mut buf,
-        "Controllers: {}",
-        s.controllers
-            .iter()
-            .map(|p| p.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
+        "{}",
+        format_controllers(s.controllers.iter().map(|p| p.to_string()), "")
     )
     .unwrap();
     writeln!(&mut buf, "Compute allocation: {}", s.compute_allocation).unwrap();
@@ -96,13 +95,13 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     writeln!(
         &mut buf,
         "Log visibility: {}",
-        format_visibility(&s.log_visibility.clone().into(), "")
+        format_visibility(&s.log_visibility.clone().into(), "log viewer", "")
     )
     .unwrap();
     writeln!(
         &mut buf,
         "Status visibility: {}",
-        format_visibility(&s.status_visibility.clone().into(), "")
+        format_visibility(&s.status_visibility.clone().into(), "status viewer", "")
     )
     .unwrap();
 

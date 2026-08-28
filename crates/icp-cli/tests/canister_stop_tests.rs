@@ -79,7 +79,7 @@ async fn canister_stop() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Stopped"))
-                .and(contains("Controllers: 2vxsx-fae")),
+                .and(contains("controller: 2vxsx-fae")),
         );
 }
 

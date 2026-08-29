@@ -164,6 +164,11 @@ impl CreateArgs {
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
             log_visibility: default.settings.log_visibility.clone().map(|v| v.0.into()),
+            snapshot_visibility: default
+                .settings
+                .snapshot_visibility
+                .clone()
+                .map(|v| v.0.into()),
             status_visibility: default
                 .settings
                 .status_visibility
@@ -259,6 +264,7 @@ impl CreateArgs {
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
             log_visibility: None,
+            snapshot_visibility: None,
             status_visibility: None,
             memory_allocation: self
                 .settings

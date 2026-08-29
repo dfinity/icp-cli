@@ -100,6 +100,12 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     .unwrap();
     writeln!(
         &mut buf,
+        "Snapshot visibility: {}",
+        format_visibility(&s.snapshot_visibility.clone().into(), "snapshot viewer", "")
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
         "Status visibility: {}",
         format_visibility(&s.status_visibility.clone().into(), "status viewer", "")
     )

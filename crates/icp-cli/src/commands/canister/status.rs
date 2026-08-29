@@ -377,6 +377,7 @@ struct SerializableCanisterSettings {
     wasm_memory_threshold: String,
     log_memory_limit: String,
     log_visibility: SerializableVisibility,
+    snapshot_visibility: SerializableVisibility,
     status_visibility: SerializableVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
@@ -436,6 +437,9 @@ impl SerializableCanisterSettings {
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
             log_memory_limit: settings.log_memory_limit.to_string(),
             log_visibility: SerializableVisibility(settings.log_visibility.clone().into()),
+            snapshot_visibility: SerializableVisibility(
+                settings.snapshot_visibility.clone().into(),
+            ),
             status_visibility: SerializableVisibility(settings.status_visibility.clone().into()),
             environment_variables: settings.environment_variables.clone(),
         }
@@ -545,6 +549,11 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         &mut buf,
         "  Log visibility: {}",
         format_visibility(&settings.log_visibility.0, "log viewer", "  ")
+    )?;
+    writeln!(
+        &mut buf,
+        "  Snapshot visibility: {}",
+        format_visibility(&settings.snapshot_visibility.0, "snapshot viewer", "  ")
     )?;
     writeln!(
         &mut buf,

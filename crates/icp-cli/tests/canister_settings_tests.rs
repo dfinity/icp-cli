@@ -1278,8 +1278,12 @@ async fn canister_settings_sync() {
     confirm_wasm_memory_limit(&ctx, &project_dir, "5_368_709_120");
 }
 
+/// The three manifest forms are covered here for `log_visibility` and then, at
+/// the end, all three visibility settings are driven from one manifest in a
+/// single sync. They share a parser and a comparison, so the forms are not
+/// repeated per setting.
 #[tokio::test]
-async fn canister_settings_sync_log_visibility() {
+async fn canister_settings_sync_visibility() {
     let ctx = TestContext::new();
 
     // Setup project
@@ -1428,10 +1432,11 @@ async fn canister_settings_sync_log_visibility() {
         "Allowed viewers\n  log viewer: 2vxsx-fae\n  log viewer: aaaaa-aa",
     );
 
-    // status_visibility takes the same manifest forms, and a single sync has to
-    // apply both settings: either change alone would satisfy the "settings
-    // already match" check that decides whether to send an update at all.
-    let pm_with_both = formatdoc! {r#"
+    // snapshot_visibility and status_visibility take the same manifest forms,
+    // and a single sync has to apply all three: any one change alone would
+    // satisfy the "settings already match" check that decides whether to send an
+    // update at all.
+    let pm_with_all_three = formatdoc! {r#"
         canisters:
           - name: my-canister
             build:
@@ -1440,6 +1445,7 @@ async fn canister_settings_sync_log_visibility() {
                   command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
             settings:
               log_visibility: public
+              snapshot_visibility: public
               status_visibility:
                 allowed_viewers:
                   - "aaaaa-aa"
@@ -1449,7 +1455,7 @@ async fn canister_settings_sync_log_visibility() {
         {ENVIRONMENT_RANDOM_PORT}
     "#};
 
-    write_string(&project_dir.join("icp.yaml"), &pm_with_both)
+    write_string(&project_dir.join("icp.yaml"), &pm_with_all_three)
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
     confirm_log_visibility(&ctx, &project_dir, "Public");
@@ -1465,8 +1471,47 @@ async fn canister_settings_sync_log_visibility() {
         ])
         .assert()
         .success()
+        .stdout(
+            contains("Snapshot visibility: Public").and(contains(
+                "Status visibility: Allowed viewers\n  status viewer: 2vxsx-fae\n  status viewer: aaaaa-aa",
+            )),
+        );
+
+    // And the allowed-viewers form drives snapshot_visibility too, which is the
+    // one manifest form that goes through the shared parser's map branch.
+    let pm_with_snapshot_viewers = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              snapshot_visibility:
+                allowed_viewers:
+                  - "aaaaa-aa"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm_with_snapshot_viewers)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
         .stdout(contains(
-            "Status visibility: Allowed viewers\n  status viewer: 2vxsx-fae\n  status viewer: aaaaa-aa",
+            "Snapshot visibility: Allowed viewers\n  snapshot viewer: aaaaa-aa",
         ));
 }
 
@@ -1699,6 +1744,246 @@ async fn canister_settings_update_status_visibility() {
     );
 }
 
+/// Drives the `--*-snapshot-viewer` / `--snapshot-visibility` flags against a
+/// live replica, checking each one both in `settings show` and in what it
+/// actually grants: whether a non-controller may list the canister's snapshots.
+///
+/// The flag-resolution matrix itself is unit-tested in
+/// `commands::canister::settings::update`; what this adds is that clap wires the
+/// flags to the right group and that the replica honours the result.
+#[tokio::test]
+async fn canister_settings_update_snapshot_visibility() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    fn update(ctx: &TestContext, project_dir: &Path, args: &[&str]) -> assert_cmd::assert::Assert {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .success()
+    }
+
+    fn update_fails(
+        ctx: &TestContext,
+        project_dir: &Path,
+        args: &[&str],
+    ) -> assert_cmd::assert::Assert {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .failure()
+    }
+
+    fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "settings",
+                "show",
+                "my-canister",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success()
+    }
+
+    /// `snapshot list` as alice, who is not a controller. The call is one of the
+    /// three the setting gates, so it either returns a list or is rejected.
+    fn snapshots_as_alice(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "snapshot",
+                "list",
+                "my-canister",
+                "--identity",
+                "alice",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+    }
+
+    // The default is controllers, reported alongside the other two settings.
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Controllers")
+            .and(contains("Log visibility: Controllers"))
+            .and(contains("Status visibility: Controllers")),
+    );
+    snapshots_as_alice(&ctx, &project_dir).failure();
+
+    // --add-snapshot-viewer grants it to alice, relative to the current list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--add-snapshot-viewer", principal_alice.as_str()],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Allowed viewers").and(contains(principal_alice.as_str())),
+    );
+    snapshots_as_alice(&ctx, &project_dir).success();
+
+    // Add and remove in one call, again relative to the current list. Alice
+    // loses access.
+    update(
+        &ctx,
+        &project_dir,
+        &[
+            "--add-snapshot-viewer",
+            principal_bob.as_str(),
+            "--remove-snapshot-viewer",
+            principal_alice.as_str(),
+        ],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Allowed viewers")
+            .and(contains(principal_bob.as_str()))
+            .and(contains(principal_alice.as_str()).not()),
+    );
+    snapshots_as_alice(&ctx, &project_dir).failure();
+
+    // --set-snapshot-viewer replaces the list outright.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-snapshot-viewer", principal_alice.as_str()],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Allowed viewers")
+            .and(contains(principal_alice.as_str()))
+            .and(contains(principal_bob.as_str()).not()),
+    );
+    snapshots_as_alice(&ctx, &project_dir).success();
+
+    // Public grants it to everyone, and leaves the other two settings alone.
+    update(&ctx, &project_dir, &["--snapshot-visibility", "public"]);
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Public")
+            .and(contains("Log visibility: Controllers"))
+            .and(contains("Status visibility: Controllers")),
+    );
+    snapshots_as_alice(&ctx, &project_dir).success();
+
+    // A relative viewer edit has no list to be relative to while public, and is
+    // refused rather than silently revoking public access.
+    update_fails(
+        &ctx,
+        &project_dir,
+        &["--add-snapshot-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Snapshot visibility is currently public, so there is no allowed viewers list for --add-snapshot-viewer to edit",
+    ));
+    update_fails(
+        &ctx,
+        &project_dir,
+        &["--remove-snapshot-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains("--remove-snapshot-viewer"));
+    // Refused, so the canister is untouched and alice still lists snapshots.
+    snapshots_as_alice(&ctx, &project_dir).success();
+
+    // Stating the list outright is allowed, and warns about what it revokes.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-snapshot-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Snapshot visibility is currently public; listing allowed viewers revokes access for everyone else",
+    ));
+    snapshots_as_alice(&ctx, &project_dir).failure();
+
+    // Removing the last viewer leaves the controllers alone with it.
+    update(
+        &ctx,
+        &project_dir,
+        &["--remove-snapshot-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Snapshot visibility is left with no allowed viewers; only the controllers keep access",
+    ));
+
+    // Revoking it outright.
+    update(
+        &ctx,
+        &project_dir,
+        &["--snapshot-visibility", "controllers"],
+    );
+    snapshots_as_alice(&ctx, &project_dir).failure();
+
+    // An update naming no visibility group must leave all three alone, rather
+    // than resetting them to an empty allowed-viewers list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-snapshot-viewer", principal_alice.as_str()],
+    );
+    update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
+    confirm(&ctx, &project_dir).stdout(
+        contains("Snapshot visibility: Allowed viewers")
+            .and(contains(principal_alice.as_str()))
+            .and(contains("Log visibility: Controllers"))
+            .and(contains("Status visibility: Controllers")),
+    );
+}
+
 #[tokio::test]
 async fn canister_settings_sync_through_proxy() {
     let ctx = TestContext::new();
@@ -1874,6 +2159,7 @@ async fn canister_settings_show() {
                 .and(contains(r#""wasm_memory_threshold""#))
                 .and(contains(r#""log_memory_limit""#))
                 .and(contains(r#""log_visibility""#))
+                .and(contains(r#""snapshot_visibility""#))
                 .and(contains(r#""status_visibility""#))
                 .and(contains(r#""environment_variables""#)),
         );

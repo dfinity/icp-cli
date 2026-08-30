@@ -953,3 +953,86 @@ async fn test_get_agent_explicit_environment_inside_project() {
     // Should use the network from the "test" environment (which is "staging")
     assert_eq!(agent.read_root_key(), staging_root_key);
 }
+
+/// The canister must come back as the *environment* configures it. Consolidation
+/// layers an environment's `settings:` overrides — the root's, and each vendored
+/// member's for its own environments — onto a clone of the base record, so the
+/// base one still holds the pre-override settings. `icp canister settings sync`
+/// writes whatever this hands back.
+#[tokio::test]
+async fn get_canister_for_env_returns_the_environments_settings_not_the_base() {
+    let mut project = MockProjectLoader::minimal().project;
+
+    // The base record holds the pre-override settings...
+    project
+        .canisters
+        .get_mut("backend")
+        .unwrap()
+        .1
+        .settings
+        .environment_variables = None;
+
+    // ...while the environment holds the override declared for it.
+    let overridden = HashMap::from([("API_KEY".to_string(), "from-the-environment".to_string())]);
+    project
+        .environments
+        .get_mut("default")
+        .unwrap()
+        .canisters
+        .get_mut("backend")
+        .unwrap()
+        .1
+        .settings
+        .environment_variables = Some(overridden.clone());
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::new(project)),
+        ..Context::mocked()
+    };
+
+    let (_, canister) = ctx
+        .get_canister_and_path_for_env(
+            "backend",
+            &EnvironmentSelection::Named("default".to_string()),
+        )
+        .await
+        .expect("backend is declared in the default environment");
+
+    assert_eq!(canister.settings.environment_variables, Some(overridden));
+}
+
+/// A canister the project declares but the selected environment does not is
+/// still reported as missing from that environment, not silently served from
+/// the project's base map.
+#[tokio::test]
+async fn get_canister_for_env_rejects_a_canister_the_environment_omits() {
+    let mut project = MockProjectLoader::minimal().project;
+    project
+        .environments
+        .get_mut("default")
+        .unwrap()
+        .canisters
+        .shift_remove("backend");
+
+    let ctx = Context {
+        project: Arc::new(MockProjectLoader::new(project)),
+        ..Context::mocked()
+    };
+
+    let error = ctx
+        .get_canister_and_path_for_env(
+            "backend",
+            &EnvironmentSelection::Named("default".to_string()),
+        )
+        .await
+        .expect_err("backend is not in the default environment");
+
+    assert!(
+        matches!(
+            &error,
+            GetEnvCanisterError::CanisterNotInEnv { canister_name, environment_name }
+                if canister_name == "backend" && environment_name == "default"
+        ),
+        "unexpected error: {error}"
+    );
+}

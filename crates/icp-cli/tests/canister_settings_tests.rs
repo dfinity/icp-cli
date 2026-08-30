@@ -1661,3 +1661,114 @@ async fn canister_settings_show_not_a_controller() {
         .success()
         .stdout(contains(principal_alice.as_str()));
 }
+
+/// `settings sync` applies the settings the *environment* declares, not the
+/// canister's base settings. Consolidation layers an environment's `settings:`
+/// override onto a clone of the base record, so reading the base record syncs
+/// pre-override settings — and for a variable declared only in the override,
+/// syncs nothing at all.
+#[tokio::test]
+async fn canister_settings_sync_applies_environment_override() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Use vendored WASM
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // `API_KEY` is declared only by the environment override — the canister's
+    // own settings block never mentions it.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+
+        environments:
+          - name: random-environment
+            network: random-network
+            settings:
+              my-canister:
+                environment_variables:
+                  API_KEY: from-the-environment
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    // Start network
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // Deploy project
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // Drop the variable on-canister, so only `settings sync` can put it back.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--remove-environment-variable",
+            "API_KEY",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("API_KEY").not());
+
+    // Sync must restore it from the environment override.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("API_KEY: from-the-environment"));
+}

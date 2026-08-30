@@ -249,27 +249,35 @@ impl Context {
         }
     }
 
+    /// The canister as it is configured *in this environment*.
+    ///
+    /// The record comes from the environment's own canister map, not from
+    /// [`crate::Project::canisters`]: consolidation layers the environment's `settings:`
+    /// overrides — the root's, and each vendored member's for its own
+    /// environments — onto a clone of the base record, so the base one still
+    /// carries the pre-override settings. Reading it here would silently apply
+    /// the wrong settings for every canister an environment overrides.
     pub async fn get_canister_and_path_for_env(
         &self,
         canister_name: &str,
         environment: &EnvironmentSelection,
     ) -> Result<(PathBuf, Canister), GetEnvCanisterError> {
         let p = self.project.load().await?;
-        let Some((path, canister)) = p.get_canister(canister_name) else {
+        if p.get_canister(canister_name).is_none() {
             return CanisterNotFoundInProjectSnafu {
                 canister_name: canister_name.to_owned(),
             }
             .fail();
-        };
+        }
 
         let env = self.get_environment(environment).await?;
-        if !env.contains_canister(canister_name) {
+        let Some((path, canister)) = env.canisters.get(canister_name) else {
             return CanisterNotInEnvSnafu {
                 canister_name: canister_name.to_owned(),
                 environment_name: environment.name().to_owned(),
             }
             .fail();
-        }
+        };
         Ok((path.clone(), canister.clone()))
     }
 

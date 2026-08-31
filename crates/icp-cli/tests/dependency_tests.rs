@@ -2,7 +2,11 @@ use indoc::formatdoc;
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
-use icp::{fs::write_string, prelude::*};
+use icp::{
+    fs::{read_to_string, write_string},
+    prelude::*,
+};
+use std::collections::BTreeMap;
 
 mod common;
 
@@ -523,4 +527,151 @@ async fn deploy_with_shared_dependency_dedups_to_one_instance() {
                     .and(contains(openemail_id.clone())),
             );
     }
+}
+
+/// The canister id store the CLI keeps for `env` under `project_dir`.
+fn ids_store_path(project_dir: &Path, env: &str) -> PathBuf {
+    for sub in ["cache", "data"] {
+        let p = project_dir.join(format!(".icp/{sub}/mappings/{env}.ids.json"));
+        if p.exists() {
+            return p;
+        }
+    }
+    panic!("no canister id store for environment '{env}' under {project_dir}/.icp");
+}
+
+/// A binding whose target has no id in the store must not unwire the canister.
+/// A deploy scoped to one canister cannot recompute an id it cannot see — the
+/// dependency was deployed from another project root, or lies outside this
+/// run's scope — so it keeps the id already stamped and says why, instead of
+/// replacing the canister's variables with a set that silently omits it.
+#[tokio::test]
+async fn scoped_deploy_keeps_a_dependency_id_it_cannot_resolve() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    std::fs::create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    let dep_manifest = formatdoc! {r#"
+        canisters:
+          - name: backend
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        environments:
+          - name: random-environment
+    "#};
+    write_string(&dep_dir.join("icp.yaml"), &dep_manifest)
+        .expect("failed to write dependency manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: app
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        dependencies:
+          - name: openemail
+            path: ./vendor/openemail
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(200 * TRILLION);
+
+    // A full workspace deploy stamps the real dependency id.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    let assert = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "--environment",
+            "random-environment",
+            "vendor/openemail:backend",
+            "--id-only",
+        ])
+        .assert()
+        .success();
+    let openemail_id = String::from_utf8(assert.get_output().stdout.clone())
+        .expect("canister id should be valid utf-8")
+        .trim()
+        .to_string();
+    assert!(
+        !openemail_id.is_empty(),
+        "expected an openemail canister id"
+    );
+
+    let stamped =
+        || contains("PUBLIC_CANISTER_ID:openemail:backend").and(contains(openemail_id.clone()));
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "app",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(stamped());
+
+    // Drop the dependency from the id store this run reads — the state a service
+    // deployed from its own project root, or a fresh checkout, is in.
+    let store = ids_store_path(&project_dir, "random-environment");
+    let mut ids: BTreeMap<String, String> =
+        serde_json::from_str(&read_to_string(&store).expect("failed to read the id store"))
+            .expect("the id store should map canister names to principals");
+    ids.remove("vendor/openemail:backend")
+        .expect("the dependency should be in the store");
+    write_string(
+        &store,
+        &serde_json::to_string(&ids).expect("failed to serialize the id store"),
+    )
+    .expect("failed to write the id store");
+
+    // Re-deploying just the app cannot recompute the id, and says so...
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "app", "--environment", "random-environment"])
+        .assert()
+        .success()
+        .stderr(
+            contains("vendor/openemail:backend")
+                .and(contains("PUBLIC_CANISTER_ID:openemail:backend")),
+        );
+
+    // ...so it keeps the id already stamped, rather than dropping the variable.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "app",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(stamped());
 }

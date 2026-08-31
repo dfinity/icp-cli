@@ -3,12 +3,14 @@ use std::collections::{BTreeMap, HashSet};
 use crate::Canister;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
-use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, EnvironmentVariable, UpdateSettingsArgs,
+};
 use icp_events::TaskOutcome;
 
 use crate::operations::task::{Reporter, Task};
-use snafu::Snafu;
-use tracing::error;
+use snafu::{ResultExt, Snafu};
+use tracing::{error, warn};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -21,6 +23,12 @@ pub enum BindingEnvVarsOperationError {
         canister_names: Vec<String>,
     },
 
+    #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
+    FetchCurrentSettings {
+        source: UpdateOrProxyError,
+        canister: Principal,
+    },
+
     #[snafu(transparent)]
     UpdateOrProxy { source: UpdateOrProxyError },
 }
@@ -31,18 +39,64 @@ pub struct SetBindingEnvVarsManyError {
     names: Vec<String>,
 }
 
+/// The environment-variable namespace the project's bindings are stamped into.
+const BINDING_PREFIX: &str = "PUBLIC_CANISTER_ID:";
+
+/// Write a canister's environment variables: the ones its manifest declares,
+/// with the ids it is wired to stamped over them.
+///
+/// `unresolved` names the bindings this run could not compute, as
+/// `(variable, referenced canister)`. Their current values are carried over,
+/// because the update below replaces the canister's whole variable list, and an
+/// unresolved binding means "no id in *this* store" — the dependency was
+/// deployed from another project root, or lies outside this command's scope —
+/// not "this canister is not wired to it". Without that, a deploy scoped to one
+/// service would delete the id a full workspace deploy had stamped, leaving the
+/// canister to read an empty value with nothing said anywhere.
 pub async fn set_env_vars_for_canister(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: &Principal,
     canister_info: &Canister,
     binding_vars: &[(String, String)],
+    unresolved: &[(String, String)],
 ) -> Result<(), BindingEnvVarsOperationError> {
     let mut environment_variables = canister_info
         .settings
         .environment_variables
         .to_owned()
         .unwrap_or_default();
+
+    // Only an unresolved binding needs the canister's current state, so the
+    // common path still writes without reading first.
+    if !unresolved.is_empty() {
+        let status = proxy_management::canister_status(
+            agent,
+            proxy,
+            CanisterIdRecord {
+                canister_id: *canister_id,
+            },
+        )
+        .await
+        .context(FetchCurrentSettingsSnafu {
+            canister: *canister_id,
+        })?;
+
+        for (variable, _) in unresolved {
+            let Some(current) = status
+                .settings
+                .environment_variables
+                .iter()
+                .find(|v| &v.name == variable)
+            else {
+                continue;
+            };
+            // A value the manifest declares still outranks a stamped one.
+            environment_variables
+                .entry(variable.to_owned())
+                .or_insert_with(|| current.value.clone());
+        }
+    }
 
     // inject the ids of the other canisters
     for (k, v) in binding_vars.iter() {
@@ -120,22 +174,35 @@ pub async fn set_binding_env_vars_many(
         // their aliases), resolved to the ids that exist in this environment.
         // A project without dependencies wires every canister to every sibling,
         // reproducing the previous flat behavior.
-        let binding_vars: Vec<(String, String)> = info
-            .bindings
-            .iter()
-            .filter_map(|(env_name, referenced_key)| {
-                canister_list.get(referenced_key).map(|principal| {
-                    (
-                        format!("PUBLIC_CANISTER_ID:{env_name}"),
-                        principal.to_text(),
-                    )
-                })
-            })
-            .collect();
+        //
+        // A binding whose target has no id in this environment is kept aside
+        // rather than dropped: the canister may already carry the value, and
+        // silently writing it away is how a scoped deploy used to unwire a
+        // canister from its dependency.
+        let mut binding_vars: Vec<(String, String)> = Vec::new();
+        let mut unresolved: Vec<(String, String)> = Vec::new();
+        for (env_name, referenced_key) in &info.bindings {
+            let variable = format!("{BINDING_PREFIX}{env_name}");
+            match canister_list.get(referenced_key) {
+                Some(principal) => binding_vars.push((variable, principal.to_text())),
+                None => unresolved.push((variable, referenced_key.to_owned())),
+            }
+        }
 
         let agent = agent.clone();
         futs.push_back(async move {
-            let result = set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await;
+            for (variable, referenced_key) in &unresolved {
+                warn!(
+                    "Canister '{}' is wired to '{referenced_key}', which has no id in environment \
+                     '{environment_name}'; leaving '{variable}' as it is. Deploy \
+                     '{referenced_key}' to stamp its id.",
+                    info.name
+                );
+            }
+
+            let result =
+                set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars, &unresolved)
+                    .await;
 
             match &result {
                 Ok(()) => task.finish(TaskOutcome::succeeded()),

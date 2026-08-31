@@ -584,7 +584,7 @@ Raw binary (only valid for file references)</li>
 </ul>
 <h2 id="icp-canister-settings-show"><code>icp canister settings show</code></h2>
 <p>Show the settings of a canister.</p>
-<p>Queries the canister_status endpoint of the management canister and displays only the settings fields. Requires the caller to be a controller.</p>
+<p>Queries the canister_status endpoint of the management canister and displays only the settings fields. Requires the caller to be allowed to read the canister’s status, which by default means being one of its controllers.</p>
 <p><strong>Usage:</strong> <code>icp canister settings show [OPTIONS] &#x3C;CANISTER></code></p>
 <h6 id="arguments-9"><strong>Arguments:</strong></h6>
 <ul>
@@ -659,13 +659,29 @@ Raw binary (only valid for file references)</li>
 <p><code>--log-visibility &#x3C;LOG_VISIBILITY></code> — Set log visibility to a fixed policy [possible values: controllers, public]. Conflicts with —add-log-viewer, —remove-log-viewer, and —set-log-viewer. Use —add-log-viewer / —set-log-viewer to grant access to specific principals instead</p>
 </li>
 <li>
-<p><code>--add-log-viewer &#x3C;ADD_LOG_VIEWER></code> — Add a principal to the allowed log viewers list</p>
+<p><code>--add-log-viewer &#x3C;ADD_LOG_VIEWER></code> — Add a principal to the allowed log viewers list.</p>
+<p>Rejected while log visibility is public, which has no viewers list to add to; use —set-log-viewer to replace the public policy with a list.</p>
 </li>
 <li>
-<p><code>--remove-log-viewer &#x3C;REMOVE_LOG_VIEWER></code> — Remove a principal from the allowed log viewers list</p>
+<p><code>--remove-log-viewer &#x3C;REMOVE_LOG_VIEWER></code> — Remove a principal from the allowed log viewers list.</p>
+<p>Rejected while log visibility is public, which has no viewers list to remove from; use —log-visibility controllers to revoke public access.</p>
 </li>
 <li>
 <p><code>--set-log-viewer &#x3C;SET_LOG_VIEWER></code> — Replace the allowed log viewers list with the specified principals</p>
+</li>
+<li>
+<p><code>--status-visibility &#x3C;STATUS_VISIBILITY></code> — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with —add-status-viewer, —remove-status-viewer, and —set-status-viewer. Use —add-status-viewer / —set-status-viewer to grant access to specific principals instead</p>
+</li>
+<li>
+<p><code>--add-status-viewer &#x3C;ADD_STATUS_VIEWER></code> — Add a principal to the allowed status viewers list.</p>
+<p>Rejected while status visibility is public, which has no viewers list to add to; use —set-status-viewer to replace the public policy with a list.</p>
+</li>
+<li>
+<p><code>--remove-status-viewer &#x3C;REMOVE_STATUS_VIEWER></code> — Remove a principal from the allowed status viewers list.</p>
+<p>Rejected while status visibility is public, which has no viewers list to remove from; use —status-visibility controllers to revoke public access.</p>
+</li>
+<li>
+<p><code>--set-status-viewer &#x3C;SET_STATUS_VIEWER></code> — Replace the allowed status viewers list with the specified principals</p>
 </li>
 <li>
 <p><code>--add-environment-variable &#x3C;ADD_ENVIRONMENT_VARIABLE></code> — Add a canister environment variable in KEY=VALUE format</p>

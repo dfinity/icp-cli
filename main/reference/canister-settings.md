@@ -156,6 +156,48 @@ settings:
       - "2vxsx-fae"
 ```
 
+### status_visibility
+
+Controls who can read the canister's status through the management canister's
+`canister_status` endpoint — the report `icp canister status` prints, covering
+the running state, cycles balance, memory usage, and the settings themselves.
+
+| Property | Value |
+|----------|-------|
+| Type | String or Object |
+| Values | `controllers`, `public`, or `allowed_viewers` object |
+| Default | `controllers` |
+
+```yaml
+# The canister's controllers can read the status (default)
+settings:
+  status_visibility: controllers
+
+# Anyone can read the status
+settings:
+  status_visibility: public
+
+# Specific principals can read the status, in addition to the controllers
+settings:
+  status_visibility:
+    allowed_viewers:
+      - "aaaaa-aa"
+      - "2vxsx-fae"
+```
+
+Two callers are always allowed, whatever the setting says: the administrators of
+the subnet the canister runs on, and the canister itself reading its own status.
+Unlike [`log_visibility`](#log_visibility), which grants access to the
+controllers and listed viewers alone, `controllers` here is a floor rather than
+an exhaustive list.
+
+A caller that is not allowed to read the status still sees the canister's
+controllers and module hash, which the replica publishes in the state tree and
+`icp canister status` falls back to. Granting status access does not grant any
+control over the canister.
+
+The replica accepts at most 10 principals in `allowed_viewers`.
+
 ### environment_variables
 
 Runtime environment variables accessible to the canister.
@@ -224,6 +266,7 @@ canisters:
       wasm_memory_limit: 1gib
       wasm_memory_threshold: 512mib
       log_visibility: controllers
+      status_visibility: controllers
       log_memory_limit: 2mib
       environment_variables:
         ENV: "production"

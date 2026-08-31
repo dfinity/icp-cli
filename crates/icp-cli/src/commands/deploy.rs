@@ -86,6 +86,11 @@ pub(crate) struct DeployArgs {
     #[arg(long, short)]
     pub(crate) yes: bool,
 
+    /// Prompt for the init argument fields the project's `icp_customize.yaml`
+    /// declares, instead of deploying with the manifest's `init_args` as written.
+    #[arg(long)]
+    pub(crate) customize: bool,
+
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
@@ -181,14 +186,21 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     )
     .await?;
 
-    // Collect interactive init arg customizations before the build so the user
-    // fills in all prompts upfront, uninterrupted by build output.
+    // Customization is opt-in: without `--customize`, the project's
+    // `icp_customize.yaml` is inert and every canister deploys with the
+    // manifest's `init_args` as written. `--yes` is unrelated — it suppresses
+    // confirmations, not the answers this collects.
+    //
+    // The prompts run before the build so the user fills them in upfront,
+    // uninterrupted by build output.
     //
     // A workspace declares its customizations once, in the root project's file:
     // options address a member's canister through its store key, so the file is
     // read from the workspace root even for a member-scoped deploy, and options
     // outside this deploy's scope are dropped by `prompt_customizations`.
-    let customize_overrides: Arc<HashMap<String, IDLArgs>> = {
+    let customize_overrides: Arc<HashMap<String, IDLArgs>> = if !args.customize {
+        Arc::new(HashMap::new())
+    } else {
         let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
         let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
         let workspace_canisters: Vec<&str> = project.canisters.keys().map(String::as_str).collect();
@@ -197,37 +209,38 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         // is exactly the case where its options would vanish unnoticed.
         customize::warn_unread_member_customize_files(&project.dir, &workspace_canisters);
 
-        match customize::load_customize_manifest(&project.dir).map_err(|e| anyhow!(e))? {
-            None => Arc::new(HashMap::new()),
-            Some(manifest) => {
-                // Validate against the whole workspace, not just this deploy's
-                // canisters, and before the `--yes` shortcut: a mistyped project
-                // path must not pass as an option for something else's canister.
-                customize::validate_canister_refs(&manifest, &workspace_canisters, &customize_path)
-                    .map_err(|e| anyhow!(e))?;
-
-                let init_args: HashMap<String, Option<icp::InitArgs>> = cnames
-                    .iter()
-                    .map(|name| {
-                        let ia = env
-                            .get_canister_info(name)
-                            .ok()
-                            .and_then(|(_, info)| info.init_args.clone());
-                        (name.clone(), ia)
-                    })
-                    .collect();
-                Arc::new(
-                    customize::prompt_customizations(
-                        &manifest,
-                        &cnames,
-                        &init_args,
-                        args.yes,
-                        &customize_path,
-                    )
-                    .map_err(|e| anyhow!(e))?,
+        let manifest = customize::load_customize_manifest(&project.dir)
+            .map_err(|e| anyhow!(e))?
+            // `--customize` asked for prompts this project does not declare.
+            // Deploying with the manifest's args regardless would ignore the flag.
+            .ok_or_else(|| {
+                anyhow!(
+                    "`--customize` was passed, but there is no `{}` at '{}'",
+                    customize::CUSTOMIZE_FILE,
+                    project.dir
                 )
-            }
-        }
+            })?;
+
+        // Validate against the whole workspace, not just this deploy's
+        // canisters: a mistyped project path must not pass as an option for
+        // something else's canister.
+        customize::validate_canister_refs(&manifest, &workspace_canisters, &customize_path)
+            .map_err(|e| anyhow!(e))?;
+
+        let init_args: HashMap<String, Option<icp::InitArgs>> = cnames
+            .iter()
+            .map(|name| {
+                let ia = env
+                    .get_canister_info(name)
+                    .ok()
+                    .and_then(|(_, info)| info.init_args.clone());
+                (name.clone(), ia)
+            })
+            .collect();
+        Arc::new(
+            customize::prompt_customizations(&manifest, &cnames, &init_args, &customize_path)
+                .map_err(|e| anyhow!(e))?,
+        )
     };
 
     // Build the selected canisters

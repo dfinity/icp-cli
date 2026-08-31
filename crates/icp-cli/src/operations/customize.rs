@@ -568,17 +568,15 @@ fn apply_answer(
     Ok(())
 }
 
+/// Ask for every option that applies to this deploy, returning the customized
+/// init args per canister. Only called once the user has opted in with
+/// `--customize`, so it always prompts.
 pub(crate) fn prompt_customizations(
     manifest: &CustomizeManifest,
     cnames: &[String],
     init_args: &HashMap<String, Option<icp::InitArgs>>,
-    skip: bool,
     customize_path: &Path,
 ) -> Result<HashMap<String, IDLArgs>, PromptCustomizationsError> {
-    if skip {
-        return Ok(HashMap::new());
-    }
-
     let cname_set: HashSet<&str> = cnames.iter().map(String::as_str).collect();
 
     // Resolve every option against this deploy, and parse everything that can be
@@ -912,22 +910,6 @@ mod tests {
     }
 
     #[test]
-    fn prompt_skip_returns_empty() {
-        let manifest = CustomizeManifest {
-            options: vec![option_for("c")],
-        };
-        let result = prompt_customizations(
-            &manifest,
-            &["c".to_string()],
-            &HashMap::new(),
-            true,
-            Path::new("icp_customize.yaml"),
-        )
-        .unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
     fn load_missing_file_returns_none() {
         let tmp = Utf8TempDir::new().unwrap();
         let result = load_customize_manifest(tmp.path()).unwrap();
@@ -970,7 +952,6 @@ options:
             &manifest,
             &["c".to_string()],
             &init_args,
-            false,
             Path::new("icp_customize.yaml"),
         )
         .unwrap_err();
@@ -994,7 +975,6 @@ options:
             &manifest,
             &["b".to_string()],
             &HashMap::new(),
-            false,
             Path::new("icp_customize.yaml"),
         )
         .unwrap();
@@ -1325,7 +1305,6 @@ options:
             &manifest,
             &["c".to_string()],
             &HashMap::new(),
-            false,
             Path::new(CUSTOMIZE_FILE),
         )
         .unwrap();

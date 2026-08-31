@@ -471,7 +471,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
     }
 
-    // Handle log and status visibility.
+    // Handle log, snapshot and status visibility.
+
     let log_visibility = args
         .log_visibility
         .as_ref()

@@ -133,6 +133,7 @@ async fn sync_canister(
     resolver: Arc<dyn RemoteResourceResolve>,
     agent: Agent,
     canister_path: PathBuf,
+    project_dir: PathBuf,
     canister_id: Principal,
     canister_info: &Canister,
     environment: &str,
@@ -143,6 +144,7 @@ async fn sync_canister(
 ) -> Result<Vec<String>, SyncCanisterError> {
     let ctx = SyncStepContext {
         canister_path,
+        project_dir,
         canister_id,
         canister_name: canister_info.name.clone(),
         environment: environment.to_owned(),
@@ -167,6 +169,7 @@ pub(crate) async fn sync_many(
     resolver: Arc<dyn RemoteResourceResolve>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
+    project_dir: PathBuf,
     environment: String,
     network: String,
     canister_ids: BTreeMap<String, Principal>,
@@ -186,6 +189,7 @@ pub(crate) async fn sync_many(
             let environment = environment.clone();
             let network = network.clone();
             let canister_ids = canister_ids.clone();
+            let project_dir = project_dir.clone();
 
             async move {
                 let sync_result = sync_canister(
@@ -193,6 +197,7 @@ pub(crate) async fn sync_many(
                     resolver,
                     agent,
                     canister_path,
+                    project_dir,
                     cid,
                     &canister_info,
                     &environment,

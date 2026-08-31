@@ -3,7 +3,7 @@ title: Sync Plugins
 description: How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.
 ---
 
-A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced (plus the project's canister ID table), and lets it make canister calls, read canister metadata, and read declared files — nothing more. By default it can call only the canister being synced; it may call other canisters it lists in the sync step's `canisters:` list.
+A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced (plus the project's canister ID table), and lets it make canister calls, read canister metadata, set canister environment variables, and read declared files — nothing more. By default it can reach only the canister being synced; it may reach other canisters it lists in the sync step's `canisters:` list.
 
 You declare a sync plugin in your manifest with a `plugin` sync step. For the exact manifest fields, see [Plugin Sync in the Configuration Reference](../reference/configuration.md#plugin-sync). To author your own plugin, see [Writing a Sync Plugin](../guides/writing-sync-plugins.md).
 
@@ -15,7 +15,7 @@ Sync plugins fill that gap. A plugin is:
 
 - **Portable** — written in any language that compiles to `wasm32-wasip2`, distributed as one `.wasm` file (local path or remote URL + `sha256`).
 - **Sandboxed** — it cannot open network sockets, spawn subprocesses, or touch the filesystem outside the directories you explicitly grant it.
-- **Scoped by declaration** — it can call update and query methods on the canister being synced, plus any canister listed in the manifest's `canisters:` list. A call to a canister that was not listed is rejected by the host.
+- **Scoped by declaration** — it can call update and query methods on, read metadata from, and set environment variables on the canister being synced, plus any canister listed in the manifest's `canisters:` list. A request aimed at a canister that was not listed is rejected by the host.
 
 The most common way to get a sync plugin is through a [recipe](recipes.md). For example, the `@dfinity/asset-canister` recipe emits a `plugin` sync step (starting with `v2.2.1`) that uploads your built static files to the asset canister — so for everyday frontend deployment you never write a plugin yourself.
 
@@ -38,15 +38,16 @@ icp sync
        │    canister-ids       = <name → principal table for the environment>
        │    dirs/files/fields  = what you declared in the manifest
        │
-       └─ plugin makes canister-call({ target, ... }) (× N)
-          and canister-metadata-section({ target, name })
+       └─ plugin makes canister-call({ target, ... }) (× N),
+          canister-metadata-section({ target, name }), and
+          canister-set-environment-variable({ target, name, value })
             target = host (the canister being synced), or a
                      canister from `canisters:` by name
 ```
 
 ## The Plugin Interface
 
-The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides two imports (`canister-call` and `canister-metadata-section`); the plugin provides one export (`exec`):
+The interface is defined as a [WIT](https://component-model.bytecodealliance.org/design/wit.html) world. The host provides three imports (`canister-call`, `canister-metadata-section`, and `canister-set-environment-variable`); the plugin provides one export (`exec`):
 
 ```wit
 world sync-plugin {
@@ -55,6 +56,9 @@ world sync-plugin {
 
     // Host import: read a metadata section from one of those same canisters.
     import canister-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
+
+    // Host import: set an environment variable on one of those same canisters.
+    import canister-set-environment-variable: func(req: set-environment-variable-request) -> result<_, string>;
 
     // Plugin export: run the sync step.
     export exec: func(input: sync-exec-input) -> result<_, string>;
@@ -78,7 +82,9 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
-Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
+Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject.
+
+Every canister the subproject being synced can name for itself is additionally listed under that name, so a plugin looks a canister up by the name that subproject's own manifest uses. For a canister in `services/crm`, that means its siblings under their bare local names, and the canisters of its own dependencies under keys relative to it — `services/crm/vendor/ledger:ledger` is also listed as `vendor/ledger:ledger`. Those are the names the subproject uses when it is deployed on its own, so a plugin written against them keeps working once the subproject is vendored into a workspace. Such a name always means what the subproject means by it: a canister elsewhere in the workspace whose key is spelled the same way is not listed under it for that sync.
 
 `dirs` and `files` each carry a `key`: the map key the entry was declared under in the manifest, or absent when `dirs:`/`files:` was written as a plain list. A key that maps to a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
 
@@ -116,6 +122,24 @@ The two routes differ in who the target sees asking, which decides whether a **p
 
 With no proxy configured, both settings read directly.
 
+### Setting an environment variable — `canister-set-environment-variable`
+
+The plugin writes one of a canister's [environment variables](../reference/environment-variables.md#canister-runtime-environment-variables) — configuration the canister's own code reads at runtime — through the `canister-set-environment-variable` import:
+
+| Request field | Meaning |
+|---------------|---------|
+| `target` | Which canister to set the variable on: `host`, or a canister declared in `canisters:` addressed by `name` — the same targets, and the same enforcement, as `canister-call` |
+| `name` | Name of the environment variable, spelled as the canister reads it |
+| `value` | Value to set it to, replacing whatever value the target has under that name |
+| `direct` | When `false` (default), the update is made by the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, it is signed by the sync identity |
+
+The target's other environment variables, and the rest of its settings, are left as they are. Setting a variable is **controller-gated**: whoever makes the update — the sync identity or the proxy, per `direct` — must control the target, the same requirement as `icp canister settings update`.
+
+Two things follow from how the management canister models environment variables, which it can only replace as a whole list:
+
+- **The update is a read-then-write, not an atomic one.** The host reads the target's current variables and writes them back with yours added. Another party's settings update that lands between the two is overwritten.
+- **A later `icp deploy` drops the variable.** Deploy rewrites each canister's variables from the manifest plus the automatic `PUBLIC_CANISTER_ID:*` bindings, without preserving what a plugin added. In the ordinary case this is invisible: deploy runs the sync phase afterwards, so a plugin that sets the variable on every sync sets it again. To have a variable survive independently of the plugin, declare it in the manifest's [`environment_variables`](../reference/canister-settings.md#environment_variables) setting instead.
+
 ### Logging — stdout and stderr
 
 The plugin's stdout and stderr are captured by the host (no logging import is needed — use ordinary `println!` / `eprintln!`):
@@ -135,7 +159,8 @@ The plugin runs with a deliberately narrow capability surface.
 - Entries may name the same directory under several keys, or name a directory inside another entry's, and the plugin is told about each entry as written. The preopens behind them are one per distinct tree: an entry nested inside another is read through the preopen covering it, which grants nothing extra.
 - Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
 - Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.
-- Paths in `dirs:`/`files:` must be relative and may not contain `..`. They also may not be — or traverse — a symlink: each declared entry is rejected if it or any of its parent components is a symlink, so a declared path cannot resolve to a target outside the canister directory. (This restriction may be relaxed later if a safe use case emerges.)
+- Paths in `dirs:`/`files:` are relative to the canister directory and may rise out of it with `..` to reach the rest of the project (`dirs: ["../shared/assets"]`). The project directory is the boundary: an entry that resolves above it — or that is absolute — is rejected before the plugin runs.
+- A declared entry may not be, or traverse, a symlink: it is rejected if it or any component it traverses below the project root is a symlink, so a declared path cannot resolve to a target outside the project. (This restriction may be relaxed later if a safe use case emerges.)
 
 ### Capabilities
 
@@ -146,7 +171,8 @@ The plugin runs with a deliberately narrow capability surface.
 | `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
 | Canister calls | yes | to the canister being synced, and to canisters declared in `canisters:` |
 | Canister metadata reads | yes | the same set of canisters as calls |
-| Environment variables / args | no | the WASI environment is empty; use `sync-exec-input.environment` |
+| Canister environment-variable writes | yes | the same set of canisters as calls; the caller must control the target |
+| The plugin's own environment variables / args | no | the WASI environment is empty; use `sync-exec-input.environment` |
 | Network sockets / DNS | blocked | treat the network as unavailable |
 | Filesystem writes | blocked | no writable preopens |
 | Spawning subprocesses | blocked | no process interface is linked |
@@ -160,7 +186,7 @@ The plugin runs with a deliberately narrow capability surface.
 | Linear memory | wasm32 address space (≤ 4 GiB) |
 | stdout / stderr per stream | 1 MiB |
 
-The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `canister-metadata-section`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `canister-metadata-section`, `canister-set-environment-variable`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
 
 ## Next Steps
 

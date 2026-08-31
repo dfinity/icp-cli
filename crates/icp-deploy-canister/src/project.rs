@@ -429,7 +429,7 @@ async fn build_manifest_canisters(
 
             let registry_recipe = match &m.instructions {
                 Instructions::BuildSync { .. } => None,
-                Instructions::Recipe { recipe } => match &recipe.recipe_type {
+                Instructions::Recipe { recipe, .. } => match &recipe.recipe_type {
                     RecipeType::Registry { .. } => Some(recipe.recipe_type.to_string()),
                     _ => None,
                 },
@@ -448,7 +448,10 @@ async fn build_manifest_canisters(
 
                     // Recipe: fetch the template through the resolver, then render
                     // and parse it into concrete steps.
-                    Instructions::Recipe { recipe } => {
+                    Instructions::Recipe {
+                        recipe,
+                        sync: extra_sync,
+                    } => {
                         let ctx = recipe::RecipeContext {
                             canister_name: m.name.clone(),
                         };
@@ -470,7 +473,13 @@ async fn build_manifest_canisters(
                             .context(CacheRecipeSnafu {
                                 recipe_type: recipe.recipe_type.clone(),
                             })?;
-                        steps
+
+                        // The manifest's own sync steps run after the recipe's.
+                        let (build, mut sync) = steps;
+                        if let Some(extra_sync) = extra_sync {
+                            sync.steps.extend(extra_sync.steps.iter().cloned());
+                        }
+                        (build, sync)
                     }
                 };
 
@@ -1399,6 +1408,134 @@ pub fn verify_sandbox(project: &Project) -> Result<(), VerifySandboxError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod recipe_sync_tests {
+    use super::*;
+    use crate::canister::recipe::{FetchedRecipe, RemoteResourceResolve, ResolveError};
+    use crate::manifest::adapter::prebuilt::SourceField;
+    use crate::manifest::canister::SyncStep;
+    use crate::manifest::recipe::Recipe;
+    use crate::sync_exec::StepProgress;
+    use crate::testutil::HostFiles;
+    use camino_tempfile::Utf8TempDir;
+
+    /// Hands back one fixed template for every recipe, without touching the
+    /// network or the cache.
+    struct FixedResolver(&'static str);
+
+    #[async_trait::async_trait]
+    impl RemoteResourceResolve for FixedResolver {
+        async fn resolve_recipe(&self, _recipe: &Recipe) -> Result<FetchedRecipe, ResolveError> {
+            Ok(FetchedRecipe {
+                template: self.0.to_owned(),
+                deferred: false,
+            })
+        }
+
+        async fn commit_recipe(
+            &self,
+            _recipe: &Recipe,
+            _fetched: &FetchedRecipe,
+        ) -> Result<(), ResolveError> {
+            Ok(())
+        }
+
+        async fn resolve_wasm(
+            &self,
+            _source: &SourceField,
+            _base_dir: &Path,
+            _sha256: Option<&str>,
+            _progress: Option<&dyn StepProgress>,
+        ) -> Result<PathBuf, ResolveError> {
+            panic!("wasm resolver should not be called in recipe sync tests");
+        }
+    }
+
+    const TEMPLATE: &str = indoc::indoc! {r#"
+        build:
+          steps:
+            - type: script
+              command: build.sh
+        sync:
+          steps:
+            - type: script
+              command: echo recipe
+    "#};
+
+    async fn consolidate(pdir: &Path) -> Result<Project, ConsolidateManifestError> {
+        let files = HostFiles;
+        let m: ProjectManifest = load_manifest(&files, &pdir.join(PROJECT_MANIFEST))
+            .await
+            .expect("failed to parse project manifest");
+        consolidate_manifest(&files, pdir, &FixedResolver(TEMPLATE), &m).await
+    }
+
+    /// The commands of a canister's sync steps, which are all script steps here.
+    fn sync_commands(p: &Project, key: &str) -> Vec<String> {
+        p.canisters
+            .get(key)
+            .expect("canister not found")
+            .1
+            .sync
+            .steps
+            .iter()
+            .map(|s| match s {
+                SyncStep::Script(adapter) => adapter.command.as_vec().join(" "),
+                other => panic!("expected a script sync step, got {other:?}"),
+            })
+            .collect()
+    }
+
+    /// A canister may add sync steps of its own on top of a recipe's; they run
+    /// after the ones the recipe renders.
+    #[tokio::test]
+    async fn manifest_sync_steps_follow_the_recipes() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+                    sync:
+                      steps:
+                        - type: script
+                          command: echo manifest
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            sync_commands(&p, "backend"),
+            ["echo recipe", "echo manifest"]
+        );
+    }
+
+    /// Without a `sync` section, a recipe canister still gets exactly the
+    /// recipe's own sync steps.
+    #[tokio::test]
+    async fn recipe_sync_steps_alone_when_manifest_has_none() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(sync_commands(&p, "backend"), ["echo recipe"]);
+    }
 }
 
 #[cfg(test)]

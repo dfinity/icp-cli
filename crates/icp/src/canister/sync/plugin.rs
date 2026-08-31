@@ -101,9 +101,10 @@ pub(super) async fn run(
         .context(ResolveWasmSnafu)?;
 
     // 2. `run_plugin` preopens the `dirs` and reads the `files` itself — both
-    //    anchored at `base_dir`, and both subject to the runtime's path-safety
-    //    checks (no escaping or symlinked paths).
+    //    anchored at `base_dir`, confined to `project_dir`, and subject to the
+    //    runtime's path-safety checks (no escaping or symlinked paths).
     let base_dir = Utf8PathBuf::from(invocation.base_dir.as_str());
+    let project_dir = Utf8PathBuf::from(invocation.project_dir.as_str());
 
     // 3. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent
@@ -113,6 +114,7 @@ pub(super) async fn run(
     let runtime_invocation = PluginInvocation {
         wasm_path,
         base_dir,
+        project_dir,
         dirs: keyed_paths(&invocation.dirs),
         files: keyed_paths(&invocation.files),
         fields: invocation.fields.clone(),

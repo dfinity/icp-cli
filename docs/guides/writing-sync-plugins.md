@@ -37,7 +37,7 @@ wit-bindgen = { version = "0.56", features = ["realloc"] }
 
 ## Generate Bindings and Implement `exec`
 
-`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `canister_metadata_section`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
+`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `canister_metadata_section`, `canister_set_environment_variable`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
 
 ```rust
 // src/lib.rs
@@ -85,7 +85,7 @@ export!(Plugin);
 A few things to note:
 
 - **You encode the arguments.** `arg` is raw Candid bytes. Encode with `candid::Encode!`; decode any response (`Vec<u8>`) with `candid::Decode!`.
-- **You choose the target.** `target: CallTarget::Host` reaches the canister being synced. To call another canister, declare it in the manifest's [`canisters:`](../reference/configuration.md#plugin-sync) list and address it with `CallTarget::Name("ledger".into())` — the name matches the entries in `input.canister_ids`. Names are the only way to reach another canister; the host resolves them per environment. The host rejects a target you did not declare.
+- **You choose the target.** `target: CallTarget::Host` reaches the canister being synced. To call another canister, declare it in the manifest's [`canisters:`](../reference/configuration.md#plugin-sync) list and address it with `CallTarget::Name("ledger".into())` — the name matches the entries in `input.canister_ids`. Names are the only way to reach another canister; the host resolves them per environment. The host rejects a target you did not declare. A name is always the one the plugin's own project uses, so hardcoding it stays correct when that project is vendored into a workspace as a subproject.
 - **`direct` and `cycles` control proxy routing.** With `direct: false`, update calls go through the [proxy canister](proxy-canister.md) when one is configured, and `cycles` can fund the forwarded call. With `direct: true`, the call always goes straight to the target. See [The Plugin Interface](../concepts/sync-plugins.md#the-plugin-interface) for the full semantics.
 
 ## Read Canister Metadata
@@ -108,6 +108,23 @@ match interface {
 ```
 
 `direct` picks who the target sees asking, which is what decides whether a *private* section is readable: a direct read is signed by the sync identity, a proxied one is made by the proxy canister on your behalf. See [Reading canister metadata](../concepts/sync-plugins.md#reading-canister-metadata--canister-metadata-section) for the full semantics.
+
+## Set a Canister Environment Variable
+
+`canister_set_environment_variable` writes one of a canister's [environment variables](../reference/environment-variables.md#canister-runtime-environment-variables) — configuration the canister reads at runtime — leaving its other variables and settings alone:
+
+```rust
+canister_set_environment_variable(&SetEnvironmentVariableRequest {
+    target: CallTarget::Host, // same targets, same rules, as canister_call
+    name: "SEEDED_BY".to_string(),
+    value: input.environment.clone(),
+    direct: false, // let the proxy make the update if one is configured
+})?;
+```
+
+The update is controller-gated, so whoever makes it must control the target: with `direct: true` that is the sync identity, with `direct: false` and a proxy configured it is the proxy canister.
+
+Set the variable on every sync rather than once. The management canister can only replace a canister's variables as a whole list, so the host reads them and writes them back with yours added — and a later `icp deploy` rewrites that list from the manifest plus the automatic `PUBLIC_CANISTER_ID:*` bindings, dropping anything a plugin added. Deploy runs the sync phase afterwards, so a plugin that always sets it always restores it. For a variable that should not depend on the plugin running, declare it in the manifest's [`environment_variables`](../reference/canister-settings.md#environment_variables) setting instead.
 
 ## Read Declared Files and Directories
 
@@ -135,7 +152,7 @@ for file in &input.files {
 
 Declaring `dirs:`/`files:` as a map instead of a list tags each entry with a `key`, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A key that maps to a list of paths yields several entries sharing that key.
 
-Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
+Open each entry at the `path` it arrives with, whatever it looks like: a manifest may declare a directory elsewhere in the project (`../shared/assets`), and the preopen carries that same spelling. Writes, and paths that escape a preopen, are rejected by the sandbox at runtime. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
 ## Read Declared Fields
 

@@ -780,6 +780,7 @@ pub async fn deploy_canister(
 
     let ctx = SyncStepContext {
         canister_path: canister_path.clone(),
+        project_dir: project.dir.clone(),
         canister_id,
         canister_name: canister.name.clone(),
         environment: environment.to_owned(),
@@ -976,6 +977,7 @@ mod tests {
     fn ctx_for(canister_id: Principal) -> SyncStepContext {
         SyncStepContext {
             canister_path: PathBuf::from("/project"),
+            project_dir: PathBuf::from("/project"),
             canister_id,
             canister_name: "backend".to_owned(),
             environment: "local".to_owned(),

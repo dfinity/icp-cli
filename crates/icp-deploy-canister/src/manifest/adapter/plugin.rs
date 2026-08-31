@@ -185,7 +185,8 @@ impl PathOrList {
 /// specific canister. It runs inside a WASI sandbox whose filesystem access
 /// is limited to the directories listed in `dirs` (preopened read-only) plus
 /// the contents of any files listed in `files` (read by the host and passed
-/// inline to the plugin).
+/// inline to the plugin). Both are written relative to the canister directory
+/// and may name anything inside the project, but nothing outside it.
 ///
 /// Example (local path):
 /// ```yaml
@@ -228,19 +229,22 @@ pub struct Adapter {
     /// Optional for `path`; required for `url`.
     pub sha256: Option<String>,
 
-    /// Directories (relative to canister directory) the plugin may read from.
-    /// Each entry must be a directory; it is made readable via WASI so the
-    /// plugin can traverse it using standard filesystem APIs. Written as a plain
-    /// list of paths, or as a map of name → path (or list of paths); the name is
-    /// surfaced to the plugin as each entry's `key`. Entries may repeat a
-    /// directory or name one inside another's — the plugin is told about each
-    /// entry as written, and reads them all.
+    /// Directories the plugin may read from, written relative to the canister
+    /// directory and confined to the project (an entry may reach elsewhere in
+    /// the project with `..`, but not out of it). Each entry must be a
+    /// directory; it is made readable via WASI so the plugin can traverse it
+    /// using standard filesystem APIs. Written as a plain list of paths, or as
+    /// a map of name → path (or list of paths); the name is surfaced to the
+    /// plugin as each entry's `key`. Entries may repeat a directory or name one
+    /// inside another's — the plugin is told about each entry as written, and
+    /// reads them all.
     pub dirs: Option<NamedPaths>,
 
-    /// Files (relative to canister directory) the host reads and passes to
-    /// the plugin as part of `sync-exec-input.files`. Written as a plain list
-    /// of paths, or as a map of name → path (or list of paths); the name is
-    /// surfaced to the plugin as each entry's `key`.
+    /// Files the host reads and passes to the plugin as part of
+    /// `sync-exec-input.files`, written relative to the canister directory and
+    /// confined to the project on the same terms as [`Self::dirs`]. Written as
+    /// a plain list of paths, or as a map of name → path (or list of paths);
+    /// the name is surfaced to the plugin as each entry's `key`.
     pub files: Option<NamedPaths>,
 
     /// Key-value fields passed to the plugin as part of `sync-exec-input.fields`.
@@ -249,13 +253,18 @@ pub struct Adapter {
     #[schemars(with = "Option<BTreeMap<String, FieldValue>>")]
     pub fields: Option<BTreeMap<String, String>>,
 
-    /// Canisters this plugin may call, or read metadata from, in addition to
-    /// the canister being synced. Each entry is a canister name resolved against
-    /// the project's canister ID table for the environment being synced (e.g.
-    /// `backend`, or a namespaced subproject canister such as
-    /// `services/open-crm:backend`). The plugin picks a target per request via
-    /// the `call-target` in its `canister-call` or `canister-metadata-section`
-    /// request; a target not listed here is rejected by the host.
+    /// Canisters this plugin may call, read metadata from, or set environment
+    /// variables on, in addition to the canister being synced. Each entry is a
+    /// canister name resolved against
+    /// the project's canister ID table for the environment being synced, written
+    /// as this project spells it: a bare local name for one of its own canisters
+    /// (e.g. `backend`), or a `<subproject>:<canister>` key for a canister of
+    /// something it depends on (e.g. `vendor/ledger:ledger`). The same spellings
+    /// hold when the project is a workspace member, so vendoring it does not
+    /// change them. The plugin picks a target per request via the `call-target`
+    /// in its `canister-call`, `canister-metadata-section`, or
+    /// `canister-set-environment-variable` request; a target not listed here is
+    /// rejected by the host.
     pub canisters: Option<Vec<String>>,
 }
 

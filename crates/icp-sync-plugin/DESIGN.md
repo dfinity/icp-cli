@@ -43,6 +43,13 @@ docs; the *reasons* behind those choices are recorded here.
   a plugin probing for an optional section, not a failure it must recognize by
   parsing error text. The host pays for that guarantee on the proxied path — see
   *Metadata reads* below.
+- **`canister-set-environment-variable` sets one variable, not a list** — the
+  management canister replaces a canister's environment variables wholesale, so
+  *some* read-modify-write has to happen; putting it in the host means a plugin
+  that wants to add one variable does not have to first learn the target's other
+  ones, which reading them itself would tell it. The cost is a round trip per
+  variable, paid by a plugin setting several. It takes the same `call-target`
+  and `direct` flag as the other two imports, for the same one mental model.
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
   canister names it knows about. It is informational only; calling still
@@ -69,7 +76,7 @@ crates/icp-sync-plugin/
   src/
     lib.rs             — public API: run_plugin(), RunPluginError
     runtime.rs         — wasmtime component setup, HostState, bindgen!, exec() call
-    path.rs            — declared-path safety checks (escapes_base, symlinks)
+    path.rs            — declared-path resolution and safety checks (project bound, symlinks)
   sync-plugin.wit      — current WIT interface, v0.2.0
   sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
   Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, ic-management-canister-types,
@@ -82,41 +89,67 @@ Public function:
 pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError>
 ```
 
-`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
-`fields`, `host_canister_id` (the canister being synced), `agent`, `proxy`,
-`identity_principal`, `environment`, `compute_limit_secs`, the exposed
-`canister_ids` table, the `callable: CallableCanisters` enforcement set, and
-`stdio`. The CLI resolves the manifest's declared `canisters:` into
+`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `project_dir`,
+`dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
+`agent`, `proxy`, `identity_principal`, `environment`, `compute_limit_secs`, the
+exposed `canister_ids` table, the `callable: CallableCanisters` enforcement set,
+and `stdio`. The CLI resolves the manifest's declared `canisters:` into
 `CallableCanisters` before calling; this crate stays free of any manifest
 knowledge.
 
 `dirs` and `files` are the manifest-relative paths (as `KeyedPath`s carrying the
 map key each was declared under, if any), straight from the adapter. The runtime
-owns *all* filesystem access anchored at `base_dir`: it preopens each `dir` from
-`base_dir.join(dir.path)` and reads each `file` from `base_dir.join(file.path)`,
-passing the contents — and the keys — inline in `SyncExecInput`. Keeping
-both inside the runtime means the path-safety logic (below) lives in one place
-and stays private to this crate — the CLI just forwards strings. The returned
+owns *all* filesystem access: it resolves each entry against `base_dir`,
+preopens each `dir` and reads each `file` from the location that resolves to,
+passing the contents — and the keys — inline in `SyncExecInput`. Keeping both
+inside the runtime means the path-safety logic (below) lives in one place and
+stays private to this crate — the CLI just forwards strings. The returned
 `Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
 `stdio`, when set, receives the rolling progress lines live.
 
-### Declared-path safety (no symlinks)
+### Declared-path safety (project-bounded, no symlinks)
 
-Declared `dirs`/`files` entries are resolved on the host *before* the WASI
-sandbox boundary, so a lexical "relative, no `..`" check is not enough on two
-counts. First, a Windows drive-relative path such as `C:foo` carries a `Prefix`
-component yet is not "absolute", so joining it would discard `base_dir`;
-`escapes_base` (in `path.rs`) rejects `..`, root, and drive-prefix components,
-mirroring the bundler's checks. Second, a declared entry that *is* a symlink —
-or that traverses a symlinked parent component — would let a preopen or a read
-resolve outside the canister directory; `first_symlink_component` walks each
-component of the declared path under `base_dir` and rejects the entry if any
-prefix is a symlink (returning the offending sub-path relative to `base_dir`, so
-errors don't leak absolute on-disk paths). Both helpers are crate-private and
-applied uniformly to `dirs` and `files`. Symlinks are forbidden outright for
-now; the restriction can be relaxed later if a safe use case emerges. (Symlinks
-*inside* a preopen that escape it are a separate concern, already rejected by
-the WASI sandbox — cap-std — at runtime.)
+An entry is written relative to `base_dir` (the canister directory) but bounded
+by `project_dir`: it may rise out of the canister directory with `..` and reach
+anything else in the project, and nothing above the project. `path.rs` resolves
+one against the other:
+
+- `base_within_root` places `base_dir` inside `project_dir` as a clean component
+  list. When `base_dir` does not lie within it — a dependency project reached by
+  an out-of-tree `path:`, which `icp project bundle` rejects but `icp sync`
+  allows — there is no project-relative position to anchor at, so `base_dir`
+  becomes its own root: exactly the rule that predated the widening, and no
+  narrower than what such a project could already reach. (This is a fallback for
+  an unanchorable base, not a tighter grant for dependencies. A dependency
+  vendored inside the workspace is bounded by the workspace root like any other
+  canister, and its manifest can in any case run arbitrary commands through a
+  `script` step.)
+- `resolve` walks the declared entry from there, resolving `.`/`..` lexically. A
+  `..` with nothing left to pop is `Escape::AboveRoot`; a root or drive-prefix
+  component is `Escape::NotRelative` — a Windows drive-relative path such as
+  `C:foo` carries a `Prefix` component yet is not "absolute", so joining it
+  would discard the base. This mirrors the bundler's checks.
+- The host path is the *resolved* location joined onto the root, never the
+  declared path joined onto `base_dir`: the latter would leave a `..` for the OS
+  to resolve through whatever `base_dir`'s own components happen to be.
+- `Resolved::first_symlink_component` then walks the resolved path under the
+  root and rejects the entry if any component is a symlink (returning the
+  offending sub-path relative to the root, so errors don't leak absolute on-disk
+  paths). An entry that stays below `base_dir` is checked only from there down —
+  the ancestry reaching the canister directory is exempt on the same grounds as
+  the root itself, since how the project reaches its own canister is not
+  something a manifest declared. An entry that rises *out* of `base_dir` is
+  checked from the root down instead: it re-anchors on an ancestor and descends
+  where the canister directory's own path never went, so a symlink in that
+  ancestry would put its target outside the project. An entry that *is* a
+  symlink, or that traverses one,
+  would otherwise let a preopen or a read resolve outside the project. Symlinks
+  are forbidden outright for now; the restriction can be relaxed later if a safe
+  use case emerges. (Symlinks *inside* a preopen that escape it are a separate
+  concern, already rejected by the WASI sandbox — cap-std — at runtime.)
+
+The guest still sees each preopen under the path the manifest wrote, `..` and
+all, so a plugin opens `dir.path` verbatim regardless of where it points.
 
 ### `HostState` and bindgen
 
@@ -162,10 +195,13 @@ exactly as `canister-call` chooses one:
   *proven* by the certificate rather than asserted. It requests `controllers`
   alongside the metadata path, since only that distinguishes a canister with no
   such section from one that was never created.
-- **Proxied** — `ProxyArgs` aimed at the management canister's
-  `canister_metadata`, so the controller check runs against the proxy. This is
-  the same shape the CLI's own management calls take through
-  `update_or_proxy_raw`; the runtime inlines it rather than depending on the CLI.
+- **Proxied** — `management_call` aimed at the management canister's
+  `canister_metadata`, so the controller check runs against the proxy.
+
+`management_call` is the shape the CLI's own management calls take through
+`update_or_proxy_raw` — proxied via `ProxyArgs`, or direct with the target as
+the effective canister ID — inlined here rather than depended on, and shared
+with the environment-variable write below.
 
 Only a certificate can make a read `none`. The management canister answers a
 section that isn't there and one private to someone else with the same
@@ -174,6 +210,27 @@ than an answer, and confirms it with a certified read before reporting absence.
 A plugin then sees one answer either way: no section by that name and no module
 installed at all are `none`; a private section it may not have, a canister that
 does not exist, and any other failure are errors.
+
+### Environment-variable writes (read-modify-write)
+
+`update_settings` has no per-variable form: naming `environment_variables` at all
+replaces the target's whole list, and omitting a setting is what leaves it
+unchanged. So `canister-set-environment-variable` reads the target's current
+settings with `canister_status`, overlays the one variable, and writes the list
+back with every other field of `CanisterSettings` left `None`.
+
+Both calls go through `management_call` on the *same* route, chosen by `direct`.
+They have to: each is controller-gated against whoever makes it, so a read as
+the sync identity followed by a write as the proxy would demand both control the
+target and buy nothing for it. The pair is not atomic — a settings update landing
+between them is overwritten — which is inherent to the wholesale-replace API and
+is documented in the WIT rather than papered over.
+
+The variable lives in the canister's settings, not in the manifest, so a later
+`icp deploy` drops it: `set_binding_env_vars_many` rewrites the list from the
+manifest's variables plus the `PUBLIC_CANISTER_ID:*` bindings without reading
+what is there. A sync step that sets the variable on every sync restores it,
+which is the ordinary case, since deploy runs the sync phase after that pass.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 
@@ -262,7 +319,9 @@ verifies sha256, builds the exposed canister ID table and the `CallableCanisters
 enforcement set (resolving `canisters:` against the project's IDs), then calls
 `icp_sync_plugin::run_plugin(...)` with a `PluginInvocation`. The runtime — not
 the CLI — opens the declared paths and enforces the path-safety checks, so the
-CLI no longer touches the plugin's input files itself. `exposed_canister_ids`
+CLI no longer touches the plugin's input files itself; it supplies the canister
+directory and the project directory (`sync::Params::path` and `project_dir`)
+that bound them. `exposed_canister_ids`
 adds a bare-local-name duplicate for every canister in the same subproject as
 the one being synced; `resolve_callable` fails the step if a name in
 `canisters:` does not resolve.

@@ -26,7 +26,10 @@ use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use ic_agent::hash_tree::{Label, LookupResult};
-use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterMetadataArgs, CanisterMetadataResult, CanisterSettings,
+    CanisterStatusResult, EnvironmentVariable, UpdateSettingsArgs,
+};
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
@@ -152,6 +155,51 @@ async fn certified_metadata_section(
             "metadata read failed: certificate proves nothing about section `{name}` \
              of canister {target}"
         )),
+    }
+}
+
+/// Call a controller-gated management-canister method about `target`, either
+/// signed by the sync identity or made by the proxy canister on its behalf.
+///
+/// This is the shape the CLI's own management calls take through
+/// `update_or_proxy_raw`; the runtime inlines it rather than depending on the
+/// CLI. Which caller the target sees is the whole point of the choice: the
+/// method checks *it* against the target's controllers, so a plugin reaches a
+/// canister the proxy controls but the sync identity does not, or the other way
+/// around.
+async fn management_call(
+    agent: &Agent,
+    proxy: Option<Principal>,
+    target: Principal,
+    method: &str,
+    arg: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let Some(proxy_cid) = proxy else {
+        return agent
+            .update(&Principal::management_canister(), method)
+            .with_arg(arg)
+            .with_effective_canister_id(target)
+            .await
+            .map_err(|e| format!("{method} call failed: {e}"));
+    };
+
+    let proxy_args = ProxyArgs {
+        canister_id: Principal::management_canister(),
+        method: method.to_string(),
+        args: arg,
+        cycles: candid::Nat::from(0u8),
+    };
+    let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
+    let raw = agent
+        .update(&proxy_cid, "proxy")
+        .with_arg(encoded)
+        .await
+        .map_err(|e| format!("proxy call failed: {e}"))?;
+    let (result,): (ProxyResult,) =
+        candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
+    match result {
+        ProxyResult::Ok(ok) => Ok(ok.result),
+        ProxyResult::Err(err) => Err(err.format_error()),
     }
 }
 
@@ -327,28 +375,21 @@ impl HostState {
                 name: name.clone(),
             })
             .map_err(|e| format!("metadata encode failed: {e}"))?;
-            let proxy_args = ProxyArgs {
-                canister_id: Principal::management_canister(),
-                method: "canister_metadata".to_string(),
-                args: metadata_args,
-                cycles: candid::Nat::from(0u8),
-            };
-            let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
-            let raw = agent
-                .update(&proxy_cid, "proxy")
-                .with_arg(encoded)
-                .await
-                .map_err(|e| format!("proxy call failed: {e}"))?;
-            let (result,): (ProxyResult,) =
-                candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
-            match result {
-                ProxyResult::Ok(ok) => {
-                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&ok.result)
+            match management_call(
+                &agent,
+                Some(proxy_cid),
+                target,
+                "canister_metadata",
+                metadata_args,
+            )
+            .await
+            {
+                Ok(raw) => {
+                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&raw)
                         .map_err(|e| format!("metadata decode failed: {e}"))?;
                     Ok(Some(metadata.value))
                 }
-                ProxyResult::Err(err) => {
-                    let message = err.format_error();
+                Err(message) => {
                     if !rejected_as_no_such_section(&message, target, &name) {
                         return Err(format!("metadata read failed: {message}"));
                     }
@@ -365,6 +406,68 @@ impl HostState {
                     }
                 }
             }
+        });
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Set one environment variable on an already-resolved target principal,
+    /// leaving its other variables and the rest of its settings alone.
+    ///
+    /// The management canister has no per-variable update — `update_settings`
+    /// replaces a canister's environment variables wholesale — so this is a
+    /// read-modify-write: read the target's current settings, overlay the one
+    /// variable, write the whole list back. It is not atomic, so a settings
+    /// update by another party landing between the two calls is overwritten.
+    ///
+    /// Both halves take the same route. `direct` picks who the target sees
+    /// asking, and both `canister_status` and `update_settings` check that
+    /// caller against its controllers: reading as one principal and writing as
+    /// another would need both to control the target and would still be the
+    /// same round trip, so there is nothing to gain by splitting them.
+    fn do_set_environment_variable(
+        &mut self,
+        target: Principal,
+        name: String,
+        value: String,
+        direct: bool,
+    ) -> Result<(), String> {
+        let agent = Arc::clone(&self.agent);
+        let proxy = if direct { None } else { self.proxy };
+
+        let start = Instant::now();
+        let result = tokio::runtime::Handle::current().block_on(async move {
+            let status_args = Encode!(&CanisterIdRecord {
+                canister_id: target
+            })
+            .map_err(|e| format!("canister_status encode failed: {e}"))?;
+            let raw = management_call(&agent, proxy, target, "canister_status", status_args)
+                .await
+                .map_err(|e| format!("reading the target's environment variables failed: {e}"))?;
+            let (status,): (CanisterStatusResult,) = candid::decode_args(&raw)
+                .map_err(|e| format!("canister_status decode failed: {e}"))?;
+
+            let mut variables = status.settings.environment_variables;
+            match variables.iter_mut().find(|variable| variable.name == name) {
+                Some(existing) => existing.value = value,
+                None => variables.push(EnvironmentVariable { name, value }),
+            }
+
+            let update_args = Encode!(&UpdateSettingsArgs {
+                canister_id: target,
+                settings: CanisterSettings {
+                    environment_variables: Some(variables),
+                    // Every other setting is left `None`, which the management
+                    // canister reads as "leave it as it is".
+                    ..CanisterSettings::default()
+                },
+                sender_canister_version: None,
+            })
+            .map_err(|e| format!("update_settings encode failed: {e}"))?;
+            management_call(&agent, proxy, target, "update_settings", update_args)
+                .await
+                .map_err(|e| format!("setting the environment variable failed: {e}"))?;
+            Ok(())
         });
         self.refund_host_call_time(start);
         result
@@ -406,6 +509,14 @@ impl v2::SyncPluginImports for HostState {
     ) -> Result<Option<Vec<u8>>, String> {
         let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
         self.do_canister_metadata_section(target, req.name, req.direct)
+    }
+
+    fn canister_set_environment_variable(
+        &mut self,
+        req: v2::icp::sync_plugin::types::SetEnvironmentVariableRequest,
+    ) -> Result<(), String> {
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_set_environment_variable(target, req.name, req.value, req.direct)
     }
 }
 
@@ -456,10 +567,17 @@ pub enum RunPluginError {
         path: Utf8PathBuf,
     },
 
-    #[snafu(display(
-        "plugin dir '{dir}' is not a safe relative path (no absolute paths or '..' allowed)"
-    ))]
+    #[snafu(display("plugin dir '{dir}' is not a relative path (absolute paths are not allowed)"))]
     UnsafeDir { dir: String },
+
+    #[snafu(display(
+        "plugin dir '{dir}' resolves outside '{project_dir}'; \
+         a plugin may only read paths inside the project directory"
+    ))]
+    DirOutsideProject {
+        dir: String,
+        project_dir: Utf8PathBuf,
+    },
 
     #[snafu(display(
         "plugin dir '{dir}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin dirs"
@@ -476,9 +594,18 @@ pub enum RunPluginError {
     },
 
     #[snafu(display(
-        "plugin file '{name}' is not a safe relative path (no absolute paths or '..' allowed)"
+        "plugin file '{name}' is not a relative path (absolute paths are not allowed)"
     ))]
     UnsafeFile { name: String },
+
+    #[snafu(display(
+        "plugin file '{name}' resolves outside '{project_dir}'; \
+         a plugin may only read paths inside the project directory"
+    ))]
+    FileOutsideProject {
+        name: String,
+        project_dir: Utf8PathBuf,
+    },
 
     #[snafu(display(
         "plugin file '{name}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin files"
@@ -588,6 +715,14 @@ pub struct PluginInvocation {
     pub wasm_path: Utf8PathBuf,
     /// Directory the declared `dirs`/`files` are anchored at (the canister dir).
     pub base_dir: Utf8PathBuf,
+    /// The project directory: the sandbox boundary. A declared path may rise
+    /// out of `base_dir` with `..` and reach anything inside the project, but
+    /// nothing above it.
+    ///
+    /// A `base_dir` that does not lie within this directory — a dependency
+    /// project reached by an out-of-tree `path:` — is its own boundary instead,
+    /// which grants nothing above the canister directory.
+    pub project_dir: Utf8PathBuf,
     /// Manifest-relative directories to preopen read-only, each tagged with the
     /// map key it was declared under (if any).
     pub dirs: Vec<KeyedPath>,
@@ -626,6 +761,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
     let PluginInvocation {
         wasm_path,
         base_dir,
+        project_dir,
         dirs,
         files,
         fields,
@@ -679,21 +815,44 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             path: wasm_path.clone(),
         })?;
 
+    // Declared paths are written relative to the canister directory but are
+    // resolved against — and confined to — the project directory, so an entry
+    // may reach a sibling canister's tree with `..` while nothing outside the
+    // project is reachable. A canister directory that lies outside the project
+    // is its own root, which grants nothing above it (see `project_dir`).
+    let (root, base_rel) = match crate::path::base_within_root(&project_dir, &base_dir) {
+        Some(base_rel) => (&project_dir, base_rel),
+        None => (&base_dir, Vec::new()),
+    };
+
     // Check every declared directory: each one is handed to the plugin as
     // configuration, so it is rejected for being unsafe or unusable whether or
-    // not it ends up needing a preopen of its own.
+    // not it ends up needing a preopen of its own. The resolved host paths are
+    // kept for the preopens below, keyed by the spelling they were declared as.
+    let mut host_paths: BTreeMap<&str, Utf8PathBuf> = BTreeMap::new();
     for KeyedPath { path: dir, .. } in &dirs {
-        ensure!(!crate::path::escapes_base(dir), UnsafeDirSnafu { dir });
-        // Reject symlinks in the declared path: neither the final entry nor any
+        let resolved = match crate::path::resolve(&base_rel, dir) {
+            Ok(resolved) => resolved,
+            Err(crate::path::Escape::NotRelative) => return UnsafeDirSnafu { dir }.fail(),
+            Err(crate::path::Escape::AboveRoot) => {
+                return DirOutsideProjectSnafu {
+                    dir,
+                    project_dir: root,
+                }
+                .fail();
+            }
+        };
+        // Reject symlinks in the resolved path: neither the final entry nor any
         // intermediate component may be a symlink, so the preopen cannot escape
-        // `base_dir` to a target elsewhere on disk. (Symlinks *inside* a preopen
-        // that escape it are separately rejected by the WASI sandbox.)
-        if let Some(link) = crate::path::first_symlink_component(&base_dir, dir) {
+        // the project to a target elsewhere on disk. (Symlinks *inside* a
+        // preopen that escape it are separately rejected by the WASI sandbox.)
+        if let Some(link) = resolved.first_symlink_component(root) {
             return SymlinkDirSnafu { dir, link }.fail();
         }
-        let host_path = base_dir.join(dir);
+        let host_path = root.join(resolved.path());
         let is_dir = std::fs::metadata(host_path.as_std_path()).is_ok_and(|meta| meta.is_dir());
         ensure!(is_dir, MissingDirSnafu { dir });
+        host_paths.insert(dir, host_path);
     }
 
     // Preopen read-only, one per distinct tree — a directory declared twice, or
@@ -702,7 +861,11 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
     // manifest, and reaches a nested declared directory through its ancestor.
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
     for dir in crate::path::covering_dirs(dirs.iter().map(|d| d.path.as_str())) {
-        let host_path = base_dir.join(dir);
+        // `covering_dirs` returns a subset of the declared spellings, every one
+        // of which the loop above resolved.
+        let host_path = host_paths
+            .get(dir)
+            .expect("covering dir was not among the declared dirs");
         wasi_builder
             .preopened_dir(
                 host_path.as_std_path(),
@@ -710,19 +873,31 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
                 DirPerms::READ,
                 FilePerms::READ,
             )
-            .context(PreopenDirSnafu { dir: host_path })?;
+            .context(PreopenDirSnafu {
+                dir: host_path.clone(),
+            })?;
     }
 
     // Read each declared file on the host and pass its content inline. The same
-    // path-safety checks as `dirs` apply: reject escaping or symlinked paths so
-    // a read cannot leave `base_dir`.
+    // path-safety checks as `dirs` apply: reject unsafe, escaping, or symlinked
+    // paths so a read cannot leave the project.
     let mut file_contents: Vec<FileContent> = Vec::with_capacity(files.len());
     for KeyedPath { key, path: name } in &files {
-        ensure!(!crate::path::escapes_base(name), UnsafeFileSnafu { name });
-        if let Some(link) = crate::path::first_symlink_component(&base_dir, name) {
+        let resolved = match crate::path::resolve(&base_rel, name) {
+            Ok(resolved) => resolved,
+            Err(crate::path::Escape::NotRelative) => return UnsafeFileSnafu { name }.fail(),
+            Err(crate::path::Escape::AboveRoot) => {
+                return FileOutsideProjectSnafu {
+                    name,
+                    project_dir: root,
+                }
+                .fail();
+            }
+        };
+        if let Some(link) = resolved.first_symlink_component(root) {
             return SymlinkFileSnafu { name, link }.fail();
         }
-        let path = base_dir.join(name);
+        let path = root.join(resolved.path());
         let content =
             std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
         file_contents.push(FileContent {
@@ -1048,12 +1223,13 @@ mod tests {
 
     /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
     /// and identity, no proxy, no declared callable canisters, the default
-    /// compute limit, and the current directory as the base. Tests override
-    /// the few fields they care about.
+    /// compute limit, and the current directory as both the base and the
+    /// project. Tests override the few fields they care about.
     fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
         PluginInvocation {
             wasm_path: wasm_path.into(),
             base_dir: ".".into(),
+            project_dir: ".".into(),
             dirs: vec![],
             files: vec![],
             fields: BTreeMap::new(),
@@ -1178,6 +1354,159 @@ mod tests {
         );
     }
 
+    /// A `dirs:` entry may rise out of the canister directory into the rest of
+    /// the project. The guest sees it at the path it was declared as, so it
+    /// reads `../shared` verbatim, and a directory below the entry is reached
+    /// through the same preopen.
+    #[test]
+    fn dirs_above_the_canister_dir_are_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("canisters/backend")).expect("create dir");
+        std::fs::create_dir_all(root.join("shared/inner")).expect("create dir");
+        std::fs::write(root.join("shared/top.txt"), b"top").expect("write file");
+        std::fs::write(root.join("shared/inner/deep.txt"), b"deep").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("canisters/backend");
+        inv.project_dir = root.to_path_buf();
+        inv.dirs = [("shared", "../../shared"), ("inner", "../../shared/inner")]
+            .into_iter()
+            .map(|(key, path)| KeyedPath {
+                key: Some(key.to_owned()),
+                path: path.to_owned(),
+            })
+            .collect();
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            [
+                "shared=inner,top.txt".to_string(),
+                "inner=deep.txt".to_string(),
+            ],
+        );
+    }
+
+    /// Two entries where one reaches further out than the other each need their
+    /// own preopen: `..` is the canister's parent and `../../shared` a child of
+    /// its grandparent, so neither is readable through the other's.
+    #[test]
+    fn dirs_reaching_out_by_different_amounts_are_both_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("canisters/backend")).expect("create dir");
+        std::fs::create_dir_all(root.join("shared")).expect("create dir");
+        std::fs::write(root.join("shared/top.txt"), b"top").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("canisters/backend");
+        inv.project_dir = root.to_path_buf();
+        inv.dirs = [("siblings", ".."), ("shared", "../../shared")]
+            .into_iter()
+            .map(|(key, path)| KeyedPath {
+                key: Some(key.to_owned()),
+                path: path.to_owned(),
+            })
+            .collect();
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            ["siblings=backend".to_string(), "shared=top.txt".to_string(),],
+        );
+    }
+
+    /// The project directory is the boundary: an entry that rises above it is
+    /// rejected before the plugin runs.
+    #[test]
+    fn dir_above_the_project_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::create_dir_all(tmp.path().join("outside")).expect("create dir");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.clone();
+        inv.dirs = unkeyed(&["../../outside"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::DirOutsideProject { .. })
+        ));
+    }
+
+    /// A canister directory outside the project — a dependency reached by an
+    /// out-of-tree path — is its own boundary, so nothing above it is reachable.
+    #[test]
+    fn dir_above_an_out_of_project_canister_dir_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        std::fs::create_dir_all(tmp.path().join("outside/backend")).expect("create dir");
+        std::fs::create_dir_all(tmp.path().join("outside/shared")).expect("create dir");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = tmp.path().join("outside/backend");
+        inv.project_dir = tmp.path().join("project");
+        inv.dirs = unkeyed(&["../shared"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::DirOutsideProject { .. })
+        ));
+    }
+
+    /// A `files:` entry may reach the rest of the project too; its content is
+    /// read by the host and passed inline.
+    #[test]
+    fn files_above_the_canister_dir_are_read() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::write(root.join("cfg.txt"), b"data").expect("write file");
+
+        let mut inv = invocation(wasm_path, "keys");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.to_path_buf();
+        inv.files = unkeyed(&["../cfg.txt"]);
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(lines, ["file -=../cfg.txt".to_string()]);
+    }
+
+    #[test]
+    fn file_above_the_project_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::write(tmp.path().join("secret.txt"), b"secret").expect("write file");
+
+        let mut inv = invocation(wasm_path, "keys");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.clone();
+        inv.files = unkeyed(&["../../secret.txt"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::FileOutsideProject { .. })
+        ));
+    }
+
     #[cfg(unix)]
     #[test]
     fn symlinked_dir_is_rejected() {
@@ -1262,6 +1591,25 @@ mod tests {
         };
         let lines = run_plugin(invocation(wasm_path, "metadata-undeclared"))
             .expect("plugin should succeed");
+        let [refusal] = &lines[..] else {
+            panic!("expected one refusal line, got: {lines:?}");
+        };
+        assert!(
+            refusal.contains("not permitted") && refusal.contains("undeclared"),
+            "got: {refusal}"
+        );
+    }
+
+    /// Setting an environment variable names its target the same way a call
+    /// does, so an undeclared target is refused before the host reads any
+    /// settings — no live canister needed.
+    #[test]
+    fn setting_env_var_on_undeclared_canister_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines =
+            run_plugin(invocation(wasm_path, "set-env-undeclared")).expect("plugin should succeed");
         let [refusal] = &lines[..] else {
             panic!("expected one refusal line, got: {lines:?}");
         };

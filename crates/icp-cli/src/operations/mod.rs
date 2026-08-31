@@ -2,6 +2,7 @@ pub(crate) mod access;
 pub(crate) mod binding_env_vars;
 pub(crate) mod build;
 pub(crate) mod bundle;
+pub(crate) mod call_output;
 pub(crate) mod candid_compat;
 pub(crate) mod canister_migration;
 pub(crate) mod create;

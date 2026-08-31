@@ -495,6 +495,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             resolver,
             agent.clone(),
             sync_canisters,
+            ctx.project.load().await?.dir,
             environment_selection.name().to_owned(),
             env.network.name.clone(),
             canister_ids,

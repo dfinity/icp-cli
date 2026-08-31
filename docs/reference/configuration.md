@@ -60,7 +60,7 @@ canisters:
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
 | `init_args` | string or object | No | Initialization arguments (see [Init Args](#init-args)) |
-| `recipe` | object | No | Recipe reference (alternative to build) |
+| `recipe` | object | No | Recipe reference (alternative to build; may be combined with `sync`) |
 
 ## Build Steps
 
@@ -169,8 +169,8 @@ sync:
 | `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
 | `url` | string | One of `path` or `url` | URL to download the wasm from |
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
-| `dirs` | list of paths, or map of name → path(s) | No | Directories (relative to the canister directory) the plugin may read; each is made readable read-only via WASI |
-| `files` | list of paths, or map of name → path(s) | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `dirs` | list of paths, or map of name → path(s) | No | Directories (relative to the canister directory, anywhere inside the project) the plugin may read; each is made readable read-only via WASI |
+| `files` | list of paths, or map of name → path(s) | No | Files (relative to the canister directory, anywhere inside the project) read by the host and passed inline to the plugin |
 | `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
 | `canisters` | array of string | No | Canisters the plugin may call, or read metadata from, in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
@@ -188,11 +188,13 @@ sync:
         - config.txt                  # a plain list is still fine
 ```
 
-Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
+Entries in `dirs:`/`files:` must be relative to the canister directory. They may reach the rest of the project with `..` — `dirs: ["../shared/assets"]` is fine — but may not resolve outside the project directory. They may not be, or traverse, a symlink, so a declared path cannot resolve to a target outside the project.
 
 A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
+
+Names are always written from this project's point of view, so they keep working when the project is vendored into a workspace as a subproject: a plugin on a canister in `services/crm` reaches a canister of its own `vendor/ledger` dependency as `vendor/ledger:ledger` either way, even though the workspace keys that canister `services/crm/vendor/ledger:ledger`. Both spellings resolve; if a canister elsewhere in the workspace happens to be keyed `vendor/ledger:ledger`, the name means your own.
 
 The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`), read those canisters' metadata sections, and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
@@ -215,6 +217,26 @@ canisters:
 | `type` | string | Yes | Recipe source (registry, URL, or local path) |
 | `sha256` | string | Conditional | Required for remote URLs |
 | `configuration` | object | No | Parameters passed to recipe template |
+
+### Adding Sync Steps to a Recipe
+
+A canister that uses a recipe may declare a `sync` section of its own. Its steps
+run after the ones the recipe renders, in the order written:
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: dist
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/warm-cache.sh
+```
+
+A `recipe` still cannot be combined with `build` — the recipe defines the build.
 
 ### Recipe Type Formats
 

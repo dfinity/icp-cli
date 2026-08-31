@@ -459,6 +459,13 @@ fn substitute_value(
             // The variant selection is already made in the existing init args.
             substitute_value(&mut inner_field.val, fields, replacement, path)
         }
+        IDLValue::Opt(inner) => {
+            // Likewise for an optional: the existing init args already decided
+            // the value is present, so the path reaches straight into it. An
+            // absent one is not an `Opt` at all and falls through as an error —
+            // there is no payload to place a field in.
+            substitute_value(inner, fields, replacement, path)
+        }
         IDLValue::Record(record_fields) => {
             let field_name = &fields[0];
             let target_id = Label::Named(field_name.clone()).get_id();
@@ -879,6 +886,92 @@ mod tests {
             return;
         }
         panic!("unexpected args structure");
+    }
+
+    #[test]
+    fn substitute_passes_through_opt() {
+        // `opt` is transparent in the path the same way a variant is: ".supply"
+        // reaches the record inside the optional without a segment of its own.
+        let mut args = parse_idl_args("(opt record { supply = 0 : nat64 })").unwrap();
+        substitute_field(
+            &mut args,
+            &parse_field_path(".supply").unwrap(),
+            IDLValue::Nat64(42),
+            Path::new("test.yaml"),
+        )
+        .unwrap();
+
+        let IDLValue::Opt(inner) = &args.args[0] else {
+            panic!("expected opt, got {:?}", args.args[0]);
+        };
+        let IDLValue::Record(fields) = inner.as_ref() else {
+            panic!("expected record inside the opt");
+        };
+        assert!(matches!(fields[0].val, IDLValue::Nat64(42)));
+    }
+
+    #[test]
+    fn substitute_passes_through_opt_nested_in_record() {
+        // An optional partway down the path is stepped over, not counted:
+        // ".config.supply" spans record -> opt -> record.
+        let mut args =
+            parse_idl_args("(record { config = opt record { supply = 0 : nat64 } })").unwrap();
+        substitute_field(
+            &mut args,
+            &parse_field_path(".config.supply").unwrap(),
+            IDLValue::Nat64(42),
+            Path::new("test.yaml"),
+        )
+        .unwrap();
+
+        let IDLValue::Record(outer) = &args.args[0] else {
+            panic!("expected record");
+        };
+        let IDLValue::Opt(inner) = &outer[0].val else {
+            panic!("expected opt, got {:?}", outer[0].val);
+        };
+        let IDLValue::Record(fields) = inner.as_ref() else {
+            panic!("expected record inside the opt");
+        };
+        assert!(matches!(fields[0].val, IDLValue::Nat64(42)));
+    }
+
+    #[test]
+    fn substitute_into_absent_opt_err() {
+        // An absent optional holds no payload to place a field in, so the path
+        // cannot reach through it.
+        let mut args = parse_idl_args("(record { config = null })").unwrap();
+        let err = substitute_field(
+            &mut args,
+            &parse_field_path(".config.supply").unwrap(),
+            IDLValue::Nat64(42),
+            Path::new("test.yaml"),
+        )
+        .unwrap_err();
+        assert!(matches!(err, SubstituteError::NotTraversable { .. }));
+        assert!(err.to_string().contains("supply"), "got: {err}");
+    }
+
+    #[test]
+    fn substitute_replaces_whole_opt() {
+        // With no fields left to walk, the optional itself is what gets replaced —
+        // which is how an absent one is filled in.
+        let mut args = parse_idl_args("(record { config = null })").unwrap();
+        substitute_field(
+            &mut args,
+            &parse_field_path(".config").unwrap(),
+            IDLValue::Opt(Box::new(IDLValue::Nat64(42))),
+            Path::new("test.yaml"),
+        )
+        .unwrap();
+
+        let IDLValue::Record(outer) = &args.args[0] else {
+            panic!("expected record");
+        };
+        let IDLValue::Opt(inner) = &outer[0].val else {
+            panic!("expected opt, got {:?}", outer[0].val);
+        };
+        assert!(matches!(inner.as_ref(), IDLValue::Nat64(42)));
     }
 
     #[test]

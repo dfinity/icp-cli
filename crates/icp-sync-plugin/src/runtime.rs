@@ -26,7 +26,10 @@ use camino::Utf8PathBuf;
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use ic_agent::hash_tree::{Label, LookupResult};
-use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterMetadataArgs, CanisterMetadataResult, CanisterSettings,
+    CanisterStatusResult, EnvironmentVariable, UpdateSettingsArgs,
+};
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
@@ -152,6 +155,51 @@ async fn certified_metadata_section(
             "metadata read failed: certificate proves nothing about section `{name}` \
              of canister {target}"
         )),
+    }
+}
+
+/// Call a controller-gated management-canister method about `target`, either
+/// signed by the sync identity or made by the proxy canister on its behalf.
+///
+/// This is the shape the CLI's own management calls take through
+/// `update_or_proxy_raw`; the runtime inlines it rather than depending on the
+/// CLI. Which caller the target sees is the whole point of the choice: the
+/// method checks *it* against the target's controllers, so a plugin reaches a
+/// canister the proxy controls but the sync identity does not, or the other way
+/// around.
+async fn management_call(
+    agent: &Agent,
+    proxy: Option<Principal>,
+    target: Principal,
+    method: &str,
+    arg: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let Some(proxy_cid) = proxy else {
+        return agent
+            .update(&Principal::management_canister(), method)
+            .with_arg(arg)
+            .with_effective_canister_id(target)
+            .await
+            .map_err(|e| format!("{method} call failed: {e}"));
+    };
+
+    let proxy_args = ProxyArgs {
+        canister_id: Principal::management_canister(),
+        method: method.to_string(),
+        args: arg,
+        cycles: candid::Nat::from(0u8),
+    };
+    let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
+    let raw = agent
+        .update(&proxy_cid, "proxy")
+        .with_arg(encoded)
+        .await
+        .map_err(|e| format!("proxy call failed: {e}"))?;
+    let (result,): (ProxyResult,) =
+        candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
+    match result {
+        ProxyResult::Ok(ok) => Ok(ok.result),
+        ProxyResult::Err(err) => Err(err.format_error()),
     }
 }
 
@@ -327,28 +375,21 @@ impl HostState {
                 name: name.clone(),
             })
             .map_err(|e| format!("metadata encode failed: {e}"))?;
-            let proxy_args = ProxyArgs {
-                canister_id: Principal::management_canister(),
-                method: "canister_metadata".to_string(),
-                args: metadata_args,
-                cycles: candid::Nat::from(0u8),
-            };
-            let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
-            let raw = agent
-                .update(&proxy_cid, "proxy")
-                .with_arg(encoded)
-                .await
-                .map_err(|e| format!("proxy call failed: {e}"))?;
-            let (result,): (ProxyResult,) =
-                candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
-            match result {
-                ProxyResult::Ok(ok) => {
-                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&ok.result)
+            match management_call(
+                &agent,
+                Some(proxy_cid),
+                target,
+                "canister_metadata",
+                metadata_args,
+            )
+            .await
+            {
+                Ok(raw) => {
+                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&raw)
                         .map_err(|e| format!("metadata decode failed: {e}"))?;
                     Ok(Some(metadata.value))
                 }
-                ProxyResult::Err(err) => {
-                    let message = err.format_error();
+                Err(message) => {
                     if !rejected_as_no_such_section(&message, target, &name) {
                         return Err(format!("metadata read failed: {message}"));
                     }
@@ -365,6 +406,68 @@ impl HostState {
                     }
                 }
             }
+        });
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Set one environment variable on an already-resolved target principal,
+    /// leaving its other variables and the rest of its settings alone.
+    ///
+    /// The management canister has no per-variable update — `update_settings`
+    /// replaces a canister's environment variables wholesale — so this is a
+    /// read-modify-write: read the target's current settings, overlay the one
+    /// variable, write the whole list back. It is not atomic, so a settings
+    /// update by another party landing between the two calls is overwritten.
+    ///
+    /// Both halves take the same route. `direct` picks who the target sees
+    /// asking, and both `canister_status` and `update_settings` check that
+    /// caller against its controllers: reading as one principal and writing as
+    /// another would need both to control the target and would still be the
+    /// same round trip, so there is nothing to gain by splitting them.
+    fn do_set_environment_variable(
+        &mut self,
+        target: Principal,
+        name: String,
+        value: String,
+        direct: bool,
+    ) -> Result<(), String> {
+        let agent = Arc::clone(&self.agent);
+        let proxy = if direct { None } else { self.proxy };
+
+        let start = Instant::now();
+        let result = tokio::runtime::Handle::current().block_on(async move {
+            let status_args = Encode!(&CanisterIdRecord {
+                canister_id: target
+            })
+            .map_err(|e| format!("canister_status encode failed: {e}"))?;
+            let raw = management_call(&agent, proxy, target, "canister_status", status_args)
+                .await
+                .map_err(|e| format!("reading the target's environment variables failed: {e}"))?;
+            let (status,): (CanisterStatusResult,) = candid::decode_args(&raw)
+                .map_err(|e| format!("canister_status decode failed: {e}"))?;
+
+            let mut variables = status.settings.environment_variables;
+            match variables.iter_mut().find(|variable| variable.name == name) {
+                Some(existing) => existing.value = value,
+                None => variables.push(EnvironmentVariable { name, value }),
+            }
+
+            let update_args = Encode!(&UpdateSettingsArgs {
+                canister_id: target,
+                settings: CanisterSettings {
+                    environment_variables: Some(variables),
+                    // Every other setting is left `None`, which the management
+                    // canister reads as "leave it as it is".
+                    ..CanisterSettings::default()
+                },
+                sender_canister_version: None,
+            })
+            .map_err(|e| format!("update_settings encode failed: {e}"))?;
+            management_call(&agent, proxy, target, "update_settings", update_args)
+                .await
+                .map_err(|e| format!("setting the environment variable failed: {e}"))?;
+            Ok(())
         });
         self.refund_host_call_time(start);
         result
@@ -406,6 +509,14 @@ impl v2::SyncPluginImports for HostState {
     ) -> Result<Option<Vec<u8>>, String> {
         let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
         self.do_canister_metadata_section(target, req.name, req.direct)
+    }
+
+    fn canister_set_environment_variable(
+        &mut self,
+        req: v2::icp::sync_plugin::types::SetEnvironmentVariableRequest,
+    ) -> Result<(), String> {
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_set_environment_variable(target, req.name, req.value, req.direct)
     }
 }
 
@@ -1480,6 +1591,25 @@ mod tests {
         };
         let lines = run_plugin(invocation(wasm_path, "metadata-undeclared"))
             .expect("plugin should succeed");
+        let [refusal] = &lines[..] else {
+            panic!("expected one refusal line, got: {lines:?}");
+        };
+        assert!(
+            refusal.contains("not permitted") && refusal.contains("undeclared"),
+            "got: {refusal}"
+        );
+    }
+
+    /// Setting an environment variable names its target the same way a call
+    /// does, so an undeclared target is refused before the host reads any
+    /// settings — no live canister needed.
+    #[test]
+    fn setting_env_var_on_undeclared_canister_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines =
+            run_plugin(invocation(wasm_path, "set-env-undeclared")).expect("plugin should succeed");
         let [refusal] = &lines[..] else {
             panic!("expected one refusal line, got: {lines:?}");
         };

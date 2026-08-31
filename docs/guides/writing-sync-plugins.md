@@ -37,7 +37,7 @@ wit-bindgen = { version = "0.56", features = ["realloc"] }
 
 ## Generate Bindings and Implement `exec`
 
-`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `canister_metadata_section`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
+`wit_bindgen::generate!` reads the WIT at build time and produces the `Guest` trait you implement, the input/request types, and the host functions (`canister_call`, `canister_metadata_section`, `canister_set_environment_variable`). The `exec` export is your entry point — it returns `Ok(())` on success or `Err(message)` to fail the sync step.
 
 ```rust
 // src/lib.rs
@@ -108,6 +108,23 @@ match interface {
 ```
 
 `direct` picks who the target sees asking, which is what decides whether a *private* section is readable: a direct read is signed by the sync identity, a proxied one is made by the proxy canister on your behalf. See [Reading canister metadata](../concepts/sync-plugins.md#reading-canister-metadata--canister-metadata-section) for the full semantics.
+
+## Set a Canister Environment Variable
+
+`canister_set_environment_variable` writes one of a canister's [environment variables](../reference/environment-variables.md#canister-runtime-environment-variables) — configuration the canister reads at runtime — leaving its other variables and settings alone:
+
+```rust
+canister_set_environment_variable(&SetEnvironmentVariableRequest {
+    target: CallTarget::Host, // same targets, same rules, as canister_call
+    name: "SEEDED_BY".to_string(),
+    value: input.environment.clone(),
+    direct: false, // let the proxy make the update if one is configured
+})?;
+```
+
+The update is controller-gated, so whoever makes it must control the target: with `direct: true` that is the sync identity, with `direct: false` and a proxy configured it is the proxy canister.
+
+Set the variable on every sync rather than once. The management canister can only replace a canister's variables as a whole list, so the host reads them and writes them back with yours added — and a later `icp deploy` rewrites that list from the manifest plus the automatic `PUBLIC_CANISTER_ID:*` bindings, dropping anything a plugin added. Deploy runs the sync phase afterwards, so a plugin that always sets it always restores it. For a variable that should not depend on the plugin running, declare it in the manifest's [`environment_variables`](../reference/canister-settings.md#environment_variables) setting instead.
 
 ## Read Declared Files and Directories
 

@@ -76,6 +76,20 @@ impl Guest for TestPlugin {
                 eprintln!("{err}");
                 Ok(())
             }
+            // Ask to set an environment variable on a canister the step did not
+            // declare. Rejected on the same rule as a call or a metadata read,
+            // before any settings are read; echo the refusal.
+            "set-env-undeclared" => {
+                let err = canister_set_environment_variable(&SetEnvironmentVariableRequest {
+                    target: CallTarget::Name("undeclared".to_string()),
+                    name: "API_URL".to_string(),
+                    value: "https://example.com".to_string(),
+                    direct: true,
+                })
+                .expect_err("host must reject an undeclared target");
+                eprintln!("{err}");
+                Ok(())
+            }
             "spin" => {
                 // Busy-loop forever to exercise the host's compute-time limit.
                 // The epoch-interruption check at the loop back-edge traps this,

@@ -27,14 +27,15 @@ A simple Rust canister with three methods:
 
 A Rust Wasm component that implements the `sync-plugin` world defined in
 `crates/icp-sync-plugin/sync-plugin.wit`. The host runtime calls its `exec`
-export and provides the `canister-call` and `canister-metadata-section` imports the
-plugin uses to reach the canister.
+export and provides the `canister-call`, `canister-metadata-section`, and
+`canister-set-environment-variable` imports the plugin uses to reach the
+canister.
 
 ## How the plugin system is exercised
 
 This example is designed to demonstrate both routing modes of the
 `canister-call` import — the `direct` flag — in a single sync run, plus a
-metadata read that follows the same routing.
+metadata read and an environment-variable write that follow the same routing.
 
 ### Read — `candid:service` via proxy (`direct: false`)
 
@@ -60,6 +61,19 @@ canister is listed as a controller of the target, the controller guard passes.
 This models a pattern where privileged, one-time setup calls must come from a
 known controller — not directly from an end-user identity.
 
+### Write — `SEEDED_BY` environment variable via proxy (`direct: false`)
+
+The plugin then records which environment seeded the canister as a canister
+environment variable, so the canister's own code can read it back at runtime.
+Setting settings is controller-gated exactly like `set_uploader`, so it takes
+the same route: the proxy makes both the settings read and the settings write,
+and it is the proxy's control over the canister that they are checked against.
+
+The management canister can only replace a canister's environment variables as a
+whole list, so the host reads the current ones and writes them back with
+`SEEDED_BY` added — the `PUBLIC_CANISTER_ID:*` variables `icp deploy` writes
+itself are still there afterwards.
+
 ### Call 2 — `register` directly (`direct: true`)
 
 For each file under `seed-data/`, the plugin calls `register` with
@@ -84,6 +98,10 @@ icp sync
        │
        ├─ canister-call set_uploader(<user>)   direct=false → proxy → canister
        │    canister stores uploader = <user>
+       │
+       ├─ canister-set-environment-variable SEEDED_BY=<environment>
+       │                                        direct=false → proxy → mgmt canister
+       │    read current settings, write them back with SEEDED_BY added
        │
        └─ canister-call register(name, content) direct=true  → canister  (× N files)
             canister checks caller == uploader  ✓

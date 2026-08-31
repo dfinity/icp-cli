@@ -37,6 +37,14 @@ Change a canister's settings to specified values
 
    Rejected while log visibility is public, which has no viewers list to remove from; use --log-visibility controllers to revoke public access.
 * `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--snapshot-visibility <SNAPSHOT_VISIBILITY>` — Set snapshot visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-snapshot-viewer, --remove-snapshot-viewer, and --set-snapshot-viewer. Use --add-snapshot-viewer / --set-snapshot-viewer to grant access to specific principals instead
+* `--add-snapshot-viewer <ADD_SNAPSHOT_VIEWER>` — Add a principal to the allowed snapshot viewers list.
+
+   Rejected while snapshot visibility is public, which has no viewers list to add to; use --set-snapshot-viewer to replace the public policy with a list.
+* `--remove-snapshot-viewer <REMOVE_SNAPSHOT_VIEWER>` — Remove a principal from the allowed snapshot viewers list.
+
+   Rejected while snapshot visibility is public, which has no viewers list to remove from; use --snapshot-visibility controllers to revoke public access.
+* `--set-snapshot-viewer <SET_SNAPSHOT_VIEWER>` — Replace the allowed snapshot viewers list with the specified principals
 * `--status-visibility <STATUS_VISIBILITY>` — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer. Use --add-status-viewer / --set-status-viewer to grant access to specific principals instead
 * `--add-status-viewer <ADD_STATUS_VIEWER>` — Add a principal to the allowed status viewers list.
 

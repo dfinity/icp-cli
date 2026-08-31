@@ -6852,6 +6852,50 @@ settings:
       - "2vxsx-fae"
 ```
 
+### snapshot_visibility
+
+Controls who can read the canister's snapshots — the `list_canister_snapshots`,
+`read_canister_snapshot_metadata`, and `read_canister_snapshot_data` endpoints of
+the management canister, which back `icp canister snapshot list` and
+`icp canister snapshot download`.
+
+| Property | Value |
+|----------|-------|
+| Type | String or Object |
+| Values | `controllers`, `public`, or `allowed_viewers` object |
+| Default | `controllers` |
+
+```yaml
+# Only controllers can read the snapshots (default)
+settings:
+  snapshot_visibility: controllers
+
+# Anyone can read the snapshots
+settings:
+  snapshot_visibility: public
+
+# Specific principals can read the snapshots, in addition to the controllers
+settings:
+  snapshot_visibility:
+    allowed_viewers:
+      - "aaaaa-aa"
+      - "2vxsx-fae"
+```
+
+Reading a snapshot exposes the canister's full state — WASM module, WASM memory,
+stable memory, and chunk store. Granting snapshot access is therefore closer to
+granting a state dump than to granting the read-only report
+[`status_visibility`](#status_visibility) covers.
+
+Like [`log_visibility`](#log_visibility) and unlike
+[`status_visibility`](#status_visibility), `controllers` here is exhaustive:
+there are no always-allowed callers on top of it.
+
+Taking, restoring, and deleting snapshots stays controller-only whatever this is
+set to; the setting governs reading alone.
+
+The replica accepts at most 10 principals in `allowed_viewers`.
+
 ### status_visibility
 
 Controls who can read the canister's status through the management canister's
@@ -7566,6 +7610,14 @@ Change a canister's settings to specified values
 
    Rejected while log visibility is public, which has no viewers list to remove from; use --log-visibility controllers to revoke public access.
 * `--set-log-viewer <SET_LOG_VIEWER>` — Replace the allowed log viewers list with the specified principals
+* `--snapshot-visibility <SNAPSHOT_VISIBILITY>` — Set snapshot visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-snapshot-viewer, --remove-snapshot-viewer, and --set-snapshot-viewer. Use --add-snapshot-viewer / --set-snapshot-viewer to grant access to specific principals instead
+* `--add-snapshot-viewer <ADD_SNAPSHOT_VIEWER>` — Add a principal to the allowed snapshot viewers list.
+
+   Rejected while snapshot visibility is public, which has no viewers list to add to; use --set-snapshot-viewer to replace the public policy with a list.
+* `--remove-snapshot-viewer <REMOVE_SNAPSHOT_VIEWER>` — Remove a principal from the allowed snapshot viewers list.
+
+   Rejected while snapshot visibility is public, which has no viewers list to remove from; use --snapshot-visibility controllers to revoke public access.
+* `--set-snapshot-viewer <SET_SNAPSHOT_VIEWER>` — Replace the allowed snapshot viewers list with the specified principals
 * `--status-visibility <STATUS_VISIBILITY>` — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer. Use --add-status-viewer / --set-status-viewer to grant access to specific principals instead
 * `--add-status-viewer <ADD_STATUS_VIEWER>` — Add a principal to the allowed status viewers list.
 
@@ -9314,6 +9366,7 @@ settings:
   wasm_memory_limit: 1gib
   wasm_memory_threshold: 512mib
   log_visibility: controllers
+  snapshot_visibility: controllers
   status_visibility: controllers
   environment_variables:
     KEY: "value"

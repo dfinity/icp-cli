@@ -670,6 +670,20 @@ Raw binary (only valid for file references)</li>
 <p><code>--set-log-viewer &#x3C;SET_LOG_VIEWER></code> — Replace the allowed log viewers list with the specified principals</p>
 </li>
 <li>
+<p><code>--snapshot-visibility &#x3C;SNAPSHOT_VISIBILITY></code> — Set snapshot visibility to a fixed policy [possible values: controllers, public]. Conflicts with —add-snapshot-viewer, —remove-snapshot-viewer, and —set-snapshot-viewer. Use —add-snapshot-viewer / —set-snapshot-viewer to grant access to specific principals instead</p>
+</li>
+<li>
+<p><code>--add-snapshot-viewer &#x3C;ADD_SNAPSHOT_VIEWER></code> — Add a principal to the allowed snapshot viewers list.</p>
+<p>Rejected while snapshot visibility is public, which has no viewers list to add to; use —set-snapshot-viewer to replace the public policy with a list.</p>
+</li>
+<li>
+<p><code>--remove-snapshot-viewer &#x3C;REMOVE_SNAPSHOT_VIEWER></code> — Remove a principal from the allowed snapshot viewers list.</p>
+<p>Rejected while snapshot visibility is public, which has no viewers list to remove from; use —snapshot-visibility controllers to revoke public access.</p>
+</li>
+<li>
+<p><code>--set-snapshot-viewer &#x3C;SET_SNAPSHOT_VIEWER></code> — Replace the allowed snapshot viewers list with the specified principals</p>
+</li>
+<li>
 <p><code>--status-visibility &#x3C;STATUS_VISIBILITY></code> — Set status visibility to a fixed policy [possible values: controllers, public]. Conflicts with —add-status-viewer, —remove-status-viewer, and —set-status-viewer. Use —add-status-viewer / —set-status-viewer to grant access to specific principals instead</p>
 </li>
 <li>

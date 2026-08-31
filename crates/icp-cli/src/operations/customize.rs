@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::io;
+use std::ops::Deref;
 
 use camino::Utf8Component;
 use candid::types::Label;
@@ -10,7 +11,8 @@ use candid_parser::{assist, parse_idl_args, utils::CandidSource};
 use icp::fs::yaml;
 use icp::manifest::ArgsFormat;
 use icp::prelude::*;
-use serde::Deserialize;
+use serde::de::{self, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use snafu::{ResultExt, Snafu};
 
 pub(crate) const CUSTOMIZE_FILE: &str = "icp_customize.yaml";
@@ -22,10 +24,74 @@ pub(crate) struct CustomizeManifest {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CustomizeOption {
-    pub(crate) canister: CanisterRef,
+    pub(crate) canister: CanisterRefs,
     pub(crate) field_path: String,
     pub(crate) candid_type: String,
     pub(crate) description: String,
+}
+
+/// The canisters one option applies to: written as a single reference, or as a
+/// list to ask for the field once and give every canister in it the same answer.
+/// Never empty — an option applying to nothing would prompt for nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CanisterRefs(Vec<CanisterRef>);
+
+impl CanisterRefs {
+    /// The references as one string, naming the option as a whole. Which of
+    /// several canisters a failure belongs to is reported separately.
+    fn joined(&self) -> String {
+        self.0
+            .iter()
+            .map(CanisterRef::store_key)
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+impl Deref for CanisterRefs {
+    type Target = [CanisterRef];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for CanisterRefs {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Written by hand rather than as an untagged enum, which reports a
+        // malformed reference as "did not match any variant" and throws away
+        // what `CanisterRef::parse` had to say about it.
+        struct OneOrMany;
+
+        impl<'de> Visitor<'de> for OneOrMany {
+            type Value = CanisterRefs;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a canister reference, or a list of canister references")
+            }
+
+            fn visit_str<E: de::Error>(self, reference: &str) -> Result<Self::Value, E> {
+                CanisterRef::parse(reference)
+                    .map(|r| CanisterRefs(vec![r]))
+                    .map_err(de::Error::custom)
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut refs = Vec::with_capacity(seq.size_hint().unwrap_or(1));
+                while let Some(reference) = seq.next_element::<CanisterRef>()? {
+                    refs.push(reference);
+                }
+                if refs.is_empty() {
+                    return Err(de::Error::custom(
+                        "`canister` is an empty list; name at least one canister",
+                    ));
+                }
+                Ok(CanisterRefs(refs))
+            }
+        }
+
+        deserializer.deserialize_any(OneOrMany)
+    }
 }
 
 /// The canister an option customizes: its local name, optionally preceded by the
@@ -114,6 +180,9 @@ fn normalize_project_path(project: &str, reference: &str) -> Result<String, Pars
 pub(crate) struct FieldPath {
     pub(crate) arg_index: usize,
     pub(crate) fields: Vec<String>,
+    /// The path as the manifest spells it, for messages about where a value
+    /// could not be applied.
+    pub(crate) text: String,
 }
 
 pub(crate) type LoadCustomizeManifestError = yaml::Error;
@@ -186,16 +255,18 @@ pub(crate) enum SubstituteError {
 
 #[derive(Debug, Snafu)]
 pub(crate) enum PromptCustomizationsError {
-    #[snafu(display("invalid field_path for canister {canister:?} in {path}"))]
+    #[snafu(display("invalid field_path for canister(s) {canisters:?} in {path}"))]
     FieldPath {
         source: ParseFieldPathError,
-        canister: String,
+        canisters: String,
         path: PathBuf,
     },
-    #[snafu(display("invalid candid_type for canister {canister:?} at {field_path:?} in {path}"))]
+    #[snafu(display(
+        "invalid candid_type for canister(s) {canisters:?} at {field_path:?} in {path}"
+    ))]
     CandidType {
         source: ParseCandidTypeError,
-        canister: String,
+        canisters: String,
         field_path: String,
         path: PathBuf,
     },
@@ -212,16 +283,22 @@ pub(crate) enum PromptCustomizationsError {
     ))]
     UnsupportedInitArgsFormat { canister: String, path: PathBuf },
     #[snafu(display(
-        "interactive prompt failed for canister {canister:?} at {field_path:?} (from {path})"
+        "interactive prompt failed for canister(s) {canisters:?} at {field_path:?} (from {path})"
     ))]
     Prompt {
         source: anyhow::Error,
-        canister: String,
+        canisters: String,
         field_path: String,
         path: PathBuf,
     },
-    #[snafu(transparent)]
-    Substitute { source: SubstituteError },
+    // One option can apply its answer to several canisters, so which canister
+    // rejected the value is not implied by the option alone.
+    #[snafu(display("cannot apply the value for {field_path:?} to canister {canister:?}"))]
+    Substitute {
+        source: SubstituteError,
+        canister: String,
+        field_path: String,
+    },
 }
 
 pub(crate) fn load_customize_manifest(
@@ -248,14 +325,16 @@ pub(crate) fn validate_canister_refs(
 ) -> Result<(), UnknownCanisterError> {
     let known: BTreeSet<&str> = workspace_canisters.iter().copied().collect();
     for opt in &manifest.options {
-        let store_key = opt.canister.store_key();
-        if !known.contains(store_key.as_str()) {
-            return UnknownCanisterSnafu {
-                reference: store_key,
-                known: known.iter().copied().collect::<Vec<_>>().join(", "),
-                path: customize_path,
+        for reference in opt.canister.iter() {
+            let store_key = reference.store_key();
+            if !known.contains(store_key.as_str()) {
+                return UnknownCanisterSnafu {
+                    reference: store_key,
+                    known: known.iter().copied().collect::<Vec<_>>().join(", "),
+                    path: customize_path,
+                }
+                .fail();
             }
-            .fail();
         }
     }
     Ok(())
@@ -305,6 +384,7 @@ fn parse_field_path(s: &str) -> Result<FieldPath, ParseFieldPathError> {
         return Ok(FieldPath {
             arg_index: 0,
             fields,
+            text: s.to_string(),
         });
     }
     let mut iter = s.split('.');
@@ -315,7 +395,11 @@ fn parse_field_path(s: &str) -> Result<FieldPath, ParseFieldPathError> {
             path_str: s.to_string(),
         })?;
     let fields = iter.map(str::to_string).collect();
-    Ok(FieldPath { arg_index, fields })
+    Ok(FieldPath {
+        arg_index,
+        fields,
+        text: s.to_string(),
+    })
 }
 
 fn parse_contextfree_candid_type_string(
@@ -418,6 +502,72 @@ pub(crate) fn substitute_field(
     )
 }
 
+/// A canister's init args from the manifest, as the Candid values the option's
+/// answers are substituted into. A canister with none starts from no args, which
+/// only a whole-argument field path (`0`) can then fill.
+fn manifest_init_args(
+    init_args: &HashMap<String, Option<icp::InitArgs>>,
+    canister: &str,
+    customize_path: &Path,
+) -> Result<IDLArgs, PromptCustomizationsError> {
+    match init_args.get(canister).and_then(Option::as_ref).cloned() {
+        None => Ok(IDLArgs { args: vec![] }),
+        Some(icp::InitArgs::Text {
+            content,
+            format: ArgsFormat::Candid,
+        }) => parse_idl_args(content.trim()).context(ParseInitArgsSnafu {
+            canister,
+            path: customize_path,
+        }),
+        Some(icp::InitArgs::Text { .. } | icp::InitArgs::Binary(_)) => {
+            UnsupportedInitArgsFormatSnafu {
+                canister,
+                path: customize_path,
+            }
+            .fail()
+        }
+    }
+}
+
+/// One option resolved against the deploy: what to ask, and which canisters
+/// receive the answer. Everything here is parsed before any prompt runs.
+struct PlannedPrompt<'a> {
+    option: &'a CustomizeOption,
+    /// The option's canisters as written, for messages naming the option.
+    canisters: String,
+    /// The subset of them this deploy targets — never empty.
+    targets: Vec<String>,
+    field_path: FieldPath,
+    type_env: TypeEnv,
+    ty: candid::types::Type,
+}
+
+/// Substitute one answer into every canister its option applies to.
+///
+/// `result` holds each canister's args across the whole run, so several options
+/// accumulate onto one canister and one option's answer reaches all of its
+/// canisters. Every target is present before this is called.
+fn apply_answer(
+    result: &mut HashMap<String, IDLArgs>,
+    targets: &[String],
+    field_path: &FieldPath,
+    value: IDLValue,
+    customize_path: &Path,
+) -> Result<(), PromptCustomizationsError> {
+    for target in targets {
+        let working_args = result
+            .get_mut(target)
+            .expect("every target's args are built before the prompts run");
+        substitute_field(working_args, field_path, value.clone(), customize_path).context(
+            SubstituteSnafu {
+                canister: target,
+                field_path: &field_path.text,
+            },
+        )?;
+    }
+    Ok(())
+}
+
 pub(crate) fn prompt_customizations(
     manifest: &CustomizeManifest,
     cnames: &[String],
@@ -431,24 +581,57 @@ pub(crate) fn prompt_customizations(
 
     let cname_set: HashSet<&str> = cnames.iter().map(String::as_str).collect();
 
-    // Group by canister preserving declaration order, filtered to the canisters
-    // this deploy targets. A reference that resolves to no canister at all is
-    // rejected by `validate_canister_refs`, so what is skipped here is only ever
-    // a canister outside the current scope — worth reporting, since a
-    // member-scoped deploy silently drops the rest of the workspace's options.
-    let mut by_canister: Vec<(String, Vec<&CustomizeOption>)> = Vec::new();
+    // Resolve every option against this deploy, and parse everything that can be
+    // rejected, before asking the first question — an unparseable candid_type or
+    // an uncustomizable init_args format three options down must not surface
+    // after the user has already typed answers that would then be thrown away.
+    let mut planned: Vec<PlannedPrompt<'_>> = Vec::new();
+    // A reference that resolves to no canister at all is rejected by
+    // `validate_canister_refs`, so what is skipped here is only ever a canister
+    // outside the current scope — worth reporting, since a member-scoped deploy
+    // drops the rest of the workspace's options.
     let mut skipped: BTreeSet<String> = BTreeSet::new();
-    for opt in &manifest.options {
-        let store_key = opt.canister.store_key();
-        if !cname_set.contains(store_key.as_str()) {
-            skipped.insert(store_key);
+
+    for option in &manifest.options {
+        let mut targets: Vec<String> = Vec::new();
+        for reference in option.canister.iter() {
+            let store_key = reference.store_key();
+            match cname_set.contains(store_key.as_str()) {
+                true => targets.push(store_key),
+                false => {
+                    skipped.insert(store_key);
+                }
+            }
+        }
+        // No canister here would receive the answer, so do not ask for it.
+        if targets.is_empty() {
             continue;
         }
-        match by_canister.iter_mut().find(|(name, _)| *name == store_key) {
-            Some((_, opts)) => opts.push(opt),
-            None => by_canister.push((store_key, vec![opt])),
-        }
+
+        let canisters = option.canister.joined();
+
+        let field_path = parse_field_path(&option.field_path).context(FieldPathSnafu {
+            canisters: &canisters,
+            path: customize_path,
+        })?;
+
+        let (type_env, ty) =
+            parse_contextfree_candid_type_string(&option.candid_type).context(CandidTypeSnafu {
+                canisters: &canisters,
+                field_path: option.field_path.as_str(),
+                path: customize_path,
+            })?;
+
+        planned.push(PlannedPrompt {
+            option,
+            canisters,
+            targets,
+            field_path,
+            type_env,
+            ty,
+        });
     }
+
     if !skipped.is_empty() {
         let names = skipped
             .iter()
@@ -460,65 +643,50 @@ pub(crate) fn prompt_customizations(
         );
     }
 
-    let mut result = HashMap::new();
-
-    for (canister_name, options) in &by_canister {
-        let canister_name = canister_name.as_str();
-        let mut working_args = match init_args
-            .get(canister_name)
-            .and_then(Option::as_ref)
-            .cloned()
-        {
-            None => IDLArgs { args: vec![] },
-            Some(icp::InitArgs::Text {
-                content,
-                format: ArgsFormat::Candid,
-            }) => parse_idl_args(content.trim()).context(ParseInitArgsSnafu {
-                canister: canister_name,
-                path: customize_path,
-            })?,
-            Some(icp::InitArgs::Text { .. } | icp::InitArgs::Binary(_)) => {
-                return UnsupportedInitArgsFormatSnafu {
-                    canister: canister_name,
-                    path: customize_path,
-                }
-                .fail();
+    // Each touched canister's args, accumulated across every option that names
+    // it. Built here rather than on first substitution so an init_args format
+    // that cannot be customized is caught before the prompts, not between them.
+    let mut result: HashMap<String, IDLArgs> = HashMap::new();
+    for prompt in &planned {
+        for target in &prompt.targets {
+            if !result.contains_key(target) {
+                result.insert(
+                    target.clone(),
+                    manifest_init_args(init_args, target, customize_path)?,
+                );
             }
-        };
-
-        for opt in options {
-            let field_path = parse_field_path(&opt.field_path).context(FieldPathSnafu {
-                canister: canister_name,
-                path: customize_path,
-            })?;
-
-            let (env, ty) = parse_contextfree_candid_type_string(&opt.candid_type).context(
-                CandidTypeSnafu {
-                    canister: canister_name,
-                    field_path: opt.field_path.as_str(),
-                    path: customize_path,
-                },
-            )?;
-
-            eprintln!("[{}] {}", canister_name, opt.description);
-
-            let context = assist::Context::new(env);
-            let prompted = assist::input_args(&context, &[ty]).context(PromptSnafu {
-                canister: canister_name,
-                field_path: opt.field_path.as_str(),
-                path: customize_path,
-            })?;
-
-            let value = prompted
-                .args
-                .into_iter()
-                .next()
-                .expect("input_args returns one value per type element");
-
-            substitute_field(&mut working_args, &field_path, value, customize_path)?;
         }
+    }
 
-        result.insert(canister_name.to_string(), working_args);
+    // One prompt per option, in the order the file lists them. An option naming
+    // several canisters is asked once and its answer applied to each, so the
+    // prompts cannot be grouped by canister — the file's order is the author's to
+    // arrange.
+    for prompt in &planned {
+        eprintln!("[{}] {}", prompt.canisters, prompt.option.description);
+
+        let context = assist::Context::new(prompt.type_env.clone());
+        let prompted = assist::input_args(&context, std::slice::from_ref(&prompt.ty)).context(
+            PromptSnafu {
+                canisters: &prompt.canisters,
+                field_path: prompt.option.field_path.as_str(),
+                path: customize_path,
+            },
+        )?;
+
+        let value = prompted
+            .args
+            .into_iter()
+            .next()
+            .expect("input_args returns one value per type element");
+
+        apply_answer(
+            &mut result,
+            &prompt.targets,
+            &prompt.field_path,
+            value,
+            customize_path,
+        )?;
     }
 
     Ok(result)
@@ -534,13 +702,29 @@ mod tests {
         CanisterRef::parse(reference).expect("reference should parse")
     }
 
+    fn crefs(references: &[&str]) -> CanisterRefs {
+        CanisterRefs(references.iter().copied().map(cref).collect())
+    }
+
     fn option_for(reference: &str) -> CustomizeOption {
+        options_for(&[reference])
+    }
+
+    fn options_for(references: &[&str]) -> CustomizeOption {
         CustomizeOption {
-            canister: cref(reference),
+            canister: crefs(references),
             field_path: ".x".to_string(),
             candid_type: "nat64".to_string(),
             description: "desc".to_string(),
         }
+    }
+
+    /// The working-args map `prompt_customizations` builds before prompting.
+    fn working(entries: &[(&str, &str)]) -> HashMap<String, IDLArgs> {
+        entries
+            .iter()
+            .map(|(canister, args)| ((*canister).to_string(), parse_idl_args(args).expect("args")))
+            .collect()
     }
 
     fn nat64_record_args(supply: u64) -> IDLArgs {
@@ -763,7 +947,7 @@ options:
         std::fs::write(tmp.path().join(CUSTOMIZE_FILE), content).unwrap();
         let manifest = load_customize_manifest(tmp.path()).unwrap().unwrap();
         assert_eq!(manifest.options.len(), 1);
-        assert_eq!(manifest.options[0].canister, cref("my-canister"));
+        assert_eq!(manifest.options[0].canister, crefs(&["my-canister"]));
     }
 
     #[test]
@@ -908,7 +1092,7 @@ options:
         let manifest = load_customize_manifest(tmp.path()).unwrap().unwrap();
         assert_eq!(
             manifest.options[0].canister,
-            cref("services/open-crm:backend")
+            crefs(&["services/open-crm:backend"])
         );
     }
 
@@ -959,6 +1143,210 @@ options:
         let msg = err.to_string();
         assert!(msg.contains("services/open_crm:backend"), "got: {msg}");
         assert!(msg.contains("services/open-crm:backend"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_refs_single_string() {
+        let manifest: CustomizeManifest = serde_yaml::from_str(
+            r#"
+options:
+  - canister: frontend
+    field_path: ".title"
+    candid_type: "text"
+    description: "Site title"
+"#,
+        )
+        .unwrap();
+        assert_eq!(manifest.options[0].canister, crefs(&["frontend"]));
+    }
+
+    #[test]
+    fn parse_refs_list() {
+        let manifest: CustomizeManifest = serde_yaml::from_str(
+            r#"
+options:
+  - canister: [frontend, "services/open-crm:backend"]
+    field_path: ".admin"
+    candid_type: "principal"
+    description: "Administrator"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            manifest.options[0].canister,
+            crefs(&["frontend", "services/open-crm:backend"])
+        );
+    }
+
+    #[test]
+    fn parse_refs_empty_list_err() {
+        let err = serde_yaml::from_str::<CustomizeManifest>(
+            r#"
+options:
+  - canister: []
+    field_path: ".admin"
+    candid_type: "principal"
+    description: "Administrator"
+"#,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("empty list"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_refs_list_keeps_reference_error() {
+        // The hand-written visitor must not flatten a bad reference inside a list
+        // into a generic "did not match any variant".
+        let err = serde_yaml::from_str::<CustomizeManifest>(
+            r#"
+options:
+  - canister: [frontend, "/srv/open-crm:backend"]
+    field_path: ".admin"
+    candid_type: "principal"
+    description: "Administrator"
+"#,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("relative to the workspace root"), "got: {msg}");
+    }
+
+    #[test]
+    fn apply_answer_reaches_every_canister() {
+        // One answer, several canisters: each is substituted into its own args,
+        // which start from its own manifest init_args.
+        let mut result = working(&[
+            ("frontend", "(record { supply = 0 : nat64 })"),
+            (
+                "services/open-crm:backend",
+                "(record { supply = 7 : nat64 })",
+            ),
+        ]);
+        let targets = vec![
+            "frontend".to_string(),
+            "services/open-crm:backend".to_string(),
+        ];
+
+        apply_answer(
+            &mut result,
+            &targets,
+            &parse_field_path(".supply").unwrap(),
+            IDLValue::Nat64(42),
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap();
+
+        for target in &targets {
+            let IDLValue::Record(fields) = &result[target].args[0] else {
+                panic!("expected record for {target}");
+            };
+            assert!(
+                matches!(fields[0].val, IDLValue::Nat64(42)),
+                "{target} did not receive the answer: {:?}",
+                fields[0].val
+            );
+        }
+    }
+
+    #[test]
+    fn apply_answer_accumulates_across_options() {
+        // A canister named by more than one option keeps the earlier answers: the
+        // second option substitutes into the args the first one produced.
+        let mut result = working(&[(
+            "frontend",
+            "(record { supply = 0 : nat64; limit = 0 : nat64 })",
+        )]);
+        let targets = vec!["frontend".to_string()];
+
+        for (path, value) in [(".supply", 42u64), (".limit", 99)] {
+            apply_answer(
+                &mut result,
+                &targets,
+                &parse_field_path(path).unwrap(),
+                IDLValue::Nat64(value),
+                Path::new(CUSTOMIZE_FILE),
+            )
+            .unwrap();
+        }
+
+        let IDLValue::Record(fields) = &result["frontend"].args[0] else {
+            panic!("expected record");
+        };
+        let value_of = |name: &str| {
+            let id = Label::Named(name.to_string()).get_id();
+            fields
+                .iter()
+                .find(|f| f.id.get_id() == id)
+                .map(|f| f.val.clone())
+        };
+        assert!(matches!(value_of("supply"), Some(IDLValue::Nat64(42))));
+        assert!(matches!(value_of("limit"), Some(IDLValue::Nat64(99))));
+    }
+
+    #[test]
+    fn apply_answer_names_the_failing_canister() {
+        // Only one of the option's canisters lacks the field, so the error has to
+        // say which — the option itself names several.
+        let mut result = working(&[
+            ("frontend", "(record { supply = 0 : nat64 })"),
+            (
+                "services/open-crm:backend",
+                "(record { other = 0 : nat64 })",
+            ),
+        ]);
+
+        let err = apply_answer(
+            &mut result,
+            &[
+                "frontend".to_string(),
+                "services/open-crm:backend".to_string(),
+            ],
+            &parse_field_path(".supply").unwrap(),
+            IDLValue::Nat64(42),
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, PromptCustomizationsError::Substitute { .. }));
+        let msg = err.to_string();
+        assert!(msg.contains("services/open-crm:backend"), "got: {msg}");
+        assert!(msg.contains(".supply"), "got: {msg}");
+    }
+
+    #[test]
+    fn prompt_skips_option_whose_canisters_are_all_out_of_scope() {
+        // Neither canister is being deployed, so there is nothing to apply an
+        // answer to and no prompt fires — reaching one would hang the test.
+        let manifest = CustomizeManifest {
+            options: vec![options_for(&["a", "services/dep:b"])],
+        };
+        let result = prompt_customizations(
+            &manifest,
+            &["c".to_string()],
+            &HashMap::new(),
+            false,
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn validate_rejects_unknown_canister_in_a_list() {
+        let manifest = CustomizeManifest {
+            options: vec![options_for(&["frontend", "services/open_crm:backend"])],
+        };
+        let err = validate_canister_refs(
+            &manifest,
+            &["frontend", "services/open-crm:backend"],
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("services/open_crm:backend"),
+            "got: {err}"
+        );
     }
 
     #[test]

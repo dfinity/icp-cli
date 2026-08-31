@@ -1197,6 +1197,9 @@ fn bundle_customize_file_addresses_member_canisters() {
     let ctx = TestContext::new();
     let project_dir = customize_workspace(&ctx);
 
+    // The third option names both canisters, so it is asked once and both
+    // receive the answer — a list has to survive the round trip into the bundle
+    // just as a single reference does.
     let customize_yaml = indoc::indoc! {r#"
         options:
           - canister: frontend
@@ -1204,6 +1207,10 @@ fn bundle_customize_file_addresses_member_canisters() {
             candid_type: "text"
             description: "Site title"
           - canister: services/open-crm:backend
+            field_path: ".quota"
+            candid_type: "nat64"
+            description: "Storage quota"
+          - canister: [frontend, "services/open-crm:backend"]
             field_path: ".admin"
             candid_type: "principal"
             description: "Administrator"
@@ -1261,7 +1268,7 @@ fn bundle_customize_file_addresses_member_canisters() {
 
 /// A project path that names no member is a typo, not a canister left out of the
 /// deploy — reject it while bundling rather than letting it reach whoever
-/// deploys the bundle.
+/// deploys the bundle. Every entry of a list is checked, not just the first.
 #[test]
 fn bundle_rejects_unknown_customize_canister() {
     let ctx = TestContext::new();
@@ -1271,7 +1278,7 @@ fn bundle_rejects_unknown_customize_canister() {
         &project_dir.join("icp_customize.yaml"),
         indoc::indoc! {r#"
             options:
-              - canister: services/open_crm:backend
+              - canister: [frontend, "services/open_crm:backend"]
                 field_path: ".admin"
                 candid_type: "principal"
                 description: "Administrator"

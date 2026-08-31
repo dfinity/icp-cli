@@ -18,7 +18,7 @@ pub mod visibility;
 mod script;
 pub mod wasm;
 
-pub use visibility::{LogVisibilityDef, StatusVisibilityDef, Visibility};
+pub use visibility::{LogVisibilityDef, SnapshotVisibilityDef, StatusVisibilityDef, Visibility};
 
 /// A reference to a controller: either an explicit principal or a canister name in this project.
 ///
@@ -132,6 +132,10 @@ pub struct Settings<EnvVar = String> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_visibility: Option<LogVisibilityDef>,
 
+    /// Controls who can read the canister's snapshots.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_visibility: Option<SnapshotVisibilityDef>,
+
     /// Controls who can read the canister's status.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_visibility: Option<StatusVisibilityDef>,
@@ -189,6 +193,7 @@ impl From<Settings> for ManifestSettings {
     fn from(settings: Settings) -> Self {
         let Settings {
             log_visibility,
+            snapshot_visibility,
             status_visibility,
             compute_allocation,
             memory_allocation,
@@ -203,6 +208,7 @@ impl From<Settings> for ManifestSettings {
 
         Self {
             log_visibility,
+            snapshot_visibility,
             status_visibility,
             compute_allocation,
             memory_allocation,
@@ -228,6 +234,7 @@ impl From<Settings> for CanisterSettings {
             controllers: None,
             reserved_cycles_limit: settings.reserved_cycles_limit.map(|c| Nat::from(c.get())),
             log_visibility: settings.log_visibility.map(|v| v.0.into()),
+            snapshot_visibility: settings.snapshot_visibility.map(|v| v.0.into()),
             status_visibility: settings.status_visibility.map(|v| v.0.into()),
             memory_allocation: settings.memory_allocation.map(|m| Nat::from(m.get())),
             compute_allocation: settings.compute_allocation.map(Nat::from),

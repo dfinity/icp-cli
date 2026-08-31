@@ -1,7 +1,7 @@
 use std::fmt;
 
 use candid::Principal;
-use ic_management_canister_types::{LogVisibility, StatusVisibility};
+use ic_management_canister_types::{LogVisibility, SnapshotVisibility, StatusVisibility};
 use serde::{Deserialize, Serialize, Serializer, de};
 
 /// Who may read a visibility-gated part of a canister.
@@ -121,6 +121,7 @@ macro_rules! candid_conversions {
 }
 
 candid_conversions!(LogVisibility);
+candid_conversions!(SnapshotVisibility);
 candid_conversions!(StatusVisibility);
 
 fn visibility_schema(description: &str, subject: &str, controllers: &str) -> schemars::Schema {
@@ -205,6 +206,15 @@ visibility_setting!(
 );
 
 visibility_setting!(
+    SnapshotVisibilityDef,
+    setting = "snapshot_visibility",
+    schema = "SnapshotVisibility",
+    description = "Controls who can read the canister's snapshots.",
+    subject = "read the snapshots",
+    controllers = "only the canister's controllers can read the snapshots",
+);
+
+visibility_setting!(
     StatusVisibilityDef,
     setting = "status_visibility",
     schema = "StatusVisibility",
@@ -244,6 +254,11 @@ allowed_viewers:
             .unwrap_err()
             .to_string();
         assert!(err.contains("unknown log_visibility value"), "{err}");
+
+        let err = serde_yaml::from_str::<SnapshotVisibilityDef>("invalid")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown snapshot_visibility value"), "{err}");
 
         let err = serde_yaml::from_str::<StatusVisibilityDef>("invalid")
             .unwrap_err()
@@ -285,6 +300,9 @@ allowed_viewers:
         ] {
             let log: LogVisibility = value.clone().into();
             assert_eq!(Visibility::from(log), value);
+
+            let snapshot: SnapshotVisibility = value.clone().into();
+            assert_eq!(Visibility::from(snapshot), value);
 
             let status: StatusVisibility = value.clone().into();
             assert_eq!(Visibility::from(status), value);

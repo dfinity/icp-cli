@@ -86,6 +86,7 @@ pub async fn sync_settings(
             .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
+        ref snapshot_visibility,
         ref status_visibility,
         compute_allocation,
         ref memory_allocation,
@@ -100,8 +101,11 @@ pub async fn sync_settings(
     let current_settings = status.settings;
 
     let desired_log_visibility = log_visibility.clone().map(Visibility::from);
+    let desired_snapshot_visibility = snapshot_visibility.clone().map(Visibility::from);
     let desired_status_visibility = status_visibility.clone().map(Visibility::from);
     let current_log_visibility = Visibility::from(current_settings.log_visibility.clone());
+    let current_snapshot_visibility =
+        Visibility::from(current_settings.snapshot_visibility.clone());
     let current_status_visibility = Visibility::from(current_settings.status_visibility.clone());
 
     let environment_variable_setting =
@@ -152,6 +156,9 @@ pub async fn sync_settings(
     if desired_log_visibility
         .as_ref()
         .is_none_or(|s| visibility_eq(s, &current_log_visibility))
+        && desired_snapshot_visibility
+            .as_ref()
+            .is_none_or(|s| visibility_eq(s, &current_snapshot_visibility))
         && desired_status_visibility
             .as_ref()
             .is_none_or(|s| visibility_eq(s, &current_status_visibility))
@@ -190,6 +197,7 @@ pub async fn sync_settings(
 
     let settings = CanisterSettings {
         log_visibility: desired_log_visibility.map(Into::into),
+        snapshot_visibility: desired_snapshot_visibility.map(Into::into),
         status_visibility: desired_status_visibility.map(Into::into),
         compute_allocation: compute_allocation.map(Nat::from),
         memory_allocation: memory_allocation.as_ref().map(|m| Nat::from(m.get())),
@@ -200,8 +208,7 @@ pub async fn sync_settings(
         log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         environment_variables: environment_variable_setting,
         controllers: controllers_setting,
-        // Not configurable from the manifest yet; `None` leaves them unchanged.
-        snapshot_visibility: None,
+        // Not configurable from the manifest yet; `None` leaves it unchanged.
         minimum_incoming_canister_call_cycles: None,
     };
 

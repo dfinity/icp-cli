@@ -970,6 +970,17 @@
           ],
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
+        "snapshot_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapshotVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read the canister's snapshots."
+        },
         "status_visibility": {
           "anyOf": [
             {
@@ -1005,6 +1016,37 @@
         }
       },
       "type": "object"
+    },
+    "SnapshotVisibility": {
+      "description": "Controls who can read the canister's snapshots.",
+      "oneOf": [
+        {
+          "description": "'controllers' (only the canister's controllers can read the snapshots) or 'public' (anyone can read the snapshots)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Specific principals that can read the snapshots",
+          "properties": {
+            "allowed_viewers": {
+              "description": "Principal IDs that can read the snapshots, in addition to the controllers",
+              "items": {
+                "description": "A principal ID",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "StatusVisibility": {
       "description": "Controls who can read the canister's status.",

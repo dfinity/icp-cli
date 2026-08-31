@@ -96,6 +96,56 @@ impl LogVisibilityOpt {
 }
 
 #[derive(Clone, Debug, Default, Args)]
+pub(crate) struct SnapshotVisibilityOpt {
+    /// Set snapshot visibility to a fixed policy [possible values: controllers, public].
+    /// Conflicts with --add-snapshot-viewer, --remove-snapshot-viewer, and --set-snapshot-viewer.
+    /// Use --add-snapshot-viewer / --set-snapshot-viewer to grant access to specific principals instead.
+    #[arg(
+        long,
+        value_parser = visibility_parser,
+        conflicts_with("add_snapshot_viewer"),
+        conflicts_with("remove_snapshot_viewer"),
+        conflicts_with("set_snapshot_viewer"),
+    )]
+    snapshot_visibility: Option<Visibility>,
+
+    /// Add a principal to the allowed snapshot viewers list.
+    ///
+    /// Rejected while snapshot visibility is public, which has no viewers list to
+    /// add to; use --set-snapshot-viewer to replace the public policy with a list.
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_snapshot_viewer"))]
+    add_snapshot_viewer: Option<Vec<Principal>>,
+
+    /// Remove a principal from the allowed snapshot viewers list.
+    ///
+    /// Rejected while snapshot visibility is public, which has no viewers list to
+    /// remove from; use --snapshot-visibility controllers to revoke public access.
+    #[arg(long, action = ArgAction::Append, conflicts_with("set_snapshot_viewer"))]
+    remove_snapshot_viewer: Option<Vec<Principal>>,
+
+    /// Replace the allowed snapshot viewers list with the specified principals
+    #[arg(long, action = ArgAction::Append)]
+    set_snapshot_viewer: Option<Vec<Principal>>,
+}
+
+impl SnapshotVisibilityOpt {
+    fn flags(&self) -> VisibilityFlags<'_> {
+        VisibilityFlags {
+            label: "Snapshot visibility",
+            stem: "snapshot",
+            fixed: self.snapshot_visibility.as_ref(),
+            add: self.add_snapshot_viewer.as_deref(),
+            remove: self.remove_snapshot_viewer.as_deref(),
+            set: self.set_snapshot_viewer.as_deref(),
+        }
+    }
+
+    pub(crate) fn require_current_settings(&self) -> bool {
+        self.flags().require_current_settings()
+    }
+}
+
+#[derive(Clone, Debug, Default, Args)]
 pub(crate) struct StatusVisibilityOpt {
     /// Set status visibility to a fixed policy [possible values: controllers, public].
     /// Conflicts with --add-status-viewer, --remove-status-viewer, and --set-status-viewer.
@@ -326,6 +376,9 @@ pub(crate) struct UpdateArgs {
     log_visibility: Option<LogVisibilityOpt>,
 
     #[command(flatten)]
+    snapshot_visibility: Option<SnapshotVisibilityOpt>,
+
+    #[command(flatten)]
     status_visibility: Option<StatusVisibilityOpt>,
 
     #[command(flatten)]
@@ -418,7 +471,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         }
     }
 
-    // Handle log and status visibility.
+    // Handle log, snapshot and status visibility.
+
     let log_visibility = args
         .log_visibility
         .as_ref()
@@ -426,6 +480,16 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             let current = current_status
                 .as_ref()
                 .map(|status| Visibility::from(status.settings.log_visibility.clone()));
+            resolve_visibility(opt.flags(), current)
+        })
+        .transpose()?;
+    let snapshot_visibility = args
+        .snapshot_visibility
+        .as_ref()
+        .map(|opt| {
+            let current = current_status
+                .as_ref()
+                .map(|status| Visibility::from(status.settings.snapshot_visibility.clone()));
             resolve_visibility(opt.flags(), current)
         })
         .transpose()?;
@@ -489,6 +553,11 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             "Log visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
         );
     }
+    if snapshot_visibility.is_some() && configured_settings.snapshot_visibility.is_some() {
+        warn!(
+            "Snapshot visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
+        );
+    }
     if status_visibility.is_some() && configured_settings.status_visibility.is_some() {
         warn!(
             "Status visibility is already set in icp.yaml; this new value will be overridden on next settings sync"
@@ -511,10 +580,10 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             .map(|m| Nat::from(m.get())),
         log_memory_limit: args.log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         log_visibility: log_visibility.map(Into::into),
+        snapshot_visibility: snapshot_visibility.map(Into::into),
         status_visibility: status_visibility.map(Into::into),
         environment_variables,
-        // Not exposed as flags yet; `None` leaves them unchanged.
-        snapshot_visibility: None,
+        // Not exposed as a flag yet; `None` leaves it unchanged.
         minimum_incoming_canister_call_cycles: None,
     };
 
@@ -568,6 +637,12 @@ fn require_current_settings(args: &UpdateArgs) -> bool {
 
     if let Some(log_visibility) = &args.log_visibility
         && log_visibility.require_current_settings()
+    {
+        return true;
+    }
+
+    if let Some(snapshot_visibility) = &args.snapshot_visibility
+        && snapshot_visibility.require_current_settings()
     {
         return true;
     }
@@ -873,6 +948,109 @@ mod tests {
                 .unwrap(),
             Visibility::AllowedViewers(vec![carol()])
         );
+    }
+
+    /// The three groups are copies of one another, so the hazard is a
+    /// mis-wired `flags()` quietly driving another setting: a group must read
+    /// its own flags and name itself.
+    #[test]
+    fn each_group_reads_its_own_flags() {
+        let viewers = vec![alice()];
+
+        let log = LogVisibilityOpt {
+            log_visibility: Some(Visibility::Public),
+            add_log_viewer: Some(viewers.clone()),
+            remove_log_viewer: Some(viewers.clone()),
+            set_log_viewer: Some(viewers.clone()),
+        };
+        let snapshot = SnapshotVisibilityOpt {
+            snapshot_visibility: Some(Visibility::Public),
+            add_snapshot_viewer: Some(viewers.clone()),
+            remove_snapshot_viewer: Some(viewers.clone()),
+            set_snapshot_viewer: Some(viewers.clone()),
+        };
+        let status = StatusVisibilityOpt {
+            status_visibility: Some(Visibility::Public),
+            add_status_viewer: Some(viewers.clone()),
+            remove_status_viewer: Some(viewers.clone()),
+            set_status_viewer: Some(viewers.clone()),
+        };
+
+        for (flags, label, stem) in [
+            (log.flags(), "Log visibility", "log"),
+            (snapshot.flags(), "Snapshot visibility", "snapshot"),
+            (status.flags(), "Status visibility", "status"),
+        ] {
+            assert_eq!(flags.label, label);
+            assert_eq!(flags.stem, stem);
+            assert_eq!(flags.fixed, Some(&Visibility::Public));
+            assert_eq!(flags.add, Some(&viewers[..]));
+            assert_eq!(flags.remove, Some(&viewers[..]));
+            assert_eq!(flags.set, Some(&viewers[..]));
+        }
+
+        // And an empty group drives nothing, whichever setting it belongs to.
+        for flags in [
+            LogVisibilityOpt::default().flags(),
+            SnapshotVisibilityOpt::default().flags(),
+            StatusVisibilityOpt::default().flags(),
+        ] {
+            assert_eq!(flags.fixed, None);
+            assert!(!flags.require_current_settings());
+        }
+    }
+
+    /// The error a group raises names the group's own flags, so a refusal
+    /// points at the setting the caller was actually editing.
+    #[test]
+    fn the_public_refusal_names_the_settings_own_flags() {
+        let viewers = vec![alice()];
+
+        for (opt_flags, label, stem) in [
+            (
+                LogVisibilityOpt {
+                    add_log_viewer: Some(viewers.clone()),
+                    ..<_>::default()
+                }
+                .flags(),
+                "Log visibility",
+                "log",
+            ),
+            (
+                SnapshotVisibilityOpt {
+                    add_snapshot_viewer: Some(viewers.clone()),
+                    ..<_>::default()
+                }
+                .flags(),
+                "Snapshot visibility",
+                "snapshot",
+            ),
+            (
+                StatusVisibilityOpt {
+                    add_status_viewer: Some(viewers.clone()),
+                    ..<_>::default()
+                }
+                .flags(),
+                "Status visibility",
+                "status",
+            ),
+        ] {
+            let err = opt_flags
+                .resolve(Some(&Visibility::Public))
+                .unwrap_err()
+                .to_string();
+
+            assert!(
+                err.contains(&format!("{label} is currently public")),
+                "{err}"
+            );
+            assert!(err.contains(&format!("--add-{stem}-viewer")), "{err}");
+            assert!(err.contains(&format!("--set-{stem}-viewer")), "{err}");
+            assert!(
+                err.contains(&format!("--{stem}-visibility controllers")),
+                "{err}"
+            );
+        }
     }
 
     /// Only a fixed policy stands on its own; every viewer edit is resolved

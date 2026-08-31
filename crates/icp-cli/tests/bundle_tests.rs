@@ -1145,6 +1145,206 @@ fn bundle_includes_customize_file() {
     assert_eq!(bundled, customize_yaml);
 }
 
+/// A workspace fixture for the customize tests: a root project with a `frontend`
+/// canister and a `services/open-crm` dependency declaring `backend`, so the
+/// dependency's canister is store-keyed `services/open-crm:backend`.
+fn customize_workspace(ctx: &TestContext) -> PathBuf {
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    let dep_dir = project_dir.join("services/open-crm");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+            dependencies:
+              - name: open-crm
+                path: ./services/open-crm
+                canisters: [backend]
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    project_dir
+}
+
+/// A workspace declares its customizations once, at its root, and reaches a
+/// member's canister through the member's workspace-relative path. The file is
+/// bundled at the archive root only — the member lands at that same relative
+/// path in the archive, so the prefixed reference resolves after extraction.
+#[test]
+fn bundle_customize_file_addresses_member_canisters() {
+    let ctx = TestContext::new();
+    let project_dir = customize_workspace(&ctx);
+
+    let customize_yaml = indoc::indoc! {r#"
+        options:
+          - canister: frontend
+            field_path: ".title"
+            candid_type: "text"
+            description: "Site title"
+          - canister: services/open-crm:backend
+            field_path: ".admin"
+            candid_type: "principal"
+            description: "Administrator"
+    "#};
+    write_string(&project_dir.join("icp_customize.yaml"), customize_yaml)
+        .expect("failed to write customize manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut entries: Vec<String> = Vec::new();
+    let mut root_customize: Option<String> = None;
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp_customize.yaml" {
+            let mut s = String::new();
+            entry.read_to_string(&mut s).expect("read customize entry");
+            root_customize = Some(s);
+        }
+        entries.push(path);
+    }
+
+    assert_eq!(
+        root_customize.expect("icp_customize.yaml not found in bundle"),
+        customize_yaml
+    );
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|e| e.ends_with("icp_customize.yaml"))
+            .count(),
+        1,
+        "customizations must appear once, at the archive root: {entries:?}"
+    );
+    // The prefix in `services/open-crm:backend` is the member's archive
+    // directory, so the reference still names a canister of the extracted bundle.
+    assert!(
+        entries.iter().any(|e| e == "services/open-crm/icp.yaml"),
+        "member manifest missing from bundle: {entries:?}"
+    );
+}
+
+/// A project path that names no member is a typo, not a canister left out of the
+/// deploy — reject it while bundling rather than letting it reach whoever
+/// deploys the bundle.
+#[test]
+fn bundle_rejects_unknown_customize_canister() {
+    let ctx = TestContext::new();
+    let project_dir = customize_workspace(&ctx);
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc::indoc! {r#"
+            options:
+              - canister: services/open_crm:backend
+                field_path: ".admin"
+                candid_type: "principal"
+                description: "Administrator"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("services/open_crm:backend")
+                .and(contains("not part of this workspace"))
+                .and(contains("services/open-crm:backend")),
+        );
+}
+
+/// A member's own customizations file is what that project uses when deployed on
+/// its own, so vendoring it is not an error — but the workspace reads only the
+/// root's file, and the member's options would otherwise vanish silently.
+#[test]
+fn bundle_warns_about_member_customize_file() {
+    let ctx = TestContext::new();
+    let project_dir = customize_workspace(&ctx);
+
+    write_string(
+        &project_dir.join("services/open-crm/icp_customize.yaml"),
+        indoc::indoc! {r#"
+            options:
+              - canister: backend
+                field_path: ".admin"
+                candid_type: "principal"
+                description: "Administrator"
+        "#},
+    )
+    .expect("failed to write member customize manifest");
+
+    // Deliberately no file at the root: that is the case where the member's
+    // options would otherwise vanish without a trace.
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success()
+        .stderr(contains("services/open-crm").and(contains("icp_customize.yaml")));
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+    let entries: Vec<String> = archive
+        .entries()
+        .expect("failed to read archive entries")
+        .map(|entry| {
+            entry
+                .expect("failed to read archive entry")
+                .path()
+                .expect("entry path")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+
+    assert!(
+        !entries
+            .iter()
+            .any(|e| e == "services/open-crm/icp_customize.yaml"),
+        "the member's file must not be bundled: {entries:?}"
+    );
+}
+
 /// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
 /// top-level `images` paths relocated under a top-level `images/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.

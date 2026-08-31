@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
 use std::io;
 
+use camino::Utf8Component;
 use candid::types::Label;
 use candid::types::value::VariantValue;
 use candid::{IDLArgs, IDLValue, TypeEnv};
@@ -20,10 +22,92 @@ pub(crate) struct CustomizeManifest {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CustomizeOption {
-    pub(crate) canister: String,
+    pub(crate) canister: CanisterRef,
     pub(crate) field_path: String,
     pub(crate) candid_type: String,
     pub(crate) description: String,
+}
+
+/// The canister an option customizes: its local name, optionally preceded by the
+/// workspace-relative path of the project that declares it — `backend` for a
+/// canister of the root project, `services/open-crm:backend` for one belonging to
+/// a vendored dependency. This is the store key the rest of the CLI addresses that
+/// canister by, so [`Self::store_key`] round-trips into `icp deploy`'s naming.
+///
+/// A workspace has one customizations file, at its root; the prefix is how that
+/// file reaches into a member project.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(try_from = "String")]
+pub(crate) struct CanisterRef {
+    /// Owning project's directory relative to the workspace root, forward-slash
+    /// separated with no `.` segments. Empty for the root project itself.
+    project: String,
+    local: String,
+}
+
+impl CanisterRef {
+    /// Split a reference at its last `:`, the same way consolidation splits a
+    /// store key — a canister's local name never contains one, while a project
+    /// path can (a Windows drive prefix, which normalization then rejects).
+    fn parse(reference: &str) -> Result<Self, ParseCanisterRefError> {
+        if reference.is_empty() {
+            return Err(ParseCanisterRefError::EmptyReference);
+        }
+        let (project, local) = match reference.rsplit_once(':') {
+            Some((project, local)) => (normalize_project_path(project, reference)?, local),
+            None => (String::new(), reference),
+        };
+        if local.is_empty() {
+            return EmptyCanisterNameSnafu { reference }.fail();
+        }
+        Ok(Self {
+            project,
+            local: local.to_owned(),
+        })
+    }
+
+    /// The consolidated name of this canister in the workspace: a root project's
+    /// canisters keep their bare local names, a member's are prefixed.
+    pub(crate) fn store_key(&self) -> String {
+        match self.project.is_empty() {
+            true => self.local.clone(),
+            false => format!("{}:{}", self.project, self.local),
+        }
+    }
+}
+
+impl fmt::Display for CanisterRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.store_key())
+    }
+}
+
+impl TryFrom<String> for CanisterRef {
+    type Error = ParseCanisterRefError;
+
+    fn try_from(reference: String) -> Result<Self, Self::Error> {
+        Self::parse(&reference)
+    }
+}
+
+/// Restate a hand-written project path in the spelling store-key prefixes use, so
+/// `./services/open-crm` and `services/open-crm/` address the same member as
+/// `services/open-crm`. `..` survives: a dependency can be declared through a
+/// path that leaves the workspace root.
+fn normalize_project_path(project: &str, reference: &str) -> Result<String, ParseCanisterRefError> {
+    let slashed = project.replace('\\', "/");
+    let mut segments: Vec<&str> = Vec::new();
+    for component in Path::new(&slashed).components() {
+        match component {
+            Utf8Component::CurDir => {}
+            Utf8Component::ParentDir => segments.push(".."),
+            Utf8Component::Normal(segment) => segments.push(segment),
+            Utf8Component::Prefix(_) | Utf8Component::RootDir => {
+                return AbsoluteProjectPathSnafu { project, reference }.fail();
+            }
+        }
+    }
+    Ok(segments.join("/"))
 }
 
 #[derive(Debug)]
@@ -33,6 +117,35 @@ pub(crate) struct FieldPath {
 }
 
 pub(crate) type LoadCustomizeManifestError = yaml::Error;
+
+#[derive(Debug, Snafu)]
+pub(crate) enum ParseCanisterRefError {
+    #[snafu(display("canister reference is empty"))]
+    EmptyReference,
+
+    #[snafu(display(
+        "canister reference {reference:?} names no canister after its ':' — \
+         write the project path first, like \"services/open-crm:backend\""
+    ))]
+    EmptyCanisterName { reference: String },
+
+    #[snafu(display(
+        "project path {project:?} in canister reference {reference:?} is absolute; \
+         it must be relative to the workspace root, like \"services/open-crm:backend\""
+    ))]
+    AbsoluteProjectPath { project: String, reference: String },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "canister {reference:?} in {path} is not part of this workspace. \
+     Its canisters are: {known}"
+))]
+pub(crate) struct UnknownCanisterError {
+    reference: String,
+    known: String,
+    path: PathBuf,
+}
 
 #[derive(Debug, Snafu)]
 pub(crate) enum ParseFieldPathError {
@@ -119,6 +232,63 @@ pub(crate) fn load_customize_manifest(
         Ok(m) => Ok(Some(m)),
         Err(yaml::Error::Io { source }) if source.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
+    }
+}
+
+/// Check every option against the canisters the workspace actually declares.
+///
+/// Without this, a misspelled project path is indistinguishable from a canister
+/// that simply isn't part of the current deploy, and
+/// [`prompt_customizations`] would skip it with a warning — leaving the canister
+/// to be installed with unintended init args.
+pub(crate) fn validate_canister_refs(
+    manifest: &CustomizeManifest,
+    workspace_canisters: &[&str],
+    customize_path: &Path,
+) -> Result<(), UnknownCanisterError> {
+    let known: BTreeSet<&str> = workspace_canisters.iter().copied().collect();
+    for opt in &manifest.options {
+        let store_key = opt.canister.store_key();
+        if !known.contains(store_key.as_str()) {
+            return UnknownCanisterSnafu {
+                reference: store_key,
+                known: known.iter().copied().collect::<Vec<_>>().join(", "),
+                path: customize_path,
+            }
+            .fail();
+        }
+    }
+    Ok(())
+}
+
+/// Warn about a customizations file belonging to a member project, whose options
+/// are not read.
+///
+/// A workspace collects its prompts once, in the root's file, where a
+/// `<project path>:` prefix reaches a member's canisters. A member's own file is
+/// still legitimate — it is what that project uses when deployed on its own — so
+/// finding one is not an error, but its options are silently inert here, which
+/// would install the canister with unintended init args.
+///
+/// Members are read off the store keys of `workspace_canisters`, whose prefix is
+/// the owning project's workspace-relative directory.
+pub(crate) fn warn_unread_member_customize_files(root_dir: &Path, workspace_canisters: &[&str]) {
+    let members: BTreeSet<&str> = workspace_canisters
+        .iter()
+        .filter_map(|name| name.rsplit_once(':'))
+        .map(|(project, _)| project)
+        .filter(|project| !project.is_empty())
+        .collect();
+
+    for member in members {
+        let path = root_dir.join(member).join(CUSTOMIZE_FILE);
+        if path.is_file() {
+            tracing::warn!(
+                "Ignoring '{path}': a workspace declares its customizations once, in \
+                 '{CUSTOMIZE_FILE}' at its root. To prompt for these, copy the options there \
+                 and prefix each `canister` with '{member}:'."
+            );
+        }
     }
 }
 
@@ -261,25 +431,30 @@ pub(crate) fn prompt_customizations(
 
     let cname_set: HashSet<&str> = cnames.iter().map(String::as_str).collect();
 
-    // Group by canister preserving declaration order, filtered to deployed canisters.
-    // Track skipped names so a typo in the customize manifest doesn't silently no-op.
-    let mut by_canister: Vec<(&str, Vec<&CustomizeOption>)> = Vec::new();
-    let mut skipped: BTreeSet<&str> = BTreeSet::new();
+    // Group by canister preserving declaration order, filtered to the canisters
+    // this deploy targets. A reference that resolves to no canister at all is
+    // rejected by `validate_canister_refs`, so what is skipped here is only ever
+    // a canister outside the current scope — worth reporting, since a
+    // member-scoped deploy silently drops the rest of the workspace's options.
+    let mut by_canister: Vec<(String, Vec<&CustomizeOption>)> = Vec::new();
+    let mut skipped: BTreeSet<String> = BTreeSet::new();
     for opt in &manifest.options {
-        if !cname_set.contains(opt.canister.as_str()) {
-            skipped.insert(opt.canister.as_str());
+        let store_key = opt.canister.store_key();
+        if !cname_set.contains(store_key.as_str()) {
+            skipped.insert(store_key);
             continue;
         }
-        match by_canister
-            .iter_mut()
-            .find(|(name, _)| *name == opt.canister.as_str())
-        {
+        match by_canister.iter_mut().find(|(name, _)| *name == store_key) {
             Some((_, opts)) => opts.push(opt),
-            None => by_canister.push((opt.canister.as_str(), vec![opt])),
+            None => by_canister.push((store_key, vec![opt])),
         }
     }
     if !skipped.is_empty() {
-        let names = skipped.iter().copied().collect::<Vec<_>>().join(", ");
+        let names = skipped
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
         tracing::warn!(
             "Customize options skipped because their canister is not being deployed: {names}"
         );
@@ -288,8 +463,9 @@ pub(crate) fn prompt_customizations(
     let mut result = HashMap::new();
 
     for (canister_name, options) in &by_canister {
+        let canister_name = canister_name.as_str();
         let mut working_args = match init_args
-            .get(*canister_name)
+            .get(canister_name)
             .and_then(Option::as_ref)
             .cloned()
         {
@@ -298,12 +474,12 @@ pub(crate) fn prompt_customizations(
                 content,
                 format: ArgsFormat::Candid,
             }) => parse_idl_args(content.trim()).context(ParseInitArgsSnafu {
-                canister: *canister_name,
+                canister: canister_name,
                 path: customize_path,
             })?,
             Some(icp::InitArgs::Text { .. } | icp::InitArgs::Binary(_)) => {
                 return UnsupportedInitArgsFormatSnafu {
-                    canister: *canister_name,
+                    canister: canister_name,
                     path: customize_path,
                 }
                 .fail();
@@ -312,13 +488,13 @@ pub(crate) fn prompt_customizations(
 
         for opt in options {
             let field_path = parse_field_path(&opt.field_path).context(FieldPathSnafu {
-                canister: *canister_name,
+                canister: canister_name,
                 path: customize_path,
             })?;
 
             let (env, ty) = parse_contextfree_candid_type_string(&opt.candid_type).context(
                 CandidTypeSnafu {
-                    canister: *canister_name,
+                    canister: canister_name,
                     field_path: opt.field_path.as_str(),
                     path: customize_path,
                 },
@@ -328,7 +504,7 @@ pub(crate) fn prompt_customizations(
 
             let context = assist::Context::new(env);
             let prompted = assist::input_args(&context, &[ty]).context(PromptSnafu {
-                canister: *canister_name,
+                canister: canister_name,
                 field_path: opt.field_path.as_str(),
                 path: customize_path,
             })?;
@@ -353,6 +529,19 @@ mod tests {
     use super::*;
     use camino_tempfile::Utf8TempDir;
     use candid::types::value::IDLField;
+
+    fn cref(reference: &str) -> CanisterRef {
+        CanisterRef::parse(reference).expect("reference should parse")
+    }
+
+    fn option_for(reference: &str) -> CustomizeOption {
+        CustomizeOption {
+            canister: cref(reference),
+            field_path: ".x".to_string(),
+            candid_type: "nat64".to_string(),
+            description: "desc".to_string(),
+        }
+    }
 
     fn nat64_record_args(supply: u64) -> IDLArgs {
         IDLArgs {
@@ -541,12 +730,7 @@ mod tests {
     #[test]
     fn prompt_skip_returns_empty() {
         let manifest = CustomizeManifest {
-            options: vec![CustomizeOption {
-                canister: "c".to_string(),
-                field_path: "0.x".to_string(),
-                candid_type: "nat64".to_string(),
-                description: "desc".to_string(),
-            }],
+            options: vec![option_for("c")],
         };
         let result = prompt_customizations(
             &manifest,
@@ -579,7 +763,7 @@ options:
         std::fs::write(tmp.path().join(CUSTOMIZE_FILE), content).unwrap();
         let manifest = load_customize_manifest(tmp.path()).unwrap().unwrap();
         assert_eq!(manifest.options.len(), 1);
-        assert_eq!(manifest.options[0].canister, "my-canister");
+        assert_eq!(manifest.options[0].canister, cref("my-canister"));
     }
 
     #[test]
@@ -595,12 +779,7 @@ options:
         // Surfaces the format check before any interactive prompt by giving the canister
         // non-Candid init args.
         let manifest = CustomizeManifest {
-            options: vec![CustomizeOption {
-                canister: "c".to_string(),
-                field_path: ".x".to_string(),
-                candid_type: "nat64".to_string(),
-                description: "desc".to_string(),
-            }],
+            options: vec![option_for("c")],
         };
         let init_args = HashMap::from([("c".to_string(), Some(icp::InitArgs::Binary(vec![0u8])))]);
         let err = prompt_customizations(
@@ -625,12 +804,7 @@ options:
         // Manifest targets canister "a", deployment is for "b" — every option is filtered
         // out, no prompts fire, the result is empty.
         let manifest = CustomizeManifest {
-            options: vec![CustomizeOption {
-                canister: "a".to_string(),
-                field_path: ".x".to_string(),
-                candid_type: "nat64".to_string(),
-                description: "desc".to_string(),
-            }],
+            options: vec![option_for("a")],
         };
         let result = prompt_customizations(
             &manifest,
@@ -641,5 +815,166 @@ options:
         )
         .unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_ref_without_project_is_root() {
+        let r = cref("backend");
+        assert_eq!(r.project, "");
+        assert_eq!(r.local, "backend");
+        assert_eq!(r.store_key(), "backend");
+    }
+
+    #[test]
+    fn parse_ref_with_project_prefix() {
+        let r = cref("services/open-crm:backend");
+        assert_eq!(r.project, "services/open-crm");
+        assert_eq!(r.local, "backend");
+        assert_eq!(r.store_key(), "services/open-crm:backend");
+    }
+
+    #[test]
+    fn parse_ref_normalizes_project_spelling() {
+        // The store-key prefix is a clean forward-slash path relative to the
+        // workspace root; these spellings all name the same member.
+        for reference in [
+            "./services/open-crm:backend",
+            "services/open-crm/:backend",
+            "services/./open-crm:backend",
+            r"services\open-crm:backend",
+        ] {
+            assert_eq!(
+                cref(reference).store_key(),
+                "services/open-crm:backend",
+                "reference was: {reference}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_ref_keeps_parent_segments() {
+        // A dependency can be declared through a path that leaves the workspace
+        // root, and its store-key prefix keeps the `..`.
+        assert_eq!(cref("../shared:backend").store_key(), "../shared:backend");
+    }
+
+    #[test]
+    fn parse_ref_bare_project_is_root() {
+        // A prefix that normalizes away addresses the root project, whose
+        // canisters are keyed by their bare names.
+        assert_eq!(cref(":backend").store_key(), "backend");
+        assert_eq!(cref(".:backend").store_key(), "backend");
+    }
+
+    #[test]
+    fn parse_ref_empty_err() {
+        assert!(matches!(
+            CanisterRef::parse(""),
+            Err(ParseCanisterRefError::EmptyReference)
+        ));
+    }
+
+    #[test]
+    fn parse_ref_missing_canister_name_err() {
+        let err = CanisterRef::parse("services/open-crm:").unwrap_err();
+        assert!(matches!(
+            err,
+            ParseCanisterRefError::EmptyCanisterName { .. }
+        ));
+    }
+
+    #[test]
+    fn parse_ref_absolute_project_err() {
+        let err = CanisterRef::parse("/srv/open-crm:backend").unwrap_err();
+        assert!(matches!(
+            err,
+            ParseCanisterRefError::AbsoluteProjectPath { .. }
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("relative to the workspace root"), "got: {msg}");
+    }
+
+    #[test]
+    fn load_file_with_project_prefix() {
+        let tmp = Utf8TempDir::new().unwrap();
+        let content = r#"
+options:
+  - canister: services/open-crm:backend
+    field_path: ".supply"
+    candid_type: "nat64"
+    description: "Initial supply"
+"#;
+        std::fs::write(tmp.path().join(CUSTOMIZE_FILE), content).unwrap();
+        let manifest = load_customize_manifest(tmp.path()).unwrap().unwrap();
+        assert_eq!(
+            manifest.options[0].canister,
+            cref("services/open-crm:backend")
+        );
+    }
+
+    #[test]
+    fn load_file_with_absolute_project_err() {
+        // The reference is rejected while deserializing, so the failure names the
+        // file rather than surfacing later as a missing canister.
+        let tmp = Utf8TempDir::new().unwrap();
+        let content = r#"
+options:
+  - canister: /srv/open-crm:backend
+    field_path: ".supply"
+    candid_type: "nat64"
+    description: "Initial supply"
+"#;
+        std::fs::write(tmp.path().join(CUSTOMIZE_FILE), content).unwrap();
+        let err = load_customize_manifest(tmp.path()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains(CUSTOMIZE_FILE), "got: {msg}");
+    }
+
+    #[test]
+    fn validate_accepts_member_canister() {
+        let manifest = CustomizeManifest {
+            options: vec![option_for("services/open-crm:backend")],
+        };
+        validate_canister_refs(
+            &manifest,
+            &["frontend", "services/open-crm:backend"],
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_misspelled_project() {
+        // The canister exists, but under a different member — the kind of mistake
+        // the scope filter in `prompt_customizations` would otherwise swallow.
+        let manifest = CustomizeManifest {
+            options: vec![option_for("services/open_crm:backend")],
+        };
+        let err = validate_canister_refs(
+            &manifest,
+            &["frontend", "services/open-crm:backend"],
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("services/open_crm:backend"), "got: {msg}");
+        assert!(msg.contains("services/open-crm:backend"), "got: {msg}");
+    }
+
+    #[test]
+    fn validate_rejects_member_canister_named_without_prefix() {
+        // A member's canister is only reachable through its project path, so the
+        // bare local name is not a canister of the workspace.
+        let manifest = CustomizeManifest {
+            options: vec![option_for("backend")],
+        };
+        assert!(
+            validate_canister_refs(
+                &manifest,
+                &["services/open-crm:backend"],
+                Path::new(CUSTOMIZE_FILE),
+            )
+            .is_err()
+        );
     }
 }

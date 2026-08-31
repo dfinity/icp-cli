@@ -183,12 +183,29 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     // Collect interactive init arg customizations before the build so the user
     // fills in all prompts upfront, uninterrupted by build output.
+    //
+    // A workspace declares its customizations once, in the root project's file:
+    // options address a member's canister through its store key, so the file is
+    // read from the workspace root even for a member-scoped deploy, and options
+    // outside this deploy's scope are dropped by `prompt_customizations`.
     let customize_overrides: Arc<HashMap<String, IDLArgs>> = {
         let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
         let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
+        let workspace_canisters: Vec<&str> = project.canisters.keys().map(String::as_str).collect();
+        // Independent of whether the root declares customizations of its own: a
+        // vendored member's file goes unread either way, and a root with no file
+        // is exactly the case where its options would vanish unnoticed.
+        customize::warn_unread_member_customize_files(&project.dir, &workspace_canisters);
+
         match customize::load_customize_manifest(&project.dir).map_err(|e| anyhow!(e))? {
             None => Arc::new(HashMap::new()),
             Some(manifest) => {
+                // Validate against the whole workspace, not just this deploy's
+                // canisters, and before the `--yes` shortcut: a mistyped project
+                // path must not pass as an option for something else's canister.
+                customize::validate_canister_refs(&manifest, &workspace_canisters, &customize_path)
+                    .map_err(|e| anyhow!(e))?;
+
                 let init_args: HashMap<String, Option<icp::InitArgs>> = cnames
                     .iter()
                     .map(|name| {

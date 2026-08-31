@@ -30,7 +30,10 @@ use tar::Builder;
 
 use crate::operations::{
     build::{BuildManyError, build_many_with_progress_bar},
-    customize::CUSTOMIZE_FILE,
+    customize::{
+        CUSTOMIZE_FILE, CustomizeManifest, UnknownCanisterError, validate_canister_refs,
+        warn_unread_member_customize_files,
+    },
 };
 
 #[derive(Debug, Snafu)]
@@ -130,6 +133,15 @@ pub enum BundleError {
 
     #[snafu(display("failed to read '{path}'"))]
     ReadCustomize { path: PathBuf, source: fs::IoError },
+
+    #[snafu(display("failed to parse '{path}'"))]
+    ParseCustomize {
+        path: PathBuf,
+        source: serde_yaml::Error,
+    },
+
+    #[snafu(transparent)]
+    CustomizeCanister { source: UnknownCanisterError },
 
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
@@ -420,6 +432,12 @@ pub(crate) async fn create_bundle(
 
     let app_manifest = prepare_app_manifest(project_dir, &canonical_project_dir)?;
 
+    // A workspace declares its customizations once, in the root project's file,
+    // whose options address a member's canister by store key. Both the file and
+    // the store keys land in the archive unchanged — an instance sits at its
+    // workspace-relative directory — so the bundle's prompts resolve after
+    // extraction exactly as they do here. Check them now rather than leaving a
+    // typo to surface on whoever deploys the bundle.
     let customize_path = project_dir.join(CUSTOMIZE_FILE);
     let customize_bytes = match fs::read(&customize_path) {
         Ok(bytes) => Some(bytes),
@@ -431,6 +449,20 @@ pub(crate) async fn create_bundle(
             });
         }
     };
+    let canister_names: Vec<&str> = canisters
+        .iter()
+        .map(|(_, canister)| canister.name.as_str())
+        .collect();
+    // Independent of whether the root declares customizations of its own: a
+    // vendored member's file is left out of the archive either way.
+    warn_unread_member_customize_files(project_dir, &canister_names);
+    if let Some(bytes) = &customize_bytes {
+        let manifest: CustomizeManifest =
+            serde_yaml::from_slice(bytes).context(ParseCustomizeSnafu {
+                path: &customize_path,
+            })?;
+        validate_canister_refs(&manifest, &canister_names, &customize_path)?;
+    }
 
     write_archive(
         output,

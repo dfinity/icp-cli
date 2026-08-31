@@ -281,6 +281,79 @@ async fn deploy_no_create_conflicts_with_creation_flags() {
         .stderr(contains("--no-create").and(contains("--subnet")));
 }
 
+/// A workspace declares its customizations once, at its root, and addresses a
+/// member's canister by its project path. A path that names no member is a typo,
+/// so it fails outright — before the build, and with `--yes` too, where the
+/// prompts themselves are skipped but a mistyped reference would otherwise sit
+/// unnoticed in CI.
+#[tokio::test]
+async fn deploy_rejects_unknown_customize_canister() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    let dep_dir = project_dir.join("services/open-crm");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+            dependencies:
+              - name: open-crm
+                path: ./services/open-crm
+                canisters: [backend]
+
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: services/open_crm:backend
+                field_path: ".admin"
+                candid_type: "principal"
+                description: "Administrator"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    for extra in [vec!["deploy"], vec!["deploy", "--yes"]] {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(&extra)
+            .assert()
+            .failure()
+            .stderr(
+                contains("services/open_crm:backend")
+                    .and(contains("not part of this workspace"))
+                    .and(contains("services/open-crm:backend")),
+            );
+    }
+}
+
 #[tokio::test]
 async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();

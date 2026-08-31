@@ -43,6 +43,13 @@ docs; the *reasons* behind those choices are recorded here.
   a plugin probing for an optional section, not a failure it must recognize by
   parsing error text. The host pays for that guarantee on the proxied path — see
   *Metadata reads* below.
+- **`canister-set-environment-variable` sets one variable, not a list** — the
+  management canister replaces a canister's environment variables wholesale, so
+  *some* read-modify-write has to happen; putting it in the host means a plugin
+  that wants to add one variable does not have to first learn the target's other
+  ones, which reading them itself would tell it. The cost is a round trip per
+  variable, paid by a plugin setting several. It takes the same `call-target`
+  and `direct` flag as the other two imports, for the same one mental model.
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
   canister names it knows about. It is informational only; calling still
@@ -188,10 +195,13 @@ exactly as `canister-call` chooses one:
   *proven* by the certificate rather than asserted. It requests `controllers`
   alongside the metadata path, since only that distinguishes a canister with no
   such section from one that was never created.
-- **Proxied** — `ProxyArgs` aimed at the management canister's
-  `canister_metadata`, so the controller check runs against the proxy. This is
-  the same shape the CLI's own management calls take through
-  `update_or_proxy_raw`; the runtime inlines it rather than depending on the CLI.
+- **Proxied** — `management_call` aimed at the management canister's
+  `canister_metadata`, so the controller check runs against the proxy.
+
+`management_call` is the shape the CLI's own management calls take through
+`update_or_proxy_raw` — proxied via `ProxyArgs`, or direct with the target as
+the effective canister ID — inlined here rather than depended on, and shared
+with the environment-variable write below.
 
 Only a certificate can make a read `none`. The management canister answers a
 section that isn't there and one private to someone else with the same
@@ -200,6 +210,27 @@ than an answer, and confirms it with a certified read before reporting absence.
 A plugin then sees one answer either way: no section by that name and no module
 installed at all are `none`; a private section it may not have, a canister that
 does not exist, and any other failure are errors.
+
+### Environment-variable writes (read-modify-write)
+
+`update_settings` has no per-variable form: naming `environment_variables` at all
+replaces the target's whole list, and omitting a setting is what leaves it
+unchanged. So `canister-set-environment-variable` reads the target's current
+settings with `canister_status`, overlays the one variable, and writes the list
+back with every other field of `CanisterSettings` left `None`.
+
+Both calls go through `management_call` on the *same* route, chosen by `direct`.
+They have to: each is controller-gated against whoever makes it, so a read as
+the sync identity followed by a write as the proxy would demand both control the
+target and buy nothing for it. The pair is not atomic — a settings update landing
+between them is overwritten — which is inherent to the wholesale-replace API and
+is documented in the WIT rather than papered over.
+
+The variable lives in the canister's settings, not in the manifest, so a later
+`icp deploy` drops it: `set_binding_env_vars_many` rewrites the list from the
+manifest's variables plus the `PUBLIC_CANISTER_ID:*` bindings without reading
+what is there. A sync step that sets the variable on every sync restores it,
+which is the ordinary case, since deploy runs the sync phase after that pass.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 

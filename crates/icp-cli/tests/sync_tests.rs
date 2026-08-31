@@ -448,7 +448,8 @@ async fn sync_plugin_registers_seed_data() {
         .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success()
-        .stderr(contains("candid:service: absent"));
+        .stderr(contains("candid:service: absent"))
+        .stderr(contains("SEEDED_BY=random-environment"));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()
@@ -469,6 +470,27 @@ async fn sync_plugin_registers_seed_data() {
             contains("apple")
                 .and(contains("banana"))
                 .and(contains("cherry")),
+        );
+
+    // The plugin's environment variable really landed in the canister's
+    // settings, alongside the PUBLIC_CANISTER_ID binding deploy writes itself —
+    // proving the host read the current list and wrote it back with the new
+    // variable added, rather than replacing it.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            contains("SEEDED_BY: random-environment")
+                .and(contains("PUBLIC_CANISTER_ID:my-canister")),
         );
 }
 
@@ -953,6 +975,10 @@ async fn sync_plugin_routes_through_proxy() {
     // This manifest skips the example's ic-wasm step, so the section really is
     // missing — and the host must report the resulting rejection as an absent
     // section, the same answer a direct read proves from the certificate.
+    //
+    // Its environment-variable write is proxied as well: both the settings read
+    // and the settings write are made by the proxy, which is a controller, so
+    // the pair is checked against the proxy rather than the user identity.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -964,7 +990,8 @@ async fn sync_plugin_routes_through_proxy() {
         ])
         .assert()
         .success()
-        .stderr(contains("candid:service: absent"));
+        .stderr(contains("candid:service: absent"))
+        .stderr(contains("SEEDED_BY=random-environment"));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()

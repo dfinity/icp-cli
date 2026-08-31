@@ -46,7 +46,19 @@ impl Guest for Plugin {
         })?;
         println!("set_uploader ({}): ok", input.identity_principal);
 
-        // 3. Register every file found by traversing the preopened dirs.
+        // 3. Record which environment seeded the canister as an environment
+        //    variable, so the canister's own code can read it back. Setting
+        //    settings is controller-gated like set_uploader, so it takes the
+        //    same route (direct: false).
+        canister_set_environment_variable(&SetEnvironmentVariableRequest {
+            target: CallTarget::Host,
+            name: "SEEDED_BY".to_string(),
+            value: input.environment.clone(),
+            direct: false,
+        })?;
+        eprintln!("SEEDED_BY={}", input.environment);
+
+        // 4. Register every file found by traversing the preopened dirs.
         //    Direct calls (direct: true) because register is gated on the
         //    uploader principal, which is the current identity — not the proxy.
         let mut registered = 0u32;

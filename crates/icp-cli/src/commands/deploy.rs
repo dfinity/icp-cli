@@ -1,5 +1,5 @@
 use anyhow::{Context as _, anyhow, bail};
-use candid::Principal;
+use candid::{IDLArgs, Principal};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
@@ -15,7 +15,8 @@ use icp::{
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use itertools::Itertools;
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
@@ -27,6 +28,7 @@ use crate::{
         build::build_many_with_progress_bar,
         candid_compat::check_candid_compatibility_many,
         create::{CreateFunding, CreateOperation, CreateTarget},
+        customize,
         install::{install_many, resolve_install_mode_and_status},
         proxy_management,
         settings::{sync_controller_dependents, sync_settings_many},
@@ -193,6 +195,38 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
     )
     .await?;
+
+    // Collect interactive init arg customizations before the build so the user
+    // fills in all prompts upfront, uninterrupted by build output.
+    let customize_overrides: Arc<HashMap<String, IDLArgs>> = {
+        let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
+        let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
+        match customize::load_customize_manifest(&project.dir).map_err(|e| anyhow!(e))? {
+            None => Arc::new(HashMap::new()),
+            Some(manifest) => {
+                let init_args: HashMap<String, Option<icp::CanisterArgs>> = cnames
+                    .iter()
+                    .map(|name| {
+                        let ia = env
+                            .get_canister_info(name)
+                            .ok()
+                            .and_then(|(_, info)| info.init_args.clone());
+                        (name.clone(), ia)
+                    })
+                    .collect();
+                Arc::new(
+                    customize::prompt_customizations(
+                        &manifest,
+                        &cnames,
+                        &init_args,
+                        args.yes,
+                        &customize_path,
+                    )
+                    .map_err(|e| anyhow!(e))?,
+                )
+            }
+        }
+    };
 
     // Build the selected canisters
     info!("Building canisters:");
@@ -361,6 +395,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
         let agent = agent.clone();
+        let co = customize_overrides.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -377,36 +412,38 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             let (_canister_path, canister_info) =
                 env.get_canister_info(name).map_err(|e| anyhow!(e))?;
 
-            // An upgrade passes `upgrade_args`; a canister that declares none is
-            // upgraded with its `init_args`, which its post-upgrade entry point
-            // expects anyway. The field is carried along so a malformed value is
-            // reported against the one the user wrote.
-            let init_args = || {
-                canister_info
+            let encode = |field: ArgsField, a: &icp::CanisterArgs| {
+                a.to_bytes()
+                    .with_context(|| format!("Failed to encode the {field} of canister '{name}'"))
+            };
+            // The customize file's prompts are filled into `init_args`, so its
+            // result stands in for that field.
+            let init_args = || match co.get(name) {
+                Some(customized) => customized.to_bytes().map(Some).map_err(|e| {
+                    anyhow!("Failed to encode the customized init_args of canister '{name}': {e}")
+                }),
+                None => canister_info
                     .init_args
                     .as_ref()
-                    .map(|a| (ArgsField::Init, a))
-            };
-            let manifest_args = match mode {
-                CanisterInstallMode::Upgrade(_) => canister_info
-                    .upgrade_args
-                    .as_ref()
-                    .map(|a| (ArgsField::Upgrade, a))
-                    .or_else(init_args),
-                CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args(),
+                    .map(|a| encode(ArgsField::Init, a))
+                    .transpose(),
             };
 
-            // CLI --args/--args-file take priority over the manifest's
+            // CLI --args/--args-file take priority over both. An upgrade passes
+            // `upgrade_args`; a canister that declares none is upgraded with its
+            // `init_args`, which its post-upgrade entry point expects anyway. The
+            // field is carried along so a malformed value is reported against the
+            // one the user wrote.
             let args_bytes = if args.args_opt.is_some() {
                 args.args_opt.resolve_bytes()?
             } else {
-                manifest_args
-                    .map(|(field, a)| {
-                        a.to_bytes().with_context(|| {
-                            format!("Failed to encode the {field} of canister '{name}'")
-                        })
-                    })
-                    .transpose()?
+                match mode {
+                    CanisterInstallMode::Upgrade(_) => match &canister_info.upgrade_args {
+                        Some(a) => Some(encode(ArgsField::Upgrade, a)?),
+                        None => init_args()?,
+                    },
+                    CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args()?,
+                }
             };
 
             Ok::<_, anyhow::Error>((name.clone(), cid, mode, status, args_bytes))

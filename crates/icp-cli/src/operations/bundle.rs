@@ -30,7 +30,10 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 use tracing::warn;
 
-use crate::operations::build::{BuildManyError, build_many_with_progress_bar};
+use crate::operations::{
+    build::{BuildManyError, build_many_with_progress_bar},
+    customize::CUSTOMIZE_FILE,
+};
 
 #[derive(Debug, Snafu)]
 pub enum BundleError {
@@ -126,6 +129,9 @@ pub enum BundleError {
         variable: String,
         source: fs::IoError,
     },
+
+    #[snafu(display("failed to read '{path}'"))]
+    ReadCustomize { path: PathBuf, source: fs::IoError },
 
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
@@ -484,9 +490,22 @@ pub(crate) async fn create_bundle(
 
     let app_manifest = prepare_app_manifest(project_dir, &canonical_project_dir)?;
 
+    let customize_path = project_dir.join(CUSTOMIZE_FILE);
+    let customize_bytes = match fs::read(&customize_path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(source) => {
+            return Err(BundleError::ReadCustomize {
+                path: customize_path,
+                source,
+            });
+        }
+    };
+
     write_archive(
         output,
         &manifests,
+        customize_bytes.as_deref(),
         &bundle_artifacts,
         &args_files,
         app_manifest.as_ref(),
@@ -1380,6 +1399,7 @@ impl<W: Write> ArchiveWriter<W> {
 fn write_archive(
     output: &Path,
     manifests: &[InstanceManifest],
+    customize_bytes: Option<&[u8]>,
     artifacts: &BundleArtifacts,
     args_files: &[ArgsFile],
     app_manifest: Option<&AppManifest>,
@@ -1390,6 +1410,7 @@ fn write_archive(
         .chain(app_manifest.iter().flat_map(|app| {
             std::iter::once(APP_MANIFEST).chain(app.images.iter().map(|i| i.archive_path.as_str()))
         }))
+        .chain(customize_bytes.map(|_| CUSTOMIZE_FILE))
         .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
         .chain(args_files.iter().map(|f| f.archive_path.as_str()))
         .chain(
@@ -1431,6 +1452,10 @@ fn write_archive(
             })?;
             archive.bytes(&shot.archive_path, &data)?;
         }
+    }
+
+    if let Some(customize_bytes) = customize_bytes {
+        archive.bytes(CUSTOMIZE_FILE, customize_bytes)?;
     }
 
     for nb in &artifacts.wasms {

@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     Canister,
-    canister::{Settings, resolve_controllers},
+    canister::{Settings, Visibility, resolve_controllers},
     context::{Context, EnvironmentSelection},
     store_id::IdMapping,
 };
@@ -13,7 +13,7 @@ use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterSettings, EnvironmentVariable, UpdateSettingsArgs,
 };
 use icp_events::TaskOutcome;
 
@@ -47,13 +47,13 @@ pub struct SyncSettingsManyError {
     names: Vec<String>,
 }
 
-/// Compare two LogVisibility values in an order-insensitive manner.
-/// For AllowedViewers, the principal lists are compared as sets.
-fn log_visibility_eq(a: &LogVisibility, b: &LogVisibility) -> bool {
+/// Compare two visibility settings, treating the allowed-viewers list as a set
+/// so a reordering from the replica does not look like a pending change.
+fn visibility_eq(a: &Visibility, b: &Visibility) -> bool {
     match (a, b) {
-        (LogVisibility::Controllers, LogVisibility::Controllers) => true,
-        (LogVisibility::Public, LogVisibility::Public) => true,
-        (LogVisibility::AllowedViewers(va), LogVisibility::AllowedViewers(vb)) => {
+        (Visibility::Controllers, Visibility::Controllers) => true,
+        (Visibility::Public, Visibility::Public) => true,
+        (Visibility::AllowedViewers(va), Visibility::AllowedViewers(vb)) => {
             let set_a: HashSet<_> = va.iter().collect();
             let set_b: HashSet<_> = vb.iter().collect();
             set_a == set_b
@@ -86,6 +86,7 @@ pub async fn sync_settings(
             .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
+        ref status_visibility,
         compute_allocation,
         ref memory_allocation,
         ref freezing_threshold,
@@ -98,9 +99,10 @@ pub async fn sync_settings(
     } = &canister.settings;
     let current_settings = status.settings;
 
-    // Convert our log_visibility to IC type for comparison and update
-    let log_visibility_setting: Option<LogVisibility> =
-        log_visibility.clone().map(LogVisibility::from);
+    let desired_log_visibility = log_visibility.clone().map(Visibility::from);
+    let desired_status_visibility = status_visibility.clone().map(Visibility::from);
+    let current_log_visibility = Visibility::from(current_settings.log_visibility.clone());
+    let current_status_visibility = Visibility::from(current_settings.status_visibility.clone());
 
     let environment_variable_setting =
         if let Some(configured_environment_variables) = &environment_variables {
@@ -147,9 +149,12 @@ pub async fn sync_settings(
         desired_sorted != current_sorted
     });
 
-    if log_visibility_setting
+    if desired_log_visibility
         .as_ref()
-        .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
+        .is_none_or(|s| visibility_eq(s, &current_log_visibility))
+        && desired_status_visibility
+            .as_ref()
+            .is_none_or(|s| visibility_eq(s, &current_status_visibility))
         && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
         && memory_allocation
             .as_ref()
@@ -184,7 +189,8 @@ pub async fn sync_settings(
     }
 
     let settings = CanisterSettings {
-        log_visibility: log_visibility_setting,
+        log_visibility: desired_log_visibility.map(Into::into),
+        status_visibility: desired_status_visibility.map(Into::into),
         compute_allocation: compute_allocation.map(Nat::from),
         memory_allocation: memory_allocation.as_ref().map(|m| Nat::from(m.get())),
         freezing_threshold: freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
@@ -194,10 +200,9 @@ pub async fn sync_settings(
         log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         environment_variables: environment_variable_setting,
         controllers: controllers_setting,
-        // TODO: make snapshot_visibility configurable from the manifest and synced
-        // here, mirroring log_visibility (Controllers/Public/AllowedViewers).
-        // Tracked for a follow-up PR; until then, leave it unchanged.
+        // Not configurable from the manifest yet; `None` leaves them unchanged.
         snapshot_visibility: None,
+        minimum_incoming_canister_call_cycles: None,
     };
 
     proxy_management::update_settings(
@@ -333,90 +338,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn log_visibility_eq_controllers() {
-        assert!(log_visibility_eq(
-            &LogVisibility::Controllers,
-            &LogVisibility::Controllers
+    fn visibility_eq_controllers() {
+        assert!(visibility_eq(
+            &Visibility::Controllers,
+            &Visibility::Controllers
         ));
     }
 
     #[test]
-    fn log_visibility_eq_public() {
-        assert!(log_visibility_eq(
-            &LogVisibility::Public,
-            &LogVisibility::Public
+    fn visibility_eq_public() {
+        assert!(visibility_eq(&Visibility::Public, &Visibility::Public));
+    }
+
+    #[test]
+    fn visibility_eq_different_variants() {
+        assert!(!visibility_eq(
+            &Visibility::Controllers,
+            &Visibility::Public
+        ));
+        assert!(!visibility_eq(
+            &Visibility::Public,
+            &Visibility::Controllers
         ));
     }
 
     #[test]
-    fn log_visibility_eq_different_variants() {
-        assert!(!log_visibility_eq(
-            &LogVisibility::Controllers,
-            &LogVisibility::Public
-        ));
-        assert!(!log_visibility_eq(
-            &LogVisibility::Public,
-            &LogVisibility::Controllers
-        ));
-    }
-
-    #[test]
-    fn log_visibility_eq_allowed_viewers_same_order() {
+    fn visibility_eq_allowed_viewers_same_order() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
-        assert!(log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p1, p2])
+        assert!(visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_order() {
+    fn visibility_eq_allowed_viewers_different_order() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         // Order should not matter
-        assert!(log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p2, p1])
+        assert!(visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p2, p1])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_principals() {
+    fn visibility_eq_allowed_viewers_different_principals() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
         let p3 = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p1, p3])
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p1, p3])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_length() {
+    fn visibility_eq_allowed_viewers_different_length() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::AllowedViewers(vec![p1, p2])
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_vs_other() {
+    fn visibility_eq_allowed_viewers_vs_other() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::Controllers
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::Controllers
         ));
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::Public
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::Public
         ));
     }
 

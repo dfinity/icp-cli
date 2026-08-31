@@ -388,6 +388,7 @@ settings:
   wasm_memory_limit: 1gib
   wasm_memory_threshold: 512mib
   log_visibility: controllers
+  status_visibility: controllers
   environment_variables:
     KEY: "value"
     # A value may also be read from a file, relative to the canister directory

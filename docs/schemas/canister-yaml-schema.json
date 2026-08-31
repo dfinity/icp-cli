@@ -213,7 +213,7 @@
       "description": "Controls who can read canister logs.",
       "oneOf": [
         {
-          "description": "Simple log visibility: 'controllers' (only controllers can view) or 'public' (anyone can view)",
+          "description": "'controllers' (only the canister's controllers can read the logs) or 'public' (anyone can read the logs)",
           "enum": [
             "controllers",
             "public"
@@ -222,12 +222,12 @@
         },
         {
           "additionalProperties": false,
-          "description": "Specific principals that can view logs",
+          "description": "Specific principals that can read the logs",
           "properties": {
             "allowed_viewers": {
-              "description": "List of principal IDs that can view canister logs",
+              "description": "Principal IDs that can read the logs, in addition to the controllers",
               "items": {
-                "description": "A principal ID that can view logs",
+                "description": "A principal ID",
                 "type": "string"
               },
               "type": "array"
@@ -438,6 +438,17 @@
           ],
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
+        "status_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read the canister's status."
+        },
         "wasm_memory_limit": {
           "anyOf": [
             {
@@ -462,6 +473,37 @@
         }
       },
       "type": "object"
+    },
+    "StatusVisibility": {
+      "description": "Controls who can read the canister's status.",
+      "oneOf": [
+        {
+          "description": "'controllers' (the canister's controllers, plus any subnet administrators and the canister itself, can read the status) or 'public' (anyone can read the status)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Specific principals that can read the status",
+          "properties": {
+            "allowed_viewers": {
+              "description": "Principal IDs that can read the status, in addition to the controllers",
+              "items": {
+                "description": "A principal ID",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "SyncStep": {
       "description": "Identifies the type of adapter used to sync the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: echo \"synchronizing canister\"\n```",

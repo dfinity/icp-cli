@@ -1,17 +1,21 @@
 use clap::Args;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings, LogVisibility};
+use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings};
 use icp::context::Context;
 use std::fmt::Write;
 
 use icp::operations::proxy_management;
 
-use crate::commands::args::CanisterCommandArgs;
+use crate::commands::{
+    args::CanisterCommandArgs,
+    canister::{format_controllers, format_visibility},
+};
 
 /// Show the settings of a canister.
 ///
 /// Queries the canister_status endpoint of the management canister and
-/// displays only the settings fields. Requires the caller to be a controller.
+/// displays only the settings fields. Requires the caller to be allowed to read
+/// the canister's status, which by default means being one of its controllers.
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
     #[command(flatten)]
@@ -66,12 +70,8 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     let mut buf = String::new();
     writeln!(
         &mut buf,
-        "Controllers: {}",
-        s.controllers
-            .iter()
-            .map(|p| p.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
+        "{}",
+        format_controllers(s.controllers.iter().map(|p| p.to_string()), "")
     )
     .unwrap();
     writeln!(&mut buf, "Compute allocation: {}", s.compute_allocation).unwrap();
@@ -92,20 +92,18 @@ fn build_output(s: &DefiniteCanisterSettings) -> String {
     .unwrap();
     writeln!(&mut buf, "Log memory limit: {}", s.log_memory_limit).unwrap();
 
-    let log_visibility = match &s.log_visibility {
-        LogVisibility::Controllers => "Controllers".to_string(),
-        LogVisibility::Public => "Public".to_string(),
-        LogVisibility::AllowedViewers(viewers) => {
-            if viewers.is_empty() {
-                "Allowed viewers list is empty".to_string()
-            } else {
-                let mut v: Vec<String> = viewers.iter().map(|p| p.to_string()).collect();
-                v.sort();
-                format!("Allowed viewers: {}", v.join(", "))
-            }
-        }
-    };
-    writeln!(&mut buf, "Log visibility: {log_visibility}").unwrap();
+    writeln!(
+        &mut buf,
+        "Log visibility: {}",
+        format_visibility(&s.log_visibility.clone().into(), "log viewer", "")
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "Status visibility: {}",
+        format_visibility(&s.status_visibility.clone().into(), "status viewer", "")
+    )
+    .unwrap();
 
     if s.environment_variables.is_empty() {
         writeln!(&mut buf, "Environment variables: N/A").unwrap();

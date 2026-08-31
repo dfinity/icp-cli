@@ -67,7 +67,7 @@ async fn canister_status() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
-                .and(contains("Controllers: 2vxsx-fae")),
+                .and(contains("controller: 2vxsx-fae")),
         );
 }
 
@@ -203,7 +203,7 @@ async fn canister_status_falls_back_when_access_is_denied() {
         .assert()
         .success()
         .stdout(
-            contains(format!("Controllers: {principal_alice}"))
+            contains(format!("controller: {principal_alice}"))
                 .and(contains("Module hash:"))
                 .and(contains("Status:").not()),
         );

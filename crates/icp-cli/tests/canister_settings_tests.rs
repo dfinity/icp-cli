@@ -75,7 +75,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str()).not()));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_alice.as_str()).not()));
 
     // Add controller
     ctx.icp()
@@ -106,7 +106,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_alice.as_str())));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_alice.as_str())));
 
     // Add and remove controller.
     ctx.icp()
@@ -140,7 +140,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -174,7 +174,7 @@ async fn canister_settings_update_controllers() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae").and(contains(principal_bob.as_str()).not()));
+        .stdout(contains("controller: 2vxsx-fae").and(contains(principal_bob.as_str()).not()));
 
     // Add multiple controllers
     ctx.icp()
@@ -208,7 +208,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -245,7 +245,7 @@ async fn canister_settings_update_controllers() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str()).not()),
         );
@@ -473,7 +473,8 @@ async fn canister_settings_update_log_visibility() {
         .success()
         .stdout(contains("Log visibility: Public"));
 
-    // Add log viewer.
+    // Public carries no viewers list, so adding to one is refused rather than
+    // silently revoking public access.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -487,7 +488,30 @@ async fn canister_settings_update_log_visibility() {
             "random-environment",
         ])
         .assert()
-        .success();
+        .failure()
+        .stderr(contains(
+            "Log visibility is currently public, so there is no allowed viewers list for --add-log-viewer to edit",
+        ));
+
+    // Setting the list outright is the way to say it, and warns about what the
+    // public policy it replaces used to grant.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--set-log-viewer",
+            principal_alice.as_str(),
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stderr(contains(
+            "Log visibility is currently public; listing allowed viewers revokes access for everyone else",
+        ));
 
     // Query settings
     ctx.icp()
@@ -503,7 +527,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:").and(contains(principal_alice.as_str())),
+            contains("Log visibility: Allowed viewers").and(contains(principal_alice.as_str())),
         );
 
     // Add and remove log viewer.
@@ -538,7 +562,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()).not())
                 .and(contains(principal_bob.as_str())),
         );
@@ -572,7 +596,9 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(contains("Log visibility: Allowed viewers list is empty"));
+        .stdout(contains(
+            "Log visibility: Allowed viewers\n  log viewer list is empty",
+        ));
 
     // Add multiple log viewers.
     ctx.icp()
@@ -606,7 +632,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -642,7 +668,9 @@ async fn canister_settings_update_log_visibility() {
         ])
         .assert()
         .success()
-        .stdout(contains("Log visibility: Allowed viewers list is empty"));
+        .stdout(contains(
+            "Log visibility: Allowed viewers\n  log viewer list is empty",
+        ));
 
     // Set multiple log viewers.
     ctx.icp()
@@ -676,7 +704,7 @@ async fn canister_settings_update_log_visibility() {
         .assert()
         .success()
         .stdout(
-            contains("Log visibility: Allowed viewers:")
+            contains("Log visibility: Allowed viewers")
                 .and(contains(principal_alice.as_str()))
                 .and(contains(principal_bob.as_str())),
         );
@@ -954,7 +982,7 @@ async fn canister_settings_update_environment_variables() {
         .assert()
         .success()
         .stdout(
-            contains("Controllers: 2vxsx-fae")
+            contains("controller: 2vxsx-fae")
                 .and(contains("Environment variables:"))
                 .and(contains("PUBLIC_CANISTER_ID:my-canister")),
         );
@@ -1394,7 +1422,281 @@ async fn canister_settings_sync_log_visibility() {
     write_string(&project_dir.join("icp.yaml"), &pm_with_allowed_viewers)
         .expect("failed to write project manifest");
     sync(&ctx, &project_dir);
-    confirm_log_visibility(&ctx, &project_dir, "Allowed viewers: 2vxsx-fae, aaaaa-aa");
+    confirm_log_visibility(
+        &ctx,
+        &project_dir,
+        "Allowed viewers\n  log viewer: 2vxsx-fae\n  log viewer: aaaaa-aa",
+    );
+
+    // status_visibility takes the same manifest forms, and a single sync has to
+    // apply both settings: either change alone would satisfy the "settings
+    // already match" check that decides whether to send an update at all.
+    let pm_with_both = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            settings:
+              log_visibility: public
+              status_visibility:
+                allowed_viewers:
+                  - "aaaaa-aa"
+                  - "2vxsx-fae"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm_with_both)
+        .expect("failed to write project manifest");
+    sync(&ctx, &project_dir);
+    confirm_log_visibility(&ctx, &project_dir, "Public");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "settings",
+            "show",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains(
+            "Status visibility: Allowed viewers\n  status viewer: 2vxsx-fae\n  status viewer: aaaaa-aa",
+        ));
+}
+
+/// Drives the `--*-status-viewer` / `--status-visibility` flags against a live
+/// replica, checking each one both in `settings show` and in what it actually
+/// grants: whether a non-controller may read the status, or falls back to the
+/// public state-tree information.
+///
+/// The flag-resolution matrix itself is unit-tested in
+/// `commands::canister::settings::update`; what this adds is that clap wires the
+/// flags to the right group and that the replica honours the result.
+#[tokio::test]
+async fn canister_settings_update_status_visibility() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let client = clients::icp(&ctx, &project_dir, None);
+    let principal_alice = get_principal(&client, "alice");
+    let principal_bob = get_principal(&client, "bob");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    fn update(ctx: &TestContext, project_dir: &Path, args: &[&str]) -> assert_cmd::assert::Assert {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .success()
+    }
+
+    fn update_fails(
+        ctx: &TestContext,
+        project_dir: &Path,
+        args: &[&str],
+    ) -> assert_cmd::assert::Assert {
+        let mut all = vec![
+            "canister",
+            "settings",
+            "update",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ];
+        all.extend_from_slice(args);
+        ctx.icp()
+            .current_dir(project_dir)
+            .args(all)
+            .assert()
+            .failure()
+    }
+
+    fn confirm(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "settings",
+                "show",
+                "my-canister",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success()
+    }
+
+    /// `canister status` as alice, who is not a controller: the full report only
+    /// when she may read the status, the public fallback otherwise.
+    fn status_as_alice(ctx: &TestContext, project_dir: &Path) -> assert_cmd::assert::Assert {
+        ctx.icp()
+            .current_dir(project_dir)
+            .args([
+                "canister",
+                "status",
+                "my-canister",
+                "--identity",
+                "alice",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success()
+    }
+
+    // The default is controllers, reported separately from log visibility.
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers").and(contains("Log visibility: Controllers")),
+    );
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // --add-status-viewer grants it to alice, relative to the current list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--add-status-viewer", principal_alice.as_str()],
+    );
+    status_as_alice(&ctx, &project_dir)
+        .stdout(contains("Status: Running").and(contains("Status visibility: Allowed viewers")));
+
+    // Add and remove in one call, again relative to the current list. Alice
+    // loses access, so the fallback comes back.
+    update(
+        &ctx,
+        &project_dir,
+        &[
+            "--add-status-viewer",
+            principal_bob.as_str(),
+            "--remove-status-viewer",
+            principal_alice.as_str(),
+        ],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers")
+            .and(contains(principal_bob.as_str()))
+            .and(contains(principal_alice.as_str()).not()),
+    );
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // --set-status-viewer replaces the list outright.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-status-viewer", principal_alice.as_str()],
+    );
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Allowed viewers")
+            .and(contains(principal_alice.as_str()))
+            .and(contains(principal_bob.as_str()).not()),
+    );
+
+    // Public grants it to everyone, and leaves log visibility alone.
+    update(&ctx, &project_dir, &["--status-visibility", "public"]);
+    confirm(&ctx, &project_dir)
+        .stdout(contains("Status visibility: Public").and(contains("Log visibility: Controllers")));
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
+
+    // A relative viewer edit has no list to be relative to while the status is
+    // public, and is refused rather than silently revoking public access.
+    update_fails(
+        &ctx,
+        &project_dir,
+        &["--add-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is currently public, so there is no allowed viewers list for --add-status-viewer to edit",
+    ));
+    update_fails(
+        &ctx,
+        &project_dir,
+        &["--remove-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains("--remove-status-viewer"));
+    // Refused, so the canister is untouched and alice still reads the status.
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status: Running"));
+
+    // Stating the list outright is allowed, and warns about what it revokes.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is currently public; listing allowed viewers revokes access for everyone else",
+    ));
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // Removing the last viewer leaves the controllers alone with it, which is
+    // warned about but not refused: the edit says what it does.
+    update(
+        &ctx,
+        &project_dir,
+        &["--remove-status-viewer", principal_bob.as_str()],
+    )
+    .stderr(contains(
+        "Status visibility is left with no allowed viewers; only the controllers keep access",
+    ));
+
+    // Revoking it puts the fallback back in place.
+    update(&ctx, &project_dir, &["--status-visibility", "controllers"]);
+    status_as_alice(&ctx, &project_dir).stdout(contains("Status:").not());
+
+    // An update naming neither visibility group must leave both alone, rather
+    // than resetting them to an empty allowed-viewers list.
+    update(
+        &ctx,
+        &project_dir,
+        &["--set-log-viewer", principal_alice.as_str()],
+    );
+    update(&ctx, &project_dir, &["--freezing-threshold", "7d"]);
+    confirm(&ctx, &project_dir).stdout(
+        contains("Status visibility: Controllers")
+            .and(contains("Log visibility: Allowed viewers"))
+            .and(contains(principal_alice.as_str())),
+    );
 }
 
 #[tokio::test]
@@ -1572,6 +1874,7 @@ async fn canister_settings_show() {
                 .and(contains(r#""wasm_memory_threshold""#))
                 .and(contains(r#""log_memory_limit""#))
                 .and(contains(r#""log_visibility""#))
+                .and(contains(r#""status_visibility""#))
                 .and(contains(r#""environment_variables""#)),
         );
 }

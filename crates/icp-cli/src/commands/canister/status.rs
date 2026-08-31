@@ -2,10 +2,9 @@ use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
-use ic_management_canister_types::{
-    CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
-};
+use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
+    canister::Visibility,
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
 };
@@ -15,7 +14,13 @@ use tracing::debug;
 
 use icp::operations::{proxy::UpdateOrProxyError, proxy_management};
 
-use crate::{commands::args, options};
+use crate::{
+    commands::{
+        args,
+        canister::{format_controllers, format_visibility},
+    },
+    options,
+};
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";
@@ -371,13 +376,19 @@ struct SerializableCanisterSettings {
     wasm_memory_limit: String,
     wasm_memory_threshold: String,
     log_memory_limit: String,
-    log_visibility: SerializableLogVisibility,
+    log_visibility: SerializableVisibility,
+    status_visibility: SerializableVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
 
-#[derive(Serialize, Clone)]
+/// `--json` renders a visibility setting as `{"type": ..., "value": ...}`,
+/// which differs from the manifest form [`Visibility`] serializes to.
+#[derive(Clone)]
+struct SerializableVisibility(Visibility);
+
+#[derive(Serialize)]
 #[serde(tag = "type", content = "value")]
-enum SerializableLogVisibility {
+enum VisibilityRepr {
     Controllers,
     Public,
     AllowedViewers(Vec<String>),
@@ -424,21 +435,23 @@ impl SerializableCanisterSettings {
             wasm_memory_limit: settings.wasm_memory_limit.to_string(),
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
             log_memory_limit: settings.log_memory_limit.to_string(),
-            log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
+            log_visibility: SerializableVisibility(settings.log_visibility.clone().into()),
+            status_visibility: SerializableVisibility(settings.status_visibility.clone().into()),
             environment_variables: settings.environment_variables.clone(),
         }
     }
 }
 
-impl SerializableLogVisibility {
-    fn from(visibility: &LogVisibility) -> Self {
-        match visibility {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                Self::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
+impl Serialize for SerializableVisibility {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let repr = match &self.0 {
+            Visibility::Controllers => VisibilityRepr::Controllers,
+            Visibility::Public => VisibilityRepr::Public,
+            Visibility::AllowedViewers(viewers) => {
+                VisibilityRepr::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
             }
-        }
+        };
+        repr.serialize(serializer)
     }
 }
 
@@ -461,7 +474,11 @@ fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, an
     }
     writeln!(&mut buf, "Canister Status Report:")?;
 
-    writeln!(&mut buf, "  Controllers: {}", result.controllers.join(", "))?;
+    writeln!(
+        &mut buf,
+        "{}",
+        format_controllers(result.controllers.iter().cloned(), "  ")
+    )?;
     writeln!(
         &mut buf,
         "  Module hash: {}",
@@ -484,8 +501,8 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     let settings = &result.settings;
     writeln!(
         &mut buf,
-        "  Controllers: {}",
-        settings.controllers.join(", ")
+        "{}",
+        format_controllers(settings.controllers.iter().cloned(), "  ")
     )?;
     writeln!(
         &mut buf,
@@ -524,19 +541,16 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         settings.log_memory_limit
     )?;
 
-    let log_visibility = match settings.log_visibility.clone() {
-        SerializableLogVisibility::Controllers => "Controllers".to_string(),
-        SerializableLogVisibility::Public => "Public".to_string(),
-        SerializableLogVisibility::AllowedViewers(mut viewers) => {
-            if viewers.is_empty() {
-                "Allowed viewers list is empty".to_string()
-            } else {
-                viewers.sort();
-                format!("Allowed viewers: {}", viewers.join(", "))
-            }
-        }
-    };
-    writeln!(&mut buf, "  Log visibility: {log_visibility}")?;
+    writeln!(
+        &mut buf,
+        "  Log visibility: {}",
+        format_visibility(&settings.log_visibility.0, "log viewer", "  ")
+    )?;
+    writeln!(
+        &mut buf,
+        "  Status visibility: {}",
+        format_visibility(&settings.status_visibility.0, "status viewer", "  ")
+    )?;
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
@@ -623,6 +637,23 @@ mod tests {
                 message: "boom".to_string(),
             })
             .is_none()
+        );
+    }
+
+    /// `--json` renders visibility as a tagged `{"type", "value"}` object, which
+    /// is a different shape from the manifest form `Visibility` serializes to,
+    /// so it is pinned here rather than left to a derive.
+    #[test]
+    fn json_visibility_shape() {
+        let json = |v: Visibility| serde_json::to_string(&SerializableVisibility(v)).unwrap();
+
+        assert_eq!(json(Visibility::Controllers), r#"{"type":"Controllers"}"#);
+        assert_eq!(json(Visibility::Public), r#"{"type":"Public"}"#);
+        assert_eq!(
+            json(Visibility::AllowedViewers(vec![
+                Principal::from_text("aaaaa-aa").unwrap()
+            ])),
+            r#"{"type":"AllowedViewers","value":["aaaaa-aa"]}"#
         );
     }
 }

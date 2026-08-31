@@ -973,7 +973,7 @@ async fn canister_create_with_unresolved_canister_controller_warns_and_syncs() {
         ])
         .assert()
         .success()
-        .stdout(contains("Controllers: 2vxsx-fae"));
+        .stdout(contains("controller: 2vxsx-fae"));
 
     // Creating "b" triggers sync_controller_dependents, which updates "a"'s controller list.
     ctx.icp()

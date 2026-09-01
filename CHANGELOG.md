@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+# v1.4.0
+
 * feat: a canister can now declare `upgrade_args` alongside `init_args`, in its own manifest and as a per-canister environment override. It is passed when `icp deploy` upgrades the canister, where `init_args` is passed when it installs or reinstalls it. It takes exactly the forms `init_args` does (inline Candid string, or `{ value | path, format }`), and paths resolve against the canister's own directory the same way. A canister that declares no `upgrade_args` is upgraded with its `init_args`, as before, and `--args` / `--args-file` still override whichever applies.
 * feat: a new `status_visibility` canister setting controls who may read a canister's status (its running state, cycles, memory usage, and settings) through the management canister. It takes the same forms as `log_visibility` — `controllers` (the default), `public`, or `{ allowed_viewers: [...] }` — and can be set in a manifest's `settings:` block or with `icp canister settings update --status-visibility / --add-status-viewer / --remove-status-viewer / --set-status-viewer`. `icp canister status` and `icp canister settings show` now report it. See the [canister settings reference](docs/reference/canister-settings.md#status_visibility).
   * `icp canister status` and `icp canister settings show` now list principals one per line under their label rather than comma-separated on the label's line: `log viewer:` / `status viewer: <principal>` for the allowed viewers of a visibility setting, `controller: <principal>` for a canister's controllers. This applies to `log_visibility` and to the controller list as well, so scripts matching those lines need updating. Both lists are sorted, which the controller list previously was not.

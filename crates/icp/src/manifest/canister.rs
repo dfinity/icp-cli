@@ -186,7 +186,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         )))
                     }
                     (true, false) => {
-                        // We have a a recipe, optionally with sync steps of its
+                        // We have a recipe, optionally with sync steps of its
                         // own to run after the recipe's
                         let recipe: Recipe = serde_yaml::from_value(
                             temp_map

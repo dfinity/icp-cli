@@ -279,9 +279,11 @@ mod resolve_tests {
     /// project root.
     const BASE: &[&str] = &["backend"];
 
-    /// The resolved location of `rel`, as a `/`-joined project-relative path.
-    fn at(base: &[&str], rel: &str) -> Result<String, Escape> {
-        Ok(resolve(base, rel)?.path().to_string())
+    /// The resolved location of `rel`, relative to the project root. Compared
+    /// against a `/`-spelled path rather than a string, since the separator
+    /// [`Resolved::path`] joins with is the platform's.
+    fn at(base: &[&str], rel: &str) -> Result<Utf8PathBuf, Escape> {
+        Ok(resolve(base, rel)?.path())
     }
 
     /// The base directory's position within the root, `/`-joined.

@@ -25,7 +25,7 @@ When a `plugin` sync step executes for a canister, icp-cli:
 
 1. Resolves the wasm — reads the local `path`, or downloads the `url` to the package cache.
 2. Verifies the `sha256` checksum if one is given (required for `url`).
-3. Reads any files listed in `files:`, preopens any directories listed in `dirs:` read-only, and collects any key-value pairs listed in `fields:`.
+3. Walks the entries listed in `files:` — preopening each directory read-only and reading each file — and collects any key-value pairs listed in `fields:`.
 4. Instantiates the component in a WASI sandbox and calls its `exec()` export.
 5. Forwards the plugin's output to the CLI and reports success or the returned error.
 
@@ -57,7 +57,7 @@ world sync-plugin {
 }
 ```
 
-The interface is versioned (currently `icp:sync-plugin@0.2.0`). icp-cli reads the version a plugin was built against from the component itself and drives it accordingly, so plugins built against the earlier `@0.1.0` interface — which could only call the canister being synced — continue to load unchanged.
+The interface is versioned (currently `icp:sync-plugin@0.2.0`). icp-cli reads the version a plugin was built against from the component itself and drives it accordingly, so plugins built against the earlier `@0.1.0` interface — which could only call the canister being synced, and which takes a separate unnamed `dirs:` in the manifest — continue to load unchanged. See the [configuration reference](../reference/configuration.md#plugin-sync) for the manifest shape each takes.
 
 The authoritative interface, including all record fields, lives in [`sync-plugin.wit`](https://github.com/dfinity/icp-cli/blob/main/crates/icp-sync-plugin/sync-plugin.wit) in the icp-cli repository.
 
@@ -67,8 +67,8 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 |-------|-------------|
 | `canister-id` | Textual principal of the canister being synced |
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
-| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only. Each entry carries its `key` (see below) and `path` |
-| `files` | The files you declared in `files:`, each with its `key`, `name` (path), and `content` read by the host |
+| `dirs` | Those `files:` entries that name a directory; the host preopened each one read-only. Each carries its `key` (see below) and `path` |
+| `files` | Those `files:` entries that name a file, each with its `key`, `name` (path), and `content` read by the host |
 | `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
@@ -76,7 +76,9 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 
 Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
 
-`dirs` and `files` each carry a `key`: the map key the entry was declared under in the manifest, or absent when `dirs:`/`files:` was written as a plain list. A key that maps to a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
+The manifest declares directories and files together under `files:`; the host splits them into these two lists by what is on disk, so a plugin never has to say up front which an entry will turn out to be.
+
+Every entry carries a `key`: the name it was declared under in the manifest. A name holding a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
 
 ### Calling a canister — `canister-call`
 
@@ -108,18 +110,18 @@ The plugin runs with a deliberately narrow capability surface.
 
 ### Filesystem
 
-- Each directory in `dirs:` is readable **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `dirs: ["assets"]` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
+- A `files:` entry naming a directory is readable **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `files: {assets: assets}` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
 - Entries may name the same directory under several keys, or name a directory inside another entry's, and the plugin is told about each entry as written. The preopens behind them are one per distinct tree: an entry nested inside another is read through the preopen covering it, which grants nothing extra.
-- Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
+- A `files:` entry naming a file is read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads its content from the input struct, not from disk.
 - Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.
-- Paths in `dirs:`/`files:` are relative to the canister directory and may rise out of it with `..` to reach the rest of the project (`dirs: ["../shared/assets"]`). The project directory is the boundary: an entry that resolves above it — or that is absolute — is rejected before the plugin runs.
+- Paths in `files:` are relative to the canister directory and may rise out of it with `..` to reach the rest of the project (`shared: ../shared/assets`). The project directory is the boundary: an entry that resolves above it — or that is absolute — is rejected before the plugin runs.
 - A declared entry may not be, or traverse, a symlink: it is rejected if it or any component it traverses below the project root is a symlink, so a declared path cannot resolve to a target outside the project. (This restriction may be relaxed later if a safe use case emerges.)
 
 ### Capabilities
 
 | Capability | Available? | Notes |
 |------------|------------|-------|
-| Read declared `dirs:` | yes | read-only preopens |
+| Read declared directories | yes | read-only preopens |
 | Clocks, RNG, `wasi:io` | yes | Rust's `HashMap`, `chrono`, etc. work normally |
 | `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
 | Canister calls | yes | to the canister being synced, and to canisters declared in `canisters:` |

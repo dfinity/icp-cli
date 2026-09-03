@@ -338,7 +338,7 @@ pub enum SyncStep {
 
     /// Represents a sync step executed by a WebAssembly plugin running inside
     /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
-    /// the canister being synced and read files from the declared `dirs`.
+    /// the canister being synced and read the paths declared in `files`.
     // Boxed: a plugin step carries far more configuration than a script one.
     Plugin(Box<adapter::plugin::Adapter>),
 }

@@ -63,8 +63,8 @@ async fn bundle_and_deploy() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -118,7 +118,7 @@ async fn bundle_and_deploy() {
             "plugins/registry/0.wasm" => {
                 found_plugin_wasm = true;
             }
-            p if p.starts_with("plugins/registry/0/dirs/seed-data/") => {
+            p if p.starts_with("plugins/registry/0/files/seed-data/") => {
                 found_seed_data = true;
             }
             _ => {}
@@ -140,7 +140,7 @@ async fn bundle_and_deploy() {
     );
     assert!(
         found_seed_data,
-        "seed-data files not found under plugins/registry/0/dirs/seed-data/ in bundle"
+        "seed-data files not found under plugins/registry/0/files/seed-data/ in bundle"
     );
 
     // Manifest must convert build steps to pre-built and must not contain script or recipe steps.
@@ -254,8 +254,8 @@ async fn bundle_with_dependency_deploys() {
                   steps:
                     - type: plugin
                       path: {plugin_wasm}
-                      dirs:
-                        - seed-data
+                      files:
+                        seed: seed-data
 
             {ENVIRONMENT_RANDOM_PORT}
         "#},
@@ -1368,9 +1368,11 @@ fn bundle_preserves_plugin_call_targets() {
     );
 }
 
-/// Map-form `dirs:`/`files:` must survive bundling: the paths are rewritten to their
-/// archive locations, but each stays under the key it was declared with, so a plugin sees
-/// the same keys whether it runs from the project or from the bundle.
+/// The map form of `files:` must survive bundling: the paths are rewritten to their archive
+/// locations, but each stays under the key it was declared with, so a plugin sees the same
+/// keys whether it runs from the project or from the bundle. Directories and files share
+/// the one setting, and bundling tells them apart the way the plugin host does — by what is
+/// on disk — copying a tree for the one and a single file for the other.
 #[test]
 fn bundle_preserves_plugin_path_keys() {
     let ctx = TestContext::new();
@@ -1398,12 +1400,11 @@ fn bundle_preserves_plugin_path_keys() {
               steps:
                 - type: plugin
                   path: plugin.wasm
-                  dirs:
+                  files:
                     seed: seed
                     migrations:
                       - m2025
                       - m2026
-                  files:
                     main: config.toml
     "#};
 
@@ -1438,9 +1439,9 @@ fn bundle_preserves_plugin_path_keys() {
     }
 
     for expected in [
-        "plugins/my-canister/0/dirs/seed/s.txt",
-        "plugins/my-canister/0/dirs/m2025/a.txt",
-        "plugins/my-canister/0/dirs/m2026/b.txt",
+        "plugins/my-canister/0/files/seed/s.txt",
+        "plugins/my-canister/0/files/m2025/a.txt",
+        "plugins/my-canister/0/files/m2026/b.txt",
         "plugins/my-canister/0/files/config.toml",
     ] {
         assert!(
@@ -1453,16 +1454,16 @@ fn bundle_preserves_plugin_path_keys() {
         serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
     let step = &parsed["canisters"][0]["sync"]["steps"][0];
     assert_eq!(
-        step["dirs"]["seed"].as_str(),
-        Some("plugins/my-canister/0/dirs/seed")
+        step["files"]["seed"].as_str(),
+        Some("plugins/my-canister/0/files/seed")
     );
     assert_eq!(
-        step["dirs"]["migrations"][0].as_str(),
-        Some("plugins/my-canister/0/dirs/m2025")
+        step["files"]["migrations"][0].as_str(),
+        Some("plugins/my-canister/0/files/m2025")
     );
     assert_eq!(
-        step["dirs"]["migrations"][1].as_str(),
-        Some("plugins/my-canister/0/dirs/m2026")
+        step["files"]["migrations"][1].as_str(),
+        Some("plugins/my-canister/0/files/m2026")
     );
     assert_eq!(
         step["files"]["main"].as_str(),
@@ -1470,11 +1471,11 @@ fn bundle_preserves_plugin_path_keys() {
     );
 }
 
-/// `dirs:`/`files:` are configuration as well as sandbox grants, so the same path may be
-/// named under several keys, and one key's directory may sit inside another's. The bundled
-/// manifest keeps every entry as declared; the archive holds one copy of each tree, since
-/// two copies of one directory (or a copy of a directory already inside another) cannot be
-/// written to the archive at all.
+/// `files:` is configuration as well as a sandbox grant, so the same path may be named under
+/// several keys, and one key's directory may sit inside another's. The bundled manifest keeps
+/// every entry as declared; the archive holds one copy of each tree, since two copies of one
+/// directory (or a copy of a directory already inside another) cannot be written to the
+/// archive at all.
 #[test]
 fn bundle_archives_aliased_plugin_paths_once() {
     let ctx = TestContext::new();
@@ -1501,11 +1502,10 @@ fn bundle_archives_aliased_plugin_paths_once() {
               steps:
                 - type: plugin
                   path: plugin.wasm
-                  dirs:
+                  files:
                     seed: data
                     backup: data
                     sub: data/inner
-                  files:
                     main: config.toml
                     fallback: ./config.toml
     "#};
@@ -1542,8 +1542,8 @@ fn bundle_archives_aliased_plugin_paths_once() {
 
     // One copy of the tree, holding what the nested entry points at.
     for expected in [
-        "plugins/my-canister/0/dirs/data/top.txt",
-        "plugins/my-canister/0/dirs/data/inner/deep.txt",
+        "plugins/my-canister/0/files/data/top.txt",
+        "plugins/my-canister/0/files/data/inner/deep.txt",
         "plugins/my-canister/0/files/config.toml",
     ] {
         assert_eq!(
@@ -1558,17 +1558,13 @@ fn bundle_archives_aliased_plugin_paths_once() {
         serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
     let step = &parsed["canisters"][0]["sync"]["steps"][0];
     for (key, expected) in [
-        ("seed", "plugins/my-canister/0/dirs/data"),
-        ("backup", "plugins/my-canister/0/dirs/data"),
-        ("sub", "plugins/my-canister/0/dirs/data/inner"),
+        ("seed", "plugins/my-canister/0/files/data"),
+        ("backup", "plugins/my-canister/0/files/data"),
+        ("sub", "plugins/my-canister/0/files/data/inner"),
+        ("main", "plugins/my-canister/0/files/config.toml"),
+        ("fallback", "plugins/my-canister/0/files/config.toml"),
     ] {
-        assert_eq!(step["dirs"][key].as_str(), Some(expected));
-    }
-    for key in ["main", "fallback"] {
-        assert_eq!(
-            step["files"][key].as_str(),
-            Some("plugins/my-canister/0/files/config.toml")
-        );
+        assert_eq!(step["files"][key].as_str(), Some(expected));
     }
 }
 

@@ -109,10 +109,12 @@ pub(super) async fn sync(
     )
     .await?;
 
-    // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
-    //    and reads the `files` itself — both anchored at `base_dir`, confined to
-    //    `project_dir`, and subject to the runtime's path-safety checks (no
-    //    escaping or symlinked paths).
+    // 2. Collect inputs as manifest strings. `run_plugin` opens the declared
+    //    paths itself — preopening or reading each by what is on disk, anchored
+    //    at `base_dir`, confined to `project_dir`, and subject to the runtime's
+    //    path-safety checks (no escaping or symlinked paths). It also decides
+    //    which of the two settings the plugin's interface accepts, so both are
+    //    forwarded as written.
     let base_dir = Utf8PathBuf::from(params.path.as_str());
     let project_dir = Utf8PathBuf::from(params.project_dir.as_str());
     let dirs = keyed_paths(adapter.dirs.as_ref());

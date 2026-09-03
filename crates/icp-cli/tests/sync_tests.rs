@@ -411,7 +411,8 @@ async fn sync_plugin_registers_seed_data() {
     write_string(&seed_data.join("fruit-03.txt"), "cherry").expect("failed to write fruit-03.txt");
 
     // Manifest: pre-built canister wasm + plugin sync step pointing at the pre-built plugin wasm.
-    // dirs is relative to the project directory and preopened read-only inside the plugin's WASI sandbox.
+    // The `files:` entry is relative to the project directory and, naming a directory, is
+    // preopened read-only inside the plugin's WASI sandbox.
     let pm = formatdoc! {r#"
         canisters:
           - name: my-canister
@@ -423,8 +424,8 @@ async fn sync_plugin_registers_seed_data() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -469,12 +470,12 @@ async fn sync_plugin_registers_seed_data() {
         );
 }
 
-/// `dirs:` may be written as a map (name → path, or name → list of paths)
-/// instead of a plain list. The declared paths are still preopened and traversed
-/// the same way, so registration works end-to-end; this proves the map form
-/// deserializes and reaches the runtime.
+/// A `files:` name may hold a list of paths rather than a single one; every
+/// path under it is preopened and traversed the same way, so registration works
+/// end-to-end. This proves the list-valued map form deserializes and reaches
+/// the runtime.
 #[tokio::test]
-async fn sync_plugin_accepts_map_form_dirs() {
+async fn sync_plugin_accepts_a_name_holding_several_dirs() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -499,7 +500,7 @@ async fn sync_plugin_accepts_map_form_dirs() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
+                  files:
                     produce:
                       - fruit
                       - veg
@@ -538,7 +539,7 @@ async fn sync_plugin_accepts_map_form_dirs() {
         .stdout(contains("apple").and(contains("carrot")));
 }
 
-/// A `dirs:` entry may rise out of the canister directory and name a directory
+/// A `files:` entry may rise out of the canister directory and name a directory
 /// elsewhere in the project — here a `shared-seed` tree next to the canister's
 /// own directory — and the plugin reads it end-to-end.
 #[tokio::test]
@@ -566,8 +567,8 @@ async fn sync_plugin_reads_a_dir_elsewhere_in_the_project() {
           steps:
             - type: plugin
               path: {plugin_wasm}
-              dirs:
-                - ../../shared-seed
+              files:
+                shared: ../../shared-seed
     "#};
     write_string(&canister_dir.join("canister.yaml"), &cm)
         .expect("failed to write canister manifest");
@@ -610,8 +611,9 @@ async fn sync_plugin_reads_a_dir_elsewhere_in_the_project() {
         .stdout(contains("apple").and(contains("banana")));
 }
 
-/// The project directory is the boundary: a `dirs:` entry that resolves above it
-/// is rejected before the plugin runs, however many `..` it takes to get there.
+/// The project directory is the boundary: a `files:` entry that resolves above
+/// it is rejected before the plugin runs, however many `..` it takes to get
+/// there.
 #[tokio::test]
 async fn sync_plugin_rejects_dir_outside_the_project() {
     let ctx = TestContext::new();
@@ -637,8 +639,8 @@ async fn sync_plugin_rejects_dir_outside_the_project() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - {escape}
+                  files:
+                    outside: {escape}
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -664,13 +666,12 @@ async fn sync_plugin_rejects_dir_outside_the_project() {
         );
 }
 
-/// A malformed `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` must abort the sync with an
-/// actionable error rather than being silently ignored. This also exercises the
-/// end-to-end wiring: it proves the override is actually read on the real plugin
-/// sync path (if it weren't, the bogus value would be ignored and the sync would
-/// proceed), which the unit tests can't cover on their own.
+/// A plugin implementing `icp:sync-plugin@0.2` — as the example one does — has
+/// no `dirs:` of its own: directories go under `files:` alongside the files.
+/// Declaring `dirs:` alongside one is rejected rather than silently ignored,
+/// and the error says where the entry belongs instead.
 #[tokio::test]
-async fn sync_plugin_rejects_invalid_compute_limit_env() {
+async fn sync_plugin_rejects_dirs_for_a_v2_plugin() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -705,6 +706,60 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("no separate `dirs:`")
+                .and(contains("seed-data"))
+                .and(contains("under `files:`")),
+        );
+}
+
+/// A malformed `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` must abort the sync with an
+/// actionable error rather than being silently ignored. This also exercises the
+/// end-to-end wiring: it proves the override is actually read on the real plugin
+/// sync path (if it weren't, the bogus value would be ignored and the sync would
+/// proceed), which the unit tests can't cover on their own.
+#[tokio::test]
+async fn sync_plugin_rejects_invalid_compute_limit_env() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  files:
+                    seed: seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
     // deploy runs the sync step, which reads ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS.
     // A non-integer value must abort with a message that names the variable and
     // echoes the offending value.
@@ -721,9 +776,9 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
         );
 }
 
-/// A `dirs:` entry that is a symlink (here pointing outside the project) is
-/// rejected before the plugin runs, so a preopen cannot escape the canister
-/// directory. Symlinks are forbidden outright for now — see
+/// A `files:` entry naming a symlinked directory (here pointing outside the
+/// project) is rejected before the plugin runs, so a preopen cannot escape the
+/// canister directory. Symlinks are forbidden outright for now — see
 /// `crates/icp-sync-plugin/DESIGN.md`.
 #[cfg(unix)]
 #[tokio::test]
@@ -734,7 +789,7 @@ async fn sync_plugin_rejects_symlinked_dir() {
     let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
 
     // A real directory *outside* the project, and a symlink to it inside the
-    // project that the manifest declares as a `dirs:` entry.
+    // project that the manifest declares as a `files:` entry.
     let outside = ctx.home_path().join("outside-seed-data");
     create_dir_all(&outside).expect("failed to create outside dir");
     write_string(&outside.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
@@ -752,8 +807,8 @@ async fn sync_plugin_rejects_symlinked_dir() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -804,7 +859,7 @@ async fn sync_plugin_rejects_symlinked_file() {
                 - type: plugin
                   path: {plugin_wasm}
                   files:
-                    - config.txt
+                    config: config.txt
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -927,8 +982,8 @@ async fn sync_plugin_routes_through_proxy() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}

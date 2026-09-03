@@ -22,7 +22,7 @@ pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
 pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 
 use bytes::Bytes;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use candid::{Encode, Principal};
 use ic_agent::Agent;
 use semver::{Version, VersionReq};
@@ -62,7 +62,8 @@ use v2::icp::sync_plugin::types::{CallTarget, CallType, CanisterIdEntry};
 ///
 /// The key is `None` when the manifest wrote the setting as a plain list, and
 /// `Some(name)` when it wrote a map. It is *non-unique*: several paths share a
-/// key when a map key resolves to a list of paths.
+/// key when a map key resolves to a list of paths. Which form a plugin accepts
+/// depends on the interface it was built against — see [`PluginAbi`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyedPath {
     /// The map key this path was declared under, or `None` for a plain-list entry.
@@ -71,14 +72,20 @@ pub struct KeyedPath {
     pub path: String,
 }
 
-/// A declared file the host read: the key and path it was declared under, plus
-/// its content. Held version-agnostically so it can be converted to whichever
-/// interface version's `file-input` record the plugin turns out to use — the
-/// v0.1.0 record has no `key`, so it is dropped there.
-struct FileContent {
+/// A declared entry the host has resolved to a location on disk, and what it
+/// found there. Held version-agnostically so it can be converted to whichever
+/// interface version's records the plugin turns out to use.
+struct ResolvedEntry {
+    /// The map key the entry was declared under, dropped for a v0.1.0 plugin
+    /// whose records have no room for it.
     key: Option<String>,
-    name: String,
-    content: String,
+    /// The path as the manifest wrote it: what the guest sees, and where a
+    /// directory is preopened.
+    path: String,
+    /// Where the entry lives on the host.
+    host_path: Utf8PathBuf,
+    /// The file's contents, or `None` for a directory.
+    content: Option<String>,
 }
 
 /// The canisters a sync plugin is permitted to call, beyond the canister being
@@ -280,22 +287,24 @@ pub enum RunPluginError {
         path: Utf8PathBuf,
     },
 
-    #[snafu(display("plugin dir '{dir}' is not a relative path (absolute paths are not allowed)"))]
-    UnsafeDir { dir: String },
+    #[snafu(display(
+        "plugin path '{declared}' is not a relative path (absolute paths are not allowed)"
+    ))]
+    UnsafePath { declared: String },
 
     #[snafu(display(
-        "plugin dir '{dir}' resolves outside '{project_dir}'; \
+        "plugin path '{declared}' resolves outside '{project_dir}'; \
          a plugin may only read paths inside the project directory"
     ))]
-    DirOutsideProject {
-        dir: String,
+    PathOutsideProject {
+        declared: String,
         project_dir: Utf8PathBuf,
     },
 
     #[snafu(display(
-        "plugin dir '{dir}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin dirs"
+        "plugin path '{declared}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin paths"
     ))]
-    SymlinkDir { dir: String, link: Utf8PathBuf },
+    SymlinkPath { declared: String, link: Utf8PathBuf },
 
     #[snafu(display("plugin dir '{dir}' is not an existing directory"))]
     MissingDir { dir: String },
@@ -306,30 +315,36 @@ pub enum RunPluginError {
         dir: Utf8PathBuf,
     },
 
-    #[snafu(display(
-        "plugin file '{name}' is not a relative path (absolute paths are not allowed)"
-    ))]
-    UnsafeFile { name: String },
-
-    #[snafu(display(
-        "plugin file '{name}' resolves outside '{project_dir}'; \
-         a plugin may only read paths inside the project directory"
-    ))]
-    FileOutsideProject {
-        name: String,
-        project_dir: Utf8PathBuf,
-    },
-
-    #[snafu(display(
-        "plugin file '{name}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin files"
-    ))]
-    SymlinkFile { name: String, link: Utf8PathBuf },
-
     #[snafu(display("failed to read plugin input file at {path}"))]
     ReadFile {
         source: std::io::Error,
         path: Utf8PathBuf,
     },
+
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.1, whose entries carry no name, \
+         but '{declared}' was declared under the name '{key}'. Write `dirs:`/`files:` as a \
+         plain list of paths, or rebuild the plugin against icp:sync-plugin@0.2."
+    ))]
+    NamedPathUnsupported {
+        path: Utf8PathBuf,
+        key: String,
+        declared: String,
+    },
+
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.2, which names every entry, but \
+         '{declared}' was declared in a plain list. Write `files:` as a map of name → path, \
+         or rebuild the plugin against icp:sync-plugin@0.1."
+    ))]
+    UnnamedPathUnsupported { path: Utf8PathBuf, declared: String },
+
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.2, which has no separate `dirs:` \
+         setting. List the directory '{declared}' under `files:` instead — the host tells a \
+         directory from a file by what is on disk."
+    ))]
+    DirsUnsupported { path: Utf8PathBuf, declared: String },
 
     #[snafu(display("failed to instantiate wasm component at {path}"))]
     Instantiate {
@@ -354,13 +369,19 @@ pub enum RunPluginError {
 }
 
 /// Which version of the sync-plugin interface a component was built against.
+///
+/// The two disagree about how declared paths are written, so the ABI decides
+/// which manifest forms are accepted as well as which world is instantiated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PluginAbi {
     /// Current interface (`icp:sync-plugin@0.2.x`): `canister-call` chooses a
-    /// target and `sync-exec-input` carries the canister ID table.
+    /// target and `sync-exec-input` carries the canister ID table. Directories
+    /// and files share one named `files` list, so `dirs:` is not accepted and
+    /// every entry must carry a key.
     V2,
     /// Legacy interface (`icp:sync-plugin@0.1.x`): calls always reach the
-    /// canister being synced.
+    /// canister being synced. `dirs` and `files` are separate lists of bare
+    /// paths, so both must be written as plain lists.
     V1,
 }
 
@@ -421,6 +442,106 @@ fn detect_plugin_abi(
     }
 }
 
+/// Reject a manifest that declared its paths in a form the plugin's interface
+/// cannot carry.
+///
+/// The two interfaces disagree on both counts. v0.1.0 has a bare path in each
+/// list and no room for a key, so its entries must be written as plain lists;
+/// v0.2.0 names every entry and has no `dirs:` of its own, so its entries must
+/// be written as a map under `files:` alone. Refusing the mismatch here is what
+/// keeps the discrepancy from surfacing as a silently dropped key or a
+/// directory the plugin was never told about.
+fn check_declared_forms(
+    abi: PluginAbi,
+    wasm_path: &Utf8PathBuf,
+    dirs: &[KeyedPath],
+    files: &[KeyedPath],
+) -> Result<(), RunPluginError> {
+    match abi {
+        PluginAbi::V1 => {
+            for entry in dirs.iter().chain(files) {
+                if let Some(key) = &entry.key {
+                    return NamedPathUnsupportedSnafu {
+                        path: wasm_path,
+                        key,
+                        declared: &entry.path,
+                    }
+                    .fail();
+                }
+            }
+        }
+        PluginAbi::V2 => {
+            if let Some(entry) = dirs.first() {
+                return DirsUnsupportedSnafu {
+                    path: wasm_path,
+                    declared: &entry.path,
+                }
+                .fail();
+            }
+            for entry in files {
+                if entry.key.is_none() {
+                    return UnnamedPathUnsupportedSnafu {
+                        path: wasm_path,
+                        declared: &entry.path,
+                    }
+                    .fail();
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolve each declared entry against the sandbox root and open it with
+/// `open`, which reports a file's contents or `None` for a directory.
+///
+/// Every entry is checked whether or not it ends up needing a preopen of its
+/// own: the plugin is handed each as configuration, so one that is unsafe or
+/// unusable fails the step rather than reaching the plugin as a path it cannot
+/// use.
+fn resolve_entries<'a>(
+    root: &Utf8Path,
+    base_rel: &[&'a str],
+    declared: &'a [KeyedPath],
+    mut open: impl FnMut(&Utf8PathBuf, &str) -> Result<Option<String>, RunPluginError>,
+) -> Result<Vec<ResolvedEntry>, RunPluginError> {
+    let mut entries = Vec::with_capacity(declared.len());
+    for KeyedPath {
+        key,
+        path: declared,
+    } in declared
+    {
+        let resolved = match crate::path::resolve(base_rel, declared) {
+            Ok(resolved) => resolved,
+            Err(crate::path::Escape::NotRelative) => return UnsafePathSnafu { declared }.fail(),
+            Err(crate::path::Escape::AboveRoot) => {
+                return PathOutsideProjectSnafu {
+                    declared,
+                    project_dir: root,
+                }
+                .fail();
+            }
+        };
+        // Reject symlinks in the resolved path: neither the final entry nor any
+        // intermediate component may be a symlink, so a preopen or a read
+        // cannot escape the project to a target elsewhere on disk. (Symlinks
+        // *inside* a preopen that escape it are separately rejected by the WASI
+        // sandbox.)
+        if let Some(link) = resolved.first_symlink_component(root) {
+            return SymlinkPathSnafu { declared, link }.fail();
+        }
+        let host_path = root.join(resolved.path());
+        let content = open(&host_path, declared)?;
+        entries.push(ResolvedEntry {
+            key: key.clone(),
+            path: declared.clone(),
+            host_path,
+            content,
+        });
+    }
+    Ok(entries)
+}
+
 /// Everything [`run_plugin`] needs to load and drive one sync plugin.
 #[derive(Debug)]
 pub struct PluginInvocation {
@@ -436,11 +557,13 @@ pub struct PluginInvocation {
     /// project reached by an out-of-tree `path:` — is its own boundary instead,
     /// which grants nothing above the canister directory.
     pub project_dir: Utf8PathBuf,
-    /// Manifest-relative directories to preopen read-only, each tagged with the
-    /// map key it was declared under (if any).
+    /// The manifest's `dirs:` entries: directories to preopen read-only. Only
+    /// v0.1.0 plugins have a `dirs` list to receive them; declaring any
+    /// alongside a v0.2.0 plugin is an error.
     pub dirs: Vec<KeyedPath>,
-    /// Manifest-relative files to read and pass inline, each tagged with the map
-    /// key it was declared under (if any).
+    /// The manifest's `files:` entries. For a v0.1.0 plugin these are files to
+    /// read and pass inline; for a v0.2.0 plugin the list holds directories
+    /// too, and the host preopens or reads each by what is on disk.
     pub files: Vec<KeyedPath>,
     /// Key-value fields to pass inline. Passed to v0.2.0 plugins; ignored by
     /// v0.1.0 plugins, whose interface has no `fields`.
@@ -527,6 +650,14 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             path: wasm_path.clone(),
         })?;
 
+    // Which interface the plugin was built against is read from the component's
+    // own declared metadata (see `detect_plugin_abi`) rather than probed by
+    // trial instantiation. It settles how the declared paths are written as
+    // well as which world is instantiated, so it is needed before they are
+    // opened.
+    let abi = detect_plugin_abi(&engine, &component, &wasm_path)?;
+    check_declared_forms(abi, &wasm_path, &dirs, &files)?;
+
     // Declared paths are written relative to the canister directory but are
     // resolved against — and confined to — the project directory, so an entry
     // may reach a sibling canister's tree with `..` while nothing outside the
@@ -537,47 +668,46 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         None => (&base_dir, Vec::new()),
     };
 
-    // Check every declared directory: each one is handed to the plugin as
-    // configuration, so it is rejected for being unsafe or unusable whether or
-    // not it ends up needing a preopen of its own. The resolved host paths are
-    // kept for the preopens below, keyed by the spelling they were declared as.
-    let mut host_paths: BTreeMap<&str, Utf8PathBuf> = BTreeMap::new();
-    for KeyedPath { path: dir, .. } in &dirs {
-        let resolved = match crate::path::resolve(&base_rel, dir) {
-            Ok(resolved) => resolved,
-            Err(crate::path::Escape::NotRelative) => return UnsafeDirSnafu { dir }.fail(),
-            Err(crate::path::Escape::AboveRoot) => {
-                return DirOutsideProjectSnafu {
-                    dir,
-                    project_dir: root,
-                }
-                .fail();
-            }
-        };
-        // Reject symlinks in the resolved path: neither the final entry nor any
-        // intermediate component may be a symlink, so the preopen cannot escape
-        // the project to a target elsewhere on disk. (Symlinks *inside* a
-        // preopen that escape it are separately rejected by the WASI sandbox.)
-        if let Some(link) = resolved.first_symlink_component(root) {
-            return SymlinkDirSnafu { dir, link }.fail();
-        }
-        let host_path = root.join(resolved.path());
+    // A `dirs:` entry is a directory by declaration — one that names anything
+    // else is rejected rather than quietly read. A `files:` entry is whichever
+    // the filesystem says (v0.2.0 holds both there; a v0.1.0 plugin has no
+    // `is-dir` to report a directory with, and reading one fails below).
+    let dir_entries = resolve_entries(root, &base_rel, &dirs, |host_path, declared| {
         let is_dir = std::fs::metadata(host_path.as_std_path()).is_ok_and(|meta| meta.is_dir());
-        ensure!(is_dir, MissingDirSnafu { dir });
-        host_paths.insert(dir, host_path);
-    }
+        ensure!(is_dir, MissingDirSnafu { dir: declared });
+        Ok(None)
+    })?;
+    let file_entries = resolve_entries(root, &base_rel, &files, |host_path, _| {
+        if abi == PluginAbi::V2 && host_path.is_dir() {
+            return Ok(None);
+        }
+        std::fs::read_to_string(host_path.as_std_path())
+            .map(Some)
+            .context(ReadFileSnafu {
+                path: host_path.clone(),
+            })
+    })?;
 
     // Preopen read-only, one per distinct tree — a directory declared twice, or
     // one already reachable through a declared ancestor, needs no preopen of its
     // own. The guest sees each preopen at the same relative path it used in the
     // manifest, and reaches a nested declared directory through its ancestor.
+    // `covering_dirs` picks between equal spellings by written order, so it is
+    // given the entries as declared rather than the deduplicated lookup below.
+    let declared_dirs: Vec<&ResolvedEntry> = dir_entries
+        .iter()
+        .chain(&file_entries)
+        .filter(|entry| entry.content.is_none())
+        .collect();
+    let host_paths: BTreeMap<&str, &Utf8PathBuf> = declared_dirs
+        .iter()
+        .map(|entry| (entry.path.as_str(), &entry.host_path))
+        .collect();
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
-    for dir in crate::path::covering_dirs(dirs.iter().map(|d| d.path.as_str())) {
-        // `covering_dirs` returns a subset of the declared spellings, every one
-        // of which the loop above resolved.
-        let host_path = host_paths
-            .get(dir)
-            .expect("covering dir was not among the declared dirs");
+    for dir in crate::path::covering_dirs(declared_dirs.iter().map(|entry| entry.path.as_str())) {
+        // `covering_dirs` returns a subset of the spellings it was given, so
+        // every one of them is in the map.
+        let host_path = host_paths[dir];
         wasi_builder
             .preopened_dir(
                 host_path.as_std_path(),
@@ -588,35 +718,6 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             .context(PreopenDirSnafu {
                 dir: host_path.clone(),
             })?;
-    }
-
-    // Read each declared file on the host and pass its content inline. The same
-    // path-safety checks as `dirs` apply: reject unsafe, escaping, or symlinked
-    // paths so a read cannot leave the project.
-    let mut file_contents: Vec<FileContent> = Vec::with_capacity(files.len());
-    for KeyedPath { key, path: name } in &files {
-        let resolved = match crate::path::resolve(&base_rel, name) {
-            Ok(resolved) => resolved,
-            Err(crate::path::Escape::NotRelative) => return UnsafeFileSnafu { name }.fail(),
-            Err(crate::path::Escape::AboveRoot) => {
-                return FileOutsideProjectSnafu {
-                    name,
-                    project_dir: root,
-                }
-                .fail();
-            }
-        };
-        if let Some(link) = resolved.first_symlink_component(root) {
-            return SymlinkFileSnafu { name, link }.fail();
-        }
-        let path = root.join(resolved.path());
-        let content =
-            std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
-        file_contents.push(FileContent {
-            key: key.clone(),
-            name: name.clone(),
-            content,
-        });
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
@@ -660,12 +761,10 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
     let identity_text = identity_principal.to_text();
     let proxy_text = proxy.map(|p| p.to_text());
 
-    // Which interface the plugin was built against is read from the component's
-    // own declared metadata (see `detect_plugin_abi`) rather than probed by
-    // trial instantiation. Both are served in parallel: v0.2.0 plugins choose a
-    // call target and receive the canister ID table; v0.1.0 plugins get neither
-    // and always call the canister being synced.
-    let call_result = match detect_plugin_abi(&engine, &component, &wasm_path)? {
+    // Both interfaces are served in parallel: v0.2.0 plugins choose a call
+    // target and receive the canister ID table; v0.1.0 plugins get neither and
+    // always call the canister being synced.
+    let call_result = match abi {
         PluginAbi::V2 => {
             let mut linker: Linker<HostState> = Linker::new(&engine);
             wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
@@ -681,16 +780,30 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
                     path: wasm_path.clone(),
                 },
             )?;
+            // The manifest declares directories and files together under
+            // `files:`; the interface keeps them apart, so split by what the
+            // host found on disk. `check_declared_forms` has established that
+            // every entry carries a key and that `dirs:` was left unwritten.
+            let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
+                .into_iter()
+                .partition(|entry| entry.content.is_none());
             let input = v2::SyncExecInput {
                 canister_id: canister_id_text,
                 environment,
-                dirs: dirs
+                dirs: dir_inputs
                     .into_iter()
-                    .map(|KeyedPath { key, path }| v2::DirInput { key, path })
+                    .map(|entry| v2::DirInput {
+                        key: entry.key.expect("v0.2.0 entries all carry a key"),
+                        path: entry.path,
+                    })
                     .collect(),
-                files: file_contents
+                files: file_inputs
                     .into_iter()
-                    .map(|FileContent { key, name, content }| v2::FileInput { key, name, content })
+                    .map(|entry| v2::FileInput {
+                        key: entry.key.expect("v0.2.0 entries all carry a key"),
+                        name: entry.path,
+                        content: entry.content.expect("a file entry carries its content"),
+                    })
                     .collect(),
                 fields: fields
                     .into_iter()
@@ -726,15 +839,18 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             let input = v1::SyncExecInput {
                 canister_id: canister_id_text,
                 environment,
-                // The v0.1.0 interface has no per-entry key; pass just the paths.
-                dirs: dirs
+                // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
+                // neither record has a key — `check_declared_forms` has
+                // established that no entry carries one.
+                dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
+                files: file_entries
                     .into_iter()
-                    .map(|KeyedPath { path, .. }| path)
-                    .collect(),
-                // The v0.1.0 `file-input` record has no `key`; drop it.
-                files: file_contents
-                    .into_iter()
-                    .map(|FileContent { name, content, .. }| v1::FileInput { name, content })
+                    .map(|entry| v1::FileInput {
+                        name: entry.path,
+                        content: entry
+                            .content
+                            .expect("a v0.1.0 entry is always read as a file"),
+                    })
                     .collect(),
                 identity_principal: identity_text,
                 proxy_canister_id: proxy_text,
@@ -928,13 +1044,26 @@ mod tests {
         Principal::anonymous()
     }
 
-    /// Plain (unkeyed) [`KeyedPath`]s, as a plain-list manifest entry produces.
+    /// Plain (unkeyed) [`KeyedPath`]s, as a plain-list manifest entry produces
+    /// — the only form a v0.1.0 plugin accepts.
     fn unkeyed(paths: &[&str]) -> Vec<KeyedPath> {
         paths
             .iter()
             .map(|p| KeyedPath {
                 key: None,
                 path: (*p).to_string(),
+            })
+            .collect()
+    }
+
+    /// Key-tagged [`KeyedPath`]s, as the map form of `files:` produces — the
+    /// only form a v0.2.0 plugin accepts.
+    fn keyed(entries: &[(&str, &str)]) -> Vec<KeyedPath> {
+        entries
+            .iter()
+            .map(|(key, path)| KeyedPath {
+                key: Some((*key).to_string()),
+                path: (*path).to_string(),
             })
             .collect()
     }
@@ -1023,12 +1152,61 @@ mod tests {
     // Fixture-dependent tests
     // -------------------------------------------------------------------------
 
+    /// A v0.2.0 plugin has no `dirs` list of its own: the manifest declares
+    /// directories under `files:` alongside the files, and the host tells them
+    /// apart by what is on disk. Declaring `dirs:` alongside one is rejected
+    /// rather than silently dropped.
     #[test]
-    fn missing_dir_is_rejected() {
+    fn dirs_are_rejected_for_a_v2_plugin() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
         let mut inv = invocation(wasm_path, "test");
+        inv.dirs = keyed(&[("seed", "data")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::DirsUnsupported { .. })
+        ));
+    }
+
+    /// Every entry a v0.2.0 plugin receives carries a key, so `files:` must be
+    /// written as a map; a plain list has no key to give it.
+    #[test]
+    fn unnamed_files_are_rejected_for_a_v2_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "test");
+        inv.files = unkeyed(&["cfg.txt"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::UnnamedPathUnsupported { .. })
+        ));
+    }
+
+    /// The v0.1.0 interface has nowhere to put a key, so the map form is
+    /// rejected for a plugin built against it.
+    #[test]
+    fn named_paths_are_rejected_for_a_v1_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "ok");
+        inv.dirs = keyed(&[("seed", "data")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::NamedPathUnsupported { .. })
+        ));
+    }
+
+    /// A v0.1.0 plugin keeps the manifest's own `dirs:`/`files:` split, so a
+    /// `dirs:` entry there must name an existing directory.
+    #[test]
+    fn missing_dir_is_rejected_for_a_v1_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "ok");
         inv.dirs = unkeyed(&["nonexistent_dir"]);
         assert!(matches!(
             run_plugin(inv),
@@ -1053,13 +1231,7 @@ mod tests {
 
         let mut inv = invocation(wasm_path, "read-dirs");
         inv.base_dir = base.to_path_buf();
-        inv.dirs = [("seed", "data"), ("backup", "data"), ("sub", "data/inner")]
-            .into_iter()
-            .map(|(key, path)| KeyedPath {
-                key: Some(key.to_owned()),
-                path: path.to_owned(),
-            })
-            .collect();
+        inv.files = keyed(&[("seed", "data"), ("backup", "data"), ("sub", "data/inner")]);
 
         let lines = run_plugin(inv).expect("plugin should succeed");
         assert_eq!(
@@ -1072,7 +1244,7 @@ mod tests {
         );
     }
 
-    /// A `dirs:` entry may rise out of the canister directory into the rest of
+    /// A declared entry may rise out of the canister directory into the rest of
     /// the project. The guest sees it at the path it was declared as, so it
     /// reads `../shared` verbatim, and a directory below the entry is reached
     /// through the same preopen.
@@ -1091,13 +1263,7 @@ mod tests {
         let mut inv = invocation(wasm_path, "read-dirs");
         inv.base_dir = root.join("canisters/backend");
         inv.project_dir = root.to_path_buf();
-        inv.dirs = [("shared", "../../shared"), ("inner", "../../shared/inner")]
-            .into_iter()
-            .map(|(key, path)| KeyedPath {
-                key: Some(key.to_owned()),
-                path: path.to_owned(),
-            })
-            .collect();
+        inv.files = keyed(&[("shared", "../../shared"), ("inner", "../../shared/inner")]);
 
         let lines = run_plugin(inv).expect("plugin should succeed");
         assert_eq!(
@@ -1126,13 +1292,7 @@ mod tests {
         let mut inv = invocation(wasm_path, "read-dirs");
         inv.base_dir = root.join("canisters/backend");
         inv.project_dir = root.to_path_buf();
-        inv.dirs = [("siblings", ".."), ("shared", "../../shared")]
-            .into_iter()
-            .map(|(key, path)| KeyedPath {
-                key: Some(key.to_owned()),
-                path: path.to_owned(),
-            })
-            .collect();
+        inv.files = keyed(&[("siblings", ".."), ("shared", "../../shared")]);
 
         let lines = run_plugin(inv).expect("plugin should succeed");
         assert_eq!(
@@ -1156,10 +1316,10 @@ mod tests {
         let mut inv = invocation(wasm_path, "read-dirs");
         inv.base_dir = root.join("backend");
         inv.project_dir = root.clone();
-        inv.dirs = unkeyed(&["../../outside"]);
+        inv.files = keyed(&[("outside", "../../outside")]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::DirOutsideProject { .. })
+            Err(RunPluginError::PathOutsideProject { .. })
         ));
     }
 
@@ -1177,10 +1337,10 @@ mod tests {
         let mut inv = invocation(wasm_path, "read-dirs");
         inv.base_dir = tmp.path().join("outside/backend");
         inv.project_dir = tmp.path().join("project");
-        inv.dirs = unkeyed(&["../shared"]);
+        inv.files = keyed(&[("shared", "../shared")]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::DirOutsideProject { .. })
+            Err(RunPluginError::PathOutsideProject { .. })
         ));
     }
 
@@ -1199,10 +1359,10 @@ mod tests {
         let mut inv = invocation(wasm_path, "keys");
         inv.base_dir = root.join("backend");
         inv.project_dir = root.to_path_buf();
-        inv.files = unkeyed(&["../cfg.txt"]);
+        inv.files = keyed(&[("cfg", "../cfg.txt")]);
 
         let lines = run_plugin(inv).expect("plugin should succeed");
-        assert_eq!(lines, ["file -=../cfg.txt".to_string()]);
+        assert_eq!(lines, ["file cfg=../cfg.txt".to_string()]);
     }
 
     #[test]
@@ -1218,10 +1378,10 @@ mod tests {
         let mut inv = invocation(wasm_path, "keys");
         inv.base_dir = root.join("backend");
         inv.project_dir = root.clone();
-        inv.files = unkeyed(&["../../secret.txt"]);
+        inv.files = keyed(&[("secret", "../../secret.txt")]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::FileOutsideProject { .. })
+            Err(RunPluginError::PathOutsideProject { .. })
         ));
     }
 
@@ -1239,10 +1399,10 @@ mod tests {
 
         let mut inv = invocation(wasm_path, "test");
         inv.base_dir = base.to_path_buf();
-        inv.dirs = unkeyed(&["link"]);
+        inv.files = keyed(&[("linked", "link")]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::SymlinkDir { .. })
+            Err(RunPluginError::SymlinkPath { .. })
         ));
     }
 
@@ -1252,7 +1412,7 @@ mod tests {
             return;
         };
         let mut inv = invocation(wasm_path, "test");
-        inv.files = unkeyed(&["nonexistent_file.txt"]);
+        inv.files = keyed(&[("missing", "nonexistent_file.txt")]);
         assert!(matches!(
             run_plugin(inv),
             Err(RunPluginError::ReadFile { .. })
@@ -1273,10 +1433,10 @@ mod tests {
 
         let mut inv = invocation(wasm_path, "test");
         inv.base_dir = base.to_path_buf();
-        inv.files = unkeyed(&["link.txt"]);
+        inv.files = keyed(&[("linked", "link.txt")]);
         assert!(matches!(
             run_plugin(inv),
-            Err(RunPluginError::SymlinkFile { .. })
+            Err(RunPluginError::SymlinkPath { .. })
         ));
     }
 
@@ -1388,13 +1548,16 @@ mod tests {
         ));
     }
 
+    /// One `files:` map holds directories and files alike; the host splits them
+    /// by what is on disk, so each lands in the interface list its kind calls
+    /// for, carrying the key it was declared under.
     #[tokio::test(flavor = "multi_thread")]
-    async fn dir_and_file_keys_reach_the_plugin() {
+    async fn file_entries_are_split_by_kind_and_keep_their_keys() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        // A real dir and file must exist: the host preopens the dir and reads
-        // the file before calling exec().
+        // Both must exist: the host preopens the dir and reads the file before
+        // calling exec().
         let tmp = camino_tempfile::tempdir().expect("create tempdir");
         let base = tmp.path();
         std::fs::create_dir_all(base.join("seeds")).expect("create dir");
@@ -1405,21 +1568,17 @@ mod tests {
         let result = tokio::task::block_in_place(|| {
             let mut inv = invocation(wasm_path, "keys");
             inv.base_dir = base.to_path_buf();
-            inv.dirs = vec![KeyedPath {
-                key: Some("assets".to_string()),
-                path: "seeds".to_string(),
-            }];
-            inv.files = vec![KeyedPath {
-                key: None,
-                path: "cfg.txt".to_string(),
-            }];
+            inv.files = keyed(&[("assets", "seeds"), ("config", "cfg.txt")]);
             inv.reporter = reporter;
             run_plugin(inv)
         });
         let lines = result.expect("plugin should succeed");
         assert_eq!(
             lines,
-            vec!["dir assets=seeds".to_string(), "file -=cfg.txt".to_string()],
+            vec![
+                "dir assets=seeds".to_string(),
+                "file config=cfg.txt".to_string()
+            ],
         );
         // The same lines are emitted live as output events.
         assert!(!output_lines(&mut rx).is_empty());
@@ -1438,6 +1597,26 @@ mod tests {
             run_plugin(invocation(wasm_path, "error")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate v1 failure"
         ));
+    }
+
+    /// The v0.1.0 split between `dirs:` and `files:` is still served: a plain
+    /// list of each is preopened and read as it always was.
+    #[test]
+    fn legacy_v1_plugin_takes_plain_dirs_and_files() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("seeds")).expect("create dir");
+        std::fs::write(base.join("cfg.txt"), b"data").expect("write file");
+
+        let mut inv = invocation(wasm_path, "ok");
+        inv.base_dir = base.to_path_buf();
+        inv.project_dir = base.to_path_buf();
+        inv.dirs = unkeyed(&["seeds"]);
+        inv.files = unkeyed(&["cfg.txt"]);
+        assert!(run_plugin(inv).is_ok());
     }
 
     #[tokio::test(flavor = "multi_thread")]

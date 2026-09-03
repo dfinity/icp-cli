@@ -770,10 +770,10 @@ async fn prepare_plugin_step(
         bytes: plugin_bytes,
     });
 
-    // Plugin preopened dirs go under a `dirs/` subdir so a user-supplied dir literally named
-    // `files` cannot collide with the `files/` area used for plugin input files.
-    // The declared paths are rewritten to their archive locations; each entry's
-    // map key is carried through unchanged.
+    // A `dirs:` entry (which only an `icp:sync-plugin@0.1` plugin takes) goes under a `dirs/`
+    // subdir so a user-supplied dir literally named `files` cannot collide with the `files/`
+    // area the `files:` entries occupy. The declared paths are rewritten to their archive
+    // locations; each entry's map key is carried through unchanged.
     let dirs_prefix = format!("plugins/{path_name}/{idx}/dirs");
     let files_prefix = format!("plugins/{path_name}/{idx}/files");
     let bundle_dirs = adapter
@@ -791,28 +791,38 @@ async fn prepare_plugin_step(
     // the archive. The reduction runs over the paths as declared, so two that
     // only *look* alike once rewritten (`../shared` and `shared` both normalize
     // to `shared`) stay separate and are still caught as a collision.
-    for dir in covering_dirs(
-        adapter
-            .dirs
+    let declared = |paths: &Option<plugin::NamedPaths>| -> Vec<String> {
+        paths
             .iter()
             .flat_map(plugin::NamedPaths::entries)
-            .map(|entry| entry.path),
-    ) {
+            .map(|entry| entry.path.to_string())
+            .collect()
+    };
+    // A `files:` entry names a directory or a file, and which it is comes from what is on
+    // disk — the same rule the plugin host applies. So partition on that before deciding
+    // whether the archive gets a tree or a single file.
+    let (file_dirs, file_files): (Vec<String>, Vec<String>) = declared(&adapter.files)
+        .into_iter()
+        .partition(|path| canister_path.join(path).is_dir());
+
+    for (dir, dir_prefix) in covering_dirs(declared(&adapter.dirs).iter().map(String::as_str))
+        .into_iter()
+        .map(|dir| (dir, &dirs_prefix))
+        .chain(
+            covering_dirs(file_dirs.iter().map(String::as_str))
+                .into_iter()
+                .map(|dir| (dir, &files_prefix)),
+        )
+    {
         out.plugin_dirs.push(DirEntry {
             src_path: canister_path.join(dir),
             archive_prefix: archive_join(
                 prefix,
-                &format!("{dirs_prefix}/{}", normalize_archive_dir(dir)),
+                &format!("{dir_prefix}/{}", normalize_archive_dir(dir)),
             ),
         });
     }
-    for file in distinct_paths(
-        adapter
-            .files
-            .iter()
-            .flat_map(plugin::NamedPaths::entries)
-            .map(|entry| entry.path),
-    ) {
+    for file in distinct_paths(file_files.iter().map(String::as_str)) {
         out.plugin_files.push(PluginFile {
             src_path: canister_path.join(file),
             archive_path: archive_join(

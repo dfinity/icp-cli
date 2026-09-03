@@ -90,9 +90,9 @@ A few things to note:
 
 ## Read Declared Files and Directories
 
-A plugin can't see the filesystem freely — only what you grant it in the manifest's `dirs:` and `files:`.
+A plugin can't see the filesystem freely — only what you grant it in the manifest's `files:`. That one setting holds directories and files alike, named: `seed: assets/seed-data`. The host splits them by what is on disk and hands you `input.dirs` and `input.files`, so a plugin never declares up front which an entry will be.
 
-Directories in `dirs:` are preopened read-only at the same relative path. Each entry gives you its `path` plus a `key` (the map key it was declared under, or `None` for a plain-list entry). Traverse them with standard `std::fs`:
+Directories arrive in `input.dirs`, preopened read-only at the same relative path. Each entry gives you its `path` plus the `key` it was declared under. Traverse them with standard `std::fs`:
 
 ```rust
 for dir in &input.dirs {
@@ -104,7 +104,7 @@ for dir in &input.dirs {
 }
 ```
 
-Files in `files:` are read by the host up front and passed inline — read them from the input struct, not from disk. Each entry carries its `key`, `name` (the path), and `content`:
+Files arrive in `input.files`, read by the host up front and passed inline — read them from the input struct, not from disk. Each entry carries its `key`, `name` (the path), and `content`:
 
 ```rust
 for file in &input.files {
@@ -112,7 +112,7 @@ for file in &input.files {
 }
 ```
 
-Declaring `dirs:`/`files:` as a map instead of a list tags each entry with a `key`, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A key that maps to a list of paths yields several entries sharing that key.
+Every entry carries the `key` it was declared under, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A name holding a list of paths yields several entries sharing that key.
 
 Open each entry at the `path` it arrives with, whatever it looks like: a manifest may declare a directory elsewhere in the project (`../shared/assets`), and the preopen carries that same spelling. Writes, and paths that escape a preopen, are rejected by the sandbox at runtime. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
@@ -145,10 +145,9 @@ sync:
   steps:
     - type: plugin
       path: target/wasm32-wasip2/release/my_plugin.wasm
-      dirs:
-        - seed-data
       files:
-        - config.txt
+        seed: seed-data
+        config: config.txt
       fields:
         api_url: https://example.com
         retries: 3

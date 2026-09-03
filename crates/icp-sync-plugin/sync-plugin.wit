@@ -7,10 +7,11 @@ interface types {
 
     /// A directory the host made readable for the plugin.
     record dir-input {
-        /// The map key this directory was declared under in the manifest, or
-        /// `none` when `dirs` was written as a plain list. Several entries share
-        /// one key when a key maps to a list of directories.
-        key: option<string>,
+        /// The map key this directory was declared under in the manifest. Every
+        /// entry has one: `files:` must be written as a map of name → path(s)
+        /// for a plugin built against this interface. The key is *non-unique* —
+        /// several entries share one when a key maps to a list of paths.
+        key: string,
         /// Path of the directory as declared in the manifest (relative to the
         /// canister directory). It is readable at this same path. Entries may
         /// repeat a path or name a directory inside another entry's; the host
@@ -21,10 +22,9 @@ interface types {
 
     /// A file the host read on behalf of the plugin.
     record file-input {
-        /// The map key this file was declared under in the manifest, or `none`
-        /// when `files` was written as a plain list. Several entries share one
-        /// key when a key maps to a list of files.
-        key: option<string>,
+        /// The map key this file was declared under in the manifest, on the
+        /// same terms as `dir-input.key`.
+        key: string,
         /// Path of the file as declared in the manifest (relative to
         /// the canister directory).
         name: string,
@@ -84,16 +84,16 @@ interface types {
         canister-id: string,
         /// Name of the environment being synced (e.g. "production", "local").
         environment: string,
-        /// Directories declared in the manifest step's `dirs` setting.
-        /// The host makes each entry readable via WASI preopens; the plugin
-        /// traverses them with standard `wasi:filesystem` (e.g. Rust's `std::fs`).
-        /// Each entry carries the map key it was declared under, if any (see
-        /// `dir-input`).
+        /// Those entries of the manifest step's `files` setting that name a
+        /// directory, in the order they were written. The manifest declares
+        /// directories and files together under `files:`; the host splits them
+        /// by what is on disk. It makes each entry here readable via WASI
+        /// preopens; the plugin traverses them with standard `wasi:filesystem`
+        /// (e.g. Rust's `std::fs`).
         dirs: list<dir-input>,
-        /// Files declared in the manifest step's `files` setting, read by
-        /// the host and passed inline. The plugin decides how to use them.
-        /// Each entry carries the map key it was declared under, if any (see
-        /// `file-input`).
+        /// Those entries of the manifest step's `files` setting that name a
+        /// file, in the order they were written. The host reads each and passes
+        /// it inline; the plugin decides how to use them.
         files: list<file-input>,
         /// Key-value fields declared in the manifest step's `fields` setting,
         /// passed inline. The plugin decides how to use them.

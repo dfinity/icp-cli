@@ -33,14 +33,15 @@ impl Guest for TestPlugin {
                 eprintln!("{rendered}");
                 Ok(())
             }
-            // Echo each dir/file entry as `kind key=path`, using "-" for an
-            // absent key, so the host can assert keys survive the boundary.
+            // Echo each entry as `kind key=path`, so the host can assert that
+            // keys survive the boundary and that a `files:` entry lands in the
+            // list its kind on disk calls for.
             "keys" => {
                 for dir in &input.dirs {
-                    eprintln!("dir {}={}", dir.key.as_deref().unwrap_or("-"), dir.path);
+                    eprintln!("dir {}={}", dir.key, dir.path);
                 }
                 for file in &input.files {
-                    eprintln!("file {}={}", file.key.as_deref().unwrap_or("-"), file.name);
+                    eprintln!("file {}={}", file.key, file.name);
                 }
                 Ok(())
             }
@@ -59,7 +60,7 @@ impl Guest for TestPlugin {
                         })
                         .map_err(|err| format!("reading '{}': {err}", dir.path))?;
                     names.sort();
-                    eprintln!("{}={}", dir.key.as_deref().unwrap_or("-"), names.join(","));
+                    eprintln!("{}={}", dir.key, names.join(","));
                 }
                 Ok(())
             }

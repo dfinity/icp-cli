@@ -41,8 +41,14 @@ docs; the *reasons* behind those choices are recorded here.
   canister names it knows about. It is informational only; calling still
   requires an entry in `canisters:`.
 - **Filesystem access via WASI, not a host import** — plugins use standard
-  language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
-  bespoke `read-file`/`list-dir` import is needed.
+  language APIs (`std::fs`); the host preopens each declared directory
+  read-only. No bespoke `read-file`/`list-dir` import is needed.
+- **One manifest setting, two interface lists** — `files:` holds directories and
+  files together, and the host sorts them into `sync-exec-input.dirs`/`.files`
+  by what is on disk. A manifest author should not have to restate a fact the
+  filesystem already carries, while the plugin still wants them apart: a
+  directory arrives as a path to traverse and a file as content to use, and
+  giving one record both shapes would leave every plugin branching on a flag.
 - **Logging via stdio, not a host import** — stdout/stderr are captured by the
   host and forwarded to the CLI. Plugins use normal print facilities.
 - **No generated bindings checked in** — `wasmtime::component::bindgen!` (host)
@@ -82,15 +88,22 @@ and `reporter`. The CLI resolves the manifest's declared `canisters:` into
 `CallableCanisters` before calling; this crate stays free of any manifest
 knowledge.
 
-`dirs` and `files` are the manifest-relative paths (as `KeyedPath`s carrying the
-map key each was declared under, if any), straight from the adapter. The runtime
-owns *all* filesystem access: it resolves each entry against `base_dir`,
-preopens each `dir` and reads each `file` from the location that resolves to,
-passing the contents — and the keys — inline in `SyncExecInput`. Keeping both
-inside the runtime means the path-safety logic (below) lives in one place and
-stays private to this crate — the CLI just forwards strings. The returned
-`Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
-`reporter` receives the same lines live, as output events.
+`dirs` and `files` are the manifest's own `dirs:`/`files:` settings as
+manifest-relative paths (`KeyedPath`s carrying the map key each was declared
+under, if any), straight from the adapter. The runtime owns *all* filesystem
+access: it resolves each entry against `base_dir`, preopens it or reads it
+depending on what is there, and passes the contents — and the keys — inline in
+`SyncExecInput`. Keeping both inside the runtime means the path-safety logic
+(below) lives in one place and stays private to this crate — the CLI just
+forwards strings. The returned `Vec<String>` is the plugin's persistent stderr
+lines (see stdio capture below); `reporter` receives the same lines live, as
+output events.
+
+Which of the two settings a step may write, and in which shape, is decided by
+the plugin rather than by the manifest, so `check_declared_forms` enforces it
+once the ABI is known (see *Interface versioning* below) and before anything is
+opened. A form the plugin's records cannot carry is an error rather than a
+silently dropped key or an unmentioned directory.
 
 ### Declared-path safety (project-bounded, no symlinks)
 
@@ -135,6 +148,19 @@ one against the other:
 
 The guest still sees each preopen under the path the manifest wrote, `..` and
 all, so a plugin opens `dir.path` verbatim regardless of where it points.
+
+### Splitting declared entries by kind
+
+For a v0.2.0 plugin the manifest's `files:` is the only setting, and
+`resolve_entries` records what it found at each entry — a file's contents, or
+`None` for a directory — so `run_plugin` can partition them into the interface's
+`dirs` and `files` lists while keeping each list in written order. A v0.1.0
+plugin keeps the manifest's own split instead: its `dirs:` entries must each be
+a directory (`MissingDir` otherwise), and its `files:` entries are all read.
+
+Preopens are derived from every entry that turned out to be a directory,
+whichever setting declared it, reduced by `covering_dirs` (below) so that one
+tree is opened once.
 
 ### `HostState` and bindgen
 
@@ -185,6 +211,13 @@ v0.1.0 `sync-exec-input` has no field for — `canister-ids` and `fields` — ar
 simply dropped for a v1 plugin; a v1 plugin cannot observe them, so declaring
 `fields:` alongside one has no effect.
 
+Declared paths are the one place where dropping the difference would not be
+harmless, so the ABI decides which manifest forms are legal instead. v0.1.0 has
+a bare path in each list and separate `dirs`/`files`; v0.2.0 names every entry
+and takes both kinds under `files:`. Writing the wrong form fails the step with
+an error naming the offending entry and the form that plugin takes — a dropped
+key or an unmentioned directory would otherwise look like a plugin bug.
+
 ### Compute budget (epoch interruption)
 
 The compute-time limit is enforced with wasmtime's epoch interruption: a
@@ -232,6 +265,10 @@ entry, and is *non-unique* — a map key holding a list of paths yields one entr
 per path, all sharing the key. The CLI passes those to the runtime as
 `KeyedPath`s (this crate stays free of manifest types), which surface in
 `sync-exec-input.dirs`/`files` as each entry's `key`.
+
+Both shapes stay parseable here because both remain legal *somewhere* — which
+one applies is settled by the plugin, which the manifest layer knows nothing
+about, so the check belongs at load time and not in `Deserialize`.
 
 Each `canisters:` entry is a canister name resolved against the project's ID
 table for the environment being synced. `Deserialize` is hand-written to reject a

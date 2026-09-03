@@ -100,6 +100,11 @@ fn deserialize_fields<'de, D: Deserializer<'de>>(
 ///
 /// Order is preserved in both forms: list entries in written order; map entries
 /// in written key order, each key's paths in written order.
+///
+/// Which form a step may use depends on the interface its plugin implements,
+/// and is enforced when the plugin is loaded rather than while parsing: a
+/// `icp:sync-plugin@0.2` plugin names every entry and so requires the map,
+/// while a `@0.1` one has nowhere to put a name and so requires the list.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum NamedPaths {
@@ -182,36 +187,26 @@ impl PathOrList {
 /// Configuration for a sync plugin step.
 ///
 /// A sync plugin is a WebAssembly module invoked during `icp sync` for a
-/// specific canister. It runs inside a WASI sandbox whose filesystem access
-/// is limited to the directories listed in `dirs` (preopened read-only) plus
-/// the contents of any files listed in `files` (read by the host and passed
-/// inline to the plugin). Both are written relative to the canister directory
-/// and may name anything inside the project, but nothing outside it.
+/// specific canister. It runs inside a WASI sandbox whose filesystem access is
+/// limited to what `files` lists: a directory is preopened read-only, and a
+/// file's contents are read by the host and passed inline to the plugin.
+/// Entries are written relative to the canister directory and may name anything
+/// inside the project, but nothing outside it.
 ///
 /// Example (local path):
 /// ```yaml
 /// - type: plugin
 ///   path: ./plugins/populate-data.wasm
 ///   sha256: e3b0c44298fc1c149afb...   # optional for path
-///   dirs:                               # directories preopened read-only
-///     - assets/seed-data
-///   files:                              # files read by the host and passed inline
-///     - config.txt
+///   files:                              # each entry is named
+///     seed: assets/seed-data            # a directory, preopened read-only
+///     config: config.txt                # a file, read and passed inline
+///     migrations:                       # a name may hold a list of paths
+///       - migrations/2025
+///       - migrations/2026
 ///   fields:                             # key-value fields passed inline
 ///     api_url: https://example.com
 ///     retries: 3
-/// ```
-///
-/// `dirs` and `files` may instead be written as a map, tagging each entry with a
-/// `key` surfaced to the plugin; a key may map to a single path or a list:
-/// ```yaml
-/// - type: plugin
-///   path: ./plugins/populate-data.wasm
-///   dirs:
-///     seed: assets/seed-data           # keyed single path
-///     migrations:                      # keyed list — entries share the key
-///       - migrations/2025
-///       - migrations/2026
 /// ```
 ///
 /// Example (remote URL — `sha256` is required):
@@ -220,6 +215,12 @@ impl PathOrList {
 ///   url: https://example.com/plugins/populate-data.wasm
 ///   sha256: e3b0c44298fc1c149afb...   # required for url
 /// ```
+///
+/// A plugin built against the older `icp:sync-plugin@0.1` interface takes the
+/// shape that interface has instead: a separate `dirs` for the directories, and
+/// plain lists of paths rather than named entries. The two shapes cannot be
+/// mixed, and which applies is settled by the plugin, so it is enforced when
+/// the plugin is loaded (see [`NamedPaths`]).
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub struct Adapter {
     #[serde(flatten)]
@@ -229,22 +230,27 @@ pub struct Adapter {
     /// Optional for `path`; required for `url`.
     pub sha256: Option<String>,
 
-    /// Directories the plugin may read from, written relative to the canister
-    /// directory and confined to the project (an entry may reach elsewhere in
-    /// the project with `..`, but not out of it). Each entry must be a
-    /// directory; it is made readable via WASI so the plugin can traverse it
-    /// using standard filesystem APIs. Written as a plain list of paths, or as
-    /// a map of name → path (or list of paths); the name is surfaced to the
-    /// plugin as each entry's `key`. Entries may repeat a directory or name one
-    /// inside another's — the plugin is told about each entry as written, and
-    /// reads them all.
+    /// Directories the plugin may read from — accepted only by a plugin
+    /// implementing `icp:sync-plugin@0.1`, which keeps them in a list of their
+    /// own; a `@0.2` plugin takes them under [`Self::files`] instead. Written
+    /// as a plain list of paths, on the same terms as [`Self::files`], and each
+    /// entry must be a directory.
     pub dirs: Option<NamedPaths>,
 
-    /// Files the host reads and passes to the plugin as part of
-    /// `sync-exec-input.files`, written relative to the canister directory and
-    /// confined to the project on the same terms as [`Self::dirs`]. Written as
-    /// a plain list of paths, or as a map of name → path (or list of paths);
-    /// the name is surfaced to the plugin as each entry's `key`.
+    /// What the plugin may read, written relative to the canister directory and
+    /// confined to the project (an entry may reach elsewhere in the project
+    /// with `..`, but not out of it).
+    ///
+    /// An entry naming a directory is made readable via WASI so the plugin can
+    /// traverse it using standard filesystem APIs; an entry naming a file is
+    /// read by the host and passed inline. Which it is comes from what is on
+    /// disk. Entries may repeat a path or name a directory inside another's —
+    /// the plugin is told about each entry as written, and reads them all.
+    ///
+    /// Written as a map of name → path (or list of paths), the name surfacing
+    /// to the plugin as each entry's `key`. A plugin implementing the older
+    /// `icp:sync-plugin@0.1` takes a plain list of paths here instead, and only
+    /// files: its directories go in [`Self::dirs`].
     pub files: Option<NamedPaths>,
 
     /// Key-value fields passed to the plugin as part of `sync-exec-input.fields`.

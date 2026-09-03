@@ -1,5 +1,6 @@
 User-agent: *
-Allow: /1.3/
+Allow: /1.4/
+Disallow: /1.3/
 Disallow: /1.2/
 Disallow: /1.1/
 Disallow: /1.0/

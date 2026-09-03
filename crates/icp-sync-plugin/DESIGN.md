@@ -12,7 +12,8 @@ invokes its `exec()` export during `icp sync` for a single canister.
 > - [Sync Plugins](../../docs/concepts/sync-plugins.md) — concept, WIT interface, sandbox, resource limits
 > - [Writing a Sync Plugin](../../docs/guides/writing-sync-plugins.md) — authoring guide (Rust)
 > - [Plugin Sync (Configuration Reference)](../../docs/reference/configuration.md) — `type: plugin` manifest fields
-> - [`sync-plugin.wit`](sync-plugin.wit) — the interface, and the sole source of truth
+> - [`sync-plugin.wit`](sync-plugin.wit) — the current interface (v0.2.0), and its source of truth
+> - [`sync-plugin-v1.wit`](sync-plugin-v1.wit) — the frozen v0.1.0 interface, still loadable
 
 ---
 
@@ -36,8 +37,8 @@ docs; the *reasons* behind those choices are recorded here.
 - **Logging via stdio, not a host import** — stdout/stderr are captured by the
   host and forwarded to the CLI. Plugins use normal print facilities.
 - **No generated bindings checked in** — `wasmtime::component::bindgen!` (host)
-  and `wit_bindgen::generate!` (guest) both run at build time from the WIT file,
-  which stays the single source of truth.
+  and `wit_bindgen::generate!` (guest) both run at build time from the WIT files,
+  which stay the source of truth for the interface they define.
 
 ---
 
@@ -50,10 +51,12 @@ Host-side Component Model runtime for sync plugins.
 ```
 crates/icp-sync-plugin/
   src/
-    lib.rs          — public API: run_plugin(), RunPluginError
-    runtime.rs      — wasmtime component setup, HostState, bindgen!, exec() call
-  sync-plugin.wit   — WIT interface (source of truth)
-  Cargo.toml        — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio
+    lib.rs             — public API: run_plugin(), RunPluginError
+    runtime.rs         — wasmtime component setup, HostState, bindgen!, exec() call
+    path.rs            — declared-path safety checks (escapes_base, symlinks)
+  sync-plugin.wit      — current WIT interface, v0.2.0
+  sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
+  Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio, semver
 ```
 
 Public function:
@@ -103,11 +106,12 @@ the WASI sandbox — cap-std — at runtime.)
 
 ### `HostState` and bindgen
 
+Both interface versions are bound, each `bindgen!` in its own module so their
+generated types don't collide:
+
 ```rust
-wasmtime::component::bindgen!({
-    world: "sync-plugin",
-    path: "sync-plugin.wit",
-});
+mod v2 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugin.wit"    }); }
+mod v1 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugin-v1.wit" }); }
 
 struct HostState {
     target_canister_id: Principal,
@@ -118,17 +122,30 @@ struct HostState {
     epoch_extension: Arc<AtomicU64>,
 }
 
-impl SyncPluginImports for HostState {
-    fn canister_call(&mut self, req: CanisterCallRequest) -> Result<Vec<u8>, String> { ... }
-}
+// Implemented for both v1::SyncPluginImports and v2::SyncPluginImports; both
+// delegate to one shared `do_canister_call(...)`.
 ```
 
 `HostState` implements `WasiView` so wasmtime_wasi can access the WASI context.
 `canister_call` uses `tokio::runtime::Handle::current().block_on(...)` because
 the caller already wraps the synchronous `run_plugin` in
-`tokio::task::block_in_place`. When a proxy is configured and the call is a
-non-`direct` update, it is encoded as `ProxyArgs` and routed through the proxy's
-`proxy` method; otherwise it goes straight to the target via `ic-agent`.
+`tokio::task::block_in_place`. Both interface versions call the canister being
+synced. When a proxy is configured and the call is a non-`direct` update, it is
+encoded as `ProxyArgs` and routed through the proxy's `proxy` method; otherwise
+it goes straight to the target via `ic-agent`.
+
+### Interface versioning (parallel v0.1.0 / v0.2.0 support)
+
+A component built with wit-bindgen imports the interface it `use`s as a
+versioned instance — `icp:sync-plugin/types@0.1.0` or `@0.2.0`. `run_plugin`
+reads that name off `Component::component_type().imports(...)` and matches the
+version with semver caret requirements (`^0.1`, `^0.2`) to pick the ABI, then
+instantiates the matching `bindgen!` world and builds the matching
+`sync-exec-input`. Reading the plugin's declared metadata is preferred over
+trial instantiation: it is unambiguous and needs no throwaway `Store`. A
+component with no recognized `icp:sync-plugin/types@<version>` import, or an
+unsupported version, is rejected with `UnsupportedInterface`. Both `.wit` files
+are checked in; `sync-plugin-v1.wit` is the frozen v0.1.0 contract.
 
 ### Compute budget (epoch interruption)
 

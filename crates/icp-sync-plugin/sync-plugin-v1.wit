@@ -1,4 +1,7 @@
-package icp:sync-plugin@0.2.0;
+// Version 0.1.0 of the sync-plugin interface. New plugins should target the
+// current interface in `sync-plugin.wit`; see that file for the up-to-date
+// contract. The host will load this version if the plugin imports it.
+package icp:sync-plugin@0.1.0;
 
 /// Types shared between the host runtime and sync plugins.
 interface types {

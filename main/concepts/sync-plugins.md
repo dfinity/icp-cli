@@ -1,6 +1,6 @@
 ﻿# Sync Plugins
 
-A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work against a single canister. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced, and lets it make canister calls and read declared files — nothing more.
+A **sync plugin** is a WebAssembly component that runs during the [sync phase](build-deploy-sync.md#sync-phase) to perform arbitrary post-deployment work. icp-cli loads the plugin into a sandboxed [wasmtime](https://wasmtime.dev/) WASI runtime, hands it the ID of the canister being synced (plus the project's canister ID table), and lets it make canister calls and read declared files — nothing more. By default it can call only the canister being synced; it may call other canisters it lists in the sync step's `canisters:` list.
 
 You declare a sync plugin in your manifest with a `plugin` sync step. For the exact manifest fields, see [Plugin Sync in the Configuration Reference](../reference/configuration.md#plugin-sync). To author your own plugin, see [Writing a Sync Plugin](../guides/writing-sync-plugins.md).
 
@@ -12,7 +12,7 @@ Sync plugins fill that gap. A plugin is:
 
 - **Portable** — written in any language that compiles to `wasm32-wasip2`, distributed as one `.wasm` file (local path or remote URL + `sha256`).
 - **Sandboxed** — it cannot open network sockets, spawn subprocesses, or touch the filesystem outside the directories you explicitly grant it.
-- **Scoped to one canister** — it can call update and query methods, but only on the canister being synced. The target is fixed by the host; the plugin cannot choose a different one.
+- **Scoped by declaration** — it can call update and query methods on the canister being synced, plus any canister listed in the manifest's `canisters:` list. A call to a canister that was not listed is rejected by the host.
 
 The most common way to get a sync plugin is through a [recipe](recipes.md). For example, the `@dfinity/asset-canister` recipe emits a `plugin` sync step (starting with `v2.2.1`) that uploads your built static files to the asset canister — so for everyday frontend deployment you never write a plugin yourself.
 
@@ -22,7 +22,7 @@ When a `plugin` sync step executes for a canister, icp-cli:
 
 1. Resolves the wasm — reads the local `path`, or downloads the `url` to the package cache.
 2. Verifies the `sha256` checksum if one is given (required for `url`).
-3. Reads any files listed in `files:` and preopens any directories listed in `dirs:` read-only.
+3. Reads any files listed in `files:`, preopens any directories listed in `dirs:` read-only, and collects any key-value pairs listed in `fields:`.
 4. Instantiates the component in a WASI sandbox and calls its `exec()` export.
 5. Forwards the plugin's output to the CLI and reports success or the returned error.
 
@@ -32,9 +32,12 @@ icp sync
        ├─ exec(sync-exec-input) called
        │    canister-id        = <canister being synced>
        │    identity-principal = <your signing identity>
-       │    dirs / files       = what you declared in the manifest
+       │    canister-ids       = <name → principal table for the environment>
+       │    dirs/files/fields  = what you declared in the manifest
        │
-       └─ plugin makes canister-call(...) to the target canister (× N)
+       └─ plugin makes canister-call({ target, ... }) (× N)
+            target = host (the canister being synced), or a
+                     canister from `canisters:` by name
 ```
 
 ## The Plugin Interface
@@ -43,13 +46,15 @@ The interface is defined as a [WIT](https://component-model.bytecodealliance.org
 
 ```wit
 world sync-plugin {
-    // Host import: call the canister being synced.
+    // Host import: call the canister being synced or one listed in `canisters:`.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
     // Plugin export: run the sync step.
     export exec: func(input: sync-exec-input) -> result<_, string>;
 }
 ```
+
+The interface is versioned (currently `icp:sync-plugin@0.2.0`). icp-cli reads the version a plugin was built against from the component itself and drives it accordingly, so plugins built against the earlier `@0.1.0` interface — which could only call the canister being synced — continue to load unchanged.
 
 The authoritative interface, including all record fields, lives in [`sync-plugin.wit`](https://github.com/dfinity/icp-cli/blob/main/crates/icp-sync-plugin/sync-plugin.wit) in the icp-cli repository.
 
@@ -61,22 +66,27 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
 | `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
 | `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
+| `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
-### Calling the canister — `canister-call`
+Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
 
-The plugin calls methods on the target canister through the `canister-call` import. It supplies the method name, **Candid-encoded argument bytes** (the host forwards them unchanged), and a few routing options:
+### Calling a canister — `canister-call`
+
+The plugin calls methods through the `canister-call` import. It picks a `target`, supplies the method name, **Candid-encoded argument bytes** (the host forwards them unchanged), and a few routing options:
 
 | Request field | Meaning |
 |---------------|---------|
+| `target` | Which canister to call: `host` (the canister being synced), or a canister declared in `canisters:` addressed by `name` |
 | `method` | The canister method to call |
 | `arg` | Candid-encoded argument bytes (the plugin encodes; the host forwards as-is) |
 | `call-type` | `update` or `query` |
 | `direct` | When `false` (default), update calls are routed through the [proxy canister](../guides/proxy-canister.md) if one is configured; when `true`, the call always goes directly to the target. Query calls always go directly regardless. |
 | `cycles` | Cycles to attach to a proxied update call; only meaningful when `direct` is `false`, a proxy is configured, and `call-type` is `update` |
 
-The host always calls the canister named in `sync-exec-input.canister-id`. There is no field for a different canister ID — the single-canister restriction is structural, not a policy the plugin can opt out of.
+The `host` target always resolves to `sync-exec-input.canister-id` and is always permitted. A `name` target is permitted only if that canister appears in the sync step's [`canisters:`](../reference/configuration.md#plugin-sync) list; the host rejects any other target without making a call. A name is the only way to address another canister — the host owns the name→principal mapping, which differs per environment.
 
 ### Logging — stdout and stderr
 
@@ -105,7 +115,7 @@ The plugin runs with a deliberately narrow capability surface.
 | Read declared `dirs:` | yes | read-only preopens |
 | Clocks, RNG, `wasi:io` | yes | Rust's `HashMap`, `chrono`, etc. work normally |
 | `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
-| Canister calls | yes | only to the canister being synced |
+| Canister calls | yes | to the canister being synced, and to canisters declared in `canisters:` |
 | Environment variables / args | no | the WASI environment is empty; use `sync-exec-input.environment` |
 | Network sockets / DNS | blocked | treat the network as unavailable |
 | Filesystem writes | blocked | no writable preopens |

@@ -6,9 +6,33 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Thu, 03 Sep 2026 11:27:08 GMT</lastBuildDate>
-    <pubDate>Mon, 31 Aug 2026 17:50:48 GMT</pubDate>
+    <lastBuildDate>Thu, 03 Sep 2026 17:18:51 GMT</lastBuildDate>
+    <pubDate>Thu, 03 Sep 2026 17:17:44 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Configuration Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
+      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
+      <pubDate>Thu, 03 Sep 2026 17:17:44 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Writing a Sync Plugin</title>
+      <link>https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</link>
+      <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
+      <pubDate>Thu, 03 Sep 2026 17:17:44 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Sync Plugins</title>
+      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
+      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
+      <pubDate>Thu, 03 Sep 2026 17:17:44 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Canister Settings Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/canister-settings/</link>
@@ -23,14 +47,6 @@
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
       <pubDate>Mon, 31 Aug 2026 17:50:48 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Configuration Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
-      <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Mon, 31 Aug 2026 17:50:48 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -95,14 +111,6 @@
       <description>Run ICP test networks inside Docker containers for isolated, reproducible local development and CI/CD pipelines.</description>
       <pubDate>Tue, 28 Jul 2026 18:49:36 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/containerized-networks/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Sync Plugins</title>
-      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
-      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
-      <pubDate>Thu, 23 Jul 2026 20:20:05 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -207,14 +215,6 @@
       <description>Step-by-step guides covering installation, local development, deployment, identity management, and more.</description>
       <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Writing a Sync Plugin</title>
-      <link>https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</link>
-      <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
-      <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

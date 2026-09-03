@@ -62,6 +62,7 @@ impl Guest for Plugin {
 
         // Call a method on the canister being synced.
         canister_call(&CanisterCallRequest {
+            target: CallTarget::Host, // the canister being synced
             method: "set_uploader".to_string(),
             arg,
             call_type: icp::sync_plugin::types::CallType::Update,
@@ -81,7 +82,7 @@ export!(Plugin);
 A few things to note:
 
 - **You encode the arguments.** `arg` is raw Candid bytes. Encode with `candid::Encode!`; decode any response (`Vec<u8>`) with `candid::Decode!`.
-- **The target is fixed.** `canister_call` always reaches the canister in `input.canister_id` — there is no field to target another canister.
+- **You choose the target.** `target: CallTarget::Host` reaches the canister being synced. To call another canister, declare it in the manifest's [`canisters:`](../reference/configuration.md#plugin-sync) list and address it with `CallTarget::Name("ledger".into())` — the name matches the entries in `input.canister_ids`. Names are the only way to reach another canister; the host resolves them per environment. The host rejects a target you did not declare.
 - **`direct` and `cycles` control proxy routing.** With `direct: false`, update calls go through the [proxy canister](proxy-canister.md) when one is configured, and `cycles` can fund the forwarded call. With `direct: true`, the call always goes straight to the target. See [The Plugin Interface](../concepts/sync-plugins.md#the-plugin-interface) for the full semantics.
 
 ## Read Declared Files and Directories
@@ -110,6 +111,18 @@ for file in &input.files {
 
 Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
+## Read Declared Fields
+
+Key-value pairs declared in the manifest's `fields:` are passed inline as string values. Use them for small configuration a plugin needs without shipping a file:
+
+```rust
+for field in &input.fields {
+    println!("{} = {}", field.name, field.value);
+}
+```
+
+A value always arrives as a string, so parse the ones you want as another type — a manifest may write `retries: 3` unquoted, and the plugin receives `"3"`.
+
 ## Build
 
 ```bash
@@ -120,7 +133,7 @@ The output `.wasm` (under `target/wasm32-wasip2/release/`) is loaded directly by
 
 ## Wire It Into the Manifest
 
-Reference the built wasm from a `plugin` sync step and declare the files and directories the plugin needs:
+Reference the built wasm from a `plugin` sync step and declare the files, directories, and fields the plugin needs:
 
 ```yaml
 sync:
@@ -131,6 +144,9 @@ sync:
         - seed-data
       files:
         - config.txt
+      fields:
+        api_url: https://example.com
+        retries: 3
 ```
 
 Then run the sync phase:

@@ -61,7 +61,7 @@ canisters:
 | `settings` | object | No | Canister settings |
 | `init_args` | string or object | No | Initialization arguments (see [Install Args](#install-args)) |
 | `upgrade_args` | string or object | No | Upgrade arguments; defaults to `init_args` (see [Install Args](#install-args)) |
-| `recipe` | object | No | Recipe reference (alternative to build) |
+| `recipe` | object | No | Recipe reference (alternative to build; may be combined with `sync`) |
 
 ## Build Steps
 
@@ -218,6 +218,26 @@ canisters:
 | `type` | string | Yes | Recipe source (registry, URL, or local path) |
 | `sha256` | string | Conditional | Required for remote URLs |
 | `configuration` | object | No | Parameters passed to recipe template |
+
+### Adding Sync Steps to a Recipe
+
+A canister that uses a recipe may declare a `sync` section of its own. Its steps
+run after the ones the recipe renders, in the order written:
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: dist
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/warm-cache.sh
+```
+
+A `recipe` still cannot be combined with `build` — the recipe defines the build.
 
 ### Recipe Type Formats
 

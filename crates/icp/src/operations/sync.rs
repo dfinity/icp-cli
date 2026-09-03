@@ -1,18 +1,27 @@
-use crate::{
-    Canister,
-    canister::sync::{Params, Synchronize, SynchronizeError},
-    package::PackageCache,
-    prelude::{Path, PathBuf},
-};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use async_trait::async_trait;
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
-use icp_events::{StepOutcome, TaskOutcome};
-
-use crate::operations::task::{Reporter, Task, TaskReporter};
+use icp_deploy_canister::manifest::adapter::prebuilt::SourceField;
+use icp_deploy_canister::sync_exec::{
+    PluginExecutor, PluginExecutorError, PluginInvocation, ScriptInvocation, ScriptRunError,
+    ScriptRunner, StepProgress,
+};
+use icp_deploy_canister::{SyncCanisterError, SyncStepContext, run_sync_steps};
+use icp_events::{StepOutcome, StepReporter, TaskOutcome};
 use snafu::prelude::*;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+
+use crate::{
+    Canister,
+    canister::recipe::RemoteResourceResolve,
+    canister::sync::{Synchronize, SynchronizeError},
+    operations::task::{Reporter, Task, TaskReporter},
+    prelude::{Path, PathBuf},
+};
 
 #[derive(Debug, Snafu)]
 #[snafu(display("Canister(s) {names:?} failed to sync."))]
@@ -20,11 +29,92 @@ pub struct SyncOperationError {
     names: Vec<String>,
 }
 
-/// Synchronizes a single canister using its configured sync steps, returning
-/// the stderr lines the steps retained for the persistent output channel.
+/// Sync-step executor that runs a resolved step through the host
+/// [`Synchronize`] implementation (WASI plugin / subprocess script) and reports
+/// it as one step of the canister's sync task. The library owns the step loop
+/// and all input derivation ([`run_sync_steps`]); this only performs the host
+/// action and reports what it produces.
+struct AgentSyncExecutor<'a> {
+    syncer: Arc<dyn Synchronize>,
+    agent: Agent,
+    resolver: Arc<dyn RemoteResourceResolve>,
+    task: &'a TaskReporter,
+    total: usize,
+    /// How many steps have been started. The library runs the steps in order and
+    /// waits for each, so this counts up to the 1-based index of the step about
+    /// to run.
+    started: AtomicUsize,
+}
+
+impl AgentSyncExecutor<'_> {
+    /// Report one step around the host action: open it under `label`, run `f`
+    /// with the step's reporter, and close it with the outcome.
+    async fn stepped<F, Fut>(&self, label: String, f: F) -> Result<Vec<String>, SynchronizeError>
+    where
+        F: FnOnce(StepReporter) -> Fut,
+        Fut: Future<Output = Result<Vec<String>, SynchronizeError>>,
+    {
+        let number = self.started.fetch_add(1, Ordering::Relaxed) + 1;
+        let reporter = self.task.step(number, self.total, label);
+        let result = f(reporter.clone()).await;
+        reporter.done(match &result {
+            Ok(_) => StepOutcome::Succeeded,
+            Err(_) => StepOutcome::Failed,
+        });
+        result
+    }
+}
+
+#[async_trait]
+impl PluginExecutor for AgentSyncExecutor<'_> {
+    async fn run_plugin(
+        &self,
+        invocation: PluginInvocation,
+        _progress: Option<&dyn StepProgress>,
+    ) -> Result<Vec<String>, PluginExecutorError> {
+        let src = match &invocation.source {
+            SourceField::Local(l) => format!("path: {}", l.path),
+            SourceField::Remote(r) => format!("url: {}", r.url),
+        };
+        self.stepped(format!("plugin {src}"), |reporter| async move {
+            self.syncer
+                .run_plugin(&invocation, &self.agent, &reporter, self.resolver.as_ref())
+                .await
+        })
+        .await
+        .map_err(|source| PluginExecutorError {
+            source: Box::new(source),
+        })
+    }
+}
+
+#[async_trait]
+impl ScriptRunner for AgentSyncExecutor<'_> {
+    async fn run_script(
+        &self,
+        invocation: ScriptInvocation,
+        _progress: Option<&dyn StepProgress>,
+    ) -> Result<Vec<String>, ScriptRunError> {
+        let label = format!("script {}", invocation.commands.join("\n"));
+        self.stepped(label, |reporter| async move {
+            self.syncer.run_script(&invocation, &reporter).await
+        })
+        .await
+        .map_err(|source| ScriptRunError {
+            source: Box::new(source),
+        })
+    }
+}
+
+/// Synchronize a single canister's steps through the library, reporting each as
+/// a step of `task` and returning the stderr lines the steps retained for the
+/// persistent output channel. Environment variables are applied separately by
+/// the caller.
+#[allow(clippy::too_many_arguments)]
 async fn sync_canister(
-    syncer: &Arc<dyn Synchronize>,
-    agent: &Agent,
+    syncer: Arc<dyn Synchronize>,
+    resolver: Arc<dyn RemoteResourceResolve>,
+    agent: Agent,
     canister_path: PathBuf,
     project_dir: &Path,
     canister_id: Principal,
@@ -34,42 +124,26 @@ async fn sync_canister(
     canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     task: &TaskReporter,
-    pkg_cache: &PackageCache,
-) -> Result<Vec<String>, SynchronizeError> {
-    let step_count = canister_info.sync.steps.len();
-    let mut stderr_lines = Vec::new();
-
-    for (i, step) in canister_info.sync.steps.iter().enumerate() {
-        let reporter = task.step(i + 1, step_count, step.to_string());
-
-        let sync_result = syncer
-            .sync(
-                step,
-                &Params {
-                    path: canister_path.clone(),
-                    project_dir: project_dir.to_path_buf(),
-                    cid: canister_id,
-                    name: canister_info.name.clone(),
-                    environment: environment.to_owned(),
-                    network: network.to_owned(),
-                    canister_ids: canister_ids.clone(),
-                    proxy,
-                },
-                agent,
-                &reporter,
-                pkg_cache,
-            )
-            .await;
-
-        reporter.done(match &sync_result {
-            Ok(_) => StepOutcome::Succeeded,
-            Err(_) => StepOutcome::Failed,
-        });
-
-        stderr_lines.extend(sync_result?);
-    }
-
-    Ok(stderr_lines)
+) -> Result<Vec<String>, SyncCanisterError> {
+    let ctx = SyncStepContext {
+        canister_path,
+        project_dir: project_dir.to_path_buf(),
+        canister_id,
+        canister_name: canister_info.name.clone(),
+        environment: environment.to_owned(),
+        network: network.to_owned(),
+        canister_ids: canister_ids.clone(),
+        proxy,
+    };
+    let executor = AgentSyncExecutor {
+        syncer,
+        agent,
+        resolver,
+        task,
+        total: canister_info.sync.steps.len(),
+        started: AtomicUsize::new(0),
+    };
+    run_sync_steps(canister_info, &ctx, &executor, &executor, None).await
 }
 
 /// The rendered `source()` chain of an error, outermost cause first.
@@ -84,8 +158,10 @@ fn error_causes(error: &dyn std::error::Error) -> Vec<String> {
 }
 
 /// Orchestrates syncing multiple canisters concurrently.
+#[allow(clippy::too_many_arguments)]
 pub async fn sync_many(
     syncer: Arc<dyn Synchronize>,
+    resolver: Arc<dyn RemoteResourceResolve>,
     agent: Agent,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     project_dir: PathBuf,
@@ -93,7 +169,6 @@ pub async fn sync_many(
     network: String,
     canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
-    pkg_cache: &PackageCache,
     reporter: &Reporter,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
@@ -104,6 +179,7 @@ pub async fn sync_many(
         let fut = {
             let agent = agent.clone();
             let syncer = syncer.clone();
+            let resolver = resolver.clone();
             let environment = environment.clone();
             let network = network.clone();
             let canister_ids = canister_ids.clone();
@@ -111,8 +187,9 @@ pub async fn sync_many(
 
             async move {
                 let result = sync_canister(
-                    &syncer,
-                    &agent,
+                    syncer,
+                    resolver,
+                    agent,
                     canister_path,
                     &project_dir,
                     cid,
@@ -122,7 +199,6 @@ pub async fn sync_many(
                     &canister_ids,
                     proxy,
                     &task,
-                    pkg_cache,
                 )
                 .await;
 

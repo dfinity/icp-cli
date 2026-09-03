@@ -65,8 +65,8 @@ pub(super) async fn execute(
 /// Takes already-resolved commands rather than an [`Adapter`], so the subprocess
 /// executor needs to know nothing about manifest types. The sync path resolves
 /// its commands and `ICP_CLI_*` environment into a
-/// [`ScriptInvocation`](super::sync::script::ScriptInvocation) before calling
-/// this; the build path calls [`execute`] with its adapter.
+/// [`ScriptInvocation`](icp_deploy_canister::sync_exec::ScriptInvocation) before
+/// calling this; the build path calls [`execute`] with its adapter.
 pub(super) async fn execute_commands(
     cmds: &[String],
     cwd: &Path,

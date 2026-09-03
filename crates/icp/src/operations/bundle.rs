@@ -654,6 +654,7 @@ async fn prepare_canister(
                         canister_path,
                         &path_name,
                         idx,
+                        local_names,
                         pkg_cache,
                         out,
                     )
@@ -715,6 +716,24 @@ fn localize_controllers<EnvVar>(
     settings
 }
 
+/// Rewrite a plugin's declared call targets from workspace store keys back to the
+/// local names of the instance being written, on the same grounds as
+/// [`localize_controllers`].
+fn localize_call_targets(
+    canisters: Option<&[String]>,
+    local_names: &HashMap<&str, &str>,
+) -> Option<Vec<String>> {
+    canisters.map(|canisters| {
+        canisters
+            .iter()
+            .map(|target| match local_names.get(target.as_str()) {
+                Some(local) => (*local).to_owned(),
+                None => target.clone(),
+            })
+            .collect()
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_plugin_step(
     adapter: &plugin::Adapter,
@@ -723,6 +742,7 @@ async fn prepare_plugin_step(
     canister_path: &Path,
     path_name: &str,
     idx: usize,
+    local_names: &HashMap<&str, &str>,
     pkg_cache: &PackageCache,
     out: &mut BundleArtifacts,
 ) -> Result<SyncStep, BundleError> {
@@ -793,6 +813,7 @@ async fn prepare_plugin_step(
         sha256: Some(plugin_sha256),
         dirs: bundle_dirs,
         files: bundle_files,
+        canisters: localize_call_targets(adapter.canisters.as_deref(), local_names),
     }))
 }
 

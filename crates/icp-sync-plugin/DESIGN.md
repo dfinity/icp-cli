@@ -27,15 +27,19 @@ docs; the *reasons* behind those choices are recorded here.
 - **Raw Candid bytes at the boundary** — `canister-call-request.arg` is
   `list<u8>`. The plugin owns Candid encoding/decoding; the host forwards bytes
   unchanged. This keeps the host free of any per-canister type knowledge.
-- **`canister-call` takes no canister ID** — the host always calls the canister
-  from `sync-exec-input.canister-id`. There is deliberately no field for a
-  different target, so the single-canister restriction is *structural* rather
-  than a policy the plugin could bypass.
+- **`canister-call` takes an explicit `target`** — the plugin selects the
+  canister being synced (`host`) or a canister from the step's `canisters:`
+  list, by name. The host resolves the target and *enforces* the list: a target
+  absent from it is rejected without a call. Names are the only way to address
+  another canister: the name→principal mapping is the host's to make, since it
+  varies per environment, and a plugin that hardcodes a principal is pinned to
+  one deployment. (In the earlier `@0.1.0` interface
+  `canister-call` had no target and always reached the canister being synced; see
+  *Interface versioning* below.)
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
-  canister names it knows about. It is informational only: `canister-call`
-  still targets the canister being synced, so the table grants no ability to
-  call other canisters.
+  canister names it knows about. It is informational only; calling still
+  requires an entry in `canisters:`.
 - **Filesystem access via WASI, not a host import** — plugins use standard
   language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
   bespoke `read-file`/`list-dir` import is needed.
@@ -71,9 +75,12 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 ```
 
 `PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
-`target_canister_id` (the canister being synced), `agent`, `proxy`,
-`identity_principal`, `environment`, `compute_limit_secs`, and the exposed
-`canister_ids` table, plus `reporter`.
+`host_canister_id` (the canister being synced), `agent`, `proxy`,
+`identity_principal`, `environment`, `compute_limit_secs`, the exposed
+`canister_ids` table, the `callable: CallableCanisters` enforcement set, and
+`reporter`. The CLI resolves the manifest's declared `canisters:` into
+`CallableCanisters` before calling; this crate stays free of any manifest
+knowledge.
 
 `dirs` and `files` are the manifest-relative path strings, straight from the
 adapter. The runtime owns *all* filesystem access anchored at `base_dir`: it
@@ -112,7 +119,8 @@ mod v2 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugi
 mod v1 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugin-v1.wit" }); }
 
 struct HostState {
-    target_canister_id: Principal,
+    host_canister_id: Principal,
+    callable: CallableCanisters,          // name → principal, from the manifest
     agent: Arc<Agent>,
     proxy: Option<Principal>,
     wasi_ctx: wasmtime_wasi::WasiCtx,
@@ -121,16 +129,18 @@ struct HostState {
 }
 
 // Implemented for both v1::SyncPluginImports and v2::SyncPluginImports; both
-// delegate to one shared `do_canister_call(...)`.
+// delegate to one shared `do_canister_call(target, ...)`.
 ```
 
 `HostState` implements `WasiView` so wasmtime_wasi can access the WASI context.
 `canister_call` uses `tokio::runtime::Handle::current().block_on(...)` because
 the caller already wraps the synchronous `run_plugin` in
-`tokio::task::block_in_place`. Both interface versions call the canister being
-synced. When a proxy is configured and the call is a non-`direct` update, it is
-encoded as `ProxyArgs` and routed through the proxy's `proxy` method; otherwise
-it goes straight to the target via `ic-agent`.
+`tokio::task::block_in_place`. For a v0.2.0 plugin the target is resolved from
+the request's `call-target` by `resolve_call_target`, which enforces the
+`callable` set; for a v0.1.0 plugin the target is always `host_canister_id`.
+When a proxy is configured and the call is a non-`direct` update, it is encoded
+as `ProxyArgs` and routed through the proxy's `proxy` method; otherwise it goes
+straight to the resolved target via `ic-agent`.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 
@@ -174,21 +184,26 @@ Deserializes the `canister.yaml` fields into:
 
 ```rust
 pub struct Adapter {
-    pub source: SourceField,         // path: or url:
+    pub source: SourceField,              // path: or url:
     pub sha256: Option<String>,
     pub dirs: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
+    pub canisters: Option<Vec<String>>,   // extra callable canisters, by name
 }
 ```
 
-`Deserialize` is hand-written to reject a `url` source without a `sha256`.
+Each `canisters:` entry is a canister name resolved against the project's ID
+table for the environment being synced. `Deserialize` is hand-written to reject a
+`url` source without a `sha256`.
 
 ### `crates/icp/src/canister/sync/plugin.rs`
 
 Resolves the wasm (local read or remote HTTP fetch into the package cache),
-verifies sha256, builds the exposed canister ID table, then calls
+verifies sha256, builds the exposed canister ID table and the `CallableCanisters`
+enforcement set (resolving `canisters:` against the project's IDs), then calls
 `icp_sync_plugin::run_plugin(...)` with a `PluginInvocation`. The runtime — not
 the CLI — opens the declared paths and enforces the path-safety checks, so the
 CLI no longer touches the plugin's input files itself. `exposed_canister_ids`
 adds a bare-local-name duplicate for every canister in the same subproject as
-the one being synced.
+the one being synced; `resolve_callable` fails the step if a name in
+`canisters:` does not resolve.

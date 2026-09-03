@@ -10,7 +10,8 @@ air-gapped signing
 
 * feat(sync-plugin): Introduced v0.2.0 of the sync-plugin interface. v0.1.0 plugins are still supported. v0.2.0 introduces the following features:
     * `canister-call` can call canisters besides the host
-    * `icp.yaml` can list key-value settings for plugins, and `files` and `dirs` can be key-value mappings instead of unstructured lists
+    * `icp.yaml` can list key-value settings for plugins
+    * `icp.yaml`'s file/dir list is merged into a single `files` key, which is also key-value instead of a list
     * A new function `canister-metadata-section` can fetch ICP metadata sections
     * Plugin input includes canister-principal mappings and the gateway and API URLs
 * feat: a canister that uses a `recipe` can now declare its own `sync` steps, which previously was rejected outright. They run after the sync steps the recipe renders, so a recipe's post-deployment work stays intact and yours is appended to it. `recipe` and `build` remain mutually exclusive.

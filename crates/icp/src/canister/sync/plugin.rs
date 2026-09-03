@@ -148,6 +148,8 @@ pub(super) async fn sync(
             proxy,
             identity_principal,
             environment: environment_owned,
+            api_url: params.urls.api_url.clone(),
+            gateway_url: params.urls.http_gateway_url.clone(),
             compute_limit_secs,
             canister_ids,
             callable,
@@ -258,6 +260,7 @@ mod tests {
     }
 
     use crate::manifest::adapter::prebuilt::{LocalSource, SourceField};
+    use crate::network::NetworkUrls;
 
     fn principal(byte: u8) -> Principal {
         Principal::from_slice(&[byte; 4])
@@ -271,6 +274,10 @@ mod tests {
             name: name.to_owned(),
             environment: "demo".to_owned(),
             network: "ic".to_owned(),
+            urls: NetworkUrls {
+                api_url: "https://icp-api.io".parse().expect("valid api url"),
+                http_gateway_url: Some("https://icp0.io".parse().expect("valid gateway url")),
+            },
             canister_ids: ids.iter().map(|(n, p)| ((*n).to_owned(), *p)).collect(),
             proxy: None,
         }

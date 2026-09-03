@@ -1,9 +1,12 @@
+use std::collections::BTreeMap;
+
 use camino::Utf8PathBuf;
 use candid::Principal;
 use ic_agent::Agent;
 use icp_events::StepReporter;
 use icp_sync_plugin::{
-    DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, RunPluginError, run_plugin,
+    DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV, PluginInvocation, RunPluginError,
+    run_plugin,
 };
 use snafu::prelude::*;
 
@@ -91,7 +94,10 @@ pub(super) async fn sync(
     let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
     let files: Vec<String> = adapter.files.clone().unwrap_or_default();
 
-    // 3. Run the plugin (blocking call — signal Tokio that this thread will block).
+    // 3. Build the canister ID table exposed to the plugin.
+    let canister_ids = exposed_canister_ids(params);
+
+    // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
     let identity_principal = agent
         .get_principal()
         .map_err(|err| PluginError::GetIdentityPrincipal { err })?;
@@ -101,21 +107,47 @@ pub(super) async fn sync(
     let reporter_clone = reporter.clone();
 
     tokio::task::block_in_place(|| {
-        run_plugin(
+        run_plugin(PluginInvocation {
             wasm_path,
             base_dir,
             dirs,
             files,
-            params.cid,
-            agent_clone,
+            target_canister_id: params.cid,
+            agent: agent_clone,
             proxy,
             identity_principal,
-            environment_owned,
+            environment: environment_owned,
             compute_limit_secs,
-            reporter_clone,
-        )
+            canister_ids,
+            reporter: reporter_clone,
+        })
     })
     .context(RunSnafu)
+}
+
+/// The canister ID table exposed to a sync plugin: every named canister in the
+/// project, plus — for canisters in the same subproject as the one being synced
+/// — a duplicate entry under the bare local name. A store key is
+/// `<subproject>:<local>` for a dependency canister and a bare local name for a
+/// canister defined directly in the app root (see the WIT `canister-id-entry`
+/// docs), so the syncing canister's namespace is the prefix of its own key.
+///
+/// A local name never contains a colon but a subproject directory may, so keys
+/// split on their *last* colon. The bare-name aliases take precedence over an
+/// app-root canister of the same local name: a plugin resolving a bare name is
+/// naming what the syncing canister's own manifest calls it.
+fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
+    let syncing_namespace = params.name.rsplit_once(':').map(|(namespace, _)| namespace);
+
+    let mut table = params.canister_ids.clone();
+    for (key, id) in &params.canister_ids {
+        if let Some((namespace, local)) = key.rsplit_once(':')
+            && Some(namespace) == syncing_namespace
+        {
+            table.insert(local.to_owned(), *id);
+        }
+    }
+    table
 }
 
 #[cfg(test)]
@@ -139,5 +171,109 @@ mod tests {
                 "unexpected error for '{bad}': {err}"
             );
         }
+    }
+
+    fn principal(byte: u8) -> Principal {
+        Principal::from_slice(&[byte; 4])
+    }
+
+    fn params_named(name: &str, ids: &[(&str, Principal)]) -> Params {
+        Params {
+            path: "/work".into(),
+            cid: principal(0),
+            name: name.to_owned(),
+            environment: "demo".to_owned(),
+            network: "ic".to_owned(),
+            canister_ids: ids.iter().map(|(n, p)| ((*n).to_owned(), *p)).collect(),
+            proxy: None,
+        }
+    }
+
+    /// Canisters sharing the syncing canister's subproject are additionally
+    /// exposed under their bare local name; canisters in other subprojects are
+    /// not.
+    #[test]
+    fn exposed_ids_add_bare_names_for_same_subproject() {
+        let backend = principal(1);
+        let frontend = principal(2);
+        let foreign = principal(3);
+        let params = params_named(
+            "services/open-accounts:backend",
+            &[
+                ("services/open-accounts:backend", backend),
+                ("services/open-accounts:frontend", frontend),
+                ("services/open-crm:backend", foreign),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        // Same-subproject canisters gain a bare-local duplicate...
+        assert_eq!(table.get("backend"), Some(&backend));
+        assert_eq!(table.get("frontend"), Some(&frontend));
+        // ...while the fully-qualified keys are still present for everyone.
+        assert_eq!(
+            table.get("services/open-accounts:frontend"),
+            Some(&frontend)
+        );
+        assert_eq!(table.get("services/open-crm:backend"), Some(&foreign));
+        // The other subproject's canister is not reachable by a bare name; the
+        // bare "backend" belongs to the syncing canister's own subproject.
+        assert_eq!(table.get("backend"), Some(&backend));
+    }
+
+    /// An app-root canister sharing a local name with a sibling of the syncing
+    /// canister does not keep the bare name: the syncing subproject's own
+    /// canister is what that name means to the plugin.
+    #[test]
+    fn exposed_ids_sibling_alias_overrides_the_app_root_name() {
+        let root_backend = principal(1);
+        let sibling_backend = principal(2);
+        let params = params_named(
+            "services/open-accounts:frontend",
+            &[
+                ("backend", root_backend),
+                ("services/open-accounts:backend", sibling_backend),
+                ("services/open-accounts:frontend", principal(3)),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("backend"), Some(&sibling_backend));
+        // The app-root canister's only key was that bare name, so it drops out
+        // of the table entirely rather than answering to a sibling's name.
+        assert!(!table.values().any(|id| *id == root_backend));
+    }
+
+    /// A subproject directory may itself contain a colon, so keys are split on
+    /// their last one — the same rule bundling uses.
+    #[test]
+    fn exposed_ids_split_subproject_prefix_at_the_last_colon() {
+        let backend = principal(1);
+        let frontend = principal(2);
+        let params = params_named(
+            "services/odd:name:backend",
+            &[
+                ("services/odd:name:backend", backend),
+                ("services/odd:name:frontend", frontend),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("backend"), Some(&backend));
+        assert_eq!(table.get("frontend"), Some(&frontend));
+    }
+
+    /// A single-project layout keys canisters by bare local name already, so no
+    /// duplicates are added.
+    #[test]
+    fn exposed_ids_unchanged_without_a_subproject() {
+        let backend = principal(1);
+        let params = params_named("backend", &[("backend", backend)]);
+        let table = exposed_canister_ids(&params);
+        assert_eq!(table.len(), 1);
+        assert_eq!(table.get("backend"), Some(&backend));
     }
 }

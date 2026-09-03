@@ -17,6 +17,14 @@ impl Guest for Plugin {
             input.canister_id, input.environment
         );
 
+        // Report where the network being synced is reached. The plugin has no
+        // sockets of its own, so these are for the user reading the output (or
+        // for handing a canister its own public address), not for fetching.
+        match &input.gateway_url {
+            Some(gateway) => eprintln!("gateway: {gateway} (api: {})", input.api_url),
+            None => eprintln!("no HTTP gateway (api: {})", input.api_url),
+        }
+
         // 1. Report the canister's Candid interface, read from its metadata.
         //    Reported rather than required: the section is only there if the
         //    build embedded it (this project's build does, via ic-wasm).

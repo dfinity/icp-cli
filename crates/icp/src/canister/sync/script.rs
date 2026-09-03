@@ -131,6 +131,7 @@ mod tests {
 
     use super::*;
     use crate::manifest::adapter::script::CommandField;
+    use crate::network::NetworkUrls;
 
     /// Serializes the tests here that mutate the process environment, since
     /// cargo runs tests in parallel threads. Async-aware because the variable
@@ -149,6 +150,10 @@ mod tests {
             name: "backend".to_owned(),
             environment: "production".to_owned(),
             network: "ic".to_owned(),
+            urls: NetworkUrls {
+                api_url: "https://icp-api.io".parse().expect("valid api url"),
+                http_gateway_url: Some("https://icp0.io".parse().expect("valid gateway url")),
+            },
             canister_ids: canister_ids
                 .iter()
                 .map(|(n, p)| ((*n).to_owned(), *p))

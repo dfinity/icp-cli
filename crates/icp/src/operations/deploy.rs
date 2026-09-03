@@ -149,6 +149,9 @@ pub enum DeployError {
     LoadProject { source: ProjectLoadError },
 
     #[snafu(transparent)]
+    NetworkUrls { source: crate::network::AccessError },
+
+    #[snafu(transparent)]
     Sync { source: SyncOperationError },
 }
 
@@ -592,6 +595,7 @@ async fn sync(
 
     let pkg_cache = ctx.dirs.package_cache()?;
     let project_dir = ctx.project.load().await?.dir;
+    let urls = ctx.network.urls(&env.network).await?;
 
     let phase = reporter.task(Task::phase("Syncing canisters:"));
     let result = sync_many(
@@ -601,6 +605,7 @@ async fn sync(
         project_dir,
         environment_selection.name().to_owned(),
         env.network.name.clone(),
+        urls,
         canister_ids,
         proxy,
         &pkg_cache,

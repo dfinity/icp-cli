@@ -9,7 +9,10 @@ use crate::{
     agent::{Create, CreateAgentError},
     context::IC_ROOT_KEY,
     manifest::network::RootKeySpec,
-    network::{Connected, NetworkDirectory, directory::LoadNetworkFileError},
+    network::{
+        Connected, NetworkDirectory, config::NetworkDescriptorModel,
+        directory::LoadNetworkFileError,
+    },
     prelude::*,
 };
 
@@ -26,6 +29,19 @@ pub enum RootKeySource {
     Configured,
     /// Fetched from the network (trust-on-first-use, provenance unverified).
     Fetched,
+}
+
+/// The URLs a network is reached at, without any of the trust material
+/// [`NetworkAccess`] carries. Resolving these never talks to the network, so a
+/// caller that only needs to name an endpoint — to show it, or to hand it to a
+/// sync plugin — does not trigger a root key fetch.
+#[derive(Clone, Debug)]
+pub struct NetworkUrls {
+    /// Endpoint canister calls are submitted to.
+    pub api_url: Url,
+
+    /// Gateway that serves canisters over HTTP, if the network exposes one.
+    pub http_gateway_url: Option<Url>,
 }
 
 #[derive(Clone)]
@@ -88,6 +104,35 @@ pub enum GetNetworkAccessError {
 pub async fn get_managed_network_access(
     nd: NetworkDirectory,
 ) -> Result<NetworkAccess, GetNetworkAccessError> {
+    let (desc, gateway_url) = managed_network_gateway(nd).await?;
+    Ok(NetworkAccess {
+        root_key: desc.root_key,
+        root_key_source: RootKeySource::Managed,
+        api_url: gateway_url.clone(),
+        http_gateway_url: Some(gateway_url),
+        use_friendly_domains: desc.use_friendly_domains,
+    })
+}
+
+/// The URLs a running managed network is reached at. Its gateway serves the API
+/// as well, so both URLs are the same one.
+pub async fn get_managed_network_urls(
+    nd: NetworkDirectory,
+) -> Result<NetworkUrls, GetNetworkAccessError> {
+    let (_, gateway_url) = managed_network_gateway(nd).await?;
+    Ok(NetworkUrls {
+        api_url: gateway_url.clone(),
+        http_gateway_url: Some(gateway_url),
+    })
+}
+
+/// A running managed network's descriptor and the URL its gateway is reachable
+/// at. A network that is not running has no descriptor, and one whose fixed port
+/// has since been taken by another project's network is not the network the
+/// descriptor describes — both are errors rather than a URL nothing answers on.
+async fn managed_network_gateway(
+    nd: NetworkDirectory,
+) -> Result<(NetworkDescriptorModel, Url), GetNetworkAccessError> {
     // Load network descriptor
     let desc = nd
         .load_network_descriptor()
@@ -118,13 +163,7 @@ pub async fn get_managed_network_access(
         }
     }
     let http_gateway_url = Url::parse(&format!("http://{}:{port}", desc.gateway.host)).unwrap();
-    Ok(NetworkAccess {
-        root_key: desc.root_key,
-        root_key_source: RootKeySource::Managed,
-        api_url: http_gateway_url.clone(),
-        http_gateway_url: Some(http_gateway_url),
-        use_friendly_domains: desc.use_friendly_domains,
-    })
+    Ok((desc, http_gateway_url))
 }
 
 pub async fn get_connected_network_access(

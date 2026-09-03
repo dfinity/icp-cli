@@ -114,6 +114,18 @@ for file in &input.files {
 
 Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
+## Read Declared Fields
+
+Key-value pairs declared in the manifest's `fields:` are passed inline as string values. Use them for small configuration a plugin needs without shipping a file:
+
+```rust
+for field in &input.fields {
+    println!("{} = {}", field.name, field.value);
+}
+```
+
+A value always arrives as a string, so parse the ones you want as another type — a manifest may write `retries: 3` unquoted, and the plugin receives `"3"`.
+
 ## Build
 
 ```bash
@@ -124,7 +136,7 @@ The output `.wasm` (under `target/wasm32-wasip2/release/`) is loaded directly by
 
 ## Wire It Into the Manifest
 
-Reference the built wasm from a `plugin` sync step and declare the files and directories the plugin needs:
+Reference the built wasm from a `plugin` sync step and declare the files, directories, and fields the plugin needs:
 
 ```yaml
 sync:
@@ -135,6 +147,9 @@ sync:
         - seed-data
       files:
         - config.txt
+      fields:
+        api_url: https://example.com
+        retries: 3
 ```
 
 Then run the sync phase:

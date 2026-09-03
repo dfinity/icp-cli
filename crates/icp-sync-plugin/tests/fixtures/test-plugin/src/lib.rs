@@ -19,6 +19,20 @@ impl Guest for TestPlugin {
                 println!("stdout from plugin");
                 Ok(())
             }
+            "fields" => {
+                if !input.fields.iter().any(|f| f.name == "greeting") {
+                    return Err("missing 'greeting' field".to_string());
+                }
+                // Echo the fields back so the host can assert on what arrived.
+                let rendered = input
+                    .fields
+                    .iter()
+                    .map(|f| format!("{}={}", f.name, f.value))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                eprintln!("{rendered}");
+                Ok(())
+            }
             "spin" => {
                 // Busy-loop forever to exercise the host's compute-time limit.
                 // The epoch-interruption check at the loop back-edge traps this,

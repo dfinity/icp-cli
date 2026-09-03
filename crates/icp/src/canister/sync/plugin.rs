@@ -99,6 +99,7 @@ pub(super) async fn sync(
     let base_dir = Utf8PathBuf::from(params.path.as_str());
     let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
     let files: Vec<String> = adapter.files.clone().unwrap_or_default();
+    let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
 
     // 3. Build the canister ID table exposed to the plugin, then resolve the
     //    step's `canisters` list against it.
@@ -120,6 +121,7 @@ pub(super) async fn sync(
             base_dir,
             dirs,
             files,
+            fields,
             host_canister_id: params.cid,
             agent: agent_clone,
             proxy,
@@ -231,6 +233,7 @@ mod tests {
             sha256: None,
             dirs: None,
             files: None,
+            fields: None,
             canisters,
         }
     }

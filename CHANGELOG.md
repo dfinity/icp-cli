@@ -8,7 +8,6 @@ air-gapped signing
 
 # Unreleased
 
-* feat(sync-plugin): `sync-exec-input` gains `api-url` and `gateway-url`, telling a `plugin` sync step where the network it is syncing to is reached: the endpoint the host submits its canister calls to, and the HTTP gateway that serves canisters over HTTP (absent when the network exposes none — the two are the same URL for a local network). A plugin still has no sockets of its own, so these are for composing a URL the user is shown or handing a canister its own public address, not for fetching. Plugins built against the earlier `@0.1.0` interface are unaffected.
 * feat: a canister that uses a `recipe` can now declare its own `sync` steps, which previously was rejected outright. They run after the sync steps the recipe renders, so a recipe's post-deployment work stays intact and yours is appended to it. `recipe` and `build` remain mutually exclusive.
 
 # v1.4.0

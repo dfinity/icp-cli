@@ -448,12 +448,19 @@ async fn sync_plugin_registers_seed_data() {
     // example's ic-wasm step, so the section genuinely isn't there — proving the
     // host performed the round-trip and mapped a proven-absent section to `none`
     // rather than to an error.
+    //
+    // It reports the network's URLs too, which for a managed network are the
+    // gateway the launcher happened to bind — so the port in the plugin's
+    // output is proof the running network's address reached it.
+    let gateway_url = ctx.gateway_url().clone();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--environment", "random-environment"])
         .assert()
         .success()
-        .stderr(contains("candid:service: absent"));
+        .stderr(contains("candid:service: absent").and(contains(format!(
+            "gateway: {gateway_url} (api: {gateway_url})"
+        ))));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()

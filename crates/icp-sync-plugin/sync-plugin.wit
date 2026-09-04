@@ -92,6 +92,16 @@ interface types {
         canister-id: string,
         /// Name of the environment being synced (e.g. "production", "local").
         environment: string,
+        /// URL of the network's API endpoint: where the host submits the
+        /// canister calls it makes on the plugin's behalf. The plugin has no
+        /// sockets of its own, so this is something to compose a URL from or
+        /// hand to a canister, not something to fetch. Normalized, so a URL
+        /// with no path carries a trailing slash ("http://127.0.0.1:4943/").
+        api-url: string,
+        /// URL of the network's HTTP gateway, which serves canisters over
+        /// HTTP, normalized the same way. `none` when the network exposes no
+        /// gateway.
+        gateway-url: option<string>,
         /// Those entries of the manifest step's `files` setting that name a
         /// directory, in the order they were written. The manifest declares
         /// directories and files together under `files:`; the host splits them

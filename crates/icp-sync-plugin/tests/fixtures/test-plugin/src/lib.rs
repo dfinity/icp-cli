@@ -33,6 +33,16 @@ impl Guest for TestPlugin {
                 eprintln!("{rendered}");
                 Ok(())
             }
+            // Echo the network URLs back as `api=<url> gateway=<url>`, using
+            // "-" for a network with no gateway.
+            "urls" => {
+                eprintln!(
+                    "api={} gateway={}",
+                    input.api_url,
+                    input.gateway_url.as_deref().unwrap_or("-")
+                );
+                Ok(())
+            }
             // Echo each entry as `kind key=path`, so the host can assert that
             // keys survive the boundary and that a `files:` entry lands in the
             // list its kind on disk calls for.

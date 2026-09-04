@@ -149,6 +149,19 @@ for field in &input.fields {
 
 A value always arrives as a string, so parse the ones you want as another type — a manifest may write `retries: 3` unquoted, and the plugin receives `"3"`.
 
+## Know Where the Network Is
+
+`input.api_url` is the endpoint the host submits your canister calls to, and `input.gateway_url` is the HTTP gateway serving canisters over HTTP — absent when the network exposes none. You have no sockets, so neither is something to fetch: use them to tell the user where something landed, or to hand a canister the address it is reachable at.
+
+```rust
+match &input.gateway_url {
+    Some(gateway) => eprintln!("{} is served from {gateway}", input.canister_id),
+    None => eprintln!("{} synced ({} has no HTTP gateway)", input.canister_id, input.environment),
+}
+```
+
+Both arrive normalized, so a URL with no path carries a trailing slash (`http://127.0.0.1:4943/`) — strip it before joining a path onto it.
+
 ## Build
 
 ```bash

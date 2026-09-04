@@ -128,6 +128,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
 
     let pkg_cache = ctx.dirs.package_cache()?;
     let project_dir = ctx.project.load().await?.dir;
+    let urls = ctx.network.urls(&env.network).await?;
 
     rendered(ctx.debug, async |reporter| {
         sync_many(
@@ -137,6 +138,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             project_dir,
             environment_selection.name().to_owned(),
             env.network.name.clone(),
+            urls,
             canister_ids,
             args.proxy,
             &pkg_cache,

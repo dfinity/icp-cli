@@ -8,6 +8,7 @@ use icp_events::StepReporter;
 use snafu::prelude::*;
 
 use crate::manifest::canister::SyncStep;
+use crate::network::NetworkUrls;
 use crate::package::PackageCache;
 use crate::prelude::*;
 
@@ -32,6 +33,10 @@ pub struct Params {
     pub environment: String,
     /// Name of the network (e.g. "local", "ic").
     pub network: String,
+    /// The network's API endpoint, where canister calls are submitted, and its
+    /// HTTP gateway if it exposes one. Passed to sync plugin steps via
+    /// `SyncExecInput`.
+    pub urls: NetworkUrls,
     /// IDs of all named canisters in the project for this environment.
     pub canister_ids: BTreeMap<String, Principal>,
     /// Proxy canister to route calls through, if `--proxy` was passed.
@@ -177,6 +182,10 @@ mod tests {
             name: "backend".to_owned(),
             environment: "production".to_owned(),
             network: "ic".to_owned(),
+            urls: NetworkUrls {
+                api_url: "https://icp-api.io".parse().expect("valid api url"),
+                http_gateway_url: Some("https://icp0.io".parse().expect("valid gateway url")),
+            },
             canister_ids: BTreeMap::from([(
                 "my-frontend".to_owned(),
                 Principal::from_slice(&[8; 4]),

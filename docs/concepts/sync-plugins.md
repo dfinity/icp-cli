@@ -71,6 +71,8 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 |-------|-------------|
 | `canister-id` | Textual principal of the canister being synced |
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
+| `api-url` | URL of the network's API endpoint, where the host submits the plugin's canister calls |
+| `gateway-url` | URL of the network's HTTP gateway, or absent when it exposes none |
 | `dirs` | Those `files:` entries that name a directory; the host preopened each one read-only. Each carries its `key` (see below) and `path` |
 | `files` | Those `files:` entries that name a file, each with its `key`, `name` (path), and `content` read by the host |
 | `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
@@ -81,6 +83,8 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject.
 
 Every canister the subproject being synced can name for itself is additionally listed under that name, so a plugin looks a canister up by the name that subproject's own manifest uses. For a canister in `services/crm`, that means its siblings under their bare local names, and the canisters of its own dependencies under keys relative to it — `services/crm/vendor/ledger:ledger` is also listed as `vendor/ledger:ledger`. Those are the names the subproject uses when it is deployed on its own, so a plugin written against them keeps working once the subproject is vendored into a workspace. Such a name always means what the subproject means by it: a canister elsewhere in the workspace whose key is spelled the same way is not listed under it for that sync.
+
+Both URLs are informational: the plugin has no sockets of its own (see [The Sandbox](#the-sandbox)), so they are there to be composed into a URL — the public address of the canister just synced, say — or handed to a canister, not fetched. They arrive normalized, so a URL with no path carries a trailing slash (`http://127.0.0.1:4943/`). A network reached through a single URL, which is the usual local case, reports that one URL as both.
 
 The manifest declares directories and files together under `files:`; the host splits them into these two lists by what is on disk, so a plugin never has to say up front which an entry will turn out to be.
 

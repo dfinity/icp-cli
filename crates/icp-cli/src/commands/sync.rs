@@ -127,12 +127,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .collect();
 
     let pkg_cache = ctx.dirs.package_cache()?;
+    let project_dir = ctx.project.load().await?.dir;
 
     rendered(ctx.debug, async |reporter| {
         sync_many(
             ctx.syncer.clone(),
             agent,
             sync_canisters,
+            project_dir,
             environment_selection.name().to_owned(),
             env.network.name.clone(),
             canister_ids,

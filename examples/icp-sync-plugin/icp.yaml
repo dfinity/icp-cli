@@ -18,5 +18,5 @@ canisters:
           # Path to the compiled PoC plugin wasm, relative to this directory.
           # Build it first: cargo build -p plugin --target wasm32-wasip2 --release
           path: target/wasm32-wasip2/release/plugin.wasm
-          dirs:
-            - seed-data
+          files:
+            seed: seed-data

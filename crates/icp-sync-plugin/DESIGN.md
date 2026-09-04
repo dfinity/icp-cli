@@ -41,8 +41,14 @@ docs; the *reasons* behind those choices are recorded here.
   canister names it knows about. It is informational only; calling still
   requires an entry in `canisters:`.
 - **Filesystem access via WASI, not a host import** — plugins use standard
-  language APIs (`std::fs`); the host preopens the declared `dirs` read-only. No
-  bespoke `read-file`/`list-dir` import is needed.
+  language APIs (`std::fs`); the host preopens each declared directory
+  read-only. No bespoke `read-file`/`list-dir` import is needed.
+- **One manifest setting, two interface lists** — `files:` holds directories and
+  files together, and the host sorts them into `sync-exec-input.dirs`/`.files`
+  by what is on disk. A manifest author should not have to restate a fact the
+  filesystem already carries, while the plugin still wants them apart: a
+  directory arrives as a path to traverse and a file as content to use, and
+  giving one record both shapes would leave every plugin branching on a flag.
 - **Logging via stdio, not a host import** — stdout/stderr are captured by the
   host and forwarded to the CLI. Plugins use normal print facilities.
 - **No generated bindings checked in** — `wasmtime::component::bindgen!` (host)
@@ -62,7 +68,7 @@ crates/icp-sync-plugin/
   src/
     lib.rs             — public API: run_plugin(), RunPluginError
     runtime.rs         — wasmtime component setup, HostState, bindgen!, exec() call
-    path.rs            — declared-path safety checks (escapes_base, symlinks)
+    path.rs            — declared-path resolution and safety checks (project bound, symlinks)
   sync-plugin.wit      — current WIT interface, v0.2.0
   sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
   Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio, semver
@@ -74,40 +80,87 @@ Public function:
 pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError>
 ```
 
-`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `dirs`, `files`,
-`fields`, `host_canister_id` (the canister being synced), `agent`, `proxy`,
-`identity_principal`, `environment`, `compute_limit_secs`, the exposed
-`canister_ids` table, the `callable: CallableCanisters` enforcement set, and
-`reporter`. The CLI resolves the manifest's declared `canisters:` into
+`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `project_dir`,
+`dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
+`agent`, `proxy`, `identity_principal`, `environment`, `compute_limit_secs`, the
+exposed `canister_ids` table, the `callable: CallableCanisters` enforcement set,
+and `reporter`. The CLI resolves the manifest's declared `canisters:` into
 `CallableCanisters` before calling; this crate stays free of any manifest
 knowledge.
 
-`dirs` and `files` are the manifest-relative path strings, straight from the
-adapter. The runtime owns *all* filesystem access anchored at `base_dir`: it
-preopens each `dir` from `base_dir.join(dir)` and reads each `file` from
-`base_dir.join(file)`, passing the contents inline in `SyncExecInput`. Keeping
-both inside the runtime means the path-safety logic (below) lives in one place
-and stays private to this crate — the CLI just forwards strings. The returned
-`Vec<String>` is the plugin's persistent stderr lines (see stdio capture below);
-`reporter` receives the same lines live, as output events.
+`dirs` and `files` are the manifest's own `dirs:`/`files:` settings as
+manifest-relative paths (`KeyedPath`s carrying the map key each was declared
+under, if any), straight from the adapter. The runtime owns *all* filesystem
+access: it resolves each entry against `base_dir`, preopens it or reads it
+depending on what is there, and passes the contents — and the keys — inline in
+`SyncExecInput`. Keeping both inside the runtime means the path-safety logic
+(below) lives in one place and stays private to this crate — the CLI just
+forwards strings. The returned `Vec<String>` is the plugin's persistent stderr
+lines (see stdio capture below); `reporter` receives the same lines live, as
+output events.
 
-### Declared-path safety (no symlinks)
+Which of the two settings a step may write, and in which shape, is decided by
+the plugin rather than by the manifest, so `check_declared_forms` enforces it
+once the ABI is known (see *Interface versioning* below) and before anything is
+opened. A form the plugin's records cannot carry is an error rather than a
+silently dropped key or an unmentioned directory.
 
-Declared `dirs`/`files` entries are resolved on the host *before* the WASI
-sandbox boundary, so a lexical "relative, no `..`" check is not enough on two
-counts. First, a Windows drive-relative path such as `C:foo` carries a `Prefix`
-component yet is not "absolute", so joining it would discard `base_dir`;
-`escapes_base` (in `path.rs`) rejects `..`, root, and drive-prefix components,
-mirroring the bundler's checks. Second, a declared entry that *is* a symlink —
-or that traverses a symlinked parent component — would let a preopen or a read
-resolve outside the canister directory; `first_symlink_component` walks each
-component of the declared path under `base_dir` and rejects the entry if any
-prefix is a symlink (returning the offending sub-path relative to `base_dir`, so
-errors don't leak absolute on-disk paths). Both helpers are crate-private and
-applied uniformly to `dirs` and `files`. Symlinks are forbidden outright for
-now; the restriction can be relaxed later if a safe use case emerges. (Symlinks
-*inside* a preopen that escape it are a separate concern, already rejected by
-the WASI sandbox — cap-std — at runtime.)
+### Declared-path safety (project-bounded, no symlinks)
+
+An entry is written relative to `base_dir` (the canister directory) but bounded
+by `project_dir`: it may rise out of the canister directory with `..` and reach
+anything else in the project, and nothing above the project. `path.rs` resolves
+one against the other:
+
+- `base_within_root` places `base_dir` inside `project_dir` as a clean component
+  list. When `base_dir` does not lie within it — a dependency project reached by
+  an out-of-tree `path:`, which `icp project bundle` rejects but `icp sync`
+  allows — there is no project-relative position to anchor at, so `base_dir`
+  becomes its own root: exactly the rule that predated the widening, and no
+  narrower than what such a project could already reach. (This is a fallback for
+  an unanchorable base, not a tighter grant for dependencies. A dependency
+  vendored inside the workspace is bounded by the workspace root like any other
+  canister, and its manifest can in any case run arbitrary commands through a
+  `script` step.)
+- `resolve` walks the declared entry from there, resolving `.`/`..` lexically. A
+  `..` with nothing left to pop is `Escape::AboveRoot`; a root or drive-prefix
+  component is `Escape::NotRelative` — a Windows drive-relative path such as
+  `C:foo` carries a `Prefix` component yet is not "absolute", so joining it
+  would discard the base. This mirrors the bundler's checks.
+- The host path is the *resolved* location joined onto the root, never the
+  declared path joined onto `base_dir`: the latter would leave a `..` for the OS
+  to resolve through whatever `base_dir`'s own components happen to be.
+- `Resolved::first_symlink_component` then walks the resolved path under the
+  root and rejects the entry if any component is a symlink (returning the
+  offending sub-path relative to the root, so errors don't leak absolute on-disk
+  paths). An entry that stays below `base_dir` is checked only from there down —
+  the ancestry reaching the canister directory is exempt on the same grounds as
+  the root itself, since how the project reaches its own canister is not
+  something a manifest declared. An entry that rises *out* of `base_dir` is
+  checked from the root down instead: it re-anchors on an ancestor and descends
+  where the canister directory's own path never went, so a symlink in that
+  ancestry would put its target outside the project. An entry that *is* a
+  symlink, or that traverses one,
+  would otherwise let a preopen or a read resolve outside the project. Symlinks
+  are forbidden outright for now; the restriction can be relaxed later if a safe
+  use case emerges. (Symlinks *inside* a preopen that escape it are a separate
+  concern, already rejected by the WASI sandbox — cap-std — at runtime.)
+
+The guest still sees each preopen under the path the manifest wrote, `..` and
+all, so a plugin opens `dir.path` verbatim regardless of where it points.
+
+### Splitting declared entries by kind
+
+For a v0.2.0 plugin the manifest's `files:` is the only setting, and
+`resolve_entries` records what it found at each entry — a file's contents, or
+`None` for a directory — so `run_plugin` can partition them into the interface's
+`dirs` and `files` lists while keeping each list in written order. A v0.1.0
+plugin keeps the manifest's own split instead: its `dirs:` entries must each be
+a directory (`MissingDir` otherwise), and its `files:` entries are all read.
+
+Preopens are derived from every entry that turned out to be a directory,
+whichever setting declared it, reduced by `covering_dirs` (below) so that one
+tree is opened once.
 
 ### `HostState` and bindgen
 
@@ -158,6 +211,13 @@ v0.1.0 `sync-exec-input` has no field for — `canister-ids` and `fields` — ar
 simply dropped for a v1 plugin; a v1 plugin cannot observe them, so declaring
 `fields:` alongside one has no effect.
 
+Declared paths are the one place where dropping the difference would not be
+harmless, so the ABI decides which manifest forms are legal instead. v0.1.0 has
+a bare path in each list and separate `dirs`/`files`; v0.2.0 names every entry
+and takes both kinds under `files:`. Writing the wrong form fails the step with
+an error naming the offending entry and the form that plugin takes — a dropped
+key or an unmentioned directory would otherwise look like a plugin bug.
+
 ### Compute budget (epoch interruption)
 
 The compute-time limit is enforced with wasmtime's epoch interruption: a
@@ -189,12 +249,26 @@ Deserializes the `canister.yaml` fields into:
 pub struct Adapter {
     pub source: SourceField,              // path: or url:
     pub sha256: Option<String>,
-    pub dirs: Option<Vec<String>>,
-    pub files: Option<Vec<String>>,
+    pub dirs: Option<NamedPaths>,
+    pub files: Option<NamedPaths>,
     pub fields: Option<BTreeMap<String, String>>, // inline key-value fields
     pub canisters: Option<Vec<String>>, // extra callable canisters, by name
 }
 ```
+
+`NamedPaths` is an untagged `List(Vec<String>) | Map(IndexMap<String, PathOrList>)`
+— the two shapes `dirs:`/`files:` may be written in — keeping the written form
+exact, so bundling can rewrite the paths (`map_paths`) and serialize the step
+back out unchanged in shape. `entries()` flattens either form to ordered
+`(key, path)` pairs: `key` is `None` for a list entry and `Some(name)` for a map
+entry, and is *non-unique* — a map key holding a list of paths yields one entry
+per path, all sharing the key. The CLI passes those to the runtime as
+`KeyedPath`s (this crate stays free of manifest types), which surface in
+`sync-exec-input.dirs`/`files` as each entry's `key`.
+
+Both shapes stay parseable here because both remain legal *somewhere* — which
+one applies is settled by the plugin, which the manifest layer knows nothing
+about, so the check belongs at load time and not in `Deserialize`.
 
 Each `canisters:` entry is a canister name resolved against the project's ID
 table for the environment being synced. `Deserialize` is hand-written to reject a
@@ -218,7 +292,9 @@ verifies sha256, builds the exposed canister ID table and the `CallableCanisters
 enforcement set (resolving `canisters:` against the project's IDs), then calls
 `icp_sync_plugin::run_plugin(...)` with a `PluginInvocation`. The runtime — not
 the CLI — opens the declared paths and enforces the path-safety checks, so the
-CLI no longer touches the plugin's input files itself. `exposed_canister_ids`
+CLI no longer touches the plugin's input files itself; it supplies the canister
+directory and the project directory (`sync::Params::path` and `project_dir`)
+that bound them. `exposed_canister_ids`
 adds a bare-local-name duplicate for every canister in the same subproject as
 the one being synced; `resolve_callable` fails the step if a name in
 `canisters:` does not resolve.

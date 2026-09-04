@@ -5,14 +5,31 @@ use candid::Principal;
 use ic_agent::Agent;
 use icp_events::StepReporter;
 use icp_sync_plugin::{
-    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, PLUGIN_COMPUTE_LIMIT_ENV,
+    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV,
     PluginInvocation, RunPluginError, run_plugin,
 };
 use snafu::prelude::*;
 
-use crate::{canister::wasm, manifest::adapter::plugin::Adapter, package::PackageCache};
+use crate::{
+    canister::wasm,
+    manifest::adapter::plugin::{Adapter, NamedPaths},
+    package::PackageCache,
+};
 
 use super::Params;
+
+/// Convert a manifest [`NamedPaths`] (or its absence) into the runtime's
+/// key-tagged path list. A missing setting yields an empty list.
+fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
+    paths
+        .into_iter()
+        .flat_map(NamedPaths::entries)
+        .map(|entry| KeyedPath {
+            key: entry.key.map(str::to_string),
+            path: entry.path.to_string(),
+        })
+        .collect()
+}
 
 #[derive(Debug, Snafu)]
 pub enum PluginError {
@@ -92,13 +109,16 @@ pub(super) async fn sync(
     )
     .await?;
 
-    // 2. Collect inputs as manifest strings. `run_plugin` preopens the `dirs`
-    //    and reads the `files` itself — both anchored at `base_dir`, and both
-    //    subject to the runtime's path-safety checks (no escaping or symlinked
-    //    paths).
+    // 2. Collect inputs as manifest strings. `run_plugin` opens the declared
+    //    paths itself — preopening or reading each by what is on disk, anchored
+    //    at `base_dir`, confined to `project_dir`, and subject to the runtime's
+    //    path-safety checks (no escaping or symlinked paths). It also decides
+    //    which of the two settings the plugin's interface accepts, so both are
+    //    forwarded as written.
     let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let dirs: Vec<String> = adapter.dirs.clone().unwrap_or_default();
-    let files: Vec<String> = adapter.files.clone().unwrap_or_default();
+    let project_dir = Utf8PathBuf::from(params.project_dir.as_str());
+    let dirs = keyed_paths(adapter.dirs.as_ref());
+    let files = keyed_paths(adapter.files.as_ref());
     let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
 
     // 3. Build the canister ID table exposed to the plugin, then resolve the
@@ -119,6 +139,7 @@ pub(super) async fn sync(
         run_plugin(PluginInvocation {
             wasm_path,
             base_dir,
+            project_dir,
             dirs,
             files,
             fields,
@@ -216,6 +237,7 @@ mod tests {
     fn params_named(name: &str, ids: &[(&str, Principal)]) -> Params {
         Params {
             path: "/work".into(),
+            project_dir: "/work".into(),
             cid: principal(0),
             name: name.to_owned(),
             environment: "demo".to_owned(),

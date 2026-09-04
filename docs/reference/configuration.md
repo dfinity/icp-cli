@@ -147,11 +147,9 @@ sync:
     - type: plugin
       path: ./plugins/populate-data.wasm
       sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
-      dirs:                              # directories preopened read-only
-        - assets/seed-data
-        - config
-      files:                             # files read by the host and passed inline
-        - config.txt
+      files:                             # named directories and files
+        seed: assets/seed-data           #   a directory, preopened read-only
+        config: config.txt               #   a file, read and passed inline
       fields:                            # key-value fields passed inline
         api_url: https://example.com
         retries: 3
@@ -170,18 +168,46 @@ sync:
 | `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
 | `url` | string | One of `path` or `url` | URL to download the wasm from |
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
-| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
-| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `files` | map of name → path(s) | No | What the plugin may read (relative to the canister directory, anywhere inside the project). A directory is made readable read-only via WASI; a file is read by the host and passed inline |
+| `dirs` | list of paths | No | Directories the plugin may read. Only for a plugin built against `icp:sync-plugin@0.1` — see below |
 | `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
 | `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
-Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
+`files:` holds directories and files together; which an entry is comes from what is on disk, not from how it was written. Each key names a single path or a list of paths, and is surfaced to the plugin as that entry's `key` — a key holding a list produces several entries sharing it. For example:
+
+```yaml
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      files:
+        seed: assets/seed-data        # one path under a name
+        migrations:                   # several paths sharing a name
+          - migrations/2025
+          - migrations/2026
+        config: config.txt            # a file, read and passed inline
+```
+
+Entries in `files:` must be relative to the canister directory. They may reach the rest of the project with `..` — `shared: ../shared/assets` is fine — but may not resolve outside the project directory. They may not be, or traverse, a symlink, so a declared path cannot resolve to a target outside the project.
+
+#### Plugins built against `icp:sync-plugin@0.1`
+
+The older interface has no name for an entry and keeps directories in a list of their own, so a plugin implementing it takes the shape that interface has: a separate `dirs:`, and plain lists of paths rather than named entries.
+
+```yaml
+    - type: plugin
+      path: ./plugins/legacy.wasm
+      dirs:
+        - assets/seed-data
+      files:
+        - config.txt
+```
+
+The two shapes cannot be mixed, and which one applies is settled by the plugin rather than the manifest, so a mismatch is reported when the plugin is loaded: naming an entry for a `@0.1` plugin, or writing `dirs:` or a plain list for a `@0.2` one, fails the sync step with an error saying which form that plugin takes.
 
 A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
 
-The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 

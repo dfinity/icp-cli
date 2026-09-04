@@ -25,6 +25,7 @@ use crate::{
 };
 use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
+use icp_sync_plugin::{covering_dirs, distinct_paths};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 
@@ -769,44 +770,71 @@ async fn prepare_plugin_step(
         bytes: plugin_bytes,
     });
 
-    // Plugin preopened dirs go under a `dirs/` subdir so a user-supplied dir literally named
-    // `files` cannot collide with the `files/` area used for plugin input files.
-    let bundle_dirs = adapter.dirs.as_ref().map(|dirs| {
-        dirs.iter()
-            .map(|d| {
-                let manifest_path = format!(
-                    "plugins/{path_name}/{idx}/dirs/{}",
-                    normalize_archive_dir(d)
-                );
-                out.plugin_dirs.push(DirEntry {
-                    src_path: canister_path.join(d),
-                    archive_prefix: archive_join(prefix, &manifest_path),
-                });
-                manifest_path
-            })
-            .collect::<Vec<_>>()
-    });
-
+    // A `dirs:` entry (which only an `icp:sync-plugin@0.1` plugin takes) goes under a `dirs/`
+    // subdir so a user-supplied dir literally named `files` cannot collide with the `files/`
+    // area the `files:` entries occupy. The declared paths are rewritten to their archive
+    // locations; each entry's map key is carried through unchanged.
+    let dirs_prefix = format!("plugins/{path_name}/{idx}/dirs");
+    let files_prefix = format!("plugins/{path_name}/{idx}/files");
+    let bundle_dirs = adapter
+        .dirs
+        .as_ref()
+        .map(|dirs| dirs.map_paths(|dir| format!("{dirs_prefix}/{}", normalize_archive_dir(dir))));
     let bundle_files = adapter.files.as_ref().map(|files| {
-        files
-            .iter()
-            .map(|f| {
-                let manifest_path = format!(
-                    "plugins/{path_name}/{idx}/files/{}",
-                    normalize_archive_dir(f)
-                );
-                out.plugin_files.push(PluginFile {
-                    src_path: canister_path.join(f),
-                    archive_path: archive_join(prefix, &manifest_path),
-                    canister_name: canister.name.clone(),
-                    orig_file: f.clone(),
-                });
-                manifest_path
-            })
-            .collect::<Vec<_>>()
+        files.map_paths(|file| format!("{files_prefix}/{}", normalize_archive_dir(file)))
     });
 
-    Ok(SyncStep::Plugin(plugin::Adapter {
+    // The rewritten manifest above keeps every declared entry; the archive holds
+    // the trees and files behind them, of which there are fewer. A directory
+    // named under two keys is one tree to copy, and a declared subdirectory of
+    // another is already inside its copy — writing either twice would collide in
+    // the archive. The reduction runs over the paths as declared, so two that
+    // only *look* alike once rewritten (`../shared` and `shared` both normalize
+    // to `shared`) stay separate and are still caught as a collision.
+    let declared = |paths: &Option<plugin::NamedPaths>| -> Vec<String> {
+        paths
+            .iter()
+            .flat_map(plugin::NamedPaths::entries)
+            .map(|entry| entry.path.to_string())
+            .collect()
+    };
+    // A `files:` entry names a directory or a file, and which it is comes from what is on
+    // disk — the same rule the plugin host applies. So partition on that before deciding
+    // whether the archive gets a tree or a single file.
+    let (file_dirs, file_files): (Vec<String>, Vec<String>) = declared(&adapter.files)
+        .into_iter()
+        .partition(|path| canister_path.join(path).is_dir());
+
+    for (dir, dir_prefix) in covering_dirs(declared(&adapter.dirs).iter().map(String::as_str))
+        .into_iter()
+        .map(|dir| (dir, &dirs_prefix))
+        .chain(
+            covering_dirs(file_dirs.iter().map(String::as_str))
+                .into_iter()
+                .map(|dir| (dir, &files_prefix)),
+        )
+    {
+        out.plugin_dirs.push(DirEntry {
+            src_path: canister_path.join(dir),
+            archive_prefix: archive_join(
+                prefix,
+                &format!("{dir_prefix}/{}", normalize_archive_dir(dir)),
+            ),
+        });
+    }
+    for file in distinct_paths(file_files.iter().map(String::as_str)) {
+        out.plugin_files.push(PluginFile {
+            src_path: canister_path.join(file),
+            archive_path: archive_join(
+                prefix,
+                &format!("{files_prefix}/{}", normalize_archive_dir(file)),
+            ),
+            canister_name: canister.name.clone(),
+            orig_file: file.to_string(),
+        });
+    }
+
+    Ok(SyncStep::Plugin(Box::new(plugin::Adapter {
         source: SourceField::Local(LocalSource {
             path: plugin_wasm_path.as_str().into(),
         }),
@@ -815,7 +843,7 @@ async fn prepare_plugin_step(
         files: bundle_files,
         canisters: localize_call_targets(adapter.canisters.as_deref(), local_names),
         fields: adapter.fields.clone(),
-    }))
+    })))
 }
 
 async fn inline_networks(
@@ -1345,8 +1373,8 @@ fn validate_source_paths(
                 SyncStep::Script(_) => {}
                 SyncStep::Plugin(adapter) => {
                     if let Some(dirs) = &adapter.dirs {
-                        for d in dirs {
-                            let src = canister_path.join(d);
+                        for dir in dirs.entries() {
+                            let src = canister_path.join(dir.path);
                             let resolved = resolve_within_project(
                                 &src,
                                 project_dir,
@@ -1357,8 +1385,8 @@ fn validate_source_paths(
                         }
                     }
                     if let Some(files) = &adapter.files {
-                        for f in files {
-                            let src = canister_path.join(f);
+                        for file in files.entries() {
+                            let src = canister_path.join(file.path);
                             resolve_within_project(
                                 &src,
                                 project_dir,

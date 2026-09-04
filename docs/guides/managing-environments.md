@@ -173,8 +173,8 @@ canisters:
       steps:
         - type: plugin
           path: ./plugins/upload-assets.wasm
-          dirs:
-            - dist
+          files:
+            assets: dist
 
   - name: backend
     build:

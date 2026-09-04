@@ -133,11 +133,13 @@ sync step that points at the certified-assets migration plugin.</p>
 <p>The plugin is published in the
 <a href="https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.1-6b48585" rel="noopener noreferrer" target="_blank">certified-assets migration-v2.2.1 release</a>.
 It uploads the contents of a single directory to the asset canister being synced —
-the same job the old <code>assets</code> step did. <code>dirs</code> is the general
-<a href="/main/concepts/sync-plugins/">sync-plugin</a> field (a list, since a plugin may
-declare several directories), but this particular plugin reads <strong>exactly one</strong> —
-list a single entry. The <code>url</code>/<code>sha256</code> pin the exact wasm: icp-cli downloads it
-once, verifies the checksum, and caches it.</p>
+the same job the old <code>assets</code> step did. <code>dirs</code> is how a
+<a href="/main/concepts/sync-plugins/">sync plugin</a> built against the <code>icp:sync-plugin@0.1</code>
+interface — as this one is — declares the directories it may read (a list, since
+such a plugin may declare several), but this particular plugin reads <strong>exactly
+one</strong>, so list a single entry. A plugin built against the current interface
+takes a named <code>files:</code> map instead. The <code>url</code>/<code>sha256</code> pin the exact wasm:
+icp-cli downloads it once, verifies the checksum, and caches it.</p>
 <p>Your <strong>build step is unchanged</strong> — keep building or providing the asset-canister
 wasm exactly as before. Only the sync step changes.</p>
 <h3 id="convert-dir-to-dirs">Convert <code>dir:</code> to <code>dirs:</code></h3>

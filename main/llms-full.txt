@@ -1414,7 +1414,7 @@ When a `plugin` sync step executes for a canister, icp-cli:
 
 1. Resolves the wasm — reads the local `path`, or downloads the `url` to the package cache.
 2. Verifies the `sha256` checksum if one is given (required for `url`).
-3. Reads any files listed in `files:`, preopens any directories listed in `dirs:` read-only, and collects any key-value pairs listed in `fields:`.
+3. Walks the entries listed in `files:` — preopening each directory read-only and reading each file — and collects any key-value pairs listed in `fields:`.
 4. Instantiates the component in a WASI sandbox and calls its `exec()` export.
 5. Forwards the plugin's output to the CLI and reports success or the returned error.
 
@@ -1446,7 +1446,7 @@ world sync-plugin {
 }
 ```
 
-The interface is versioned (currently `icp:sync-plugin@0.2.0`). icp-cli reads the version a plugin was built against from the component itself and drives it accordingly, so plugins built against the earlier `@0.1.0` interface — which could only call the canister being synced — continue to load unchanged.
+The interface is versioned (currently `icp:sync-plugin@0.2.0`). icp-cli reads the version a plugin was built against from the component itself and drives it accordingly, so plugins built against the earlier `@0.1.0` interface — which could only call the canister being synced, and which takes a separate unnamed `dirs:` in the manifest — continue to load unchanged. See the [configuration reference](../reference/configuration.md#plugin-sync) for the manifest shape each takes.
 
 The authoritative interface, including all record fields, lives in [`sync-plugin.wit`](https://github.com/dfinity/icp-cli/blob/main/crates/icp-sync-plugin/sync-plugin.wit) in the icp-cli repository.
 
@@ -1456,14 +1456,18 @@ The authoritative interface, including all record fields, lives in [`sync-plugin
 |-------|-------------|
 | `canister-id` | Textual principal of the canister being synced |
 | `environment` | Name of the environment being synced (e.g. `local`, `production`) |
-| `dirs` | The directories you declared in `dirs:`; the host preopened each one read-only |
-| `files` | The files you declared in `files:`, each as a `(name, content)` pair read by the host |
+| `dirs` | Those `files:` entries that name a directory; the host preopened each one read-only. Each carries its `key` (see below) and `path` |
+| `files` | Those `files:` entries that name a file, each with its `key`, `name` (path), and `content` read by the host |
 | `fields` | The key-value fields you declared in `fields:`, each as a `(name, value)` pair; values are strings |
 | `identity-principal` | Textual principal of the signing identity used for canister calls |
 | `proxy-canister-id` | Textual principal of the proxy canister if one was configured via `--proxy`, otherwise absent |
 | `canister-ids` | The project's canister ID table for this environment — each entry a canister name and the principal it resolves to. Informational; being listed here does not grant permission to call a canister |
 
 Each `canister-ids` entry's name is the canister's fully-qualified project key: a bare local name for a canister defined in the app root, or a `subproject:canister` key for a canister defined in a subproject. Canisters in the same subproject as the one being synced are additionally listed under their bare local name, so a plugin can look up a sibling by the name that subproject's manifest uses. A bare name always means the sibling: if an app-root canister has the same local name, it is not listed for that sync.
+
+The manifest declares directories and files together under `files:`; the host splits them into these two lists by what is on disk, so a plugin never has to say up front which an entry will turn out to be.
+
+Every entry carries a `key`: the name it was declared under in the manifest. A name holding a list of paths produces several entries sharing that key, so the key is not unique. Use it to group or label declared paths — e.g. distinguish `seed:` directories from `migrations:` directories — without hardcoding paths in the plugin.
 
 ### Calling a canister — `canister-call`
 
@@ -1495,16 +1499,18 @@ The plugin runs with a deliberately narrow capability surface.
 
 ### Filesystem
 
-- Each directory in `dirs:` is preopened **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `dirs: ["assets"]` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
-- Files in `files:` are read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads their content from the input struct, not from disk.
+- A `files:` entry naming a directory is readable **read-only**. The plugin sees it at the same relative path it used in the manifest (e.g. `files: {assets: assets}` is visible as `assets/` inside the guest) and traverses it with standard filesystem APIs (`std::fs` in Rust).
+- Entries may name the same directory under several keys, or name a directory inside another entry's, and the plugin is told about each entry as written. The preopens behind them are one per distinct tree: an entry nested inside another is read through the preopen covering it, which grants nothing extra.
+- A `files:` entry naming a file is read by the host up front and passed inline in `sync-exec-input.files`. The plugin reads its content from the input struct, not from disk.
 - Any path outside a preopen is invisible. Writes, creates, deletes, renames, and symlinks that escape a preopen are rejected by the sandbox at runtime.
-- Paths in `dirs:`/`files:` must be relative and may not contain `..`. They also may not be — or traverse — a symlink: each declared entry is rejected if it or any of its parent components is a symlink, so a declared path cannot resolve to a target outside the canister directory. (This restriction may be relaxed later if a safe use case emerges.)
+- Paths in `files:` are relative to the canister directory and may rise out of it with `..` to reach the rest of the project (`shared: ../shared/assets`). The project directory is the boundary: an entry that resolves above it — or that is absolute — is rejected before the plugin runs.
+- A declared entry may not be, or traverse, a symlink: it is rejected if it or any component it traverses below the project root is a symlink, so a declared path cannot resolve to a target outside the project. (This restriction may be relaxed later if a safe use case emerges.)
 
 ### Capabilities
 
 | Capability | Available? | Notes |
 |------------|------------|-------|
-| Read declared `dirs:` | yes | read-only preopens |
+| Read declared directories | yes | read-only preopens |
 | Clocks, RNG, `wasi:io` | yes | Rust's `HashMap`, `chrono`, etc. work normally |
 | `process::exit` / panics | yes | abort the guest cleanly; the host surfaces the error |
 | Canister calls | yes | to the canister being synced, and to canisters declared in `canisters:` |
@@ -4275,8 +4281,8 @@ canisters:
       steps:
         - type: plugin
           path: ./plugins/upload-assets.wasm
-          dirs:
-            - dist
+          files:
+            assets: dist
 
   - name: backend
     build:
@@ -5627,21 +5633,21 @@ A few things to note:
 
 ## Read Declared Files and Directories
 
-A plugin can't see the filesystem freely — only what you grant it in the manifest's `dirs:` and `files:`.
+A plugin can't see the filesystem freely — only what you grant it in the manifest's `files:`. That one setting holds directories and files alike, named: `seed: assets/seed-data`. The host splits them by what is on disk and hands you `input.dirs` and `input.files`, so a plugin never declares up front which an entry will be.
 
-Directories in `dirs:` are preopened read-only at the same relative path. Traverse them with standard `std::fs`:
+Directories arrive in `input.dirs`, preopened read-only at the same relative path. Each entry gives you its `path` plus the `key` it was declared under. Traverse them with standard `std::fs`:
 
 ```rust
 for dir in &input.dirs {
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+    for entry in std::fs::read_dir(&dir.path).map_err(|e| e.to_string())? {
         let path = entry.map_err(|e| e.to_string())?.path();
         let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        // ... encode and send to the canister ...
+        // ... encode and send to the canister; dir.key groups related dirs ...
     }
 }
 ```
 
-Files in `files:` are read by the host up front and passed inline — read them from the input struct, not from disk:
+Files arrive in `input.files`, read by the host up front and passed inline — read them from the input struct, not from disk. Each entry carries its `key`, `name` (the path), and `content`:
 
 ```rust
 for file in &input.files {
@@ -5649,7 +5655,9 @@ for file in &input.files {
 }
 ```
 
-Writes, paths outside a preopen, and `..` traversal are all rejected by the sandbox. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
+Every entry carries the `key` it was declared under, so a plugin can group or label paths (for example, tell `seed:` directories from `migrations:`) without hardcoding paths. A name holding a list of paths yields several entries sharing that key.
+
+Open each entry at the `path` it arrives with, whatever it looks like: a manifest may declare a directory elsewhere in the project (`../shared/assets`), and the preopen carries that same spelling. Writes, and paths that escape a preopen, are rejected by the sandbox at runtime. See [The Sandbox](../concepts/sync-plugins.md#the-sandbox) for the full capability list and resource limits.
 
 ## Read Declared Fields
 
@@ -5680,10 +5688,9 @@ sync:
   steps:
     - type: plugin
       path: target/wasm32-wasip2/release/my_plugin.wasm
-      dirs:
-        - seed-data
       files:
-        - config.txt
+        seed: seed-data
+        config: config.txt
       fields:
         api_url: https://example.com
         retries: 3
@@ -6613,11 +6620,13 @@ sync:
 The plugin is published in the
 [certified-assets migration-v2.2.1 release](https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.1-6b48585).
 It uploads the contents of a single directory to the asset canister being synced —
-the same job the old `assets` step did. `dirs` is the general
-[sync-plugin](../concepts/sync-plugins.md) field (a list, since a plugin may
-declare several directories), but this particular plugin reads **exactly one** —
-list a single entry. The `url`/`sha256` pin the exact wasm: icp-cli downloads it
-once, verifies the checksum, and caches it.
+the same job the old `assets` step did. `dirs` is how a
+[sync plugin](../concepts/sync-plugins.md) built against the `icp:sync-plugin@0.1`
+interface — as this one is — declares the directories it may read (a list, since
+such a plugin may declare several), but this particular plugin reads **exactly
+one**, so list a single entry. A plugin built against the current interface
+takes a named `files:` map instead. The `url`/`sha256` pin the exact wasm:
+icp-cli downloads it once, verifies the checksum, and caches it.
 
 Your **build step is unchanged** — keep building or providing the asset-canister
 wasm exactly as before. Only the sync step changes.
@@ -9151,11 +9160,9 @@ sync:
     - type: plugin
       path: ./plugins/populate-data.wasm
       sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
-      dirs:                              # directories preopened read-only
-        - assets/seed-data
-        - config
-      files:                             # files read by the host and passed inline
-        - config.txt
+      files:                             # named directories and files
+        seed: assets/seed-data           #   a directory, preopened read-only
+        config: config.txt               #   a file, read and passed inline
       fields:                            # key-value fields passed inline
         api_url: https://example.com
         retries: 3
@@ -9174,18 +9181,46 @@ sync:
 | `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
 | `url` | string | One of `path` or `url` | URL to download the wasm from |
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
-| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
-| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `files` | map of name → path(s) | No | What the plugin may read (relative to the canister directory, anywhere inside the project). A directory is made readable read-only via WASI; a file is read by the host and passed inline |
+| `dirs` | list of paths | No | Directories the plugin may read. Only for a plugin built against `icp:sync-plugin@0.1` — see below |
 | `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
 | `canisters` | array of string | No | Canisters the plugin may call in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
-Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
+`files:` holds directories and files together; which an entry is comes from what is on disk, not from how it was written. Each key names a single path or a list of paths, and is surfaced to the plugin as that entry's `key` — a key holding a list produces several entries sharing it. For example:
+
+```yaml
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      files:
+        seed: assets/seed-data        # one path under a name
+        migrations:                   # several paths sharing a name
+          - migrations/2025
+          - migrations/2026
+        config: config.txt            # a file, read and passed inline
+```
+
+Entries in `files:` must be relative to the canister directory. They may reach the rest of the project with `..` — `shared: ../shared/assets` is fine — but may not resolve outside the project directory. They may not be, or traverse, a symlink, so a declared path cannot resolve to a target outside the project.
+
+#### Plugins built against `icp:sync-plugin@0.1`
+
+The older interface has no name for an entry and keeps directories in a list of their own, so a plugin implementing it takes the shape that interface has: a separate `dirs:`, and plain lists of paths rather than named entries.
+
+```yaml
+    - type: plugin
+      path: ./plugins/legacy.wasm
+      dirs:
+        - assets/seed-data
+      files:
+        - config.txt
+```
+
+The two shapes cannot be mixed, and which one applies is settled by the plugin rather than the manifest, so a mismatch is reported when the plugin is loaded: naming an entry for a `@0.1` plugin, or writing `dirs:` or a plain list for a `@0.2` one, fails the sync step with an error saying which form that plugin takes.
 
 A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
 
 A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
 
-The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`) and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 

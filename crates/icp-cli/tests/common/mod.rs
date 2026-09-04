@@ -48,6 +48,10 @@ pub(crate) fn build_sync_plugin_example() -> (camino::Utf8PathBuf, camino::Utf8P
         .join("../../examples/icp-sync-plugin");
     // Use CARGO env var when available (set by cargo test), fall back to PATH lookup.
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    // `<example>/target` is only where the wasm lands under a default configuration;
+    // `CARGO_TARGET_DIR` or a `build.target-dir` config key moves it. Ask cargo where it
+    // actually builds instead of guessing.
+    let target_dir = cargo_target_dir(&cargo, &example_dir);
 
     let status = Command::new(&cargo)
         .args([
@@ -85,9 +89,33 @@ pub(crate) fn build_sync_plugin_example() -> (camino::Utf8PathBuf, camino::Utf8P
     );
 
     (
-        example_dir.join("target/wasm32-unknown-unknown/release/canister.wasm"),
-        example_dir.join("target/wasm32-wasip2/release/plugin.wasm"),
+        target_dir.join("wasm32-unknown-unknown/release/canister.wasm"),
+        target_dir.join("wasm32-wasip2/release/plugin.wasm"),
     )
+}
+
+/// The target directory cargo uses for builds run in `workspace_dir`, as cargo itself
+/// resolves it from the environment and the config hierarchy.
+fn cargo_target_dir(cargo: &str, workspace_dir: &camino::Utf8Path) -> camino::Utf8PathBuf {
+    let output = Command::new(cargo)
+        .args(["metadata", "--format-version", "1", "--no-deps"])
+        .current_dir(workspace_dir)
+        .output()
+        .expect("failed to spawn cargo metadata");
+    assert!(
+        output.status.success(),
+        "cargo metadata failed in {workspace_dir}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    #[derive(serde::Deserialize)]
+    struct Metadata {
+        target_directory: camino::Utf8PathBuf,
+    }
+
+    let metadata: Metadata =
+        serde_json::from_slice(&output.stdout).expect("failed to parse cargo metadata output");
+    metadata.target_directory
 }
 
 // Spawns a test server that expects a single request and responds with a 200 status code and the given body

@@ -312,6 +312,7 @@ pub async fn deploy(
         params.proxy,
         target_canisters,
         canister_list,
+        &env,
         &phase.reporter(),
     )
     .await;
@@ -668,6 +669,13 @@ pub async fn resolve_targets(
         for name in &cnames {
             if let Some((_, canister)) = env.canisters.get(name) {
                 for target in canister.bindings.values() {
+                    // A target the environment does not contain at all was
+                    // deliberately left out of it, so no deploy from anywhere in
+                    // the workspace can give it an id here. Waiting on it would
+                    // block this sub-project forever.
+                    if !env.canisters.contains_key(target) {
+                        continue;
+                    }
                     if !scoped.contains(target.as_str()) && !deployed.contains_key(target) {
                         missing.insert(target.clone());
                     }

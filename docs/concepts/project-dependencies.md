@@ -23,7 +23,9 @@ dependencies:
 
 ## What gets deployed
 
-`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+`icp deploy` deploys **all** of the dependency's canisters into the same environment, not just the exposed ones. A dependency's canisters may call each other, and icp-cli does not track an internal "requires" graph, so the whole dependency is always deployed — exactly as it would deploy on its own. `canisters:` here is an **exposure** filter (which IDs your canisters see), not a deployment filter.
+
+"Exactly as it would deploy on its own" includes its own environments: if the dependency's environment [names a subset of its canisters](#which-canisters-an-environment-holds), only those are deployed to that environment.
 
 ## Canister ID injection
 
@@ -102,11 +104,37 @@ Force the workspace root with the `--project-root-override` flag or the `ICP_PRO
 
 The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
 
-A dependency's own same-named environment still contributes its **per-canister settings, init args, and upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
+A dependency's own same-named environment still contributes its **per-canister settings**, **init args**, and **upgrade args**, so a vendored project's canisters get the configuration their author intended. Precedence, highest first:
 
 1. the workspace root's explicit override for that canister, keyed by the same path-based name used to address it (e.g. `settings: { "vendor/openemail:backend": … }`)
 2. the dependency's own environment configuration
 3. the canister's base settings
+
+### Which canisters an environment holds
+
+`canisters:` is not an override, so it does not follow that precedence. Each project's environment block decides **its own** canisters, and a project that writes no list contributes all of them:
+
+```yaml
+# app/icp.yaml — the workspace root, whose canisters are `app` and `worker`
+environments:
+  - name: staging
+    canisters: [app]
+```
+
+```yaml
+# app/vendor/openemail/icp.yaml — canisters `backend` and `frontend`
+environments:
+  - name: staging
+    canisters: [backend]
+```
+
+`staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project: this is what the dependency would deploy on its own, which is the point — vendoring does not change it.
+
+`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: from the root, it deploys none of the root's own canisters while every dependency still deploys all of its own.
+
+A project may name **only** its own canisters — never `"vendor/openemail:frontend"` from the root, nor `"libfoo:util"` from inside openemail, however those names are spelled elsewhere in the manifest. Naming a canister the writing project does not declare is rejected when the project is read, whether it belongs to another project in the workspace or to nobody at all. So the answer to "is this canister in `staging`?" always comes from one manifest — the one that declares the canister — and it is the same answer vendored as standalone. Keeping a dependency's canister out of an environment means editing that dependency, which is what deploying it on its own would already have required.
+
+Lists in different projects therefore never interact, and neither do lists for different environments. Two parents of a [shared dependency](#shared-dependencies) have nothing to disagree about: the shared instance decides for itself, once.
 
 Because the root decides which environments exist, **every member must declare each environment the workspace targets.** Deploying to an environment a dependency does not declare fails with a clear error. If a dependency has no environment-specific configuration, declaring the environment with no overrides is enough:
 

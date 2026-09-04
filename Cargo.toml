@@ -126,8 +126,17 @@ missing_debug_implementations = "warn"
 [workspace.lints.clippy]
 enum_variant_names = "allow"
 
-[profile.dev.package.scrypt]
-opt-level = 3
+[profile.dev.package]
+# too slow to ever leave unoptimized
+scrypt = { opt-level = 3 }
+# these bloat the exception handling table producing a macos linker warning
+cargo-generate = { opt-level = 1 }
+cranelift-codegen = { opt-level = 1 }
+rhai = { opt-level = 1 }
+wasmparser = { opt-level = 1 }
+wasmtime-environ = { opt-level = 1 }
+wasmtime-internal-cranelift = { opt-level = 1 }
+wast = { opt-level = 1 }
 
 # The profile that 'dist' will build with
 [profile.dist]

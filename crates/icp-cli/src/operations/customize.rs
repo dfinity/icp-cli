@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::io;
 use std::ops::Deref;
@@ -6,8 +6,10 @@ use std::ops::Deref;
 use camino::Utf8Component;
 use candid::types::Label;
 use candid::types::value::VariantValue;
-use candid::{IDLArgs, IDLValue, TypeEnv};
+use candid::types::{TypeEnv, TypeInner};
+use candid::{IDLArgs, IDLValue};
 use candid_parser::{assist, parse_idl_args, utils::CandidSource};
+use icp::canister::Settings;
 use icp::fs::yaml;
 use icp::manifest::ArgsFormat;
 use icp::prelude::*;
@@ -22,12 +24,90 @@ pub(crate) struct CustomizeManifest {
     pub(crate) options: Vec<CustomizeOption>,
 }
 
+/// One user-configurable setting: what to ask about, which canisters it belongs
+/// to, and where the answer goes.
 #[derive(Debug, Deserialize)]
+#[serde(try_from = "CustomizeOptionRepr")]
 pub(crate) struct CustomizeOption {
     pub(crate) canister: CanisterRefs,
-    pub(crate) field_path: String,
-    pub(crate) candid_type: String,
     pub(crate) description: String,
+    pub(crate) target: CustomizeTarget,
+}
+
+/// What an option's answer configures. Each option addresses one or the other.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CustomizeTarget {
+    /// A field of the init args the canister is installed with, addressed by
+    /// `field_path` and asked for at `candid_type`.
+    InitArgField {
+        field_path: String,
+        candid_type: String,
+    },
+    /// One of the canister's environment variables. A variable's value is text,
+    /// so there is no type to declare, and the variable need not be among the
+    /// canister's manifest settings — the answer is laid over them either way.
+    EnvVar { name: String },
+}
+
+impl CustomizeTarget {
+    /// How the destination is named in messages about the option.
+    fn describe(&self) -> String {
+        match self {
+            Self::InitArgField { field_path, .. } => format!("field path {field_path:?}"),
+            Self::EnvVar { name } => format!("environment variable {name:?}"),
+        }
+    }
+}
+
+/// A [`CustomizeOption`] as the file spells it, with both targets' fields flat
+/// and optional. Written this way rather than as an untagged enum, which rejects
+/// a half-written option as "did not match any variant" — saying nothing about
+/// which half is missing.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CustomizeOptionRepr {
+    canister: CanisterRefs,
+    description: String,
+    field_path: Option<String>,
+    candid_type: Option<String>,
+    env: Option<String>,
+}
+
+impl TryFrom<CustomizeOptionRepr> for CustomizeOption {
+    type Error = ParseCustomizeOptionError;
+
+    fn try_from(repr: CustomizeOptionRepr) -> Result<Self, Self::Error> {
+        let CustomizeOptionRepr {
+            canister,
+            description,
+            field_path,
+            candid_type,
+            env,
+        } = repr;
+        let target = match (field_path, candid_type, env) {
+            (Some(field_path), Some(candid_type), None) => CustomizeTarget::InitArgField {
+                field_path,
+                candid_type,
+            },
+            (None, None, Some(name)) if name.is_empty() => {
+                return Err(ParseCustomizeOptionError::EmptyEnvVarName);
+            }
+            // `env: KEY=value` is the shape of a shell assignment, not of a name.
+            (None, None, Some(name)) if name.contains('=') => {
+                return EnvVarNameHasEqualsSnafu { name }.fail();
+            }
+            (None, None, Some(name)) => CustomizeTarget::EnvVar { name },
+            (_, _, Some(_)) => return Err(ParseCustomizeOptionError::MixedTarget),
+            (Some(_), None, None) => return Err(ParseCustomizeOptionError::MissingCandidType),
+            (None, Some(_), None) => return Err(ParseCustomizeOptionError::MissingFieldPath),
+            (None, None, None) => return Err(ParseCustomizeOptionError::NoTarget),
+        };
+        Ok(Self {
+            canister,
+            description,
+            target,
+        })
+    }
 }
 
 /// The canisters one option applies to: written as a single reference, or as a
@@ -188,6 +268,36 @@ pub(crate) struct FieldPath {
 pub(crate) type LoadCustomizeManifestError = yaml::Error;
 
 #[derive(Debug, Snafu)]
+pub(crate) enum ParseCustomizeOptionError {
+    #[snafu(display(
+        "an option customizes an init argument field or an environment variable, not both — \
+         give it either `field_path` and `candid_type`, or `env`"
+    ))]
+    MixedTarget,
+
+    #[snafu(display("option has a `field_path` but no `candid_type` to prompt for it at"))]
+    MissingCandidType,
+
+    #[snafu(display("option has a `candid_type` but no `field_path` to substitute it into"))]
+    MissingFieldPath,
+
+    #[snafu(display(
+        "option customizes nothing — give it `field_path` and `candid_type` to set a field \
+         of the init args, or `env` to set an environment variable"
+    ))]
+    NoTarget,
+
+    #[snafu(display("`env` names no environment variable"))]
+    EmptyEnvVarName,
+
+    #[snafu(display(
+        "environment variable name {name:?} contains '='; `env` takes the name alone, \
+         and the value is what the option prompts for"
+    ))]
+    EnvVarNameHasEquals { name: String },
+}
+
+#[derive(Debug, Snafu)]
 pub(crate) enum ParseCanisterRefError {
     #[snafu(display("canister reference is empty"))]
     EmptyReference,
@@ -283,12 +393,12 @@ pub(crate) enum PromptCustomizationsError {
     ))]
     UnsupportedInitArgsFormat { canister: String, path: PathBuf },
     #[snafu(display(
-        "interactive prompt failed for canister(s) {canisters:?} at {field_path:?} (from {path})"
+        "interactive prompt failed for canister(s) {canisters:?} at {target} (from {path})"
     ))]
     Prompt {
         source: anyhow::Error,
         canisters: String,
-        field_path: String,
+        target: String,
         path: PathBuf,
     },
     // One option can apply its answer to several canisters, so which canister
@@ -544,9 +654,45 @@ struct PlannedPrompt<'a> {
     canisters: String,
     /// The subset of them this deploy targets — never empty.
     targets: Vec<String>,
-    field_path: FieldPath,
-    type_env: TypeEnv,
-    ty: candid::types::Type,
+    plan: PlannedTarget,
+}
+
+/// A [`CustomizeTarget`] with everything the file spells as text already parsed.
+enum PlannedTarget {
+    InitArgField {
+        field_path: FieldPath,
+        type_env: TypeEnv,
+        ty: candid::types::Type,
+    },
+    EnvVar {
+        name: String,
+    },
+}
+
+/// The answers one `--customize` run collected, keyed by canister store key. A
+/// canister appears under `init_args` only once an option has customized a field
+/// of its init args, and under `env_vars` only once one has customized a variable
+/// of its own — the two are set through different calls and neither implies the
+/// other.
+#[derive(Debug, Default)]
+pub(crate) struct Customizations {
+    pub(crate) init_args: HashMap<String, IDLArgs>,
+    pub(crate) env_vars: HashMap<String, BTreeMap<String, String>>,
+}
+
+impl Customizations {
+    /// Lay a canister's answers over the environment variables it would
+    /// otherwise deploy with, leaving every variable no option asked about as the
+    /// manifest wrote it.
+    pub(crate) fn overlay_env_vars(&self, canister: &str, settings: &mut Settings) {
+        let Some(answers) = self.env_vars.get(canister) else {
+            return;
+        };
+        settings
+            .environment_variables
+            .get_or_insert_default()
+            .extend(answers.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
 }
 
 /// Substitute one answer into every canister its option applies to.
@@ -575,15 +721,15 @@ fn apply_answer(
     Ok(())
 }
 
-/// Ask for every option that applies to this deploy, returning the customized
-/// init args per canister. Only called once the user has opted in with
+/// Ask for every option that applies to this deploy, returning what each canister
+/// is to be customized with. Only called once the user has opted in with
 /// `--customize`, so it always prompts.
 pub(crate) fn prompt_customizations(
     manifest: &CustomizeManifest,
     cnames: &[String],
     init_args: &HashMap<String, Option<icp::InitArgs>>,
     customize_path: &Path,
-) -> Result<HashMap<String, IDLArgs>, PromptCustomizationsError> {
+) -> Result<Customizations, PromptCustomizationsError> {
     let cname_set: HashSet<&str> = cnames.iter().map(String::as_str).collect();
 
     // Resolve every option against this deploy, and parse everything that can be
@@ -615,25 +761,39 @@ pub(crate) fn prompt_customizations(
 
         let canisters = option.canister.joined();
 
-        let field_path = parse_field_path(&option.field_path).context(FieldPathSnafu {
-            canisters: &canisters,
-            path: customize_path,
-        })?;
+        let plan = match &option.target {
+            CustomizeTarget::InitArgField {
+                field_path,
+                candid_type,
+            } => {
+                let field_path = parse_field_path(field_path).context(FieldPathSnafu {
+                    canisters: &canisters,
+                    path: customize_path,
+                })?;
 
-        let (type_env, ty) =
-            parse_contextfree_candid_type_string(&option.candid_type).context(CandidTypeSnafu {
-                canisters: &canisters,
-                field_path: option.field_path.as_str(),
-                path: customize_path,
-            })?;
+                let (type_env, ty) =
+                    parse_contextfree_candid_type_string(candid_type).context(CandidTypeSnafu {
+                        canisters: &canisters,
+                        field_path: &field_path.text,
+                        path: customize_path,
+                    })?;
+
+                PlannedTarget::InitArgField {
+                    field_path,
+                    type_env,
+                    ty,
+                }
+            }
+            // Nothing left to parse: the name is validated as the file is read,
+            // and the value is always text.
+            CustomizeTarget::EnvVar { name } => PlannedTarget::EnvVar { name: name.clone() },
+        };
 
         planned.push(PlannedPrompt {
             option,
             canisters,
             targets,
-            field_path,
-            type_env,
-            ty,
+            plan,
         });
     }
 
@@ -648,14 +808,21 @@ pub(crate) fn prompt_customizations(
         );
     }
 
-    // Each touched canister's args, accumulated across every option that names
-    // it. Built here rather than on first substitution so an init_args format
-    // that cannot be customized is caught before the prompts, not between them.
-    let mut result: HashMap<String, IDLArgs> = HashMap::new();
+    let mut result = Customizations::default();
+
+    // Each canister's args, accumulated across every option that names it. Built
+    // here rather than on first substitution so an init_args format that cannot
+    // be customized is caught before the prompts, not between them. Only the
+    // canisters an init-arg option names are entered: an env-var option has no
+    // use for its canister's init args, and must not be blocked by a format they
+    // cannot be customized in.
     for prompt in &planned {
+        if !matches!(prompt.plan, PlannedTarget::InitArgField { .. }) {
+            continue;
+        }
         for target in &prompt.targets {
-            if !result.contains_key(target) {
-                result.insert(
+            if !result.init_args.contains_key(target) {
+                result.init_args.insert(
                     target.clone(),
                     manifest_init_args(init_args, target, customize_path)?,
                 );
@@ -670,28 +837,62 @@ pub(crate) fn prompt_customizations(
     for prompt in &planned {
         eprintln!("[{}] {}", prompt.canisters, prompt.option.description);
 
-        let context = assist::Context::new(prompt.type_env.clone());
-        let prompted = assist::input_args(&context, std::slice::from_ref(&prompt.ty)).context(
-            PromptSnafu {
-                canisters: &prompt.canisters,
-                field_path: prompt.option.field_path.as_str(),
-                path: customize_path,
-            },
-        )?;
+        let prompt_snafu = PromptSnafu {
+            canisters: &prompt.canisters,
+            target: prompt.option.target.describe(),
+            path: customize_path,
+        };
 
-        let value = prompted
-            .args
-            .into_iter()
-            .next()
-            .expect("input_args returns one value per type element");
+        match &prompt.plan {
+            PlannedTarget::InitArgField {
+                field_path,
+                type_env,
+                ty,
+            } => {
+                let context = assist::Context::new(type_env.clone());
+                let prompted =
+                    assist::input_args(&context, std::slice::from_ref(ty)).context(prompt_snafu)?;
 
-        apply_answer(
-            &mut result,
-            &prompt.targets,
-            &prompt.field_path,
-            value,
-            customize_path,
-        )?;
+                let value = prompted
+                    .args
+                    .into_iter()
+                    .next()
+                    .expect("input_args returns one value per type element");
+
+                apply_answer(
+                    &mut result.init_args,
+                    &prompt.targets,
+                    field_path,
+                    value,
+                    customize_path,
+                )?;
+            }
+            PlannedTarget::EnvVar { name } => {
+                // A variable's value is a string, so the prompt is candid's plain
+                // text input — the same one an init arg field of type `text` gets,
+                // editor shortcut and all.
+                let context = assist::Context::new(TypeEnv::new());
+                let prompted = assist::input_args(&context, &[TypeInner::Text.into()])
+                    .context(prompt_snafu)?;
+
+                let IDLValue::Text(value) = prompted
+                    .args
+                    .into_iter()
+                    .next()
+                    .expect("input_args returns one value per type element")
+                else {
+                    unreachable!("a prompt for `text` yields text");
+                };
+
+                for target in &prompt.targets {
+                    result
+                        .env_vars
+                        .entry(target.clone())
+                        .or_default()
+                        .insert(name.clone(), value.clone());
+                }
+            }
+        }
     }
 
     Ok(result)
@@ -718,9 +919,21 @@ mod tests {
     fn options_for(references: &[&str]) -> CustomizeOption {
         CustomizeOption {
             canister: crefs(references),
-            field_path: ".x".to_string(),
-            candid_type: "nat64".to_string(),
             description: "desc".to_string(),
+            target: CustomizeTarget::InitArgField {
+                field_path: ".x".to_string(),
+                candid_type: "nat64".to_string(),
+            },
+        }
+    }
+
+    fn env_option_for(reference: &str, name: &str) -> CustomizeOption {
+        CustomizeOption {
+            canister: crefs(&[reference]),
+            description: "desc".to_string(),
+            target: CustomizeTarget::EnvVar {
+                name: name.to_string(),
+            },
         }
     }
 
@@ -1071,7 +1284,7 @@ options:
             Path::new("icp_customize.yaml"),
         )
         .unwrap();
-        assert!(result.is_empty());
+        assert!(result.init_args.is_empty() && result.env_vars.is_empty());
     }
 
     #[test]
@@ -1401,7 +1614,179 @@ options:
             Path::new(CUSTOMIZE_FILE),
         )
         .unwrap();
-        assert!(result.is_empty());
+        assert!(result.init_args.is_empty() && result.env_vars.is_empty());
+    }
+
+    #[test]
+    fn parse_option_with_env_target() {
+        let manifest: CustomizeManifest = serde_yaml::from_str(
+            r#"
+options:
+  - canister: frontend
+    env: API_ENDPOINT
+    description: "Upstream API base URL"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            manifest.options[0].target,
+            CustomizeTarget::EnvVar {
+                name: "API_ENDPOINT".to_string()
+            }
+        );
+    }
+
+    /// The two targets are alternatives, and a half-written option names neither
+    /// unambiguously. Each shape gets its own message, which an untagged enum
+    /// would have flattened into "did not match any variant".
+    #[test]
+    fn parse_option_rejects_ambiguous_targets() {
+        for (fields, expected) in [
+            (
+                "field_path: \".supply\"\n    candid_type: nat64\n    env: SUPPLY",
+                "not both",
+            ),
+            ("field_path: \".supply\"", "no `candid_type`"),
+            ("candid_type: nat64", "no `field_path`"),
+            ("", "customizes nothing"),
+        ] {
+            let yaml = format!(
+                "options:\n  - canister: frontend\n    description: d\n    {}\n",
+                fields
+            );
+            let err = serde_yaml::from_str::<CustomizeManifest>(&yaml).unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains(expected), "for {fields:?}, got: {msg}");
+        }
+    }
+
+    #[test]
+    fn parse_option_rejects_env_name_carrying_a_value() {
+        // `env: KEY=value` is a shell assignment; the value is what the option
+        // prompts for, so the name stands alone.
+        let err = serde_yaml::from_str::<CustomizeManifest>(
+            r#"
+options:
+  - canister: frontend
+    env: "API_ENDPOINT=https://api.example.com"
+    description: "Upstream API base URL"
+"#,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("takes the name alone"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_option_rejects_empty_env_name() {
+        let err = serde_yaml::from_str::<CustomizeManifest>(
+            r#"
+options:
+  - canister: frontend
+    env: ""
+    description: "Upstream API base URL"
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("names no environment variable"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_option_rejects_unknown_field() {
+        // A misspelled target key would otherwise read as an option with no
+        // target at all, blaming the wrong thing.
+        let err = serde_yaml::from_str::<CustomizeManifest>(
+            r#"
+options:
+  - canister: frontend
+    env_var: API_ENDPOINT
+    description: "Upstream API base URL"
+"#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("env_var"), "got: {err}");
+    }
+
+    #[test]
+    fn prompt_does_not_read_init_args_for_an_env_option() {
+        // Init args are parsed up front for the canisters an init-arg option
+        // names — an env-var option has no use for them, and a canister whose
+        // init args cannot be customized is still free to have its environment
+        // customized. Both canisters here have uncustomizable init args, so the
+        // failure naming only "d" is what shows "c" was left alone.
+        let manifest = CustomizeManifest {
+            options: vec![env_option_for("c", "API_ENDPOINT"), option_for("d")],
+        };
+        let init_args = HashMap::from([
+            ("c".to_string(), Some(icp::InitArgs::Binary(vec![0u8]))),
+            ("d".to_string(), Some(icp::InitArgs::Binary(vec![0u8]))),
+        ]);
+        let err = prompt_customizations(
+            &manifest,
+            &["c".to_string(), "d".to_string()],
+            &init_args,
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("\"d\""), "got: {msg}");
+        assert!(!msg.contains("\"c\""), "got: {msg}");
+    }
+
+    #[test]
+    fn overlay_env_vars_adds_to_a_canister_that_declared_none() {
+        let customizations = Customizations {
+            init_args: HashMap::new(),
+            env_vars: HashMap::from([(
+                "frontend".to_string(),
+                BTreeMap::from([("API_ENDPOINT".to_string(), "https://api".to_string())]),
+            )]),
+        };
+        let mut settings = Settings::default();
+        customizations.overlay_env_vars("frontend", &mut settings);
+        assert_eq!(
+            settings.environment_variables,
+            Some(HashMap::from([(
+                "API_ENDPOINT".to_string(),
+                "https://api".to_string()
+            )]))
+        );
+    }
+
+    #[test]
+    fn overlay_env_vars_keeps_the_variables_no_option_asked_about() {
+        let customizations = Customizations {
+            init_args: HashMap::new(),
+            env_vars: HashMap::from([(
+                "frontend".to_string(),
+                BTreeMap::from([("API_ENDPOINT".to_string(), "https://api".to_string())]),
+            )]),
+        };
+        let mut settings = Settings {
+            environment_variables: Some(HashMap::from([
+                ("API_ENDPOINT".to_string(), "https://manifest".to_string()),
+                ("LOG_LEVEL".to_string(), "debug".to_string()),
+            ])),
+            ..Settings::default()
+        };
+        customizations.overlay_env_vars("frontend", &mut settings);
+        let vars = settings.environment_variables.unwrap();
+        assert_eq!(vars["API_ENDPOINT"], "https://api");
+        assert_eq!(vars["LOG_LEVEL"], "debug");
+    }
+
+    #[test]
+    fn overlay_env_vars_leaves_an_unanswered_canister_alone() {
+        // Not even an empty map: `sync_settings` reads `None` as "the manifest
+        // says nothing about this canister's environment" and skips it, which is
+        // not the same as "set it to nothing".
+        let customizations = Customizations::default();
+        let mut settings = Settings::default();
+        customizations.overlay_env_vars("frontend", &mut settings);
+        assert_eq!(settings.environment_variables, None);
     }
 
     #[test]

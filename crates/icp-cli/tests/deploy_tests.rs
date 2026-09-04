@@ -462,6 +462,66 @@ async fn deploy_without_customize_flag_uses_manifest_init_args() {
         .stdout(eq("(\"7\")").trim());
 }
 
+/// An `env` option is planned like any other and reaches the prompt, which names
+/// the variable it is asking about. There being no terminal to ask on is a
+/// failure, not a licence to fall back on the manifest's value — the point of the
+/// flag is that the deployed value is the answered one.
+///
+/// The variable is deliberately absent from the canister's settings: an
+/// environment variable needs no placeholder in the manifest to be customizable,
+/// unlike an init argument field, which has to exist to be substituted into.
+#[tokio::test]
+async fn deploy_customize_prompts_for_an_undeclared_environment_variable() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            settings:
+              environment_variables:
+                LOG_LEVEL: "debug"
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: my-canister
+                env: API_ENDPOINT
+                description: "Upstream API base URL"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--customize",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            // The description is printed before the prompt, and the failure
+            // names what was being asked for.
+            contains("Upstream API base URL")
+                .and(contains("environment variable \"API_ENDPOINT\""))
+                .and(contains("my-canister")),
+        );
+}
+
 #[tokio::test]
 async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();

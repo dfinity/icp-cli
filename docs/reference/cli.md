@@ -966,7 +966,7 @@ using --args or --args-file:
   Default value: `2000000000000`
 * `--no-create` — If any canisters do not exist, error instead of creating them
 * `-y`, `--yes` — Skip confirmation prompts, including the Candid interface compatibility check
-* `--customize` — Prompt for the init argument fields the project's `icp_customize.yaml` declares, instead of deploying with the manifest's `init_args` as written
+* `--customize` — Prompt for the init argument fields and environment variables the project's `icp_customize.yaml` declares, instead of deploying with the manifest's values as written
 * `--identity <IDENTITY>` — The user identity to run this command as
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for and deploy to. By default, the local environment is used
 * `--json` — Output command results as JSON

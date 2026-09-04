@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail};
-use candid::{IDLArgs, Principal};
+use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
@@ -86,8 +86,9 @@ pub(crate) struct DeployArgs {
     #[arg(long, short)]
     pub(crate) yes: bool,
 
-    /// Prompt for the init argument fields the project's `icp_customize.yaml`
-    /// declares, instead of deploying with the manifest's `init_args` as written.
+    /// Prompt for the init argument fields and environment variables the
+    /// project's `icp_customize.yaml` declares, instead of deploying with the
+    /// manifest's values as written.
     #[arg(long)]
     pub(crate) customize: bool,
 
@@ -188,8 +189,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 
     // Customization is opt-in: without `--customize`, the project's
     // `icp_customize.yaml` is inert and every canister deploys with the
-    // manifest's `init_args` as written. `--yes` is unrelated — it suppresses
-    // confirmations, not the answers this collects.
+    // manifest's `init_args` and `environment_variables` as written. `--yes` is
+    // unrelated — it suppresses confirmations, not the answers this collects.
     //
     // The prompts run before the build so the user fills them in upfront,
     // uninterrupted by build output.
@@ -198,8 +199,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // options address a member's canister through its store key, so the file is
     // read from the workspace root even for a member-scoped deploy, and options
     // outside this deploy's scope are dropped by `prompt_customizations`.
-    let customize_overrides: Arc<HashMap<String, IDLArgs>> = if !args.customize {
-        Arc::new(HashMap::new())
+    let customizations: Arc<customize::Customizations> = if !args.customize {
+        Arc::new(customize::Customizations::default())
     } else {
         let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
         let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
@@ -362,6 +363,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let env_canisters = &env.canisters;
     let target_canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
+        let customizations = customizations.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -373,7 +375,12 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             let (_, info) = env_canisters
                 .get(name)
                 .ok_or_else(|| anyhow!("Canister id exists but no canister info"))?;
-            Ok::<_, anyhow::Error>((cid, info.clone()))
+            let mut info = info.clone();
+            // Ahead of both `set_binding_env_vars_many` and `sync_settings_many`,
+            // which each write these settings out: the answers travel with the
+            // canister rather than being applied twice.
+            customizations.overlay_env_vars(name, &mut info.settings);
+            Ok::<_, anyhow::Error>((cid, info))
         }
     }))
     .await?;
@@ -409,7 +416,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let canisters = try_join_all(cnames.iter().map(|name| {
         let environment_selection = environment_selection.clone();
         let agent = agent.clone();
-        let co = customize_overrides.clone();
+        let customizations = customizations.clone();
         async move {
             let cid = ctx
                 .get_canister_id_for_env(
@@ -429,7 +436,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
             // Priority: CLI --args/--args-file > icp_customize.yaml prompts > manifest init_args
             let init_args_bytes = if args.args_opt.is_some() {
                 args.args_opt.resolve_bytes()?
-            } else if let Some(customized) = co.get(name) {
+            } else if let Some(customized) = customizations.init_args.get(name) {
                 Some(
                     customized
                         .to_bytes()

@@ -1199,7 +1199,8 @@ fn bundle_customize_file_addresses_member_canisters() {
 
     // The third option names both canisters, so it is asked once and both
     // receive the answer — a list has to survive the round trip into the bundle
-    // just as a single reference does.
+    // just as a single reference does. The fourth targets an environment
+    // variable rather than an init argument field.
     let customize_yaml = indoc::indoc! {r#"
         options:
           - canister: frontend
@@ -1214,6 +1215,9 @@ fn bundle_customize_file_addresses_member_canisters() {
             field_path: ".admin"
             candid_type: "principal"
             description: "Administrator"
+          - canister: services/open-crm:backend
+            env: API_ENDPOINT
+            description: "Upstream API base URL"
     "#};
     write_string(&project_dir.join("icp_customize.yaml"), customize_yaml)
         .expect("failed to write customize manifest");
@@ -1296,6 +1300,36 @@ fn bundle_rejects_unknown_customize_canister() {
                 .and(contains("not part of this workspace"))
                 .and(contains("services/open-crm:backend")),
         );
+}
+
+/// An option customizes a field of the init args or an environment variable, and
+/// naming both leaves it ambiguous which the answer is for. Rejecting it while
+/// bundling keeps the ambiguity from reaching whoever deploys the bundle, and the
+/// message has to say which two keys are in conflict.
+#[test]
+fn bundle_rejects_customize_option_with_two_targets() {
+    let ctx = TestContext::new();
+    let project_dir = customize_workspace(&ctx);
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc::indoc! {r#"
+            options:
+              - canister: frontend
+                field_path: ".endpoint"
+                candid_type: "text"
+                env: API_ENDPOINT
+                description: "Upstream API base URL"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("not both").and(contains("`env`")));
 }
 
 /// A member's own customizations file is what that project uses when deployed on

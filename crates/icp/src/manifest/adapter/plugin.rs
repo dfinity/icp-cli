@@ -259,12 +259,16 @@ pub struct Adapter {
     #[schemars(with = "Option<BTreeMap<String, FieldValue>>")]
     pub fields: Option<BTreeMap<String, String>>,
 
-    /// Canisters this plugin may call in addition to the canister being synced.
-    /// Each entry is a canister name resolved against the project's canister ID
-    /// table for the environment being synced (e.g. `backend`, or a namespaced
-    /// subproject canister such as `services/open-crm:backend`). The plugin
-    /// picks a target per call via the `call-target` in its `canister-call`
-    /// request; a target not listed here is rejected by the host.
+    /// Canisters this plugin may call, or read metadata from, in addition to
+    /// the canister being synced. Each entry is a canister name resolved against
+    /// the project's canister ID table for the environment being synced, written
+    /// as this project spells it: a bare local name for one of its own canisters
+    /// (e.g. `backend`), or a `<subproject>:<canister>` key for a canister of
+    /// something it depends on (e.g. `vendor/ledger:ledger`). The same spellings
+    /// hold when the project is a workspace member, so vendoring it does not
+    /// change them. The plugin picks a target per request via the `call-target`
+    /// in its `canister-call` or `canister-metadata-section` request; a target
+    /// not listed here is rejected by the host.
     pub canisters: Option<Vec<String>>,
 }
 

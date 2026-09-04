@@ -3811,6 +3811,7 @@ dependencies = [
  "console 0.16.3",
  "hex",
  "ic-agent",
+ "ic-management-canister-types 0.9.0",
  "icp-canister-interfaces",
  "icp-events",
  "semver",

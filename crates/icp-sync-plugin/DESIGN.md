@@ -36,6 +36,13 @@ docs; the *reasons* behind those choices are recorded here.
   one deployment. (In the earlier `@0.1.0` interface
   `canister-call` had no target and always reached the canister being synced; see
   *Interface versioning* below.)
+- **`canister-metadata-section` mirrors `canister-call`'s targeting and routing** — it
+  takes the same `call-target` (enforced against `canisters:` the same way) and
+  the same `direct` flag, so one mental model covers both imports. Its return is
+  `result<option<list<u8>>, string>`: a missing section is an ordinary answer for
+  a plugin probing for an optional section, not a failure it must recognize by
+  parsing error text. The host pays for that guarantee on the proxied path — see
+  *Metadata reads* below.
 - **`sync-exec-input` carries the canister ID table** — `canister-ids` exposes
   the project's name→principal map for the environment, so a plugin can resolve
   canister names it knows about. It is informational only; calling still
@@ -71,7 +78,8 @@ crates/icp-sync-plugin/
     path.rs            — declared-path resolution and safety checks (project bound, symlinks)
   sync-plugin.wit      — current WIT interface, v0.2.0
   sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
-  Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, candid, camino, snafu, tokio, semver
+  Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, ic-management-canister-types,
+                         candid, camino, snafu, tokio, semver
 ```
 
 Public function:
@@ -186,14 +194,38 @@ struct HostState {
 ```
 
 `HostState` implements `WasiView` so wasmtime_wasi can access the WASI context.
-`canister_call` uses `tokio::runtime::Handle::current().block_on(...)` because
-the caller already wraps the synchronous `run_plugin` in
+Both imports use `tokio::runtime::Handle::current().block_on(...)` because the
+caller already wraps the synchronous `run_plugin` in
 `tokio::task::block_in_place`. For a v0.2.0 plugin the target is resolved from
 the request's `call-target` by `resolve_call_target`, which enforces the
 `callable` set; for a v0.1.0 plugin the target is always `host_canister_id`.
 When a proxy is configured and the call is a non-`direct` update, it is encoded
 as `ProxyArgs` and routed through the proxy's `proxy` method; otherwise it goes
 straight to the resolved target via `ic-agent`.
+
+### Metadata reads (two routes, one answer)
+
+`canister-metadata-section` cannot reuse the call path: `read_state` is not a canister
+method, so a proxy canister has nothing to forward. The two routes are therefore
+different protocols reaching the same data, chosen by the request's `direct` flag
+exactly as `canister-call` chooses one:
+
+- **Direct** — a `read_state` signed by the sync identity, so absence is
+  *proven* by the certificate rather than asserted. It requests `controllers`
+  alongside the metadata path, since only that distinguishes a canister with no
+  such section from one that was never created.
+- **Proxied** — `ProxyArgs` aimed at the management canister's
+  `canister_metadata`, so the controller check runs against the proxy. This is
+  the same shape the CLI's own management calls take through
+  `update_or_proxy_raw`; the runtime inlines it rather than depending on the CLI.
+
+Only a certificate can make a read `none`. The management canister answers a
+section that isn't there and one private to someone else with the same
+rejection, so the proxied route treats that rejection as a claim to check rather
+than an answer, and confirms it with a certified read before reporting absence.
+A plugin then sees one answer either way: no section by that name and no module
+installed at all are `none`; a private section it may not have, a canister that
+does not exist, and any other failure are errors.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 
@@ -222,10 +254,11 @@ key or an unmentioned directory would otherwise look like a plugin bug.
 
 The compute-time limit is enforced with wasmtime's epoch interruption: a
 background thread calls `Engine::increment_epoch` once per second, and the store
-deadline (`set_epoch_deadline`) bounds pure wasm execution. Because canister
-calls block the guest while the host awaits the network, `canister_call` records
-the elapsed time and the `epoch_deadline_callback` grants it back via
-`epoch_extension` — so network latency is *not* charged against the limit. The
+deadline (`set_epoch_deadline`) bounds pure wasm execution. Because a host
+call blocks the guest while the host awaits the network, both imports record the
+elapsed time (`refund_host_call_time`) and the `epoch_deadline_callback` grants
+it back via `epoch_extension` — so network latency is *not* charged against the
+limit. The
 ticker thread stops when its RAII guard drops at the end of `run_plugin`.
 
 The deadline in seconds is the `compute_limit_secs` parameter. The CLI resolves

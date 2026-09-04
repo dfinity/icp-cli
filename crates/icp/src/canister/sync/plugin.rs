@@ -158,29 +158,58 @@ pub(super) async fn sync(
 }
 
 /// The canister ID table exposed to a sync plugin: every named canister in the
-/// project, plus — for canisters in the same subproject as the one being synced
-/// — a duplicate entry under the bare local name. A store key is
-/// `<subproject>:<local>` for a canister in a subproject and a bare local name
-/// for a canister defined directly in the app root (see the WIT
-/// `canister-id-entry` docs), so the syncing canister's namespace is the prefix
-/// of its own key.
+/// project, plus — for every canister in the subproject the synced canister
+/// belongs to, or in a subproject nested below it — a duplicate entry under the
+/// name that subproject itself uses. A store key is `<subproject>:<local>` for a
+/// canister in a subproject and a bare local name for a canister defined
+/// directly in the app root (see the WIT `canister-id-entry` docs), so the
+/// syncing canister's namespace is the prefix of its own key.
 ///
-/// A local name never contains a colon but a subproject directory may, so keys
-/// split on their *last* colon. The bare-name aliases take precedence over an
-/// app-root canister of the same local name: a plugin resolving a bare name is
-/// naming what the syncing canister's own manifest calls it.
+/// The aliases exist so a subproject's manifest and plugins keep working when it
+/// is vendored into a workspace: both the step's `canisters:` list and the name a
+/// plugin passes back as a call target are written where the subproject's own
+/// names apply, but store keys are relative to the app root, which moves. See
+/// [`member_relative_alias`] for the names produced.
+///
+/// The aliases take precedence over a canister elsewhere in the workspace whose
+/// store key happens to be spelled the same way: a plugin resolving such a name
+/// is naming what its own subproject calls it.
 fn exposed_canister_ids(params: &Params) -> BTreeMap<String, Principal> {
-    let syncing_namespace = params.name.rsplit_once(':').map(|(namespace, _)| namespace);
+    // A canister in the app root is in the subproject the store keys are already
+    // relative to, so its names need no translation.
+    let Some((syncing_namespace, _)) = params.name.rsplit_once(':') else {
+        return params.canister_ids.clone();
+    };
 
     let mut table = params.canister_ids.clone();
     for (key, id) in &params.canister_ids {
-        if let Some((namespace, local)) = key.rsplit_once(':')
-            && Some(namespace) == syncing_namespace
-        {
-            table.insert(local.to_owned(), *id);
+        if let Some(alias) = member_relative_alias(syncing_namespace, key) {
+            table.insert(alias.to_owned(), *id);
         }
     }
     table
+}
+
+/// The name a canister has *within* the subproject at `namespace`: its store key
+/// with that subproject's prefix removed. A canister of the subproject itself
+/// comes back under its bare local name; one belonging to a subproject nested
+/// below it comes back under the `<path>:<local>` key it would have if that
+/// subproject were the app root. `None` for a canister the subproject has no name
+/// of its own for.
+///
+/// A local name never contains a colon but a subproject directory may, so a key
+/// splits on its *last* colon.
+fn member_relative_alias<'a>(namespace: &str, key: &'a str) -> Option<&'a str> {
+    let (key_namespace, _) = key.rsplit_once(':')?;
+    let rest = key.strip_prefix(namespace)?;
+    match key_namespace == namespace {
+        // The colon separating the subproject from a local name of its own.
+        true => rest.strip_prefix(':'),
+        // Otherwise the key's subproject must sit *below* this one. Demanding
+        // the path separator is what keeps `services/crm-legacy:backend` out of
+        // `services/crm`, which it merely shares a spelling prefix with.
+        false => rest.strip_prefix('/'),
+    }
 }
 
 /// Resolve the step's `canisters` list into a [`CallableCanisters`] enforcement
@@ -293,6 +322,84 @@ mod tests {
         assert_eq!(table.get("backend"), Some(&backend));
     }
 
+    /// A canister of a subproject nested below the syncing canister's own is
+    /// exposed under the key that subproject has relative to it — the very key
+    /// its manifest and plugins use when it is built standalone, so vendoring it
+    /// into a workspace leaves both spellings working.
+    #[test]
+    fn exposed_ids_add_member_relative_names_for_nested_subprojects() {
+        let ledger = principal(1);
+        let deep = principal(2);
+        let params = params_named(
+            "services/crm:backend",
+            &[
+                ("services/crm:backend", principal(9)),
+                ("services/crm/vendor/ledger:ledger", ledger),
+                ("services/crm/vendor/ledger/vendor/util:util", deep),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("vendor/ledger:ledger"), Some(&ledger));
+        // Nesting is not limited to one level: the whole subtree below the
+        // syncing canister's subproject is renamed relative to it.
+        assert_eq!(table.get("vendor/ledger/vendor/util:util"), Some(&deep));
+        // The workspace-absolute keys remain.
+        assert_eq!(
+            table.get("services/crm/vendor/ledger:ledger"),
+            Some(&ledger)
+        );
+    }
+
+    /// A subproject whose path merely starts with the same characters is not
+    /// nested below the syncing canister's, so it contributes no alias.
+    #[test]
+    fn exposed_ids_ignore_a_subproject_sharing_a_spelling_prefix() {
+        let legacy = principal(1);
+        let params = params_named(
+            "services/crm:backend",
+            &[
+                ("services/crm:backend", principal(9)),
+                ("services/crm-legacy:backend", legacy),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("services/crm-legacy:backend"), Some(&legacy));
+        // Its local name belongs to the syncing canister, not to it.
+        assert_eq!(table.get("backend"), Some(&principal(9)));
+        assert_eq!(table.get("-legacy:backend"), None);
+    }
+
+    /// A member-relative alias wins over a workspace canister whose store key is
+    /// spelled the same way, for the same reason a bare sibling name does: the
+    /// name is being read where the subproject's own names apply.
+    #[test]
+    fn exposed_ids_member_relative_alias_overrides_a_root_dependency_key() {
+        let root_ledger = principal(1);
+        let own_ledger = principal(2);
+        let params = params_named(
+            "services/crm:backend",
+            &[
+                ("services/crm:backend", principal(9)),
+                ("services/crm/vendor/ledger:ledger", own_ledger),
+                ("vendor/ledger:ledger", root_ledger),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("vendor/ledger:ledger"), Some(&own_ledger));
+        // The root's own dependency is still reachable, by its store key.
+        assert_eq!(
+            table.get("services/crm/vendor/ledger:ledger"),
+            Some(&own_ledger)
+        );
+        assert!(!table.values().any(|id| *id == root_ledger));
+    }
+
     /// An app-root canister sharing a local name with a sibling of the syncing
     /// canister does not keep the bare name: the syncing subproject's own
     /// canister is what that name means to the plugin.
@@ -323,11 +430,13 @@ mod tests {
     fn exposed_ids_split_subproject_prefix_at_the_last_colon() {
         let backend = principal(1);
         let frontend = principal(2);
+        let nested = principal(3);
         let params = params_named(
             "services/odd:name:backend",
             &[
                 ("services/odd:name:backend", backend),
                 ("services/odd:name:frontend", frontend),
+                ("services/odd:name/vendor/ledger:ledger", nested),
             ],
         );
 
@@ -335,6 +444,27 @@ mod tests {
 
         assert_eq!(table.get("backend"), Some(&backend));
         assert_eq!(table.get("frontend"), Some(&frontend));
+        assert_eq!(table.get("vendor/ledger:ledger"), Some(&nested));
+    }
+
+    /// The mirror image: a directory whose *name* contains a colon is not a
+    /// subproject nested below the part before it. `services/odd:name` holds one
+    /// directory named `odd:name`, so from `services/odd` it is nothing at all.
+    #[test]
+    fn exposed_ids_do_not_read_a_colon_in_a_directory_name_as_nesting() {
+        let odd = principal(1);
+        let params = params_named(
+            "services/odd:backend",
+            &[
+                ("services/odd:backend", principal(9)),
+                ("services/odd:name:frontend", odd),
+            ],
+        );
+
+        let table = exposed_canister_ids(&params);
+
+        assert_eq!(table.get("services/odd:name:frontend"), Some(&odd));
+        assert_eq!(table.get("name:frontend"), None);
     }
 
     /// A single-project layout keys canisters by bare local name already, so no

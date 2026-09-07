@@ -51,11 +51,19 @@ interface types {
         /// defined directly in the app root has no subproject prefix and appears
         /// as its bare local name, e.g. "backend".
         ///
-        /// Every canister in the same subproject as the canister being synced is
-        /// additionally listed under its bare local name (a duplicate entry with
-        /// the same `id`), so a plugin can address a sibling by the same local
-        /// name the manifest uses. A bare name always means the sibling, so an
-        /// app-root canister sharing that local name is not listed.
+        /// Every canister the subproject being synced can name for itself is
+        /// additionally listed under that name (a duplicate entry with the same
+        /// `id`): its own canisters under their bare local names, and the
+        /// canisters of subprojects nested below it under the
+        /// `subproject:local` key those would have if it were the app root —
+        /// e.g. for "services/crm:backend", the canister
+        /// "services/crm/vendor/ledger:ledger" is also listed as
+        /// "vendor/ledger:ledger". These are the keys the subproject's own
+        /// manifest uses, so a plugin addresses the same canister by the same
+        /// name whether the subproject is deployed standalone or vendored into
+        /// a workspace. Such a name always means what the subproject means by
+        /// it, so a canister elsewhere in the workspace whose key is spelled
+        /// the same way is not listed under it.
         name: string,
         /// Textual principal the name resolves to for this environment.
         id: string,
@@ -71,10 +79,10 @@ interface types {
         /// permitted, whether or not it also appears in `canisters`.
         host,
         /// A canister from the `canisters` list, identified by name, spelled
-        /// exactly as it appears in `sync-exec-input.canister-ids` — a bare
-        /// local name for a canister in the same subproject, or a
-        /// `subproject:local` key otherwise. The host resolves it against that
-        /// mapping table.
+        /// exactly as it appears in `sync-exec-input.canister-ids` — for a
+        /// canister the synced canister's own subproject names, the name that
+        /// subproject uses; otherwise the app-root-relative `subproject:local`
+        /// key. The host resolves it against that mapping table.
         name(string),
     }
 
@@ -136,11 +144,32 @@ interface types {
         /// for query calls.
         cycles: u64,
     }
+
+    /// A request to read a canister's metadata section.
+    record metadata-section-request {
+        /// Which canister to read from. The same rule as
+        /// `canister-call-request.target` applies: `host` is always permitted,
+        /// a `name` must appear in the sync step's `canisters` list.
+        target: call-target,
+        /// Name of the metadata section, as spelled in the wasm module's custom
+        /// section minus the `icp:public `/`icp:private ` prefix — e.g.
+        /// `candid:service`.
+        name: string,
+        /// When true, the section is read straight from the target canister
+        /// with a certified `read_state` request signed by the sync identity,
+        /// which reaches a private section only if that identity controls the
+        /// target. When false (the default), the read is routed through the
+        /// proxy canister configured via `--proxy` — as a call to the
+        /// management canister's `canister_metadata` method, so a private
+        /// section gated on the proxy's control is readable. With no proxy
+        /// configured the read goes directly either way.
+        direct: bool,
+    }
 }
 
 /// The complete interface of a sync plugin.
 world sync-plugin {
-    use types.{sync-exec-input, canister-call-request, call-target, canister-id-entry, dir-input, file-input, field-input};
+    use types.{sync-exec-input, canister-call-request, metadata-section-request, call-target, canister-id-entry, dir-input, file-input, field-input};
 
     // -------------------------------------------------------------------------
     // Host functions (imports) — provided by icp-cli, called by the plugin
@@ -153,6 +182,21 @@ world sync-plugin {
     /// Returns the raw Candid-encoded response bytes on success or an error
     /// message on failure. The plugin is responsible for decoding.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    /// Read a metadata section from a canister.
+    /// The `req.target` selects the canister under the same rule as
+    /// `canister-call`: the canister being synced (`host`), or one listed in
+    /// the sync step's `canisters` list, by name.
+    /// A direct read is a certified `read_state` request signed by the sync
+    /// identity; a proxied read (`direct` false, with `--proxy` configured) is
+    /// a call to the management canister's `canister_metadata` method made by
+    /// the proxy, which reaches sections private to the proxy's control.
+    /// Returns the section's raw bytes on success, or `none` when the target
+    /// provably has no section by that name — including when it has no module
+    /// installed at all, and so no sections. A section the reader may not have
+    /// is an error, as is a canister that does not exist or any other failed
+    /// read. The plugin is responsible for interpreting the bytes.
+    import canister-metadata-section: func(req: metadata-section-request) -> result<option<list<u8>>, string>;
 
     // The plugin's stdout is captured and shown as transient progress in
     // the rolling step view of icp-cli; it is discarded when the step ends.

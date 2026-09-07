@@ -27,13 +27,27 @@ A simple Rust canister with three methods:
 
 A Rust Wasm component that implements the `sync-plugin` world defined in
 `crates/icp-sync-plugin/sync-plugin.wit`. The host runtime calls its `exec`
-export and provides a `canister-call` import the plugin uses to reach the
-canister.
+export and provides the `canister-call` and `canister-metadata-section` imports the
+plugin uses to reach the canister.
 
 ## How the plugin system is exercised
 
 This example is designed to demonstrate both routing modes of the
-`canister-call` import — the `direct` flag — in a single sync run.
+`canister-call` import — the `direct` flag — in a single sync run, plus a
+metadata read that follows the same routing.
+
+### Read — `candid:service` via proxy (`direct: false`)
+
+Before calling anything, the plugin asks for the canister's `candid:service`
+metadata section and reports its size. The build embeds that section with
+`ic-wasm`, so it is there; had it not been, the read would return "absent"
+rather than fail — a missing section is an answer, not an error.
+
+Routed through the proxy (`direct: false`), the read reaches the canister as the
+management canister's `canister_metadata` method called by the proxy, so it is
+the proxy's control over the canister that a private section would be checked
+against. A direct read (`direct: true`) is a `read_state` signed by the user
+identity instead.
 
 ### Call 1 — `set_uploader` via proxy (`direct: false`)
 
@@ -64,6 +78,9 @@ icp sync
        ├─ exec(sync-exec-input) called
        │    identity-principal = <user>
        │    proxy-canister-id  = <proxy>
+       │
+       ├─ canister-metadata-section candid:service  direct=false → proxy → mgmt canister
+       │    reports the section's size, or "absent"
        │
        ├─ canister-call set_uploader(<user>)   direct=false → proxy → canister
        │    canister stores uploader = <user>

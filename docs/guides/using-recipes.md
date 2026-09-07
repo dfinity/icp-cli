@@ -163,6 +163,27 @@ canisters:
         API_KEY: "secret"
 ```
 
+## Adding Your Own Sync Steps
+
+A recipe canister can also declare a `sync` section of its own, for
+post-deployment work the recipe does not cover. Those steps run after the
+recipe's own sync steps:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v3.0.0"
+      configuration:
+        package: backend
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/seed-data.sh
+```
+
+`build` remains exclusive with `recipe`: the recipe is what defines the build.
+
 ## Next Steps
 
 - [Recipes](../concepts/recipes.md) — Understand how recipes work

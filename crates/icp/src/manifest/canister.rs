@@ -170,29 +170,23 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 //
                 let has_recipe = temp_map.contains_key(&recipe_key);
                 let has_build = temp_map.contains_key(&build_key);
-                let has_sync = temp_map.contains_key(&sync_key);
 
-                match (has_recipe, has_build, has_sync) {
-                    (true, true, _) => {
+                match (has_recipe, has_build) {
+                    (true, true) => {
                         // Can't have a recipe and a build
                         Err(Error::custom(format!(
                             "Canister {name} cannot have both a `recipe` and a `build` section"
                         )))
                     }
-                    (true, false, true) => {
-                        // Can't have a recipe and a sync sections
-                        Err(Error::custom(format!(
-                            "Canister {name} cannot have both a `recipe` and a `sync` section"
-                        )))
-                    }
-                    (false, false, _) => {
+                    (false, false) => {
                         // We must have recipe or build
                         Err(Error::custom(format!(
                             "Canister {name} must have a `recipe` or a `build` section"
                         )))
                     }
-                    (true, false, false) => {
-                        // We have a a recipe
+                    (true, false) => {
+                        // We have a recipe, optionally with sync steps of its
+                        // own to run after the recipe's
                         let recipe: Recipe = serde_yaml::from_value(
                             temp_map
                                 .remove(&recipe_key)
@@ -202,6 +196,19 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         .map_err(|e| {
                             Error::custom(format!("Canister {name} failed to parse recipe: {}", e))
                         })?;
+
+                        // An explicit `sync: null` deserializes to `None`, as
+                        // it does in the build/sync variant
+                        let sync: Option<SyncSteps> =
+                            if let Some(sync_value) = temp_map.remove(&sync_key) {
+                                serde_yaml::from_value(sync_value).map_err(|e| {
+                                    Error::custom(format!(
+                                        "Canister {name} failed to parse sync instructions: {e}"
+                                    ))
+                                })?
+                            } else {
+                                None
+                            };
 
                         if !temp_map.is_empty() {
                             return Err(Error::custom(format!(
@@ -214,10 +221,10 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             settings,
                             init_args,
                             upgrade_args,
-                            instructions: Instructions::Recipe { recipe },
+                            instructions: Instructions::Recipe { recipe, sync },
                         })
                     }
-                    (false, true, _) => {
+                    (false, true) => {
                         // We have a build section
 
                         // Try to deserialize as BuildSync variant
@@ -262,6 +269,10 @@ impl<'de> Deserialize<'de> for CanisterManifest {
 pub enum Instructions {
     Recipe {
         recipe: Recipe,
+
+        /// Additional sync steps, run after the ones the recipe renders.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sync: Option<SyncSteps>,
     },
 
     BuildSync {
@@ -629,7 +640,8 @@ mod tests {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -659,7 +671,8 @@ mod tests {
                             ("key-2".to_string(), "value-2".into())
                         ]),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -691,7 +704,8 @@ mod tests {
                             "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                                 .to_string()
                         ),
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -722,10 +736,93 @@ mod tests {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
+    }
+
+    #[test]
+    fn recipe_with_sync() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                    name: my-canister
+                    recipe:
+                      type: file://my-recipe
+                    sync:
+                      steps:
+                        - type: script
+                          command: echo hi
+                "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: ManifestSettings::default(),
+                init_args: None,
+                upgrade_args: None,
+                instructions: Instructions::Recipe {
+                    recipe: Recipe {
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
+                        configuration: HashMap::new(),
+                        sha256: None,
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Script(script::Adapter {
+                            command: script::CommandField::Command("echo hi".to_string()),
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn recipe_with_null_sync() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                    name: my-canister
+                    recipe:
+                      type: file://my-recipe
+                    sync:
+                "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: ManifestSettings::default(),
+                init_args: None,
+                upgrade_args: None,
+                instructions: Instructions::Recipe {
+                    recipe: Recipe {
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
+                        configuration: HashMap::new(),
+                        sha256: None,
+                    },
+                    sync: None,
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn recipe_with_invalid_sync() {
+        match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+                name: my-canister
+                recipe:
+                  type: file://my-recipe
+                sync:
+                  steps:
+                    - type: nonsense
+        "#})
+        {
+            Ok(_) => panic!("an unknown sync step type should not deserialize"),
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Canister my-canister failed to parse sync instructions") {
+                    panic!(
+                        "expected 'Canister my-canister failed to parse sync instructions' error but got: {err}"
+                    );
+                }
+            }
+        };
     }
 
     #[test]

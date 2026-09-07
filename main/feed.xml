@@ -6,15 +6,47 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 04 Sep 2026 10:56:27 GMT</lastBuildDate>
-    <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
+    <lastBuildDate>Mon, 07 Sep 2026 21:03:36 GMT</lastBuildDate>
+    <pubDate>Mon, 07 Sep 2026 21:02:34 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Writing a Sync Plugin</title>
+      <link>https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</link>
+      <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
+      <pubDate>Mon, 07 Sep 2026 21:02:34 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Sync Plugins</title>
+      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
+      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
+      <pubDate>Mon, 07 Sep 2026 21:02:34 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Configuration Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/configuration/</link>
       <description>Complete schema reference for icp.yaml project configuration including canisters, networks, and environments.</description>
-      <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
+      <pubDate>Mon, 07 Sep 2026 21:02:33 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/configuration/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Using Recipes</title>
+      <link>https://cli.internetcomputer.org/main/guides/using-recipes/</link>
+      <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
+      <pubDate>Mon, 07 Sep 2026 21:02:33 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/using-recipes/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Recipes</title>
+      <link>https://cli.internetcomputer.org/main/concepts/recipes/</link>
+      <description>How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.</description>
+      <pubDate>Mon, 07 Sep 2026 21:02:33 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -31,22 +63,6 @@
       <description>Configure and use dev, staging, and production environments to deploy independent canister instances with different settings.</description>
       <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/managing-environments/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Writing a Sync Plugin</title>
-      <link>https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</link>
-      <description>Author a WebAssembly sync plugin in Rust that runs sandboxed post-deployment logic against a canister during icp sync.</description>
-      <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/writing-sync-plugins/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Sync Plugins</title>
-      <link>https://cli.internetcomputer.org/main/concepts/sync-plugins/</link>
-      <description>How sync plugins extend the sync phase with sandboxed WebAssembly components that run arbitrary post-deployment logic against a canister.</description>
-      <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/sync-plugins/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -194,14 +210,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Using Recipes</title>
-      <link>https://cli.internetcomputer.org/main/guides/using-recipes/</link>
-      <description>Reference official and custom recipes to simplify canister build configuration for Rust, Motoko, and frontend projects.</description>
-      <pubDate>Sun, 07 Jun 2026 14:12:41 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/using-recipes/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>icp-cli Documentation</title>
       <link>https://cli.internetcomputer.org/main/</link>
       <description>Build and deploy applications on the Internet Computer using icp-cli, with links to quickstart, tutorials, guides, and reference documentation.</description>
@@ -215,14 +223,6 @@
       <description>Step-by-step guides covering installation, local development, deployment, identity management, and more.</description>
       <pubDate>Thu, 04 Jun 2026 18:27:46 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Recipes</title>
-      <link>https://cli.internetcomputer.org/main/concepts/recipes/</link>
-      <description>How recipes use Handlebars templates to generate reusable build and sync configurations, reducing canister boilerplate.</description>
-      <pubDate>Mon, 01 Jun 2026 14:53:24 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/recipes/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

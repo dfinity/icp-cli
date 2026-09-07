@@ -20,6 +20,7 @@ icp-events.workspace = true
 semver.workspace = true
 snafu.workspace = true
 tokio.workspace = true
+url.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 

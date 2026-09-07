@@ -33,6 +33,7 @@ use snafu::prelude::*;
 // Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
 use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
+use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
@@ -756,6 +757,12 @@ pub struct PluginInvocation {
     pub identity_principal: Principal,
     /// Name of the environment being synced.
     pub environment: String,
+    /// The network's API endpoint — where canister calls are submitted.
+    /// Surfaced to v0.2.0 plugins; v0.1.0 plugins have no field for it.
+    pub api_url: Url,
+    /// The network's HTTP gateway, when it exposes one. Surfaced to v0.2.0
+    /// plugins; v0.1.0 plugins have no field for it.
+    pub gateway_url: Option<Url>,
     /// Pure-wasm compute-time budget in seconds.
     pub compute_limit_secs: u64,
     /// The project's canister ID table for this environment, as exposed to the
@@ -783,6 +790,8 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         proxy,
         identity_principal,
         environment,
+        api_url,
+        gateway_url,
         compute_limit_secs,
         canister_ids,
         callable,
@@ -968,6 +977,8 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
             let input = v2::SyncExecInput {
                 canister_id: canister_id_text,
                 environment,
+                api_url: api_url.to_string(),
+                gateway_url: gateway_url.map(|url| url.to_string()),
                 dirs: dir_inputs
                     .into_iter()
                     .map(|entry| v2::DirInput {
@@ -1248,8 +1259,9 @@ mod tests {
 
     /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
     /// and identity, no proxy, no declared callable canisters, the default
-    /// compute limit, and the current directory as both the base and the
-    /// project. Tests override the few fields they care about.
+    /// compute limit, a local network with no gateway of its own, and the
+    /// current directory as both the base and the project. Tests override the
+    /// few fields they care about.
     fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
         PluginInvocation {
             wasm_path: wasm_path.into(),
@@ -1263,6 +1275,8 @@ mod tests {
             proxy: None,
             identity_principal: anon(),
             environment: environment.to_string(),
+            api_url: Url::parse("http://127.0.0.1:4943").expect("valid api url"),
+            gateway_url: None,
             compute_limit_secs: DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             canister_ids: BTreeMap::new(),
             callable: CallableCanisters::default(),
@@ -1783,6 +1797,36 @@ mod tests {
             run_plugin(invocation(wasm_path, "fields")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "missing 'greeting' field"
         ));
+    }
+
+    /// Both network URLs reach the plugin, the gateway one as a `some`.
+    #[test]
+    fn plugin_network_urls_are_passed_through() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "urls");
+        inv.api_url = Url::parse("https://icp-api.io").expect("valid api url");
+        inv.gateway_url = Some(Url::parse("https://icp0.io").expect("valid gateway url"));
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            vec!["api=https://icp-api.io/ gateway=https://icp0.io/".to_string()]
+        );
+    }
+
+    /// A network with no HTTP gateway leaves `gateway-url` absent rather than
+    /// passing an empty or invented URL.
+    #[test]
+    fn plugin_gateway_url_is_absent_without_a_gateway() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines = run_plugin(invocation(wasm_path, "urls")).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            vec!["api=http://127.0.0.1:4943/ gateway=-".to_string()]
+        );
     }
 
     /// One `files:` map holds directories and files alike; the host splits them

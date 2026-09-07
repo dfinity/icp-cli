@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use snafu::prelude::*;
 
 pub use crate::manifest::network::RootKeySpec;
-pub use access::RootKeySource;
+pub use access::{NetworkUrls, RootKeySource};
 pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
 pub use managed::run::{RunNetworkError, run_network};
 use strum::EnumString;
@@ -20,7 +20,7 @@ use crate::{
     },
     network::access::{
         GetNetworkAccessError, NetworkAccess, get_connected_network_access,
-        get_managed_network_access,
+        get_managed_network_access, get_managed_network_urls,
     },
     prelude::*,
     project::DEFAULT_LOCAL_NETWORK_PORT,
@@ -348,6 +348,11 @@ pub enum AccessError {
 pub trait Access: Sync + Send {
     fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError>;
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError>;
+
+    /// The network's URLs alone. Unlike [`Access::access`] this resolves no root
+    /// key, so a caller that only needs an endpoint does not make a connected
+    /// network fetch one.
+    async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError>;
 }
 
 pub struct Accessor {
@@ -387,6 +392,21 @@ impl Access for Accessor {
             Configuration::Connected { connected: cfg } => {
                 Ok(get_connected_network_access(cfg, &self.agent).await?)
             }
+        }
+    }
+
+    async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError> {
+        match &network.configuration {
+            Configuration::Managed { managed: _ } => {
+                let nd = self.get_network_directory(network)?;
+                Ok(get_managed_network_urls(nd).await?)
+            }
+            // A connected network's endpoints are configured, so there is
+            // nothing to resolve.
+            Configuration::Connected { connected: cfg } => Ok(NetworkUrls {
+                api_url: cfg.api_url.clone(),
+                http_gateway_url: cfg.http_gateway_url.clone(),
+            }),
         }
     }
 }
@@ -442,6 +462,14 @@ impl Access for MockNetworkAccessor {
                     network: network.name.clone(),
                 },
             })
+    }
+
+    async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError> {
+        let access = self.access(network).await?;
+        Ok(NetworkUrls {
+            api_url: access.api_url,
+            http_gateway_url: access.http_gateway_url,
+        })
     }
 }
 

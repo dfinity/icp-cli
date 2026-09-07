@@ -90,11 +90,12 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
 
 `PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `project_dir`,
 `dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
-`agent`, `proxy`, `identity_principal`, `environment`, `compute_limit_secs`, the
-exposed `canister_ids` table, the `callable: CallableCanisters` enforcement set,
-and `reporter`. The CLI resolves the manifest's declared `canisters:` into
-`CallableCanisters` before calling; this crate stays free of any manifest
-knowledge.
+`agent`, `proxy`, `identity_principal`, `environment`, `api_url` and
+`gateway_url` (where the network is reached — informational, since the guest has
+no sockets), `compute_limit_secs`, the exposed `canister_ids` table, the
+`callable: CallableCanisters` enforcement set, and `reporter`. The CLI resolves
+the manifest's declared `canisters:` into `CallableCanisters` before calling;
+this crate stays free of any manifest knowledge.
 
 `dirs` and `files` are the manifest's own `dirs:`/`files:` settings as
 manifest-relative paths (`KeyedPath`s carrying the map key each was declared

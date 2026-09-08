@@ -130,7 +130,7 @@ environments:
 
 `staging` holds `app` and `vendor/openemail:backend`. The root's list left out its own `worker`; openemail's left out its own `frontend`. Neither list reaches into the other project: this is what the dependency would deploy on its own, which is the point — vendoring does not change it.
 
-`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: from the root, it deploys none of the root's own canisters while every dependency still deploys all of its own.
+`canisters: []` keeps the project that writes it out of the environment entirely, and only that project: at the root, it deploys none of the root's own canisters while leaving every dependency's own environment selection unchanged.
 
 A project may name **only** its own canisters — never `"vendor/openemail:frontend"` from the root, nor `"libfoo:util"` from inside openemail, however those names are spelled elsewhere in the manifest. Naming a canister the writing project does not declare is rejected when the project is read, whether it belongs to another project in the workspace or to nobody at all. So the answer to "is this canister in `staging`?" always comes from one manifest — the one that declares the canister — and it is the same answer vendored as standalone. Keeping a dependency's canister out of an environment means editing that dependency, which is what deploying it on its own would already have required.
 

@@ -41,7 +41,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); mv "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -68,17 +70,23 @@ canisters:
 
 ### Locating Cargo Build Output
 
-Cargo does not always write to `./target`. In a Cargo workspace the target directory sits at the
-workspace root, and `CARGO_TARGET_DIR` or a `build.target-dir` config key moves it anywhere. A recipe
-that hardcodes `target/...` builds successfully and then fails to find the wasm, so ask cargo where it
-builds:
+Cargo does not always write to `./target`. A build step runs in the canister directory, so in a Cargo
+workspace the target directory sits above it at the workspace root, and `CARGO_TARGET_DIR` or a
+`build.target-dir` config key moves it anywhere. A recipe that hardcodes `target/...` builds
+successfully and then fails to find the wasm, so ask cargo where it builds:
 
-```
-- TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+```yaml
+- |-
+  TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+  cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
-Each entry in `commands:` runs in its own shell, so keep the lookup and the command that uses
-`$TARGET_DIR` on one line, separated by `;`. The `sed` avoids taking a dependency on `jq`.
+Each entry in `commands:` runs in its own shell, so `$TARGET_DIR` would be empty in a following entry.
+The `|-` block keeps both commands in one entry, and therefore one shell. The `sed` avoids taking a
+dependency on `jq`.
+
+Copy the wasm rather than moving it: cargo materializes the top-level artifact from `deps/`, and a
+build step has no reason to remove cargo's output.
 
 
 ## Template Syntax
@@ -108,10 +116,14 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); ic-wasm "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ package }}.wasm" -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          ic-wasm "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ package }}.wasm" -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/debug/{{ package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/debug/{{ package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 
@@ -130,7 +142,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); mv "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -175,7 +189,9 @@ Built-in recipe variables work with all Handlebars helpers. For example, the `re
 
 ```
 - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-- TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+- |-
+  TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+  cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 User-provided overrides can still be supported with an `{{#if}}` fallback for cases where the user needs to supply a different name (e.g. when the Cargo package name differs from the canister name):

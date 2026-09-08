@@ -66,7 +66,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Build parallelism

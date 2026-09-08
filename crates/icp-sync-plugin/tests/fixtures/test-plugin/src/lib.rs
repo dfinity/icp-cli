@@ -33,6 +33,16 @@ impl Guest for TestPlugin {
                 eprintln!("{rendered}");
                 Ok(())
             }
+            // Echo the network URLs back as `api=<url> gateway=<url>`, using
+            // "-" for a network with no gateway.
+            "urls" => {
+                eprintln!(
+                    "api={} gateway={}",
+                    input.api_url,
+                    input.gateway_url.as_deref().unwrap_or("-")
+                );
+                Ok(())
+            }
             // Echo each entry as `kind key=path`, so the host can assert that
             // keys survive the boundary and that a `files:` entry lands in the
             // list its kind on disk calls for.
@@ -62,6 +72,19 @@ impl Guest for TestPlugin {
                     names.sort();
                     eprintln!("{}={}", dir.key, names.join(","));
                 }
+                Ok(())
+            }
+            // Ask for a metadata section from a canister the step did not
+            // declare. The host must reject the target before it touches the
+            // network, so this needs no live canister; echo the refusal.
+            "metadata-undeclared" => {
+                let err = canister_metadata_section(&MetadataSectionRequest {
+                    target: CallTarget::Name("undeclared".to_string()),
+                    name: "candid:service".to_string(),
+                    direct: true,
+                })
+                .expect_err("host must reject an undeclared target");
+                eprintln!("{err}");
                 Ok(())
             }
             "spin" => {

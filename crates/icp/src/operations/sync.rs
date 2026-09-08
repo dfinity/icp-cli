@@ -1,6 +1,7 @@
 use crate::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
+    network::NetworkUrls,
     package::PackageCache,
     prelude::{Path, PathBuf},
 };
@@ -22,6 +23,7 @@ pub struct SyncOperationError {
 
 /// Synchronizes a single canister using its configured sync steps, returning
 /// the stderr lines the steps retained for the persistent output channel.
+#[allow(clippy::too_many_arguments)]
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
     agent: &Agent,
@@ -31,6 +33,7 @@ async fn sync_canister(
     canister_info: &Canister,
     environment: &str,
     network: &str,
+    urls: &NetworkUrls,
     canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     task: &TaskReporter,
@@ -52,6 +55,7 @@ async fn sync_canister(
                     name: canister_info.name.clone(),
                     environment: environment.to_owned(),
                     network: network.to_owned(),
+                    urls: urls.clone(),
                     canister_ids: canister_ids.clone(),
                     proxy,
                 },
@@ -91,6 +95,7 @@ pub async fn sync_many(
     project_dir: PathBuf,
     environment: String,
     network: String,
+    urls: NetworkUrls,
     canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     pkg_cache: &PackageCache,
@@ -106,6 +111,7 @@ pub async fn sync_many(
             let syncer = syncer.clone();
             let environment = environment.clone();
             let network = network.clone();
+            let urls = urls.clone();
             let canister_ids = canister_ids.clone();
             let project_dir = project_dir.clone();
 
@@ -119,6 +125,7 @@ pub async fn sync_many(
                     &canister_info,
                     &environment,
                     &network,
+                    &urls,
                     &canister_ids,
                     proxy,
                     &task,

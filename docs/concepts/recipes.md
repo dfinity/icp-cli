@@ -41,6 +41,13 @@ canisters:
               cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
+### Extra Sync Steps
+
+A recipe defines the canister's build, so `recipe` and `build` are mutually
+exclusive. `sync` is not: a canister using a recipe may declare its own `sync`
+steps, which run after the recipe's. See
+[Using Recipes](../guides/using-recipes.md#adding-your-own-sync-steps).
+
 ## Recipe Sources
 
 Recipes can come from three sources:

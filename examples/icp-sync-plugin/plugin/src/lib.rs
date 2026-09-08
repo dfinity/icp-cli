@@ -17,7 +17,28 @@ impl Guest for Plugin {
             input.canister_id, input.environment
         );
 
-        // 1. Set the uploader to the current identity principal.
+        // Report where the network being synced is reached. The plugin has no
+        // sockets of its own, so these are for the user reading the output (or
+        // for handing a canister its own public address), not for fetching.
+        match &input.gateway_url {
+            Some(gateway) => eprintln!("gateway: {gateway} (api: {})", input.api_url),
+            None => eprintln!("no HTTP gateway (api: {})", input.api_url),
+        }
+
+        // 1. Report the canister's Candid interface, read from its metadata.
+        //    Reported rather than required: the section is only there if the
+        //    build embedded it (this project's build does, via ic-wasm).
+        let interface = canister_metadata_section(&MetadataSectionRequest {
+            target: CallTarget::Host,
+            name: "candid:service".to_string(),
+            direct: false,
+        })?;
+        match &interface {
+            Some(bytes) => eprintln!("candid:service: {} bytes", bytes.len()),
+            None => eprintln!("candid:service: absent"),
+        }
+
+        // 2. Set the uploader to the current identity principal.
         //    Routed through the proxy (direct: false) so the controller-gated
         //    call is signed by the proxy canister, which is a controller.
         let uploader = Principal::from_text(&input.identity_principal)
@@ -33,7 +54,7 @@ impl Guest for Plugin {
         })?;
         println!("set_uploader ({}): ok", input.identity_principal);
 
-        // 2. Register every file found by traversing the preopened dirs.
+        // 3. Register every file found by traversing the preopened dirs.
         //    Direct calls (direct: true) because register is gated on the
         //    uploader principal, which is the current identity — not the proxy.
         let mut registered = 0u32;

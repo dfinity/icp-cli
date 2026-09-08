@@ -17,6 +17,8 @@ air-gapped signing
     * A new function `canister-metadata-section` can fetch ICP metadata sections
     * Plugin input includes canister-principal mappings and the gateway and API URLs
 * feat: a canister that uses a `recipe` can now declare its own `sync` steps, which previously was rejected outright. They run after the sync steps the recipe renders, so a recipe's post-deployment work stays intact and yours is appended to it. `recipe` and `build` remain mutually exclusive.
+* feat: Env-specific builds previously did not affect which canisters were being built. Now, any canisters not listed in that environment will not be built.
+* feat: Environment declarations in workspaces no longer require all canisters to be declared at the top level. Instead, each subproject declares its own canisters' membership in environment blocks.
 
 # v1.4.0
 

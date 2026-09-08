@@ -1,0 +1,592 @@
+﻿# Configuration Reference
+
+Complete reference for `icp.yaml` project configuration.
+
+For conceptual explanation, see [Project Model](../concepts/project-model.md).
+
+## File Structure
+
+```yaml
+# icp.yaml
+canisters:
+  - # canister definitions or references
+
+networks:
+  - # network definitions or references (optional)
+
+environments:
+  - # environment definitions (optional)
+```
+
+## Canisters
+
+### Inline Definition
+
+```yaml
+canisters:
+  - name: my-canister
+    build:
+      steps:
+        - type: script
+          commands:
+            - echo "Building..."
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/configure-canister.sh
+    settings:
+      compute_allocation: 5
+    init_args: "()"
+```
+
+### External Reference
+
+```yaml
+canisters:
+  - path/to/canister.yaml
+  - canisters/*           # Glob pattern
+  - services/**/*.yaml    # Recursive glob
+```
+
+### Canister Properties
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | string | Yes | Unique canister identifier |
+| `build` | object | Yes | Build configuration |
+| `sync` | object | No | Post-deployment sync configuration |
+| `settings` | object | No | Canister settings |
+| `init_args` | string or object | No | Initialization arguments (see [Install Args](#install-args)) |
+| `upgrade_args` | string or object | No | Upgrade arguments; defaults to `init_args` (see [Install Args](#install-args)) |
+| `recipe` | object | No | Recipe reference (alternative to build; may be combined with `sync`) |
+
+## Build Steps
+
+### Script Step
+
+Execute shell commands:
+
+```yaml
+build:
+  steps:
+    - type: script
+      commands:
+        - cargo build --target wasm32-unknown-unknown --release
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
+```
+
+**Environment variables:**
+- `ICP_WASM_OUTPUT_PATH` — Target path for WASM output
+- `ICP_CLI_ENVIRONMENT` — Name of the environment being built for
+
+See [Environment Variables Reference](environment-variables.md) for all available variables.
+
+### Pre-built Step
+
+Use existing WASM from a local file or remote URL:
+
+```yaml
+# Local file
+build:
+  steps:
+    - type: pre-built
+      path: dist/canister.wasm
+      sha256: abc123...  # Optional integrity check
+
+# Remote URL
+build:
+  steps:
+    - type: pre-built
+      url: https://github.com/example/releases/download/v1.0/canister.wasm
+      sha256: abc123...  # Recommended for remote files
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | One of `path` or `url` | Local path to WASM file |
+| `url` | string | One of `path` or `url` | URL to download WASM file from |
+| `sha256` | string | No | SHA256 hash for verification (recommended for URLs) |
+
+## Sync Steps
+
+Sync steps run after canister deployment to configure the running canister.
+
+> Uploading static files to an asset canister is no longer a built-in sync step.
+> Use a `plugin` sync step (a WebAssembly sync plugin) — for example, one provided
+> by a recipe. The `@dfinity/asset-canister` recipe emits a `plugin` sync step
+> starting with `v2.2.1`; earlier versions emit the retired `assets` step and will
+> no longer load. Upgrading an existing project? See
+> [Upgrading from icp-cli 0.2](../migration/upgrading-from-v0-2.md).
+
+### Script Sync
+
+Run shell commands after deployment:
+
+```yaml
+sync:
+  steps:
+    - type: script
+      commands:
+        - echo "Post-deployment setup"
+        - ./scripts/configure-canister.sh
+```
+
+Script sync steps support the same `command` and `commands` fields as build script steps.
+
+### Plugin Sync
+
+Run a sandboxed WebAssembly [sync plugin](../concepts/sync-plugins.md) against the canister being synced. The plugin is a single `.wasm` component, referenced either by a local `path` or a remote `url`:
+
+```yaml
+sync:
+  steps:
+    # Local plugin
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
+      files:                             # named directories and files
+        seed: assets/seed-data           #   a directory, preopened read-only
+        config: config.txt               #   a file, read and passed inline
+      fields:                            # key-value fields passed inline
+        api_url: https://example.com
+        retries: 3
+      canisters:                          # extra canisters the plugin may reach
+        - ledger                          #   by name (resolved for the environment)
+        - services/open-crm:backend
+
+    # Remote plugin (downloaded and verified before execution)
+    - type: plugin
+      url: https://example.com/plugins/migrate-v2.wasm
+      sha256: a665a45920422f9d417e...   # required for url
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
+| `url` | string | One of `path` or `url` | URL to download the wasm from |
+| `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
+| `files` | map of name → path(s) | No | What the plugin may read (relative to the canister directory, anywhere inside the project). A directory is made readable read-only via WASI; a file is read by the host and passed inline |
+| `dirs` | list of paths | No | Directories the plugin may read. Only for a plugin built against `icp:sync-plugin@0.1` — see below |
+| `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
+| `canisters` | array of string | No | Canisters the plugin may call, or read metadata from, in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
+
+`files:` holds directories and files together; which an entry is comes from what is on disk, not from how it was written. Each key names a single path or a list of paths, and is surfaced to the plugin as that entry's `key` — a key holding a list produces several entries sharing it. For example:
+
+```yaml
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      files:
+        seed: assets/seed-data        # one path under a name
+        migrations:                   # several paths sharing a name
+          - migrations/2025
+          - migrations/2026
+        config: config.txt            # a file, read and passed inline
+```
+
+Entries in `files:` must be relative to the canister directory. They may reach the rest of the project with `..` — `shared: ../shared/assets` is fine — but may not resolve outside the project directory. They may not be, or traverse, a symlink, so a declared path cannot resolve to a target outside the project.
+
+#### Plugins built against `icp:sync-plugin@0.1`
+
+The older interface has no name for an entry and keeps directories in a list of their own, so a plugin implementing it takes the shape that interface has: a separate `dirs:`, and plain lists of paths rather than named entries.
+
+```yaml
+    - type: plugin
+      path: ./plugins/legacy.wasm
+      dirs:
+        - assets/seed-data
+      files:
+        - config.txt
+```
+
+The two shapes cannot be mixed, and which one applies is settled by the plugin rather than the manifest, so a mismatch is reported when the plugin is loaded: naming an entry for a `@0.1` plugin, or writing `dirs:` or a plain list for a `@0.2` one, fails the sync step with an error saying which form that plugin takes.
+
+A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
+
+A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
+
+Names are always written from this project's point of view, so they keep working when the project is vendored into a workspace as a subproject: a plugin on a canister in `services/crm` reaches a canister of its own `vendor/ledger` dependency as `vendor/ledger:ledger` either way, even though the workspace keys that canister `services/crm/vendor/ledger:ledger`. Both spellings resolve; if a canister elsewhere in the workspace happens to be keyed `vendor/ledger:ledger`, the name means your own.
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`), read those canisters' metadata sections, and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+
+## Recipes
+
+### Recipe Reference
+
+```yaml
+canisters:
+  - name: my-canister
+    recipe:
+      type: "@dfinity/rust@v3.4.0"
+      sha256: abc123...  # Required for remote URLs
+      configuration:
+        package: my-crate
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Recipe source (registry, URL, or local path) |
+| `sha256` | string | Conditional | Required for remote URLs |
+| `configuration` | object | No | Parameters passed to recipe template |
+
+### Adding Sync Steps to a Recipe
+
+A canister that uses a recipe may declare a `sync` section of its own. Its steps
+run after the ones the recipe renders, in the order written:
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: dist
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/warm-cache.sh
+```
+
+A `recipe` still cannot be combined with `build` — the recipe defines the build.
+
+### Recipe Type Formats
+
+```yaml
+# Registry (recommended)
+type: "@dfinity/rust@v3.4.0"
+
+# Local file
+type: ./recipes/my-recipe.hb.yaml
+
+# Remote URL
+type: https://example.com/recipe.hb.yaml
+```
+
+## Networks
+
+Networks define where canisters are deployed. There are two modes:
+
+- **Managed** (`mode: managed`): A local test network launched and controlled by icp-cli. Can run [natively](#managed-network) or in a [Docker container](#docker-network).
+- **Connected** (`mode: connected`): A remote network accessed by URL.
+
+### Managed Network
+
+A managed network runs the [network launcher](https://github.com/dfinity/icp-cli-network-launcher) natively on your machine. To run it in a Docker container instead, see [Docker Network](#docker-network).
+
+```yaml
+networks:
+  - name: local-dev
+    mode: managed
+    gateway:
+      bind: 127.0.0.1
+      port: 4943
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | string | Yes | Network identifier |
+| `mode` | string | Yes | `managed` |
+| `gateway.bind` | string | No | Bind address (default: 127.0.0.1) |
+| `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
+| `gateway.domains` | array | No | Custom domain names the gateway responds to (e.g. `my-app.localhost`) |
+| `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
+| `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. When enabled, the internet identity frontend is available at id.ai.localhost:<port> |
+| `nns` | boolean | No | Install NNS and SNS canisters (default: false). Implies `ii` and adds an SNS subnet. |
+| `subnets` | array | No | Configure subnet types. See [Subnet Configuration](#subnet-configuration). |
+| `bitcoind-addr` | array | No | Bitcoin P2P node addresses (e.g. `127.0.0.1:18444`). Adds a bitcoin and II subnet. |
+| `dogecoind-addr` | array | No | Dogecoin P2P node addresses. Adds a bitcoin and II subnet. |
+
+For full details on how these settings interact, see the [network launcher CLI reference](https://github.com/dfinity/icp-cli-network-launcher#cli-reference).
+
+> **Note:** These settings apply to native managed networks only. For [Docker image mode](#docker-network), pass equivalent flags via the `args` field instead.
+
+#### Subnet Configuration
+
+Configure the local network's subnet layout:
+
+- **Default** (no `subnets` field): one application subnet is created.
+- **With `subnets`**: only the listed subnets are created — the default application subnet is **replaced**, not extended. Add `application` explicitly if you still need it.
+- An **NNS subnet** is always created regardless of configuration (required for system operations).
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    subnets:
+      - application
+      - application
+      - application
+```
+
+Available subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
+
+#### Bitcoin and Dogecoin Integration
+
+Connect the local network to a Bitcoin or Dogecoin node for testing chain integration:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+```
+
+The `bitcoind-addr` field specifies the P2P address (not RPC) of the Bitcoin node. Multiple addresses can be specified. Dogecoin integration works the same way via `dogecoind-addr`. Both can be configured simultaneously.
+
+**Implicit effects:** When `bitcoind-addr` or `dogecoind-addr` is configured, the network launcher automatically adds a **bitcoin** subnet and an **II** subnet (provides threshold signing keys required for chain operations). If you also explicitly specify `subnets`, you must include `application` to keep the default application subnet:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    bitcoind-addr:
+      - "127.0.0.1:18444"
+    subnets:
+      - application
+      - system
+```
+
+### Connected Network
+
+```yaml
+networks:
+  - name: testnet
+    mode: connected
+    url: https://testnet.ic0.app
+    root-key: fetch  # mainnet | fetch | <hex-encoded-key>
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | string | Yes | Network identifier |
+| `mode` | string | Yes | `connected` |
+| `url` | string | Yes | Network endpoint URL |
+| `root-key` | string | Yes | How to obtain the root key: see below |
+
+The `root-key` is the public key used to verify responses from the network, and is required for connected networks. It accepts one of:
+
+- **`mainnet`** — use the canonical IC mainnet root key. Use this to reach mainnet through a non-default boundary node without repeating the key literal; responses are still fully verified against the real mainnet key.
+- **`fetch`** — fetch the root key from the network on each use. This is trust-on-first-use and does **not** verify the key's provenance, so only use it for testnets that you (or someone you trust) operate. `icp` prints a warning whenever it fetches, and `network status` labels such a key as `fetched`.
+- **a 266-character hex-encoded key** — pin a specific root key.
+
+> The built-in `ic` network always uses the mainnet root key and cannot be redefined.
+
+### Docker Network
+
+A managed network can also run inside a Docker container. Adding the `image` field switches from native to Docker mode:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "0:4943"
+```
+
+To configure image-specific behavior (e.g., enabling Internet Identity, NNS, or Bitcoin integration), use the `args` field to pass command-line arguments to the container entrypoint:
+
+```yaml
+networks:
+  - name: docker-local
+    mode: managed
+    image: ghcr.io/dfinity/icp-cli-network-launcher
+    port-mapping:
+      - "8000:4943"
+    args:
+      - "--ii"
+```
+
+The available arguments depend on the Docker image — see the image's documentation for details.
+
+> **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, you may need to pass `--add-host=host.docker.internal:host-gateway` or equivalent to ensure it resolves.
+
+See [Containerized Networks](../guides/containerized-networks.md) for full configuration options.
+
+## Environments
+
+```yaml
+environments:
+  - name: staging
+    network: ic
+    canisters:
+      - frontend
+      - backend
+    settings:
+      frontend:
+        memory_allocation: 2gib
+      backend:
+        compute_allocation: 10
+        environment_variables:
+          LOG_LEVEL: "info"
+    init_args:
+      backend: "(record { mode = \"staging\" })"
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | string | Yes | Environment identifier |
+| `network` | string | Yes | Network to deploy to |
+| `canisters` | array | No | Canisters to include (default: all) |
+| `settings` | object | No | Per-canister setting overrides |
+| `init_args` | object | No | Per-canister init arg overrides (see [Install Args](#install-args)) |
+| `upgrade_args` | object | No | Per-canister upgrade arg overrides (see [Install Args](#install-args)) |
+
+## Canister Settings
+
+See [Canister Settings Reference](canister-settings.md) for all options.
+
+```yaml
+settings:
+  compute_allocation: 5
+  memory_allocation: 4gib
+  freezing_threshold: 30d
+  reserved_cycles_limit: 1t
+  wasm_memory_limit: 1gib
+  wasm_memory_threshold: 512mib
+  log_visibility: controllers
+  snapshot_visibility: controllers
+  status_visibility: controllers
+  environment_variables:
+    KEY: "value"
+    # A value may also be read from a file, relative to the canister directory
+    KEY_FROM_FILE:
+      path: ./secrets/key
+```
+
+Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).
+
+## Install Args
+
+`init_args` are passed to the canister when its code is installed or
+reinstalled; `upgrade_args` are passed when it is upgraded. A canister that
+omits `upgrade_args` is upgraded with its `init_args`. Both fields take the same
+forms, and `--args` / `--args-file` on `icp deploy` override either of them.
+
+A plain string is shorthand for inline Candid content:
+
+```yaml
+init_args: "(record { owner = principal \"aaaaa-aa\" })"
+upgrade_args: "(record { owner = principal \"aaaaa-aa\"; migrate = true })"
+```
+
+File reference:
+
+```yaml
+init_args:
+  path: ./args.bin
+  format: bin
+```
+
+Inline value (explicit):
+
+```yaml
+init_args:
+  value: "(record { owner = principal \"aaaaa-aa\" })"
+  format: candid
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `path` | string | Yes* | Path to a file containing the args, relative to the canister directory |
+| `value` | string | Yes* | Inline args value |
+| `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
+
+*Exactly one of `path` or `value` must be specified.
+
+Supported formats:
+- **`hex`** — Hex-encoded bytes (inline or file)
+- **`candid`** — Candid text format (inline or file)
+- **`bin`** — Raw binary bytes; only valid with `path` (e.g. output of `didc encode`)
+
+## Implicit Defaults
+
+### Networks
+
+| Name | Mode | Description |
+|------|------|-------------|
+| `local` | managed | `localhost:8000`, can be overridden |
+| `ic` | connected | ICP mainnet, cannot be overridden |
+
+### Environments
+
+| Name | Network | Canisters |
+|------|---------|-----------|
+| `local` | local | All |
+| `ic` | ic | All |
+
+## Complete Example
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: dist
+    settings:
+      memory_allocation: 1gib
+
+  - name: backend
+    build:
+      steps:
+        - type: script
+          commands:
+            - cargo build --target wasm32-unknown-unknown --release
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
+    settings:
+      compute_allocation: 5
+    init_args:
+      value: "(record { admin = principal \"aaaaa-aa\" })"
+
+networks:
+  - name: local
+    mode: managed
+    gateway:
+      port: 9999
+
+environments:
+  - name: staging
+    network: ic
+    canisters: [frontend, backend]
+    settings:
+      backend:
+        compute_allocation: 10
+        environment_variables:
+          ENV: "staging"
+
+  - name: production
+    network: ic
+    canisters: [frontend, backend]
+    settings:
+      frontend:
+        memory_allocation: 4gib
+      backend:
+        compute_allocation: 30
+        freezing_threshold: 90d
+        environment_variables:
+          ENV: "production"
+    init_args:
+      backend: "(record { admin = principal \"xxxx-xxxx\" })"
+```
+
+## Schema
+
+JSON schemas for editor integration are available in [docs/schemas/](https://github.com/dfinity/icp-cli/tree/main/docs/schemas):
+- [`icp-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json) — Main project configuration
+- [`canister-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/canister-yaml-schema.json) — Canister configuration
+- [`network-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/network-yaml-schema.json) — Network configuration
+- [`environment-yaml-schema.json`](https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/environment-yaml-schema.json) — Environment configuration
+
+Configure your editor to use them for autocomplete and validation:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dfinity/icp-cli/main/docs/schemas/icp-yaml-schema.json
+canisters:
+  - name: my-canister
+    # ...
+```

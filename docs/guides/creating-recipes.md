@@ -80,7 +80,6 @@ builds:
 Each entry in `commands:` runs in its own shell, so keep the lookup and the command that uses
 `$TARGET_DIR` on one line, separated by `;`. The `sed` avoids taking a dependency on `jq`.
 
-Shorter snippets below omit this lookup to keep the syntax they demonstrate in focus.
 
 ## Template Syntax
 
@@ -109,10 +108,10 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - ic-wasm target/wasm32-unknown-unknown/release/{{ package }}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); ic-wasm "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ package }}.wasm" -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - cp target/wasm32-unknown-unknown/debug/{{ package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/debug/{{ package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 
@@ -176,7 +175,7 @@ Built-in recipe variables work with all Handlebars helpers. For example, the `re
 
 ```
 - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-- cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+- TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 User-provided overrides can still be supported with an `{{#if}}` fallback for cases where the user needs to supply a different name (e.g. when the Cargo package name differs from the canister name):

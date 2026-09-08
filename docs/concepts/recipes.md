@@ -36,7 +36,7 @@ canisters:
         - type: script
           commands:
             - cargo build --package my-backend --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/my_backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ## Recipe Sources

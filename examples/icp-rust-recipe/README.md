@@ -23,7 +23,7 @@ canisters:
 ### Key Components
 
 - **`type: "@dfinity/rust@v3.4.0"`**: Uses the official DFINITY Rust recipe
-- **`package`**: Specifies the Cargo package name to build (required)
+- **`package`**: The Cargo package name to build (optional, defaults to the canister name — set here because this crate is named `icp-canister`, not `my-canister`)
 - **`shrink`**: Enables WASM optimization (optional)
 
 ## Project Structure

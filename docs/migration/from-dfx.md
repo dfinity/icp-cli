@@ -49,8 +49,6 @@ canisters:
   - name: my_canister
     recipe:
       type: "@dfinity/rust@v3.4.0"
-      configuration:
-        package: my_canister
 ```
 
 ### Build Process
@@ -133,7 +131,6 @@ canisters:
     recipe:
       type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
         candid: "src/backend/backend.did"
 ```
 
@@ -234,8 +231,6 @@ canisters:
   - name: backend
     recipe:
       type: "@dfinity/rust@v3.4.0"
-      configuration:
-        package: backend
 ```
 
 **Key differences:**

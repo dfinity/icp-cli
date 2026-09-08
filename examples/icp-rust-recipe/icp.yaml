@@ -5,7 +5,8 @@ canisters:
     recipe:
       type: "@dfinity/rust@v3.4.0"
       configuration:
-        # cargo package for canister (required field)
+        # cargo package for canister; optional, defaults to the canister
+        # name. Needed here because this crate is not named `my-canister`.
         package: icp-canister
         shrink: true
         # optional

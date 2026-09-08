@@ -29,8 +29,18 @@ canisters:
   - name: backend
     recipe:
       type: "@dfinity/rust@v3.4.0"
+```
+
+`package` defaults to the canister name, so it only needs setting when the Cargo package is named
+something else:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
+        package: my-backend-crate
 ```
 
 ### Motoko Canister
@@ -85,8 +95,6 @@ canisters:
   - name: backend
     recipe:
       type: "@dfinity/rust@v3.4.0"
-      configuration:
-        package: backend
 ```
 
 ## Local Recipes
@@ -157,8 +165,6 @@ canisters:
   - name: backend
     recipe:
       type: "@dfinity/rust@v3.4.0"
-      configuration:
-        package: backend
     settings:
       compute_allocation: 10
       environment_variables:

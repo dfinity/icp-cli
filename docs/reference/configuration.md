@@ -75,7 +75,9 @@ build:
     - type: script
       commands:
         - cargo build --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 **Environment variables:**
@@ -219,7 +221,7 @@ The plugin runs in a WASI sandbox: it can call update and query methods on the c
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       sha256: abc123...  # Required for remote URLs
       configuration:
         package: my-crate
@@ -255,7 +257,7 @@ A `recipe` still cannot be combined with `build` — the recipe defines the buil
 
 ```yaml
 # Registry (recommended)
-type: "@dfinity/rust@v3.0.0"
+type: "@dfinity/rust@v3.4.0"
 
 # Local file
 type: ./recipes/my-recipe.hb.yaml
@@ -536,7 +538,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
     init_args:

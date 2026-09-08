@@ -14,7 +14,7 @@ The [`icp.yaml`](./icp.yaml) file configures a canister using the `@dfinity/rust
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: icp-canister
         shrink: true
@@ -22,8 +22,8 @@ canisters:
 
 ### Key Components
 
-- **`type: "@dfinity/rust@v3.0.0"`**: Uses the official DFINITY Rust recipe
-- **`package`**: Specifies the Cargo package name to build (required)
+- **`type: "@dfinity/rust@v3.4.0"`**: Uses the official DFINITY Rust recipe
+- **`package`**: The Cargo package name to build (optional, defaults to the canister name — set here because this crate is named `icp-canister`, not `my-canister`)
 - **`shrink`**: Enables WASM optimization (optional)
 
 ## Project Structure

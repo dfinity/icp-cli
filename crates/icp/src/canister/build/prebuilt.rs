@@ -1,7 +1,12 @@
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
-use crate::{canister::wasm, fs, manifest::adapter::prebuilt::Adapter, package::PackageCache};
+use crate::{
+    canister::{ReporterProgress, wasm},
+    fs,
+    manifest::adapter::prebuilt::Adapter,
+    package::PackageCache,
+};
 
 use super::Params;
 
@@ -24,7 +29,7 @@ pub(super) async fn build(
         &adapter.source,
         &params.path,
         adapter.sha256.as_deref(),
-        reporter,
+        Some(&ReporterProgress(reporter)),
         pkg_cache,
     )
     .await?;

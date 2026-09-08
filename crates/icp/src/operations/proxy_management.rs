@@ -1,15 +1,14 @@
 use candid::Principal;
 use ic_agent::Agent;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterStatusResult, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterArgs, DeleteCanisterSnapshotArgs, FetchCanisterLogsArgs, FetchCanisterLogsResult,
-    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotsArgs,
-    ListCanisterSnapshotsResult, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResult, ReadCanisterSnapshotMetadataArgs,
+    CanisterIdRecord, CanisterStatusResult, CreateCanisterArgs, DeleteCanisterArgs,
+    DeleteCanisterSnapshotArgs, FetchCanisterLogsArgs, FetchCanisterLogsResult, InstallCodeArgs,
+    ListCanisterSnapshotsArgs, ListCanisterSnapshotsResult, LoadCanisterSnapshotArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResult, ReadCanisterSnapshotMetadataArgs,
     ReadCanisterSnapshotMetadataResult, StartCanisterArgs, StopCanisterArgs,
     TakeCanisterSnapshotArgs, TakeCanisterSnapshotResult, UpdateSettingsArgs,
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResult, UploadChunkArgs, UploadChunkResult,
+    UploadCanisterSnapshotMetadataResult,
 };
 
 use snafu::{ResultExt, Snafu};
@@ -136,61 +135,6 @@ pub async fn install_code(
         agent,
         Principal::management_canister(),
         "install_code",
-        (args,),
-        proxy,
-        Some(effective),
-        0,
-    )
-    .await
-}
-
-pub async fn install_chunked_code(
-    agent: &Agent,
-    proxy: Option<Principal>,
-    args: InstallChunkedCodeArgs,
-) -> Result<(), UpdateOrProxyError> {
-    let effective = args.target_canister;
-    update_or_proxy::<_, ()>(
-        agent,
-        Principal::management_canister(),
-        "install_chunked_code",
-        (args,),
-        proxy,
-        Some(effective),
-        0,
-    )
-    .await
-}
-
-pub async fn upload_chunk(
-    agent: &Agent,
-    proxy: Option<Principal>,
-    args: UploadChunkArgs,
-) -> Result<UploadChunkResult, UpdateOrProxyError> {
-    let effective = args.canister_id;
-    let (result,): (UploadChunkResult,) = update_or_proxy(
-        agent,
-        Principal::management_canister(),
-        "upload_chunk",
-        (args,),
-        proxy,
-        Some(effective),
-        0,
-    )
-    .await?;
-    Ok(result)
-}
-
-pub async fn clear_chunk_store(
-    agent: &Agent,
-    proxy: Option<Principal>,
-    args: ClearChunkStoreArgs,
-) -> Result<(), UpdateOrProxyError> {
-    let effective = args.canister_id;
-    update_or_proxy::<_, ()>(
-        agent,
-        Principal::management_canister(),
-        "clear_chunk_store",
         (args,),
         proxy,
         Some(effective),

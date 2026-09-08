@@ -1,0 +1,332 @@
+//! Canister installation, syncing, and the project model, with all host IO
+//! abstracted behind trait objects so the core can run inside a canister.
+//!
+//! See the module-level docs on the IO traits ([`files`], [`icp_access`],
+//! [`ids`]) for the abstraction boundary.
+
+use std::collections::{BTreeMap, HashMap};
+
+use indexmap::IndexMap;
+use serde::Serialize;
+use snafu::prelude::*;
+
+use candid_parser::parse_idl_args;
+
+use crate::{
+    canister::Settings,
+    manifest::{
+        ArgsFormat,
+        canister::{BuildSteps, SyncSteps},
+    },
+    network::Configuration,
+    prelude::*,
+};
+
+pub mod canister;
+pub mod deploy;
+pub mod files;
+pub mod icp_access;
+pub mod ids;
+pub mod manifest;
+pub mod network;
+pub mod parsers;
+pub mod prelude;
+pub mod project;
+pub mod sync_exec;
+
+#[cfg(test)]
+mod testutil;
+
+pub use deploy::{
+    DeployCanisterError, DeployError, InstallCanisterError, InstallMode, SyncCanisterError,
+    SyncStepError, apply_binding_env_vars, binding_env_vars, deploy, deploy_canister,
+    install_canister, install_canister_resolved, install_canister_wasm,
+    resolve_install_mode_and_status, run_sync_steps, start_canister, sync_canister,
+};
+pub use files::{FileAccess, FileAccessError};
+pub use icp_access::{IcpAccess, IcpAccessError};
+pub use ids::{IdMapping, IdStore, IdStoreError};
+pub use project::{consolidate_manifest, load_project, verify_sandbox};
+pub use sync_exec::{
+    PluginExecutor, PluginExecutorError, PluginInvocation, ScriptInvocation, ScriptRunError,
+    ScriptRunner, StepProgress, SyncStepContext, system_env_vars,
+};
+
+/// Resolved canister arguments, with any file references already loaded.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum CanisterArgs {
+    /// Text content (inline or loaded from file). Format is always known.
+    Text { content: String, format: ArgsFormat },
+    /// Raw binary bytes (from a file with `format: bin`). Used directly.
+    Binary(Vec<u8>),
+}
+
+#[derive(Debug, Snafu)]
+pub enum CanisterArgsToBytesError {
+    #[snafu(display("failed to decode hex args"))]
+    HexDecode { source: hex::FromHexError },
+
+    #[snafu(display("failed to parse Candid args"))]
+    CandidParse { source: candid_parser::Error },
+
+    #[snafu(display("failed to encode Candid args to bytes"))]
+    CandidEncode { source: candid::Error },
+}
+
+impl CanisterArgs {
+    /// Resolve to raw bytes according to the format.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, CanisterArgsToBytesError> {
+        match self {
+            CanisterArgs::Binary(bytes) => Ok(bytes.clone()),
+            CanisterArgs::Text { content, format } => match format {
+                ArgsFormat::Hex => hex::decode(content.trim()).context(HexDecodeSnafu),
+                ArgsFormat::Candid => {
+                    let args = parse_idl_args(content.trim()).context(CandidParseSnafu)?;
+                    args.to_bytes().context(CandidEncodeSnafu)
+                }
+                ArgsFormat::Bin => {
+                    unreachable!("binary format cannot appear in CanisterArgs::Text")
+                }
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Canister {
+    pub name: String,
+
+    /// Canister settings, such as memory constaints, etc.
+    pub settings: Settings,
+
+    /// The build configuration specifying how to compile the canister's source
+    /// code into a WebAssembly module, including the adapter to use.
+    pub build: BuildSteps,
+
+    /// The configuration specifying how to sync the canister
+    pub sync: SyncSteps,
+
+    /// Initialization arguments passed to the canister during installation.
+    /// Resolved from the manifest — file contents are already loaded.
+    pub init_args: Option<CanisterArgs>,
+
+    /// Arguments passed to the canister when it is upgraded, resolved the same
+    /// way as [`Self::init_args`]. `None` means the manifest named none, and an
+    /// upgrade passes the init args instead.
+    pub upgrade_args: Option<CanisterArgs>,
+
+    /// If the canister was defined via a recipe reference, this holds the
+    /// original recipe specifier string (e.g. `@dfinity/motoko@v4.0.0`).
+    /// `None` when the canister uses explicit build/sync instructions.
+    pub registry_recipe: Option<String>,
+
+    /// Canister-discovery wiring. Maps the name this canister reads in a
+    /// `PUBLIC_CANISTER_ID:<name>` environment variable to the store key of the
+    /// referenced canister. Computed during consolidation so each canister sees
+    /// the view its owning project expects: its own project's canisters under
+    /// their local names, plus any declared dependencies under their aliases
+    /// (`<alias>:<canister>`). For a project with no dependencies this maps every
+    /// canister's local name to itself, reproducing the flat "every canister sees
+    /// every sibling" behavior.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bindings: BTreeMap<String, String>,
+
+    /// Subdomain prefixes for the canister's friendly URLs, most-specific label
+    /// first, e.g. `["backend"]` for an own canister or `["backend.openemail"]`
+    /// for a dependency canister (dot-nested by alias chain). A de-duplicated
+    /// shared dependency canister carries one entry per alias chain that reaches
+    /// it. Consumed only at deploy time to build `custom-domains.txt` entries and
+    /// the printed URLs; a runtime display aid that is always recomputed during
+    /// consolidation, so it is never serialized.
+    #[serde(skip)]
+    pub friendly_names: Vec<String>,
+
+    /// For each environment variable whose value came from a file, the file it
+    /// was read from. `settings.environment_variables` already holds the
+    /// contents; the paths are kept so `icp project bundle` can hold a file
+    /// backing a variable to the same containment rule it applies to every other
+    /// file a manifest points at. Bookkeeping for that check rather than part of
+    /// the resolved configuration, so it is never serialized.
+    #[serde(skip)]
+    pub environment_variable_files: BTreeMap<String, PathBuf>,
+}
+
+#[derive(Debug, Snafu)]
+pub enum BundleModulePathError {
+    #[snafu(display(
+        "canister '{canister}' does not have a single build step (found {count}); a bundled \
+         canister must be built by exactly one pre-built step"
+    ))]
+    NotSingleBuildStep { canister: String, count: usize },
+
+    #[snafu(display(
+        "canister '{canister}' is not built by a pre-built step; a bundled canister's module \
+         must come from a `pre-built` build step"
+    ))]
+    NotPrebuilt { canister: String },
+
+    #[snafu(display("canister '{canister}' is built from a remote URL, not a local module path"))]
+    NotLocal { canister: String },
+}
+
+/// Extract the local wasm module path a bundled canister is built from.
+///
+/// A bundle's canisters are each built by a single `pre-built` step pointing at
+/// the module on disk; this returns that path, erroring if the build is not that
+/// single-prebuilt-local-path shape.
+pub fn bundle_get_canister_module_path(
+    canister: &Canister,
+) -> Result<&Path, BundleModulePathError> {
+    let steps = &canister.build.steps;
+    let [step] = steps.as_slice() else {
+        return NotSingleBuildStepSnafu {
+            canister: canister.name.clone(),
+            count: steps.len(),
+        }
+        .fail();
+    };
+    let manifest::BuildStep::Prebuilt(adapter) = step else {
+        return NotPrebuiltSnafu {
+            canister: canister.name.clone(),
+        }
+        .fail();
+    };
+    match &adapter.source {
+        manifest::prebuilt::SourceField::Local(local) => Ok(&local.path),
+        manifest::prebuilt::SourceField::Remote(_) => NotLocalSnafu {
+            canister: canister.name.clone(),
+        }
+        .fail(),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Network {
+    pub name: String,
+    pub configuration: Configuration,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Environment {
+    pub name: String,
+    pub network: Network,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
+}
+
+impl Environment {
+    pub fn get_canister_names(&self) -> Vec<String> {
+        self.canisters.keys().cloned().collect()
+    }
+
+    pub fn contains_canister(&self, canister_name: &str) -> bool {
+        self.canisters.contains_key(canister_name)
+    }
+
+    pub fn get_canister_info(&self, canister: &str) -> Result<(PathBuf, Canister), String> {
+        self.canisters
+            .get(canister)
+            .ok_or_else(|| {
+                format!(
+                    "canister '{}' not declared in environment '{}'",
+                    canister, self.name
+                )
+            })
+            .cloned()
+    }
+}
+
+/// Consolidated project definition
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Project {
+    pub dir: PathBuf,
+    pub canisters: IndexMap<String, (PathBuf, Canister)>,
+    pub networks: HashMap<String, Network>,
+    pub environments: HashMap<String, Environment>,
+
+    /// Environments the workspace defines that some vendored member does *not*
+    /// declare, keyed by environment name → the missing members' store-key
+    /// prefixes. Enforced when the environment is selected (strict rule).
+    /// Empty for standalone projects and workspaces whose members are complete.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub member_missing_envs: HashMap<String, Vec<String>>,
+}
+
+impl Project {
+    pub fn get_canister(&self, canister_name: &str) -> Option<&(PathBuf, Canister)> {
+        self.canisters.get(canister_name)
+    }
+}
+
+#[cfg(test)]
+mod bundle_tests {
+    use super::*;
+    use crate::canister::Settings;
+    use crate::manifest::adapter::prebuilt::{LocalSource, RemoteSource};
+    use crate::manifest::adapter::{prebuilt, script};
+    use crate::manifest::canister::{BuildStep, SyncSteps};
+
+    fn canister_with_build(steps: Vec<BuildStep>) -> Canister {
+        Canister {
+            name: "backend".to_owned(),
+            settings: Settings::default(),
+            build: BuildSteps { steps },
+            sync: SyncSteps { steps: vec![] },
+            init_args: None,
+            upgrade_args: None,
+            registry_recipe: None,
+            bindings: BTreeMap::new(),
+            friendly_names: vec![],
+            environment_variable_files: BTreeMap::new(),
+        }
+    }
+
+    fn prebuilt_local(path: &str) -> BuildStep {
+        BuildStep::Prebuilt(prebuilt::Adapter {
+            source: prebuilt::SourceField::Local(LocalSource { path: path.into() }),
+            sha256: None,
+        })
+    }
+
+    #[test]
+    fn extracts_the_single_prebuilt_local_path() {
+        let c = canister_with_build(vec![prebuilt_local("out/backend.wasm")]);
+        assert_eq!(
+            bundle_get_canister_module_path(&c).unwrap(),
+            Path::new("out/backend.wasm")
+        );
+    }
+
+    #[test]
+    fn rejects_zero_or_multiple_build_steps() {
+        let two = canister_with_build(vec![prebuilt_local("a.wasm"), prebuilt_local("b.wasm")]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&two),
+            Err(BundleModulePathError::NotSingleBuildStep { count: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_a_non_prebuilt_step() {
+        let c = canister_with_build(vec![BuildStep::Script(script::Adapter {
+            command: script::CommandField::Command("make".to_owned()),
+        })]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&c),
+            Err(BundleModulePathError::NotPrebuilt { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_a_remote_prebuilt_source() {
+        let c = canister_with_build(vec![BuildStep::Prebuilt(prebuilt::Adapter {
+            source: prebuilt::SourceField::Remote(RemoteSource {
+                url: "https://example.com/backend.wasm".to_owned(),
+            }),
+            sha256: Some("abc".to_owned()),
+        })]);
+        assert!(matches!(
+            bundle_get_canister_module_path(&c),
+            Err(BundleModulePathError::NotLocal { .. })
+        ));
+    }
+}

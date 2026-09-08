@@ -10,7 +10,7 @@ use crate::{
     context::IC_ROOT_KEY,
     manifest::network::RootKeySpec,
     network::{
-        Connected, NetworkDirectory, config::NetworkDescriptorModel,
+        Connected, NetworkDirectory, NetworkUrls, config::NetworkDescriptorModel,
         directory::LoadNetworkFileError,
     },
     prelude::*,
@@ -29,19 +29,6 @@ pub enum RootKeySource {
     Configured,
     /// Fetched from the network (trust-on-first-use, provenance unverified).
     Fetched,
-}
-
-/// The URLs a network is reached at, without any of the trust material
-/// [`NetworkAccess`] carries. Resolving these never talks to the network, so a
-/// caller that only needs to name an endpoint — to show it, or to hand it to a
-/// sync plugin — does not trigger a root key fetch.
-#[derive(Clone, Debug)]
-pub struct NetworkUrls {
-    /// Endpoint canister calls are submitted to.
-    pub api_url: Url,
-
-    /// Gateway that serves canisters over HTTP, if the network exposes one.
-    pub http_gateway_url: Option<Url>,
 }
 
 #[derive(Clone)]

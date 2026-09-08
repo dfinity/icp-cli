@@ -154,7 +154,7 @@ canisters:
   - name: {{project-name}}
     {% if backend_language == "rust" %}
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: {{crate_name}}
     {% else %}

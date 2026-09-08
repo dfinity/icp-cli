@@ -45,9 +45,7 @@ icp-cli introduces recipes — reusable build templates. Instead of dfx's built-
 canisters:
   - name: my_canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: my_canister
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 ### Build Process
@@ -63,7 +61,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Build parallelism
@@ -126,9 +126,8 @@ icp-cli assumes users will use canister environment variables to connect caniste
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
         candid: "src/backend/backend.did"
 ```
 
@@ -228,9 +227,7 @@ canisters:
 
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 **Key differences:**

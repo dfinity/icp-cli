@@ -173,7 +173,9 @@ build:
     - type: script
       commands:
         - cargo build --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 **Pre-built** — Use existing WASM:
@@ -1012,7 +1014,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/hello.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/hello.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ## Network Discovery
@@ -1247,7 +1251,7 @@ Given this recipe usage:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: my-backend
 ```
@@ -1262,7 +1266,9 @@ canisters:
         - type: script
           commands:
             - cargo build --package my-backend --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/my_backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Extra Sync Steps
@@ -1282,7 +1288,7 @@ Official recipes from the DFINITY registry:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     package: my-crate
 ```
@@ -1350,7 +1356,7 @@ Recipe templates have access to two kinds of variables:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     shrink: true   # available as {{ shrink }} in the template
 ```
@@ -2668,7 +2674,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -2692,6 +2700,27 @@ canisters:
         package: my-backend-crate
         shrink: true
 ```
+
+### Locating Cargo Build Output
+
+Cargo does not always write to `./target`. A build step runs in the canister directory, so in a Cargo
+workspace the target directory sits above it at the workspace root, and `CARGO_TARGET_DIR` or a
+`build.target-dir` config key moves it anywhere. A recipe that hardcodes `target/...` builds
+successfully and then fails to find the wasm, so ask cargo where it builds:
+
+```yaml
+- |-
+  TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+  cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
+```
+
+Each entry in `commands:` runs in its own shell, so `$TARGET_DIR` would be empty in a following entry.
+The `|-` block keeps both commands in one entry, and therefore one shell. The `sed` avoids taking a
+dependency on `jq`.
+
+Copy the wasm rather than moving it: cargo materializes the top-level artifact from `deps/`, and a
+build step has no reason to remove cargo's output.
+
 
 ## Template Syntax
 
@@ -2720,10 +2749,14 @@ build:
       commands:
         {{#if shrink}}
         - cargo build --release --target wasm32-unknown-unknown
-        - ic-wasm target/wasm32-unknown-unknown/release/{{ package }}.wasm -o "$ICP_WASM_OUTPUT_PATH" shrink
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          ic-wasm "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ package }}.wasm" -o "$ICP_WASM_OUTPUT_PATH" shrink
         {{else}}
         - cargo build --target wasm32-unknown-unknown
-        - cp target/wasm32-unknown-unknown/debug/{{ package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/debug/{{ package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
         {{/if}}
 ```
 
@@ -2742,7 +2775,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -2787,7 +2822,9 @@ Built-in recipe variables work with all Handlebars helpers. For example, the `re
 
 ```
 - cargo build --package {{_.canister.name}} --target wasm32-unknown-unknown --release
-- cp "target/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
+- |-
+  TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+  cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" _.canister.name }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 User-provided overrides can still be supported with an `{{#if}}` fallback for cases where the user needs to supply a different name (e.g. when the Cargo package name differs from the canister name):
@@ -3066,7 +3103,7 @@ canisters:
   - name: {{project-name}}
     {% if backend_language == "rust" %}
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: {{crate_name}}
     {% else %}
@@ -4327,7 +4364,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 
 environments:
   - name: staging
@@ -5425,8 +5464,8 @@ Recipes are reusable build templates that simplify canister configuration. Inste
 DFINITY maintains recipes for common use cases at [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
 
 You can reference recipes by pointing to a URL. For the official recipes, you can use a shorthand for example these recipe types are equivalent:
-* `@dfinity/rust@v3.0.0`
-* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
+* `@dfinity/rust@v3.4.0`
+* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.4.0/recipe.hbs`
 
 ### Rust Canister
 
@@ -5436,9 +5475,19 @@ For building a rust canister:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
+```
+
+`package` defaults to the canister name, so it only needs setting when the Cargo package is named
+something else:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
+        package: my-backend-crate
 ```
 
 ### Motoko Canister
@@ -5485,16 +5534,14 @@ canisters:
 
 A version is always required for registry recipes. These two types are equivalent:
 
-* `@dfinity/rust@v3.0.0`
-* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
+* `@dfinity/rust@v3.4.0`
+* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.4.0/recipe.hbs`
 
 ```yaml
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 ## Local Recipes
@@ -5509,7 +5556,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{package}} --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/{{package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{package}}.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 Reference it in your `icp.yaml`:
@@ -5562,9 +5611,7 @@ in the configuration file. eg:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
     settings:
       compute_allocation: 10
       environment_variables:
@@ -5769,7 +5816,9 @@ Both arrive normalized, so a URL with no path carries a trailing slash (`http://
 cargo build --target wasm32-wasip2 --release
 ```
 
-The output `.wasm` (under `target/wasm32-wasip2/release/`) is loaded directly by icp-cli — no extra component-packaging step is required.
+The output `.wasm` is loaded directly by icp-cli — no extra component-packaging step is required.
+It lands in `<cargo-target-dir>/wasm32-wasip2/release/`, which is `./target` only for a standalone
+crate with no `CARGO_TARGET_DIR` or `build.target-dir` set; in a workspace it sits at the workspace root.
 
 ## Wire It Into the Manifest
 
@@ -5787,6 +5836,10 @@ sync:
         api_url: https://example.com
         retries: 3
 ```
+
+`path` is a plain path relative to the canister directory — it is not expanded, so it cannot
+reference `$CARGO_TARGET_DIR`. If your target directory is elsewhere, point `path` at the real
+location or copy the plugin wasm into the canister directory as a build step.
 
 Then run the sync phase:
 
@@ -5913,9 +5966,7 @@ icp-cli introduces recipes — reusable build templates. Instead of dfx's built-
 canisters:
   - name: my_canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: my_canister
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 ### Build Process
@@ -5931,7 +5982,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Build parallelism
@@ -5994,9 +6047,8 @@ icp-cli assumes users will use canister environment variables to connect caniste
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
         candid: "src/backend/backend.did"
 ```
 
@@ -6096,9 +6148,7 @@ canisters:
 
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 **Key differences:**
@@ -7124,7 +7174,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
       memory_allocation: 2gib
@@ -9180,7 +9232,9 @@ build:
     - type: script
       commands:
         - cargo build --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 **Environment variables:**
@@ -9324,7 +9378,7 @@ The plugin runs in a WASI sandbox: it can call update and query methods on the c
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       sha256: abc123...  # Required for remote URLs
       configuration:
         package: my-crate
@@ -9360,7 +9414,7 @@ A `recipe` still cannot be combined with `build` — the recipe defines the buil
 
 ```yaml
 # Registry (recommended)
-type: "@dfinity/rust@v3.0.0"
+type: "@dfinity/rust@v3.4.0"
 
 # Local file
 type: ./recipes/my-recipe.hb.yaml
@@ -9641,7 +9695,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
     init_args:
@@ -9719,7 +9775,9 @@ build:
     - type: script
       commands:
         - cargo build --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### `ICP_CLI_ENVIRONMENT`

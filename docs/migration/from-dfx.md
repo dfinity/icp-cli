@@ -48,7 +48,7 @@ icp-cli introduces recipes — reusable build templates. Instead of dfx's built-
 canisters:
   - name: my_canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: my_canister
 ```
@@ -129,7 +129,7 @@ icp-cli assumes users will use canister environment variables to connect caniste
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: backend
         candid: "src/backend/backend.did"
@@ -231,7 +231,7 @@ canisters:
 
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: backend
 ```

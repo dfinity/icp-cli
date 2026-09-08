@@ -217,7 +217,7 @@ The plugin runs in a WASI sandbox: it can call update and query methods on the c
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       sha256: abc123...  # Required for remote URLs
       configuration:
         package: my-crate
@@ -233,7 +233,7 @@ canisters:
 
 ```yaml
 # Registry (recommended)
-type: "@dfinity/rust@v3.0.0"
+type: "@dfinity/rust@v3.4.0"
 
 # Local file
 type: ./recipes/my-recipe.hb.yaml

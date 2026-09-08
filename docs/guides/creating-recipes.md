@@ -41,7 +41,7 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); mv "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:
@@ -65,6 +65,22 @@ canisters:
         package: my-backend-crate
         shrink: true
 ```
+
+### Locating Cargo Build Output
+
+Cargo does not always write to `./target`. In a Cargo workspace the target directory sits at the
+workspace root, and `CARGO_TARGET_DIR` or a `build.target-dir` config key moves it anywhere. A recipe
+that hardcodes `target/...` builds successfully and then fails to find the wasm, so ask cargo where it
+builds:
+
+```
+- TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+```
+
+Each entry in `commands:` runs in its own shell, so keep the lookup and the command that uses
+`$TARGET_DIR` on one line, separated by `;`. The `sed` avoids taking a dependency on `jq`.
+
+Shorter snippets below omit this lookup to keep the syntax they demonstrate in focus.
 
 ## Template Syntax
 
@@ -115,7 +131,7 @@ build:
     - type: script
       commands:
         - cargo build --package {{ package }} --target wasm32-unknown-unknown --release
-        - mv target/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'); mv "${TARGET_DIR}/wasm32-unknown-unknown/release/{{ replace "-" "_" package }}.wasm" "$ICP_WASM_OUTPUT_PATH"
 
     - type: script
       commands:

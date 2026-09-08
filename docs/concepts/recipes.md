@@ -21,7 +21,7 @@ Given this recipe usage:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: my-backend
 ```
@@ -49,7 +49,7 @@ Official recipes from the DFINITY registry:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     package: my-crate
 ```
@@ -117,7 +117,7 @@ Recipe templates have access to two kinds of variables:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     shrink: true   # available as {{ shrink }} in the template
 ```

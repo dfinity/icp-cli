@@ -7,6 +7,10 @@ set -euo pipefail
 # Add the icp binary to PATH. Ask cargo for the target directory rather than
 # assuming ./target, which CARGO_TARGET_DIR and build.target-dir both move.
 TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+if [ ! -d "$TARGET_DIR" ]; then
+  echo "Could not determine the cargo target directory (got: '$TARGET_DIR')" >&2
+  exit 1
+fi
 export PATH="${TARGET_DIR}/debug:$PATH"
 echo "icp version: $(icp --version)"
 echo "icp path: $(which icp)"

@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+# v1.5.0
+
 * feat(sync-plugin): Introduced v0.2.0 of the sync-plugin interface. v0.1.0 plugins are still supported. v0.2.0 introduces the following features:
     * `canister-call` can call canisters besides the host
     * `icp.yaml` can list key-value settings for plugins

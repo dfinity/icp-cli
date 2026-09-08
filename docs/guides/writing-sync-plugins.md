@@ -168,7 +168,9 @@ Both arrive normalized, so a URL with no path carries a trailing slash (`http://
 cargo build --target wasm32-wasip2 --release
 ```
 
-The output `.wasm` (under `target/wasm32-wasip2/release/`) is loaded directly by icp-cli — no extra component-packaging step is required.
+The output `.wasm` is loaded directly by icp-cli — no extra component-packaging step is required.
+It lands in `<cargo-target-dir>/wasm32-wasip2/release/`, which is `./target` only for a standalone
+crate with no `CARGO_TARGET_DIR` or `build.target-dir` set; in a workspace it sits at the workspace root.
 
 ## Wire It Into the Manifest
 
@@ -186,6 +188,10 @@ sync:
         api_url: https://example.com
         retries: 3
 ```
+
+`path` is a plain path relative to the canister directory — it is not expanded, so it cannot
+reference `$CARGO_TARGET_DIR`. If your target directory is elsewhere, point `path` at the real
+location or copy the plugin wasm into the canister directory as a build step.
 
 Then run the sync phase:
 

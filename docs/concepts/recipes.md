@@ -21,7 +21,7 @@ Given this recipe usage:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       configuration:
         package: my-backend
 ```
@@ -36,7 +36,9 @@ canisters:
         - type: script
           commands:
             - cargo build --package my-backend --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/my_backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 ### Extra Sync Steps
@@ -56,7 +58,7 @@ Official recipes from the DFINITY registry:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     package: my-crate
 ```
@@ -124,7 +126,7 @@ Recipe templates have access to two kinds of variables:
 
 ```yaml
 recipe:
-  type: "@dfinity/rust@v3.0.0"
+  type: "@dfinity/rust@v3.4.0"
   configuration:
     shrink: true   # available as {{ shrink }} in the template
 ```

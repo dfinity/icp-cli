@@ -14,6 +14,7 @@
 //! there and implemented here.
 
 pub mod agent;
+pub mod calls;
 pub mod context;
 pub mod directories;
 pub mod identity;

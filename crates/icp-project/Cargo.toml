@@ -6,6 +6,11 @@ license = { workspace = true }
 publish.workspace = true
 
 [features]
+default = ["host"]
+# Implementations of this crate's seams that use the machine it is running on:
+# the filesystem, the project-local `.icp` stores, subprocesses. Turned off for
+# a build that has to run somewhere without them, such as inside a canister.
+host = []
 # Exposes this crate's mocks and fixtures so downstream crates can test against
 # the same seams. Off in a normal build, so none of it ships.
 test-util = []

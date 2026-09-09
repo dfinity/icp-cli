@@ -2,17 +2,17 @@ use std::sync::Arc;
 #[cfg(any(test, feature = "test-util"))]
 use std::{collections::HashMap, sync::Mutex};
 
+#[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, ICP_BASE,
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
     },
-    manifest::ProjectRootLocate,
-    prelude::*,
 };
+use crate::{manifest::ProjectRootLocate, prelude::*, store_id::StoreCause};
 use async_trait::async_trait;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 
 #[async_trait]
 /// Trait for accessing and managing canister build artifacts.
@@ -26,24 +26,23 @@ pub trait Access: Sync + Send {
 
 #[derive(Debug, Snafu)]
 pub enum SaveError {
-    #[snafu(display("failed to write artifact file"))]
-    SaveWriteFileError { source: crate::fs::IoError },
-
     #[snafu(display(
         "canister '{name}' encodes to a {len}-byte artifact filename, exceeding the 255-byte \
          filesystem limit; shorten the dependency path or canister name"
     ))]
     SaveNameTooLong { name: String, len: usize },
 
-    #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    /// The store could not keep the artifact. What a store is made of is the
+    /// implementation's business, so the cause is carried whole.
+    #[snafu(display("failed to store the build artifact for canister '{name}'"))]
+    SaveStore {
+        source: crate::store_id::StoreCause,
+        name: String,
+    },
 }
 
 #[derive(Debug, Snafu)]
 pub enum LookupArtifactError {
-    #[snafu(display("failed to read artifact file"))]
-    LookupReadFileError { source: crate::fs::IoError },
-
     #[snafu(display("could not find artifact for canister '{name}'"))]
     LookupArtifactNotFound { name: String },
 
@@ -53,14 +52,20 @@ pub enum LookupArtifactError {
     ))]
     LookupNameTooLong { name: String, len: usize },
 
-    #[snafu(transparent)]
-    LockError { source: crate::fs::lock::LockError },
+    /// As [`SaveError::SaveStore`].
+    #[snafu(display("failed to read the build artifact for canister '{name}'"))]
+    LookupStore {
+        source: crate::store_id::StoreCause,
+        name: String,
+    },
 }
 
+#[cfg(feature = "host")]
 pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
 }
 
+#[cfg(feature = "host")]
 pub struct ArtifactPaths {
     dir: PathBuf,
 }
@@ -72,6 +77,7 @@ pub struct ArtifactPaths {
 /// filename characters on every platform. Percent-encoding the unsafe set keeps
 /// the mapping reversible and collision-free; plain names (alphanumeric/`-`/`_`/`.`)
 /// are left unchanged, so existing artifact filenames are unaffected.
+#[cfg(feature = "host")]
 fn sanitize_artifact_name(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for c in name.chars() {
@@ -87,28 +93,34 @@ fn sanitize_artifact_name(name: &str) -> String {
 }
 
 /// Maximum length of a single filename component on common filesystems.
+#[cfg(feature = "host")]
 const NAME_MAX: usize = 255;
 
 /// The encoded filename length if it exceeds `NAME_MAX`, else `None`. A deeply
 /// nested dependency store key can stay within the total path limit yet blow the
 /// per-component limit once its separators are percent-encoded.
+#[cfg(feature = "host")]
+#[cfg(feature = "host")]
 fn artifact_name_overflow(name: &str) -> Option<usize> {
     let len = sanitize_artifact_name(name).len();
     (len > NAME_MAX).then_some(len)
 }
 
+#[cfg(feature = "host")]
 impl ArtifactPaths {
     fn artifact_by_name(&self, name: &str) -> PathBuf {
         self.dir.join(sanitize_artifact_name(name))
     }
 }
 
+#[cfg(feature = "host")]
 impl PathsAccess for ArtifactPaths {
     fn lock_file(&self) -> PathBuf {
         self.dir.join(".lock")
     }
 }
 
+#[cfg(feature = "host")]
 impl ArtifactStore {
     pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
@@ -131,6 +143,7 @@ impl ArtifactStore {
 }
 
 #[async_trait]
+#[cfg(feature = "host")]
 impl Access for ArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {
         if let Some(len) = artifact_name_overflow(name) {
@@ -140,13 +153,17 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
-        self.lock()?
+        let store_err = |e: &dyn std::fmt::Display| SaveError::SaveStore {
+            source: StoreCause::new(std::io::Error::other(e.to_string())),
+            name: name.to_owned(),
+        };
+        self.lock()
+            .map_err(|e| store_err(&e))?
             .with_write(async |store| {
-                // Save artifact
-                write(&store.artifact_by_name(name), wasm).context(SaveWriteFileSnafu)?;
-                Ok(())
+                write(&store.artifact_by_name(name), wasm).map_err(|e| store_err(&e))
             })
-            .await?
+            .await
+            .map_err(|e| store_err(&e))?
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
@@ -157,7 +174,12 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
-        self.lock()?
+        let store_err = |e: &dyn std::fmt::Display| LookupArtifactError::LookupStore {
+            source: StoreCause::new(std::io::Error::other(e.to_string())),
+            name: name.to_owned(),
+        };
+        self.lock()
+            .map_err(|e| store_err(&e))?
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
                 // Not Found
@@ -168,12 +190,10 @@ impl Access for ArtifactStore {
                     .fail();
                 }
 
-                // Load artifact
-                let wasm = read(&artifact).context(LookupReadFileSnafu)?;
-
-                Ok(wasm)
+                read(&artifact).map_err(|e| store_err(&e))
             })
-            .await?
+            .await
+            .map_err(|e| store_err(&e))?
     }
 }
 

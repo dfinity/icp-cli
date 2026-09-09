@@ -14,6 +14,7 @@ use candid_parser::parse_idl_args;
 
 use crate::{
     canister::{Settings, recipe::Resolve},
+    files::FileSystem,
     manifest::{
         ArgsFormat, LoadManifestFromPathError, PROJECT_MANIFEST, ProjectRootLocate,
         ProjectRootLocateError,
@@ -26,6 +27,8 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
+pub mod files;
+#[cfg(feature = "host")]
 pub mod fs;
 pub mod host;
 pub mod manifest;
@@ -232,6 +235,7 @@ pub trait ProjectLoad: Sync + Send {
 pub struct ProjectLoadImpl {
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
     pub recipe: Arc<dyn Resolve>,
+    pub files: Arc<dyn FileSystem>,
 }
 
 /// Ensures the "operating on a workspace root above your sub-project" notice is
@@ -275,14 +279,14 @@ impl ProjectLoad for ProjectLoadImpl {
         }
 
         // Load project manifest
-        let m = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
+        let m = load_manifest_from_path(self.files.as_ref(), &pdir.join(PROJECT_MANIFEST))
             .await
             .context(ProjectManifestSnafu)?;
 
         debug!("Loaded project manifest: {m:#?}");
 
         // Consolidate manifest into project
-        let p = project::consolidate_manifest(&pdir, self.recipe.as_ref(), &m)
+        let p = project::consolidate_manifest(self.files.as_ref(), &pdir, self.recipe.as_ref(), &m)
             .await
             .context(ProjectSnafu)?;
 
@@ -769,6 +773,7 @@ mod tests {
         let loader = ProjectLoadImpl {
             project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
             recipe: Arc::new(MockRecipeResolver),
+            files: Arc::new(crate::files::HostFileSystem),
         };
 
         // Call load
@@ -829,6 +834,7 @@ mod tests {
         let loader = ProjectLoadImpl {
             project_root_locate: Arc::new(MockProjectRootLocate::new(project_dir.to_path_buf())),
             recipe: Arc::new(MockRecipeResolver),
+            files: Arc::new(crate::files::HostFileSystem),
         };
 
         // Call load

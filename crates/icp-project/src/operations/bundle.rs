@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     Canister, CanisterArgs,
     canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
-    fs,
+    files::FileSystem,
     manifest::{
         ArgsFormat, BuildStep, BuildSteps, CanisterManifest, CanisterSelection, DependencyManifest,
         EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
@@ -119,7 +119,10 @@ pub enum BundleError {
     },
 
     #[snafu(display("failed to read args file '{path}'"))]
-    ReadArgsFile { path: PathBuf, source: fs::IoError },
+    ReadArgsFile {
+        path: PathBuf,
+        source: crate::files::FsError,
+    },
 
     #[snafu(display(
         "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
@@ -127,7 +130,7 @@ pub enum BundleError {
     ReadEnvVar {
         canister: String,
         variable: String,
-        source: fs::IoError,
+        source: crate::files::FsError,
     },
 
     #[snafu(display("failed to serialize bundle manifest"))]
@@ -148,11 +151,8 @@ pub enum BundleError {
     #[snafu(display("failed to finalize bundle archive"))]
     FlushArchive { source: std::io::Error },
 
-    #[snafu(display("failed to canonicalize path '{path}'"))]
-    CanonicalizePath {
-        path: PathBuf,
-        source: std::io::Error,
-    },
+    #[snafu(display("failed to resolve the real location of '{path}'"))]
+    CanonicalizePath { path: PathBuf },
 
     #[snafu(display(
         "source path '{path}' for canister '{canister}' resolves outside the project directory \
@@ -197,18 +197,21 @@ pub enum BundleError {
     #[snafu(display("failed to read plugin wasm for canister '{canister}'"))]
     ReadPlugin {
         canister: String,
-        source: fs::IoError,
+        source: crate::files::FsError,
     },
 
     #[snafu(display("failed to read plugin file '{file}' for canister '{canister}'"))]
     ReadPluginFile {
         canister: String,
         file: String,
-        source: fs::IoError,
+        source: crate::files::FsError,
     },
 
     #[snafu(display("failed to read app manifest '{path}'"))]
-    ReadAppManifest { path: PathBuf, source: fs::IoError },
+    ReadAppManifest {
+        path: PathBuf,
+        source: crate::files::FsError,
+    },
 
     #[snafu(display("failed to parse app manifest '{path}'"))]
     ParseAppManifest {
@@ -241,7 +244,10 @@ pub enum BundleError {
     SerializeAppManifest { source: serde_yaml::Error },
 
     #[snafu(display("failed to read image '{path}'"))]
-    ReadImage { path: PathBuf, source: fs::IoError },
+    ReadImage {
+        path: PathBuf,
+        source: crate::files::FsError,
+    },
 }
 
 /// In-memory bytes destined for a single tar entry.
@@ -368,6 +374,7 @@ impl Pruned<'_> {
 }
 
 pub async fn create_bundle(
+    files: &dyn FileSystem,
     project_dir: &Path,
     canisters: Vec<(PathBuf, Canister)>,
     selected: &HashSet<String>,
@@ -395,31 +402,35 @@ pub async fn create_bundle(
     // dependency declarations — and the store keys and `PUBLIC_CANISTER_ID`
     // wiring deploy derives from them — carry over unchanged.
     let instances = group_canisters(
-        workspace_instances(project_dir).await?,
+        workspace_instances(files, project_dir).await?,
         &canisters,
         project_dir,
     )?;
     validate_canisters(&instances)?;
     let mut prefixes_by_dir: HashMap<PathBuf, String> = HashMap::with_capacity(instances.len());
     for instance in &instances {
-        prefixes_by_dir.insert(canonicalize(&instance.dir)?, instance.prefix.clone());
+        prefixes_by_dir.insert(
+            canonicalize(files, &instance.dir).await?,
+            instance.prefix.clone(),
+        );
     }
     let pruned = Pruned {
         dropped: &dropped,
         prefixes_by_dir: &prefixes_by_dir,
         environment,
     };
-    let canonical_project_dir = canonicalize(project_dir)?;
+    let canonical_project_dir = canonicalize(files, project_dir).await?;
     let canonical_sync_dirs =
         validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
-    validate_env_var_files(&canisters, &canonical_project_dir)?;
-    validate_output_path(output, &canonical_sync_dirs)?;
+    validate_env_var_files(files, &canisters, &canonical_project_dir).await?;
+    validate_output_path(files, output, &canonical_sync_dirs).await?;
 
     build_many(
         canisters.clone(),
         environment,
         builder,
         artifacts.clone(),
+        files,
         reporter,
     )
     .await?;
@@ -452,6 +463,7 @@ pub async fn create_bundle(
 
     for instance in &instances {
         let canister_items = prepare_canisters(
+            files,
             instance,
             &pruned,
             &*artifacts,
@@ -459,8 +471,9 @@ pub async fn create_bundle(
             &mut bundle_artifacts,
         )
         .await?;
-        let networks = inline_networks(&instance.manifest.networks, &instance.dir).await?;
+        let networks = inline_networks(files, &instance.manifest.networks, &instance.dir).await?;
         let environments = inline_environments(
+            files,
             instance,
             &pruned,
             &canonical_project_dir,
@@ -484,15 +497,17 @@ pub async fn create_bundle(
         });
     }
 
-    let app_manifest = prepare_app_manifest(project_dir, &canonical_project_dir)?;
+    let app_manifest = prepare_app_manifest(files, project_dir, &canonical_project_dir).await?;
 
     write_archive(
+        files,
         output,
         &manifests,
         &bundle_artifacts,
         &args_files,
         app_manifest.as_ref(),
     )
+    .await
 }
 
 /// The local name a canister's owning project knows it by: consolidation keys a
@@ -671,6 +686,7 @@ fn group_canisters(
 
 /// Build one instance's manifest items and collect the archive artifacts they reference.
 async fn prepare_canisters(
+    files: &dyn FileSystem,
     instance: &Instance,
     pruned: &Pruned<'_>,
     artifacts: &dyn store_artifact::Access,
@@ -688,6 +704,7 @@ async fn prepare_canisters(
     let mut items = Vec::with_capacity(instance.canisters.len());
     for (canister_path, canister) in &instance.canisters {
         let item = prepare_canister(
+            files,
             &instance.prefix,
             canister_path,
             canister,
@@ -705,6 +722,7 @@ async fn prepare_canisters(
 
 #[allow(clippy::too_many_arguments)]
 async fn prepare_canister(
+    files: &dyn FileSystem,
     prefix: &str,
     canister_path: &Path,
     canister: &Canister,
@@ -745,6 +763,7 @@ async fn prepare_canister(
                 plugin_idx += 1;
                 bundle_sync_steps.push(
                     prepare_plugin_step(
+                        files,
                         adapter,
                         prefix,
                         canister,
@@ -854,6 +873,7 @@ fn localize_call_targets(
 
 #[allow(clippy::too_many_arguments)]
 async fn prepare_plugin_step(
+    files: &dyn FileSystem,
     adapter: &plugin::Adapter,
     prefix: &str,
     canister: &Canister,
@@ -878,7 +898,7 @@ async fn prepare_plugin_step(
             canister: canister.name.clone(),
         })?;
 
-    let plugin_bytes = fs::read(&resolved).context(ReadPluginSnafu {
+    let plugin_bytes = files.read(&resolved).await.context(ReadPluginSnafu {
         canister: canister.name.clone(),
     })?;
     let plugin_sha256 = hex::encode(Sha256::digest(&plugin_bytes));
@@ -918,9 +938,15 @@ async fn prepare_plugin_step(
     // A `files:` entry names a directory or a file, and which it is comes from what is on
     // disk — the same rule the plugin host applies. So partition on that before deciding
     // whether the archive gets a tree or a single file.
-    let (file_dirs, file_files): (Vec<String>, Vec<String>) = declared(&adapter.files)
-        .into_iter()
-        .partition(|path| canister_path.join(path).is_dir());
+    let mut file_dirs: Vec<String> = Vec::new();
+    let mut file_files: Vec<String> = Vec::new();
+    for path in declared(&adapter.files) {
+        if files.is_dir(&canister_path.join(&path)).await {
+            file_dirs.push(path);
+        } else {
+            file_files.push(path);
+        }
+    }
 
     for (dir, dir_prefix) in covering_dirs(declared(&adapter.dirs).iter().map(String::as_str))
         .into_iter()
@@ -964,6 +990,7 @@ async fn prepare_plugin_step(
 }
 
 async fn inline_networks(
+    files: &dyn FileSystem,
     items: &[Item<NetworkManifest>],
     instance_dir: &Path,
 ) -> Result<Vec<Item<NetworkManifest>>, BundleError> {
@@ -973,7 +1000,7 @@ async fn inline_networks(
             Item::Manifest(_) => item.clone(),
             Item::Path(path) => {
                 let full = instance_dir.join(path);
-                let m = load_manifest_from_path::<NetworkManifest>(&full)
+                let m = load_manifest_from_path::<NetworkManifest>(files, &full)
                     .await
                     .context(LoadNetworkSnafu { path: full })?;
                 Item::Manifest(m)
@@ -1023,7 +1050,8 @@ const UPGRADE_ARGS_DIR: &str = "upgrade-args";
 /// Relocate the files one environment's args overrides point at into
 /// `archive_dir`, rewriting each override to name the archived copy.
 #[allow(clippy::too_many_arguments)]
-fn relocate_args_overrides(
+async fn relocate_args_overrides(
+    files: &dyn FileSystem,
     overrides: &mut HashMap<String, ManifestArgs>,
     archive_dir: &str,
     instance_prefix: &str,
@@ -1049,7 +1077,7 @@ fn relocate_args_overrides(
         // could otherwise point the args at host files outside the project, and
         // normalize_archive_dir would silently strip any leading `..` from the
         // rewritten archive path so the escape wouldn't be visible there.
-        canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
+        canonicalize_within_project(files, &src, canonical_project_dir, canister_name).await?;
         let manifest_path = format!(
             "{archive_dir}/{}/{}",
             path_segment(canister_name),
@@ -1080,6 +1108,7 @@ fn relocate_args_overrides(
 
 #[allow(clippy::too_many_arguments)]
 async fn inline_environments(
+    files: &dyn FileSystem,
     instance: &Instance,
     pruned: &Pruned<'_>,
     canonical_project_dir: &Path,
@@ -1098,7 +1127,7 @@ async fn inline_environments(
             Item::Manifest(_) => item.clone(),
             Item::Path(path) => {
                 let full = instance_dir.join(path);
-                let m = load_manifest_from_path::<EnvironmentManifest>(&full)
+                let m = load_manifest_from_path::<EnvironmentManifest>(files, &full)
                     .await
                     .context(LoadEnvironmentSnafu { path: full })?;
                 Item::Manifest(m)
@@ -1119,6 +1148,7 @@ async fn inline_environments(
             ] {
                 let Some(overrides) = overrides else { continue };
                 relocate_args_overrides(
+                    files,
                     overrides,
                     archive_dir,
                     instance_prefix,
@@ -1128,7 +1158,8 @@ async fn inline_environments(
                     owner_prefixes,
                     seen_archive_paths,
                     args_files,
-                )?;
+                )
+                .await?;
             }
         }
 
@@ -1151,7 +1182,7 @@ async fn inline_environments(
                         // Same containment rule as an init_args override above: a
                         // manifest must not have the bundle carry off a file from
                         // outside the project, inlined value or archived copy.
-                        let canon = canonicalize(&src)?;
+                        let canon = canonicalize(files, &src).await?;
                         if !canon.starts_with(canonical_project_dir) {
                             return EnvVarEscapesProjectSnafu {
                                 canister: canister_name.clone(),
@@ -1161,7 +1192,7 @@ async fn inline_environments(
                             }
                             .fail();
                         }
-                        let value = fs::read_to_string(&src).context(ReadEnvVarSnafu {
+                        let value = files.read_to_string(&src).await.context(ReadEnvVarSnafu {
                             canister: canister_name,
                             variable,
                         })?;
@@ -1221,18 +1252,22 @@ fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned:
 
 /// Load `icp_appmanifest.yaml` if present, rewriting its top-level `images` paths to point at
 /// copies relocated under `images/` in the bundle. Returns `None` when the file is absent.
-fn prepare_app_manifest(
+async fn prepare_app_manifest(
+    files: &dyn FileSystem,
     project_dir: &Path,
     canonical_project_dir: &Path,
 ) -> Result<Option<AppManifest>, BundleError> {
     let manifest_path = project_dir.join(APP_MANIFEST);
-    if !manifest_path.exists() {
+    if !files.exists(&manifest_path).await {
         return Ok(None);
     }
 
-    let raw = fs::read_to_string(&manifest_path).context(ReadAppManifestSnafu {
-        path: &manifest_path,
-    })?;
+    let raw = files
+        .read_to_string(&manifest_path)
+        .await
+        .context(ReadAppManifestSnafu {
+            path: &manifest_path,
+        })?;
     let mut doc: serde_yaml::Value = serde_yaml::from_str(&raw).context(ParseAppManifestSnafu {
         path: &manifest_path,
     })?;
@@ -1263,7 +1298,7 @@ fn prepare_app_manifest(
             })?
             .to_owned();
         let src = project_dir.join(&orig);
-        let canon = canonicalize(&src)?;
+        let canon = canonicalize(files, &src).await?;
         if !canon.starts_with(canonical_project_dir) {
             return ImageEscapesProjectSnafu {
                 path: src,
@@ -1391,7 +1426,8 @@ impl<W: Write> ArchiveWriter<W> {
     }
 }
 
-fn write_archive(
+async fn write_archive(
+    files: &dyn FileSystem,
     output: &Path,
     manifests: &[InstanceManifest],
     artifacts: &BundleArtifacts,
@@ -1440,7 +1476,7 @@ fn write_archive(
     if let Some(app) = app_manifest {
         archive.bytes(APP_MANIFEST, app.yaml.as_bytes())?;
         for shot in &app.images {
-            let data = fs::read(&shot.src_path).context(ReadImageSnafu {
+            let data = files.read(&shot.src_path).await.context(ReadImageSnafu {
                 path: shot.src_path.clone(),
             })?;
             archive.bytes(&shot.archive_path, &data)?;
@@ -1452,9 +1488,12 @@ fn write_archive(
     }
 
     for entry in args_files {
-        let data = fs::read(&entry.src_path).context(ReadArgsFileSnafu {
-            path: entry.src_path.clone(),
-        })?;
+        let data = files
+            .read(&entry.src_path)
+            .await
+            .context(ReadArgsFileSnafu {
+                path: entry.src_path.clone(),
+            })?;
         archive.bytes(&entry.archive_path, &data)?;
     }
 
@@ -1467,10 +1506,13 @@ fn write_archive(
     }
 
     for pf in &artifacts.plugin_files {
-        let data = fs::read(&pf.src_path).context(ReadPluginFileSnafu {
-            canister: pf.canister_name.clone(),
-            file: pf.orig_file.clone(),
-        })?;
+        let data = files
+            .read(&pf.src_path)
+            .await
+            .context(ReadPluginFileSnafu {
+                canister: pf.canister_name.clone(),
+                file: pf.orig_file.clone(),
+            })?;
         archive.bytes(&pf.archive_path, &data)?;
     }
 
@@ -1579,13 +1621,14 @@ fn validate_source_paths(
 /// settings before `create_bundle` runs — so the paths come from the canister
 /// model rather than the manifest, and the environment overrides `create_bundle`
 /// rewrites itself are checked in [`inline_environments`].
-fn validate_env_var_files(
+async fn validate_env_var_files(
+    files: &dyn FileSystem,
     canisters: &[(PathBuf, Canister)],
     canonical_project_dir: &Path,
 ) -> Result<(), BundleError> {
     for (_, canister) in canisters {
         for (variable, file) in &canister.environment_variable_files {
-            let canon = canonicalize(file)?;
+            let canon = canonicalize(files, file).await?;
             if !canon.starts_with(canonical_project_dir) {
                 return EnvVarEscapesProjectSnafu {
                     canister: canister.name.clone(),
@@ -1655,8 +1698,12 @@ fn resolve_within_project(
 
 /// Refuse to write the bundle output into a directory we are about to recursively archive —
 /// otherwise the partial bundle file would be included in itself.
-fn validate_output_path(output: &Path, canonical_sync_dirs: &[PathBuf]) -> Result<(), BundleError> {
-    let canonical_output = canonicalize_output(output)?;
+async fn validate_output_path(
+    files: &dyn FileSystem,
+    output: &Path,
+    canonical_sync_dirs: &[PathBuf],
+) -> Result<(), BundleError> {
+    let canonical_output = canonicalize_output(files, output).await?;
     for sync_dir in canonical_sync_dirs {
         if canonical_output.starts_with(sync_dir) {
             return OutputOverlapsSyncDirSnafu {
@@ -1710,18 +1757,22 @@ fn is_absolute_bind_mount_host(mount: &str) -> bool {
     !h.is_empty() && (h[0] == b'/' || h[0] == b'\\')
 }
 
-fn canonicalize(path: &Path) -> Result<PathBuf, BundleError> {
-    path.canonicalize_utf8().context(CanonicalizePathSnafu {
-        path: path.to_path_buf(),
-    })
+async fn canonicalize(files: &dyn FileSystem, path: &Path) -> Result<PathBuf, BundleError> {
+    files
+        .canonicalize(path)
+        .await
+        .context(CanonicalizePathSnafu {
+            path: path.to_path_buf(),
+        })
 }
 
-fn canonicalize_within_project(
+async fn canonicalize_within_project(
+    files: &dyn FileSystem,
     src: &Path,
     canonical_project_dir: &Path,
     canister: &str,
 ) -> Result<PathBuf, BundleError> {
-    let canon = canonicalize(src)?;
+    let canon = canonicalize(files, src).await?;
     if !canon.starts_with(canonical_project_dir) {
         return SourceEscapesProjectSnafu {
             canister: canister.to_owned(),
@@ -1735,9 +1786,12 @@ fn canonicalize_within_project(
 
 /// Resolve the canonical form of an output path that may not exist yet. We canonicalize its
 /// parent (which must exist before we can write a file there anyway) and append the filename.
-fn canonicalize_output(output: &Path) -> Result<PathBuf, BundleError> {
-    if output.exists() {
-        return canonicalize(output);
+async fn canonicalize_output(
+    files: &dyn FileSystem,
+    output: &Path,
+) -> Result<PathBuf, BundleError> {
+    if files.exists(output).await {
+        return canonicalize(files, output).await;
     }
     let parent = output
         .parent()
@@ -1747,7 +1801,7 @@ fn canonicalize_output(output: &Path) -> Result<PathBuf, BundleError> {
         .file_name()
         .map(|s| s.to_string())
         .unwrap_or_default();
-    let canon_parent = canonicalize(parent)?;
+    let canon_parent = canonicalize(files, parent).await?;
     Ok(canon_parent.join(filename))
 }
 

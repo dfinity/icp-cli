@@ -14,7 +14,7 @@ pub(crate) mod dependency;
 pub(crate) mod environment;
 pub(crate) mod network;
 pub(crate) mod project;
-pub(crate) mod recipe;
+pub mod recipe;
 pub(crate) mod serde_helpers;
 
 pub use {

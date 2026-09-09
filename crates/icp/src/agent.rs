@@ -1,63 +1,16 @@
-use std::{error::Error, fmt, future::Future, sync::Arc, time::Duration};
+//! The agent an operation speaks through, without the means to make one.
+//!
+//! Building an agent takes an identity, a key store and a way to unlock it —
+//! all of which belong to the surrounding application, not here. So this layer
+//! names only what it needs: something it can ask for an agent when it has
+//! something to say.
 
-use async_trait::async_trait;
+use std::{error::Error, future::Future};
+
 use futures::future::BoxFuture;
-use ic_agent::{Agent, AgentError, Identity};
-use snafu::prelude::*;
+use ic_agent::Agent;
+use snafu::Snafu;
 use tokio::sync::OnceCell;
-
-use crate::prelude::*;
-
-#[derive(Debug, Snafu)]
-pub enum CreateAgentError {
-    #[snafu(display("failed to create agent"))]
-    Agent { source: AgentError },
-}
-
-/// How far ahead of now an agent dates the messages it expires, unless the
-/// caller pins something else.
-const DEFAULT_INGRESS_EXPIRY: Duration = Duration::from_secs(4 * MINUTE);
-
-#[async_trait]
-pub trait Create: Sync + Send {
-    /// Builds an agent talking to `url` as `id`.
-    ///
-    /// `ingress_expiry` pins how far ahead of now the agent dates the messages it
-    /// derives an expiry for. Pass `None` for the default. Pass `Some` only when
-    /// the expiry is itself part of the output — signing a message here for
-    /// another machine to submit, where the call envelope and the pre-signed
-    /// `request_status` that accompanies it have to land in the same submission
-    /// window. A pinned expiry is used verbatim, so the
-    /// `ICP_CLI_TEST_ADVANCE_TIME_MS` clock offset applies to the default only.
-    async fn create(
-        &self,
-        id: Arc<dyn Identity>,
-        url: &str,
-        ingress_expiry: Option<Duration>,
-    ) -> Result<Agent, CreateAgentError>;
-}
-
-pub struct Creator;
-
-#[async_trait]
-impl Create for Creator {
-    async fn create(
-        &self,
-        id: Arc<dyn Identity>,
-        url: &str,
-        ingress_expiry: Option<Duration>,
-    ) -> Result<Agent, CreateAgentError> {
-        let ingress_expiry =
-            ingress_expiry.unwrap_or_else(|| DEFAULT_INGRESS_EXPIRY + test_time_advance());
-
-        let b = Agent::builder()
-            .with_url(url)
-            .with_arc_identity(id)
-            .with_ingress_expiry(ingress_expiry);
-
-        Ok(b.build().context(AgentSnafu)?)
-    }
-}
 
 /// An [`Agent`] created on first use.
 ///
@@ -87,7 +40,7 @@ impl<'a> LazyAgent<'a> {
             cell: OnceCell::new(),
             create: Box::new(move || {
                 let creating = create();
-                Box::pin(async move { creating.await.map_err(|e| LazyAgentError(Box::new(e))) })
+                Box::pin(async move { creating.await.map_err(LazyAgentError::new) })
             }),
         }
     }
@@ -98,36 +51,24 @@ impl<'a> LazyAgent<'a> {
     }
 }
 
-/// Whatever went wrong in a [`LazyAgent`]'s creation function.
+/// An agent could not be created.
 ///
-/// Type-erased, and hand-written rather than a Snafu variant, because how an
-/// identity is resolved and unlocked belongs to the caller: an operation holding
-/// a `LazyAgent` cannot name that error, and does nothing with it but report it.
-/// So this adds no message of its own — display and source both pass straight
-/// through, as `snafu(transparent)` would.
-#[derive(Debug)]
-pub struct LazyAgentError(Box<dyn Error + Send + Sync>);
-
-impl fmt::Display for LazyAgentError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
+/// What that took is the caller's business: resolving an identity, unlocking a
+/// key, reaching a network for its root key. This layer knows only that it can
+/// fail and that whatever went wrong is what the user needs to be told, so the
+/// cause is carried whole and displayed as itself rather than being restated
+/// here.
+#[derive(Debug, Snafu)]
+#[snafu(display("{source}"))]
+pub struct LazyAgentError {
+    pub source: Box<dyn Error + Send + Sync + 'static>,
 }
 
-impl Error for LazyAgentError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.0.source()
-    }
-}
-
-/// How far a test has advanced the replica's clock past this machine's, so the
-/// default ingress expiry stays ahead of replica time.
-fn test_time_advance() -> Duration {
-    match std::env::var("ICP_CLI_TEST_ADVANCE_TIME_MS") {
-        Ok(ms) => Duration::from_millis(
-            ms.parse::<u64>()
-                .expect("ICP_CLI_TEST_ADVANCE_TIME_MS must be set to an int"),
-        ),
-        Err(_) => Duration::ZERO,
+impl LazyAgentError {
+    /// Wraps a creation function's own error for the boundary.
+    pub fn new(source: impl Error + Send + Sync + 'static) -> Self {
+        Self {
+            source: Box::new(source),
+        }
     }
 }

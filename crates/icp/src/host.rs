@@ -101,7 +101,7 @@ pub struct Ignore;
 impl Observe for Ignore {}
 
 impl Host {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-util"))]
     /// A host whose every seam is a mock, for tests that only exercise the
     /// resolution methods below.
     pub fn mocked() -> Self {

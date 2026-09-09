@@ -2,7 +2,7 @@ use std::io::stdout;
 
 use anyhow::bail;
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::commands::args;

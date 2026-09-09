@@ -1,6 +1,7 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::{context::NetworkOrEnvironmentSelection, prelude::LOCAL};
+use icp::prelude::LOCAL;
+use icp_app::context::NetworkOrEnvironmentSelection;
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct NetworkOrEnvironmentArgs {

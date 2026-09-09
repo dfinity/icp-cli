@@ -3,7 +3,8 @@ use std::sync::Arc;
 use anyhow::Error;
 use clap::{CommandFactory, Parser, ValueHint};
 use commands::Command;
-use icp::{directories::Access, prelude::*};
+use icp::prelude::*;
+use icp_app::directories::Access;
 use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -161,7 +162,7 @@ async fn run() -> Result<(), Error> {
         "Starting icp-cli"
     );
 
-    let password_func: icp::identity::PasswordFunc = match cli.identity_password_file {
+    let password_func: icp_app::identity::PasswordFunc = match cli.identity_password_file {
         Some(path) => Arc::new(move || {
             icp::fs::read_to_string(&path)
                 .map(|s| s.trim().to_string())
@@ -175,16 +176,16 @@ async fn run() -> Result<(), Error> {
         }),
     };
     let pem_session_duration = {
-        let dirs = icp::directories::Directories::new()?;
+        let dirs = icp_app::directories::Directories::new()?;
         let settings_dirs = dirs.settings()?;
         let settings = settings_dirs
-            .with_read(async |dirs| icp::settings::Settings::load_from(dirs))
+            .with_read(async |dirs| icp_app::settings::Settings::load_from(dirs))
             .await??;
         settings
             .session_length
             .map(|m| std::time::Duration::from_secs((u64::from(m) + 2) * 60))
     };
-    let ctx = icp::context::initialize(
+    let ctx = icp_app::context::initialize(
         cli.project_root_override,
         cli.debug,
         password_func,
@@ -223,7 +224,7 @@ async fn run() -> Result<(), Error> {
 }
 
 /// Dispatch the command to its handler.
-async fn dispatch(ctx: &icp::context::Context, command: Command) -> Result<(), Error> {
+async fn dispatch(ctx: &icp_app::context::Context, command: Command) -> Result<(), Error> {
     match command {
         // Build
         Command::Build(args) => commands::build::exec(ctx, &args).await?,

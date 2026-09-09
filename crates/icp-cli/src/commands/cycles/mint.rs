@@ -3,13 +3,13 @@ use std::io::stdout;
 use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
-use icp::context::Context;
 use icp::parsers::{CyclesAmount, parse_token_amount};
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use icp::operations::token::mint::mint_cycles;
+use icp_app::operations::token::mint::mint_cycles;
 
 /// Convert ICP to cycles.
 ///

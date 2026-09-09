@@ -7,7 +7,7 @@ use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, TakeCanisterSnapshotArgs,
 };
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use super::SnapshotId;

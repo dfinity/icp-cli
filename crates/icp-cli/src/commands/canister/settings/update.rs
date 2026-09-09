@@ -2,7 +2,6 @@ use anyhow::bail;
 use candid::Nat;
 use clap::{ArgAction, Args};
 use dialoguer::Confirm;
-use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable,
@@ -391,11 +390,6 @@ pub(crate) struct UpdateArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow::Error> {
     let selections = args.cmd_args.selections();
-    let identity = ctx.get_identity(&selections.identity, None).await?;
-    let caller_principal = identity
-        .sender()
-        .map_err(|e| anyhow::anyhow!("failed to get caller principal: {e}"))?;
-
     let agent = ctx
         .get_agent(
             &selections.identity,
@@ -403,6 +397,9 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+    let caller_principal = agent
+        .get_principal()
+        .map_err(|e| anyhow::anyhow!("failed to get caller principal: {e}"))?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,

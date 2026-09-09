@@ -68,7 +68,7 @@ pub(crate) struct StartArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::Error> {
     // Load project
-    let p = ctx.project.load().await?;
+    let p = ctx.host.project.load().await?;
 
     // Convert args to selection and get network
     let selection: Result<_, _> = args.network_selection.clone().into();
@@ -87,7 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let pdir = &p.dir;
 
     // Network directory
-    let nd = ctx.network.get_network_directory(&network)?;
+    let nd = ctx.host.network.get_network_directory(&network)?;
     nd.ensure_exists()
         .context("failed to create network directory")?;
 
@@ -125,7 +125,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     for env in p.environments.values() {
         if env.network == network {
             // It's been ensured that the network is managed, so is_cache is true.
-            ctx.ids.cleanup(true, env.name.as_str())?;
+            ctx.host.ids.cleanup(true, env.name.as_str())?;
         }
     }
 

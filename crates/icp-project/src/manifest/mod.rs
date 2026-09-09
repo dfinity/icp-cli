@@ -5,6 +5,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
+use crate::files::FileSystem;
+#[cfg(feature = "host")]
 use crate::fs;
 use crate::prelude::*;
 
@@ -127,6 +129,7 @@ pub trait ProjectRootLocate: Sync + Send {
 }
 
 /// Implementation of [`ProjectRootLocate`].
+#[cfg(feature = "host")]
 pub struct ProjectRootLocateImpl {
     /// Current directory to begin search from in case dir is unspecified.
     cwd: PathBuf,
@@ -135,6 +138,7 @@ pub struct ProjectRootLocateImpl {
     dir: Option<PathBuf>,
 }
 
+#[cfg(feature = "host")]
 impl ProjectRootLocateImpl {
     /// Creates a new instance of `ProjectRootLocateImpl`.
     ///
@@ -145,6 +149,7 @@ impl ProjectRootLocateImpl {
     }
 }
 
+#[cfg(feature = "host")]
 /// The nearest directory at or above `start` that contains a project manifest.
 fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
     let mut dir = start.to_owned();
@@ -157,6 +162,7 @@ fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
 }
 
 /// The nearest directory *strictly above* `dir` that contains a project manifest.
+#[cfg(feature = "host")]
 fn next_manifest_dir_above(dir: &Path) -> Option<PathBuf> {
     let mut cur = dir.parent()?.to_owned();
     loop {
@@ -170,6 +176,7 @@ fn next_manifest_dir_above(dir: &Path) -> Option<PathBuf> {
 /// Canonicalize a directory (resolving `..` and symlinks) into a UTF-8 path.
 /// Returns `None` if the path does not exist or is not valid UTF-8; callers
 /// treat that as "cannot establish identity", which is safe for resolution.
+#[cfg(feature = "host")]
 fn canonicalize_dir(dir: &Path) -> Option<PathBuf> {
     let canon = dunce::canonicalize(dir.as_std_path()).ok()?;
     PathBuf::try_from(canon).ok()
@@ -179,6 +186,7 @@ fn canonicalize_dir(dir: &Path) -> Option<PathBuf> {
 /// other field. Deliberately lenient: any read/parse failure yields no
 /// dependencies, so an unrelated or malformed ancestor manifest is treated as
 /// declaring nothing (it will not be adopted as a workspace root).
+#[cfg(feature = "host")]
 fn read_dependency_paths(manifest_path: &Path) -> Vec<String> {
     #[derive(Deserialize)]
     struct DepProbe {
@@ -203,6 +211,7 @@ fn read_dependency_paths(manifest_path: &Path) -> Vec<String> {
 /// transitively. Each `path:` is resolved relative to the manifest that
 /// declares it, then canonicalized so identity is independent of how the path
 /// is spelled (matches [`crate::project`] dependency de-duplication).
+#[cfg(feature = "host")]
 fn transitive_dep_dirs(manifest_dir: &Path) -> HashSet<PathBuf> {
     let mut out = HashSet::new();
     let Some(start) = canonicalize_dir(manifest_dir) else {
@@ -224,6 +233,7 @@ fn transitive_dep_dirs(manifest_dir: &Path) -> HashSet<PathBuf> {
     out
 }
 
+#[cfg(feature = "host")]
 impl ProjectRootLocate for ProjectRootLocateImpl {
     fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
         // Start from the project the command is standing in. An explicit
@@ -280,8 +290,11 @@ impl ProjectRootLocate for ProjectRootLocateImpl {
 
 #[derive(Debug, Snafu)]
 pub enum LoadManifestFromPathError {
-    #[snafu(display("failed to read manifest from path"))]
-    Read { source: fs::IoError },
+    #[snafu(display("failed to read manifest at '{path}'"))]
+    Read {
+        source: crate::files::FsError,
+        path: PathBuf,
+    },
 
     #[snafu(display("failed to parse manifest at '{path}'"))]
     Parse {
@@ -291,11 +304,16 @@ pub enum LoadManifestFromPathError {
 }
 
 /// Loads a manifest of type `T` from the specified file path.
-pub async fn load_manifest_from_path<T>(path: &Path) -> Result<T, LoadManifestFromPathError>
+pub async fn load_manifest_from_path<T>(
+    files: &dyn FileSystem,
+    path: &Path,
+) -> Result<T, LoadManifestFromPathError>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let content = fs::read(path).context(ReadSnafu)?;
+    let content = files.read(path).await.context(ReadSnafu {
+        path: path.to_path_buf(),
+    })?;
     let m = serde_yaml::from_slice::<T>(&content).context(ParseSnafu {
         path: path.to_path_buf(),
     })?;

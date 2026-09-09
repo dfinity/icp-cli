@@ -48,6 +48,21 @@ pub fn read_to_string(path: &Path) -> Result<String, IoError> {
     std::fs::read_to_string(path).context(IoSnafu { path })
 }
 
+/// Non-recursive directory listing, as full paths. A name that is not UTF-8
+/// cannot be named by any manifest, so it is skipped rather than being an
+/// error.
+pub fn read_dir(path: &Path) -> Result<Vec<PathBuf>, IoError> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(path).context(IoSnafu { path })? {
+        let entry = entry.context(IoSnafu { path })?;
+        if let Ok(p) = PathBuf::from_path_buf(entry.path()) {
+            out.push(p);
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 pub fn remove_dir_all(path: &Path) -> Result<(), IoError> {
     std::fs::remove_dir_all(path).context(IoSnafu { path })
 }

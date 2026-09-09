@@ -24,7 +24,7 @@ pub enum BuildOperationError {
     MissingWasmOutput,
 
     #[snafu(display("failed to read wasm output file"))]
-    ReadWasmOutput { source: crate::fs::IoError },
+    ReadWasmOutput { source: crate::files::FsError },
 
     #[snafu(display("failed to save wasm artifact"))]
     SaveWasmArtifact {
@@ -45,6 +45,7 @@ pub async fn build(
     task: &TaskReporter,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
 ) -> Result<(), BuildOperationError> {
     let build_dir = tempdir().context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
@@ -73,11 +74,14 @@ pub async fn build(
         build_result?;
     }
 
-    if !wasm_output_path.exists() {
+    if !files.exists(&wasm_output_path).await {
         return MissingWasmOutputSnafu.fail();
     }
 
-    let wasm = crate::fs::read(&wasm_output_path).context(ReadWasmOutputSnafu)?;
+    let wasm = files
+        .read(&wasm_output_path)
+        .await
+        .context(ReadWasmOutputSnafu)?;
 
     artifacts
         .save(&canister.name, &wasm)
@@ -92,6 +96,7 @@ pub async fn build_many(
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
     reporter: &Reporter,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
@@ -109,6 +114,7 @@ pub async fn build_many(
                 &task,
                 builder,
                 artifacts,
+                files,
             )
             .await;
 

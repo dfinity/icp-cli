@@ -53,6 +53,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
 
     rendered(ctx.debug, async |reporter| {
         create_bundle(
+            ctx.host.files.as_ref(),
             &project.dir,
             canisters,
             &selected,

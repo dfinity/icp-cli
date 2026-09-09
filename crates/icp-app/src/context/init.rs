@@ -106,8 +106,11 @@ pub fn initialize(
         pkg_cache,
     });
 
+    // The project's files come from this machine.
+    let files = Arc::new(icp_project::files::HostFileSystem);
+
     // Canister builder
-    let builder = Arc::new(Builder::new(wasm.clone()));
+    let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
 
     // Canister syncer
     let syncer = Arc::new(Syncer::host(wasm.clone()));
@@ -116,6 +119,7 @@ pub fn initialize(
     let pload = ProjectLoadImpl {
         project_root_locate: project_root_locate.clone(),
         recipe,
+        files: files.clone(),
     };
 
     let pload = Lazy::new(pload);
@@ -153,6 +157,7 @@ pub fn initialize(
     Ok(Context {
         host: Host {
             project: pload,
+            files,
             ids,
             artifacts,
             builder,

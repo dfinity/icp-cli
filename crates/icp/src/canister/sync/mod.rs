@@ -7,9 +7,9 @@ use ic_agent::Agent;
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
+use crate::canister::wasm;
 use crate::manifest::canister::SyncStep;
 use crate::network::NetworkUrls;
-use crate::package::PackageCache;
 use crate::prelude::*;
 
 mod plugin;
@@ -60,7 +60,6 @@ pub trait Synchronize: Sync + Send {
         params: &Params,
         agent: &Agent,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
 
@@ -70,16 +69,17 @@ pub trait Synchronize: Sync + Send {
 /// everywhere.
 pub struct Syncer {
     scripts: Arc<dyn ScriptRunner>,
+    wasm: Arc<dyn wasm::Fetch>,
 }
 
 impl Syncer {
     /// A syncer that runs script steps as host subprocesses.
-    pub fn host() -> Self {
-        Self::new(Arc::new(HostScripts))
+    pub fn host(wasm: Arc<dyn wasm::Fetch>) -> Self {
+        Self::new(Arc::new(HostScripts), wasm)
     }
 
-    pub fn new(scripts: Arc<dyn ScriptRunner>) -> Self {
-        Self { scripts }
+    pub fn new(scripts: Arc<dyn ScriptRunner>, wasm: Arc<dyn wasm::Fetch>) -> Self {
+        Self { scripts, wasm }
     }
 }
 
@@ -91,7 +91,6 @@ impl Synchronize for Syncer {
         params: &Params,
         agent: &Agent,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
             SyncStep::Script(adapter) => Ok(self
@@ -105,7 +104,7 @@ impl Synchronize for Syncer {
                 &params.environment,
                 params.proxy,
                 reporter,
-                pkg_cache,
+                self.wasm.as_ref(),
             )
             .await?),
         }
@@ -126,7 +125,6 @@ impl Synchronize for UnimplementedMockSyncer {
         _params: &Params,
         _agent: &Agent,
         _reporter: &StepReporter,
-        _pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
     }
@@ -172,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn script_steps_are_dispatched_to_the_injected_runner() {
         let scripts = Arc::new(RecordingScripts::default());
-        let syncer = Syncer::new(scripts.clone());
+        let syncer = Syncer::new(scripts.clone(), Arc::new(wasm::UnimplementedMockFetch));
 
         let cid = Principal::from_slice(&[7; 4]);
         let params = Params {
@@ -196,17 +194,8 @@ mod tests {
             command: CommandField::Command("./deploy.sh".to_owned()),
         });
 
-        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
-        let pkg_cache = PackageCache::new(tmp.path().to_owned()).unwrap();
-
         let retained = syncer
-            .sync(
-                &step,
-                &params,
-                &dummy_agent(),
-                &StepReporter::null(),
-                &pkg_cache,
-            )
+            .sync(&step, &params, &dummy_agent(), &StepReporter::null())
             .await
             .expect("script step should dispatch");
         assert!(retained.is_empty());

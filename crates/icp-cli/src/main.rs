@@ -202,7 +202,7 @@ async fn run() -> Result<(), Error> {
     let result = dispatch(&ctx, command).instrument(trace_span).await;
 
     if let Some(session) = telemetry_session {
-        session.finish(result.is_ok(), &ctx.host.telemetry_data);
+        session.finish(result.is_ok(), &ctx.telemetry_data);
     }
 
     // Show update nag after command output

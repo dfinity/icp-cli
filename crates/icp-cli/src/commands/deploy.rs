@@ -2,13 +2,13 @@ use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use ic_agent::{Agent, AgentError};
 use icp_app::{context::Context, identity::IdentitySelection};
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use icp_project::calls::{Call, CallError, CanisterCalls};
 use icp_project::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp_project::parsers::CyclesAmount;
 use icp_project::{
-    agent::LazyAgent,
+    defer::{Deferred, DeferredError},
     host::{CanisterSelection, EnvironmentSelection},
     network::Configuration as NetworkConfiguration,
 };
@@ -115,14 +115,18 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
-    // One agent for the whole run, including the URLs printed at the end: one
-    // identity unlock and, for a network whose root key is fetched, one fetch
-    // rather than one per phase. Deferred rather than made here, because
-    // unlocking a key and reaching a network are exactly what a deploy that
-    // fails to build should not do; the first phase that needs the network
-    // creates it.
+    // One agent for the whole run, including the calls seam built on it and the
+    // URLs printed at the end: one identity unlock and, for a network whose
+    // root key is fetched, one fetch rather than one per phase. Deferred rather
+    // than made here, because unlocking a key and reaching a network are
+    // exactly what a deploy that fails to build should not do; the first phase
+    // that needs the network creates it.
     let (identity, environment) = (&identity_selection, &environment_selection);
-    let agent = LazyAgent::new(move || ctx.get_agent_for_env(identity, environment));
+    let agent = Deferred::new(move || ctx.get_agent_for_env(identity, environment));
+    let calls = Deferred::new(|| async {
+        let agent = agent.get().await?.clone();
+        icp_app::calls::calls(agent, args.proxy).map_err(DeferredError::new)
+    });
 
     let params = DeployParams {
         environment: environment_selection.clone(),
@@ -141,7 +145,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // command having to await it phase by phase.
     let mut report = DeployReport::default();
     let result = rendered(ctx.debug, async |reporter| {
-        deploy(&ctx.host, &agent, &params, reporter, &mut report).await
+        deploy(&ctx.host, &calls, &agent, &params, reporter, &mut report).await
     })
     .await;
 
@@ -159,7 +163,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     print_canister_urls(
         ctx,
         &environment_selection,
-        agent.get().await?,
+        calls.get().await?.as_ref(),
         &canisters,
         args.json,
     )
@@ -188,16 +192,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
 /// so only the `error_code` string distinguishes them. Transport/other errors
 /// are inconclusive and, per the false-positive bias, also count as "has
 /// `http_request`".
-async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
+async fn has_http_request(calls: &dyn CanisterCalls, canister_id: Principal) -> bool {
     // A valid Candid encoding of zero arguments (`DIDL\0\0`) — *not* raw empty
     // bytes, which are not a well-formed Candid message. This lets a genuine
     // zero-argument `http_request` reply, while a single-argument one still
     // fails to decode and traps; either way the method exists.
     let empty_args = candid::encode_args(()).expect("encoding () never fails");
-    let result = agent
-        .query(&canister_id, "http_request")
-        .with_arg(empty_args)
-        .call()
+    let result = calls
+        .query(Call::new(canister_id, "http_request", empty_args))
         .await;
 
     match result {
@@ -216,17 +218,15 @@ async fn has_http_request(agent: &Agent, canister_id: Principal) -> bool {
 /// `error_code` is absent (older replicas) do we fall back to the message, and
 /// then only when it names `http_request`, so a nested "no such method" bubbled
 /// up from an existing handler isn't mistaken for `http_request` being absent.
-fn is_method_not_found(err: &AgentError) -> bool {
-    let reject = match err {
-        AgentError::CertifiedReject { reject, .. }
-        | AgentError::UncertifiedReject { reject, .. } => reject,
-        _ => return false,
-    };
-    match reject.error_code.as_deref() {
+fn is_method_not_found(err: &CallError) -> bool {
+    if !err.is_rejection() {
+        return false;
+    }
+    match err.code() {
         Some(code) => code == "IC0536",
         None => {
-            reject.reject_message.contains("has no query method")
-                && reject.reject_message.contains("http_request")
+            let message = err.message().unwrap_or_default();
+            message.contains("has no query method") && message.contains("http_request")
         }
     }
 }
@@ -235,7 +235,7 @@ fn is_method_not_found(err: &AgentError) -> bool {
 async fn print_canister_urls(
     ctx: &Context,
     environment_selection: &EnvironmentSelection,
-    agent: &Agent,
+    calls: &dyn CanisterCalls,
     canister_names: &[String],
     json: bool,
 ) -> Result<(), anyhow::Error> {
@@ -289,7 +289,7 @@ async fn print_canister_urls(
             continue;
         };
 
-        if has_http_request(agent, canister_id).await {
+        if has_http_request(calls, canister_id).await {
             // A canister carries one friendly name normally, or several when
             // it's a de-duplicated shared dependency canister reached via
             // multiple alias chains — print one URL for each. Fall back to a
@@ -424,20 +424,26 @@ async fn get_candid_ui_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_agent::agent::{RejectCode, RejectResponse};
 
-    fn reject(error_code: Option<&str>, reject_message: &str) -> AgentError {
-        AgentError::UncertifiedReject {
-            reject: RejectResponse {
-                // Both a missing method and a trap surface as `CanisterError`,
-                // so the reject code is intentionally the same across cases —
-                // only `error_code`/message distinguishes them.
-                reject_code: RejectCode::CanisterError,
-                reject_message: reject_message.to_string(),
-                error_code: error_code.map(String::from),
-            },
-            operation: None,
+    /// A rejection, which is all the classifier looks at: both a missing
+    /// method and a trap are rejections, and only the code or the message
+    /// distinguishes them.
+    fn reject(code: Option<&str>, message: &str) -> CallError {
+        CallError::Rejected {
+            canister: Principal::anonymous(),
+            method: "http_request".to_owned(),
+            code: code.map(String::from),
+            message: message.to_owned(),
         }
+    }
+
+    /// A call that reached no verdict at all.
+    fn no_verdict() -> CallError {
+        CallError::failed(
+            Principal::anonymous(),
+            "http_request",
+            std::io::Error::other("connection reset"),
+        )
     }
 
     #[test]
@@ -494,9 +500,9 @@ mod tests {
     }
 
     #[test]
-    fn non_reject_error_is_inconclusive_not_method_not_found() {
-        // Transport/other errors are not evidence the method is absent; the
-        // false-positive bias then treats the canister as a frontend.
-        assert!(!is_method_not_found(&AgentError::InvalidReplicaStatus));
+    fn a_call_with_no_verdict_is_inconclusive_not_method_not_found() {
+        // A call that reached no verdict is not evidence the method is absent;
+        // the false-positive bias then treats the canister as a frontend.
+        assert!(!is_method_not_found(&no_verdict()));
     }
 }

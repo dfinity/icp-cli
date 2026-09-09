@@ -404,6 +404,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -426,8 +428,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     if require_current_settings(args) {
         current_status = Some(
             proxy_management::canister_status(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 CanisterIdRecord { canister_id: cid },
             )
             .await?,
@@ -589,8 +590,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     };
 
     proxy_management::update_settings(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         UpdateSettingsArgs {
             canister_id: cid,
             settings,

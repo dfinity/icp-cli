@@ -40,6 +40,8 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -49,8 +51,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
         .await?;
 
     let snapshots = proxy_management::list_canister_snapshots(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         CanisterIdRecord { canister_id: cid },
     )
     .await?;

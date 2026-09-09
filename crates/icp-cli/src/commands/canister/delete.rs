@@ -38,6 +38,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -51,8 +53,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
             .get_principal()
             .map_err(|e| anyhow!("could not determine caller principal: {e}"))?;
         recover_cycles::recover_cycles_before_delete(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             cid,
             destination,
             crate::artifacts::get_recover_cycles_wasm(),
@@ -62,9 +63,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
 
     // delete_canister requires the canister be stopped; stopping an
     // already-stopped canister is a no-op, and the recovery step leaves it running.
-    proxy_management::stop_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
-        .await?;
-    proxy_management::delete_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
+    proxy_management::stop_canister(calls.as_ref(), CanisterIdRecord { canister_id: cid }).await?;
+    proxy_management::delete_canister(calls.as_ref(), CanisterIdRecord { canister_id: cid })
         .await?;
 
     // Remove canister ID from the id store if it was referenced by name

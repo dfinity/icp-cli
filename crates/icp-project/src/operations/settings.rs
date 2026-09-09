@@ -11,19 +11,18 @@ use crate::{
 };
 use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, EnvironmentVariable, UpdateSettingsArgs,
 };
 use icp_events::TaskOutcome;
 
+use crate::calls::{CanisterCalls, TypedCallError};
 use crate::operations::task::{Reporter, Task};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 use tracing::warn;
 
-use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 #[derive(Debug, Snafu)]
@@ -31,12 +30,12 @@ use super::proxy_management;
 pub enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {
-        source: UpdateOrProxyError,
+        source: TypedCallError,
         canister: Principal,
     },
     #[snafu(display("failed to update canister settings for canister {canister}"))]
     UpdateSettings {
-        source: UpdateOrProxyError,
+        source: TypedCallError,
         canister: Principal,
     },
 }
@@ -74,16 +73,14 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
 /// references that could not be resolved because the referenced canister has not been created
 /// yet. Resolved controllers are always applied immediately.
 pub async fn sync_settings(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     cid: &Principal,
     canister: &Canister,
     ids: &IdMapping,
 ) -> Result<Vec<String>, SyncSettingsOperationError> {
-    let status =
-        proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id: *cid })
-            .await
-            .context(FetchCurrentSettingsSnafu { canister: *cid })?;
+    let status = proxy_management::canister_status(calls, CanisterIdRecord { canister_id: *cid })
+        .await
+        .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
         ref snapshot_visibility,
@@ -213,8 +210,7 @@ pub async fn sync_settings(
     };
 
     proxy_management::update_settings(
-        agent,
-        proxy,
+        calls,
         UpdateSettingsArgs {
             canister_id: *cid,
             settings,
@@ -247,8 +243,7 @@ fn warn_unresolved_controller(controller: &str, canister: &str, environment: &En
 }
 
 pub async fn sync_settings_many(
-    agent: Agent,
-    proxy: Option<Principal>,
+    calls: Arc<dyn CanisterCalls>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
     environment: &Environment,
@@ -259,12 +254,12 @@ pub async fn sync_settings_many(
 
     for (cid, info) in target_canisters {
         let task = reporter.task(Task::update_settings(info.name.clone(), cid));
-        let agent = agent.clone();
+        let calls = calls.clone();
         let ids = ids.clone();
 
         futs.push_back(async move {
             let result = async {
-                let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
+                let unresolved = sync_settings(calls.as_ref(), &cid, &info, &ids).await?;
                 for name in &unresolved {
                     warn_unresolved_controller(name, &info.name, environment);
                 }
@@ -315,8 +310,7 @@ pub enum SyncControllerDependentsError {
 /// `sync_settings` for each so the controller is applied now that it can be resolved.
 pub async fn sync_controller_dependents(
     host: &Host,
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     newly_created_name: &str,
     env: &EnvironmentSelection,
 ) -> Result<(), SyncControllerDependentsError> {
@@ -338,7 +332,7 @@ pub async fn sync_controller_dependents(
         let Some(&cid) = ids.get(name) else {
             continue;
         };
-        match sync_settings(agent, proxy, &cid, canister, &ids).await {
+        match sync_settings(calls, &cid, canister, &ids).await {
             Ok(unresolved) => {
                 for still_unresolved in &unresolved {
                     warn_unresolved_controller(still_unresolved, name, &env_data);

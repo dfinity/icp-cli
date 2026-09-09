@@ -258,7 +258,10 @@ async fn resolve_interface(
         }
     }
     match agent {
-        Some(agent) => Ok(get_candid_type(agent, validated.canister_id).await),
+        Some(agent) => {
+            let calls = icp_app::calls::calls(agent.clone(), None)?;
+            Ok(get_candid_type(calls.as_ref(), validated.canister_id).await)
+        }
         None => Ok(None),
     }
 }

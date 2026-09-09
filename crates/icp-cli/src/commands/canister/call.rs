@@ -8,6 +8,7 @@ use icp_app::context::{Context, NetworkSelection};
 use icp_app::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
 };
+use icp_project::calls::Call;
 use icp_project::host::EnvironmentSelection;
 use icp_project::manifest::ArgsFormat;
 use icp_project::network::{Configuration as NetworkConfiguration, RootKeySpec};
@@ -19,9 +20,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::warn;
 use url::Url;
 
-use icp_project::operations::{
-    create::shell_quote, proxy::update_or_proxy_raw, wasm::extract_candid_service,
-};
+use icp_project::operations::{create::shell_quote, wasm::extract_candid_service};
 
 use crate::{
     call_output::{
@@ -171,7 +170,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
 
     let candid_types = match (&args.candid, &agent) {
         (Some(path), _) => Some(load_candid_from_file(path)?),
-        (None, Some(agent)) => get_candid_type(agent, cid).await,
+        (None, Some(agent)) => {
+            let calls = icp_app::calls::calls(agent.clone(), None)?;
+            get_candid_type(calls.as_ref(), cid).await
+        }
         // Fetching `candid:service` is a network round trip, so signing falls
         // back to the interface of whatever this project last built.
         (None, None) => local_candid_type(ctx, &selections.canister).await,
@@ -294,23 +296,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
     }
 
     let agent = agent.expect("an agent is built whenever the call is submitted");
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+    let call = Call::new(cid, &method, arg_bytes).with_cycles(args.cycles.get());
     let res = if args.query {
-        agent
-            .query(&cid, &method)
-            .with_arg(arg_bytes)
-            .call()
-            .await?
+        calls.query(call).await?
     } else {
-        update_or_proxy_raw(
-            &agent,
-            cid,
-            &method,
-            arg_bytes,
-            args.proxy,
-            None,
-            args.cycles.get(),
-        )
-        .await?
+        calls.update(call).await?
     };
 
     print_response(&res, args.output, declared_method.as_ref(), args.json)

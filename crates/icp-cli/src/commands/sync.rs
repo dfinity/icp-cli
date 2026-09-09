@@ -61,6 +61,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     let agent = ctx
         .get_agent_for_env(&identity_selection, &environment_selection)
         .await?;
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
 
     // Prepare list of canisters with their info for syncing
     let sync_canisters = try_join_all(cnames.iter().map(|name| async {
@@ -95,14 +96,12 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     // so detect a non-Running canister up front and abort with an actionable error
     // instead of letting the plugin's first call fail with a cryptic IC0508
     // ("canister is stopped ... does not have a CallContextManager").
-    let proxy = args.proxy;
     try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
-        let agent = agent.clone();
+        let calls = calls.clone();
         let cid = *cid;
         async move {
             let status = proxy_management::canister_status(
-                &agent,
-                proxy,
+                calls.as_ref(),
                 CanisterIdRecord {
                     canister_id: CanisterId::from(cid),
                 },

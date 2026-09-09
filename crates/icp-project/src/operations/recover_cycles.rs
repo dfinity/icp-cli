@@ -11,8 +11,8 @@
 //! failure to move a *meaningful* balance is a hard error so the user can
 //! retry rather than silently lose cycles.
 
+use crate::calls::{CanisterCalls, TypedCallError};
 use candid::{CandidType, Decode, Encode, Principal};
-use ic_agent::Agent;
 use ic_management_canister_types::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, InstallCodeArgs,
     UpdateSettingsArgs,
@@ -21,7 +21,6 @@ use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
 use tracing::{info, warn};
 
-use super::proxy::UpdateOrProxyError;
 use crate::operations::proxy_management;
 
 /// Total cycle balance (from `canister_status`) at or below which recovery is
@@ -35,7 +34,7 @@ pub enum RecoverCyclesError {
     #[snafu(display("failed to query status of canister {canister_id} before cycle recovery"))]
     QueryStatus {
         canister_id: Principal,
-        source: UpdateOrProxyError,
+        source: TypedCallError,
     },
 
     #[snafu(display(
@@ -43,7 +42,7 @@ pub enum RecoverCyclesError {
     ))]
     UpdateSettings {
         canister_id: Principal,
-        source: UpdateOrProxyError,
+        source: TypedCallError,
     },
 
     #[snafu(display("failed to encode the recovery destination principal"))]
@@ -52,13 +51,13 @@ pub enum RecoverCyclesError {
     #[snafu(display("failed to install the cycle-recovery module on canister {canister_id}"))]
     InstallModule {
         canister_id: Principal,
-        source: UpdateOrProxyError,
+        source: TypedCallError,
     },
 
     #[snafu(display("failed to start canister {canister_id} for cycle recovery"))]
     StartCanister {
         canister_id: Principal,
-        source: UpdateOrProxyError,
+        source: TypedCallError,
     },
 
     #[snafu(display("failed to encode the recover_cycles arguments"))]
@@ -67,7 +66,7 @@ pub enum RecoverCyclesError {
     #[snafu(display("the recover_cycles call to canister {canister_id} failed"))]
     CallRecover {
         canister_id: Principal,
-        source: ic_agent::AgentError,
+        source: crate::calls::CallError,
     },
 
     #[snafu(display("failed to decode the recover_cycles result from canister {canister_id}"))]
@@ -107,13 +106,12 @@ enum RecoverResult {
 /// call; the deposit destination is baked into the install argument, so routing
 /// does not affect where the cycles land.
 pub async fn recover_cycles_before_delete(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     destination: Principal,
     recover_cycles_wasm: &[u8],
 ) -> Result<(), RecoverCyclesError> {
-    let status = proxy_management::canister_status(agent, proxy, CanisterIdRecord { canister_id })
+    let status = proxy_management::canister_status(calls, CanisterIdRecord { canister_id })
         .await
         .context(QueryStatusSnafu { canister_id })?;
     let cycles: u128 = status.cycles.0.try_into().unwrap_or(u128::MAX);
@@ -130,8 +128,7 @@ pub async fn recover_cycles_before_delete(
     // Lower the freezing threshold so the recovery canister sees a larger liquid
     // balance and can deposit close to the full total.
     proxy_management::update_settings(
-        agent,
-        proxy,
+        calls,
         UpdateSettingsArgs {
             canister_id: CanisterId::from(canister_id),
             settings: CanisterSettings {
@@ -153,8 +150,7 @@ pub async fn recover_cycles_before_delete(
 
     let arg = Encode!(&destination).context(EncodeDestinationSnafu)?;
     proxy_management::install_code(
-        agent,
-        proxy,
+        calls,
         InstallCodeArgs {
             mode: CanisterInstallMode::Reinstall,
             canister_id: CanisterId::from(canister_id),
@@ -167,16 +163,18 @@ pub async fn recover_cycles_before_delete(
     .context(InstallModuleSnafu { canister_id })?;
 
     // The canister must be running to accept the recovery update call.
-    proxy_management::start_canister(agent, proxy, CanisterIdRecord { canister_id })
+    proxy_management::start_canister(calls, CanisterIdRecord { canister_id })
         .await
         .context(StartCanisterSnafu { canister_id })?;
 
     // Direct (non-proxied) call: the destination is the install arg, not the
     // caller, so proxy routing is irrelevant here.
-    let bytes = agent
-        .update(&canister_id, "recover_cycles")
-        .with_arg(Encode!().context(EncodeArgsSnafu)?)
-        .call_and_wait()
+    let bytes = calls
+        .update(crate::calls::Call::new(
+            canister_id,
+            "recover_cycles",
+            Encode!().context(EncodeArgsSnafu)?,
+        ))
         .await
         .context(CallRecoverSnafu { canister_id })?;
     let result = Decode!(&bytes, RecoverResult).context(DecodeResultSnafu { canister_id })?;

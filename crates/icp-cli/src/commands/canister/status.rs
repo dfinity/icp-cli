@@ -5,7 +5,8 @@ use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
     canister::Visibility,
-    context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
+    context::{Context, NetworkSelection},
+    host::{CanisterSelection, EnvironmentSelection},
     identity::IdentitySelection,
 };
 use serde::Serialize;
@@ -131,7 +132,7 @@ async fn get_principals(
             };
         }
         None => {
-            let env = ctx.get_environment(environment).await?;
+            let env = ctx.host.get_environment(environment).await?;
             for (_, c) in env.canisters.values() {
                 let cid = ctx
                     .get_canister_id(

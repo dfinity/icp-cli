@@ -15,7 +15,7 @@ use num_traits::ToPrimitive;
 use tracing::{info, warn};
 
 use crate::commands::args::{self, Canister};
-use icp::context::CanisterSelection;
+use icp::host::CanisterSelection;
 use icp::operations::canister_migration::{
     get_subnet_for_canister, migrate_canister, migration_status,
 };

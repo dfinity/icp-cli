@@ -21,7 +21,7 @@ pub(crate) struct ListArgs {
 
 pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::Error> {
     let environment_selection = args.environment.clone().into();
-    let env = ctx.get_environment(&environment_selection).await?;
+    let env = ctx.host.get_environment(&environment_selection).await?;
     let canisters = env.canisters.keys().cloned().collect();
     if args.json {
         serde_json::to_writer(stdout(), &JsonList { canisters })?;

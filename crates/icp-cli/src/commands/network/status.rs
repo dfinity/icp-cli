@@ -1,9 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
-use icp::{
-    context::Context,
-    network::{Configuration, RootKeySource},
-};
+use icp::network::{Configuration, RootKeySource};
+use icp_app::context::Context;
 use serde::Serialize;
 
 use super::args::NetworkOrEnvironmentArgs;
@@ -69,7 +67,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     let status = match &network.configuration {
         Configuration::Managed { managed: _ } => {
             // Network directory
-            let nd = ctx.host.network.get_network_directory(&network)?;
+            let nd = ctx.network_dirs.get_network_directory(&network)?;
 
             // Load network descriptor
             let descriptor = nd

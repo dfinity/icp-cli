@@ -455,13 +455,12 @@ async fn build_manifest_canisters(
                     // The template rendered, so an unpinned download is now known
                     // good and safe to cache. Committing only here is what keeps a
                     // bad remote response from becoming sticky.
-                    if let Some(pending) = fetched.pending_cache {
-                        recipe_resolver
-                            .commit(pending)
-                            .await
-                            .context(CacheRecipeSnafu {
+                    if fetched.deferred {
+                        recipe_resolver.commit(recipe, &fetched).await.context(
+                            CacheRecipeSnafu {
                                 recipe_type: recipe.recipe_type.clone(),
-                            })?;
+                            },
+                        )?;
                     }
 
                     // The manifest's own sync steps run after the recipe's.
@@ -1662,7 +1661,7 @@ mod recipe_sync_tests {
         async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
             Ok(Fetched {
                 template: self.0.to_owned(),
-                pending_cache: None,
+                deferred: false,
             })
         }
     }

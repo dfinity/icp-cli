@@ -1,59 +1,74 @@
 //! Recipe resolution, split into two stages.
 //!
-//! [`fetch`] retrieves a recipe's Handlebars template — reading a local file, or
-//! downloading a remote URL or registry recipe — and returns the raw template
-//! text. [`render`] turns that text into concrete build/sync steps. The first
-//! stage does I/O and nothing else; the second is a pure function.
+//! [`Resolve`] retrieves a recipe's Handlebars template — reading a local file,
+//! or downloading a remote URL or registry recipe — and returns the raw
+//! template text. [`render`] turns that text into concrete build/sync steps.
+//! The first stage does I/O and nothing else; the second is a pure function.
 //!
-//! The [`Resolve`] seam therefore covers only the fetching half, so a caller that
-//! already has a template (or must not touch the network) can render without
-//! going through a resolver at all.
+//! The seam therefore covers only the fetching half, so a caller that already
+//! has a template (or must not touch the network) can render without going
+//! through a resolver at all.
 //!
 //! Caching a download is a third step, because whether a template is worth
-//! keeping is not known until it renders. A download that carried a `sha256` is
-//! cached during the fetch — the checksum already proves the bytes are the ones
-//! that were asked for. An *unpinned* download is held back as a
-//! [`PendingCache`] and only committed by the caller once rendering succeeds, so
-//! that one bad remote response cannot become sticky in the cache. The full
-//! sequence is therefore fetch → render → [`Resolve::commit`].
+//! keeping is not known until it renders: one bad remote response must not
+//! become sticky in the cache. A resolver that wants to cache says so by
+//! returning [`Fetched::deferred`], and the caller calls
+//! [`Resolve::commit`] once rendering has succeeded. What is then written, and
+//! where, is the resolver's own business — nothing about a cache crosses this
+//! trait.
 
 use async_trait::async_trait;
-use snafu::prelude::*;
+use snafu::Snafu;
 
 use crate::manifest::recipe::Recipe;
 
-pub mod fetch;
 pub mod render;
 
-pub use fetch::{Fetched, PendingCache};
 pub use render::{RecipeContext, RenderRecipeError, render_recipe};
 
-/// Retrieves the recipe templates a project references.
-///
-/// Only *fetching* is behind this trait: rendering a fetched template into build
-/// and sync steps is [`render_recipe`], which needs no I/O and so needs no seam.
-#[async_trait]
-pub trait Resolve: Sync + Send {
-    /// Fetch the Handlebars template for `recipe`, returning its raw source and
-    /// any cache write held back until the template is known to render.
-    async fn resolve(&self, recipe: &Recipe) -> Result<Fetched, ResolveError>;
+/// A recipe template, as retrieved by a [`Resolve`].
+pub struct Fetched {
+    /// Raw Handlebars template source.
+    pub template: String,
 
-    /// Write a held-back download to the cache, now that it has rendered.
-    ///
-    /// Defaults to doing nothing: only [`fetch::RecipeFetcher`] caches, and only
-    /// it can construct the [`PendingCache`] that reaches this method, so a
-    /// resolver that never defers a write never has one to commit.
-    async fn commit(&self, pending: PendingCache) -> Result<(), ResolveError> {
-        let _ = pending;
-        Ok(())
+    /// Whether the resolver is holding work back until the template is known
+    /// to render. A resolver that caches nothing leaves this `false` and is
+    /// never asked to commit.
+    pub deferred: bool,
+}
+
+/// A recipe template could not be retrieved or could not be cached.
+///
+/// Fetching one may mean an HTTP request and a write to a cache outside the
+/// project. This layer knows only that it can fail, so the cause is carried
+/// whole and displayed as itself.
+#[derive(Debug, Snafu)]
+#[snafu(display("{source}"))]
+pub struct ResolveError {
+    pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
+}
+
+impl ResolveError {
+    /// Wraps an implementation's own error for the trait boundary.
+    pub fn new(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            source: Box::new(source),
+        }
     }
 }
 
-#[derive(Debug, Snafu)]
-pub enum ResolveError {
-    #[snafu(display("failed to fetch recipe template"))]
-    Fetch { source: fetch::RecipeFetchError },
+/// Retrieves the recipe templates a project references.
+#[async_trait]
+pub trait Resolve: Sync + Send {
+    /// Fetch the Handlebars template for `recipe`.
+    async fn resolve(&self, recipe: &Recipe) -> Result<Fetched, ResolveError>;
 
-    #[snafu(display("failed to cache recipe template"))]
-    Commit { source: fetch::RecipeFetchError },
+    /// Let the resolver finish whatever it deferred, now that the template it
+    /// returned has rendered.
+    ///
+    /// Defaults to doing nothing, for a resolver that never defers.
+    async fn commit(&self, recipe: &Recipe, fetched: &Fetched) -> Result<(), ResolveError> {
+        let _ = (recipe, fetched);
+        Ok(())
+    }
 }

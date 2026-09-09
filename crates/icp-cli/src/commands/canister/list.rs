@@ -1,7 +1,7 @@
 use std::io::stdout;
 
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::options::EnvironmentOpt;

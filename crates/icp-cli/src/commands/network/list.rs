@@ -1,5 +1,5 @@
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// List all networks configured in the project
 #[derive(Args, Debug)]

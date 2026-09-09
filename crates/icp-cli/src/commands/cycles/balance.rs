@@ -3,14 +3,14 @@ use std::io::stdout;
 use bigdecimal::BigDecimal;
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use icp::operations::token::TokenAmount;
-use icp::operations::token::balance::get_raw_balance;
+use icp_app::operations::token::TokenAmount;
+use icp_app::operations::token::balance::get_raw_balance;
 
 /// Display the cycles balance
 #[derive(Args, Clone, Debug)]

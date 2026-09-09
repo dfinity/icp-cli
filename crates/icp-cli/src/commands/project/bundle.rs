@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
-use icp::context::Context;
 use icp::host::EnvironmentSelection;
 use icp::prelude::*;
+use icp_app::context::Context;
 use tracing::warn;
 
 use icp::operations::bundle::create_bundle;

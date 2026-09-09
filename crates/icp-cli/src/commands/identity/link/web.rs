@@ -13,15 +13,14 @@ use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
 use ic_agent::{Identity as _, export::Principal, identity::BasicIdentity};
-use icp::{
+use icp::{fs::read_to_string, prelude::*};
+use icp_app::{
     context::Context,
-    fs::read_to_string,
     identity::{
         delegation::DelegationChain,
         key::{self, validate_password},
         manifest::IdentityList,
     },
-    prelude::*,
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::RngExt as _;
@@ -164,7 +163,7 @@ pub(crate) enum WebAuthError {
 
     #[snafu(display("failed to load identity list"))]
     LoadIdentityList {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: icp_app::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(display("failed to read storage password file"))]

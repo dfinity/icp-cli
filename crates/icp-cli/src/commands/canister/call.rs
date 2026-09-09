@@ -4,16 +4,14 @@ use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use clap::{Args, ValueHint};
 use ic_agent::agent::EffectiveId;
+use icp::host::EnvironmentSelection;
 use icp::manifest::ArgsFormat;
 use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
 use icp::parsers::{CyclesAmount, DurationAmount};
 use icp::prelude::*;
-use icp::signed_message::{
+use icp_app::context::{Context, NetworkSelection};
+use icp_app::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
-};
-use icp::{
-    context::{Context, NetworkSelection},
-    host::EnvironmentSelection,
 };
 use std::io::{self, Write};
 use std::str::FromStr;

@@ -33,7 +33,7 @@ fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
 #[derive(Debug, Snafu)]
 pub enum PluginError {
     #[snafu(transparent)]
-    Wasm { source: wasm::WasmError },
+    Wasm { source: wasm::FetchError },
 
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },

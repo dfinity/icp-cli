@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use clap::{Args, Subcommand};
-use icp::{
+use icp_app::{
     context::Context,
     settings::{Settings, UpdateCheck},
 };

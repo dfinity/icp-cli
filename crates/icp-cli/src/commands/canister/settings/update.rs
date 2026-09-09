@@ -10,8 +10,9 @@ use ic_management_canister_types::{
 };
 use icp::ProjectLoadError;
 use icp::canister::Visibility;
+use icp::host::CanisterSelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
-use icp::{context::Context, host::CanisterSelection};
+use icp_app::context::Context;
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 

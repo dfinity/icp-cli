@@ -5,13 +5,12 @@ use std::{
 
 use clap::{Args, ValueHint};
 use ic_agent::{Identity as _, export::Principal, identity::Delegation as AgentDelegation};
-use icp::{
+use icp::{fs::read_to_string, prelude::*};
+use icp_app::{
     context::{Context, GetIdentityError},
-    fs::read_to_string,
     identity::delegation::{
         Delegation as WireDelegation, DelegationChain, SignedDelegation as WireSignedDelegation,
     },
-    prelude::*,
 };
 use pem::Pem;
 use snafu::{OptionExt, ResultExt, Snafu};

@@ -1,0 +1,86 @@
+[package]
+name = "icp-app"
+version.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+publish.workspace = true
+
+[features]
+# `clap::ValueEnum` derives on the settings/identity enums used as CLI value
+# types. Enabled by `icp-cli`.
+clap = ["dep:clap", "icp/clap"]
+# Exposes this crate's mocks, as `icp`'s own feature does for its seams.
+test-util = ["icp/test-util"]
+
+[dependencies]
+async-dropper = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+backoff = { workspace = true }
+bigdecimal = { workspace = true }
+bip32 = { workspace = true }
+bollard = { workspace = true }
+camino = { workspace = true }
+camino-tempfile = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true, optional = true }
+crypto-bigint = { workspace = true }
+directories = { workspace = true }
+dunce = { workspace = true }
+ed25519-consensus = { workspace = true }
+elliptic-curve = { workspace = true }
+flate2 = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+hybrid-array = { workspace = true }
+ic-agent = { workspace = true }
+ic-ed25519 = { workspace = true }
+ic-identity-hsm = { workspace = true }
+ic-ledger-types = { workspace = true }
+ic-management-canister-types = { workspace = true }
+ic-utils = { workspace = true }
+icp = { workspace = true }
+icp-canister-interfaces = { workspace = true }
+icp-events = { workspace = true }
+icrc-ledger-types = { workspace = true }
+itertools = { workspace = true }
+k256 = { workspace = true }
+keyring = { workspace = true }
+notify = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+p256 = { workspace = true }
+pem = { workspace = true }
+phf = { workspace = true }
+pkcs8 = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+scrypt = { workspace = true }
+sec1 = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+snafu = { workspace = true }
+strum = { workspace = true }
+sysinfo = { workspace = true }
+tar = { workspace = true }
+time = { workspace = true }
+tiny-bip39 = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time", "io-util", "io-std", "process", "signal"] }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+wslpath2 = { workspace = true }
+zeroize = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }
+
+[dev-dependencies]
+httptest = { workspace = true }
+icp = { workspace = true, features = ["test-util"] }
+indexmap = { workspace = true }
+indoc = { workspace = true }

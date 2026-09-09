@@ -1,7 +1,7 @@
 use clap::Args;
 use ic_agent::export::Principal;
 use ic_management_canister_types::{CanisterIdRecord, DefiniteCanisterSettings};
-use icp::context::Context;
+use icp_app::context::Context;
 use std::fmt::Write;
 
 use icp::operations::proxy_management;

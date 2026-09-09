@@ -29,6 +29,7 @@ pub mod canister;
 pub mod context;
 pub mod directories;
 pub mod fs;
+pub mod host;
 pub mod identity;
 pub mod manifest;
 pub mod network;

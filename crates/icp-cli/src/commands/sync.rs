@@ -4,8 +4,11 @@ use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
-use icp::context::{CanisterSelection, Context, EnvironmentSelection};
 use icp::identity::IdentitySelection;
+use icp::{
+    context::Context,
+    host::{CanisterSelection, EnvironmentSelection},
+};
 use std::collections::BTreeMap;
 use tracing::info;
 
@@ -40,7 +43,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
     // Get environment
-    let env = ctx.get_environment(&environment_selection).await?;
+    let env = ctx.host.get_environment(&environment_selection).await?;
 
     // Determine which canisters to sync
     let cnames = match args.canisters.is_empty() {
@@ -64,9 +67,11 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     // Prepare list of canisters with their info for syncing
     let sync_canisters = try_join_all(cnames.iter().map(|name| async {
         let (canister_path, info) = ctx
+            .host
             .get_canister_and_path_for_env(name, &environment_selection)
             .await?;
         let cid = ctx
+            .host
             .get_canister_id_for_env(
                 &CanisterSelection::Named(name.clone()),
                 &environment_selection,
@@ -121,18 +126,19 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     info!("Syncing canisters:");
 
     let canister_ids: BTreeMap<String, Principal> = ctx
+        .host
         .ids_by_environment(&environment_selection)
         .await?
         .into_iter()
         .collect();
 
     let pkg_cache = ctx.dirs.package_cache()?;
-    let project_dir = ctx.project.load().await?.dir;
-    let urls = ctx.network.urls(&env.network).await?;
+    let project_dir = ctx.host.project.load().await?.dir;
+    let urls = ctx.host.network.urls(&env.network).await?;
 
     rendered(ctx.debug, async |reporter| {
         sync_many(
-            ctx.syncer.clone(),
+            ctx.host.syncer.clone(),
             agent,
             sync_canisters,
             project_dir,

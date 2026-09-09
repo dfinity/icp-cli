@@ -62,7 +62,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
             .await?
     } else {
         // Load project
-        let _ = ctx.project.load().await?;
+        let _ = ctx.host.project.load().await?;
 
         // Convert args to selection and get network
         let selection: Result<_, _> = args.network_selection.clone().into();
@@ -71,7 +71,7 @@ pub(crate) async fn exec(ctx: &Context, args: &PingArgs) -> Result<(), anyhow::E
         // NetworkAccess
         // TODO We might want to expose the ctx.create_agent function that takes a NetworkAccess
         // instead of doing this
-        let access = ctx.network.access(&network).await?;
+        let access = ctx.host.network.access(&network).await?;
         let agent = ctx
             .get_agent_for_url(&IdentitySelection::Anonymous, &access.api_url)
             .await?;

@@ -6,7 +6,8 @@ use ic_agent::{Agent, AgentError};
 use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp::parsers::CyclesAmount;
 use icp::{
-    context::{CanisterSelection, Context, EnvironmentSelection},
+    context::Context,
+    host::{CanisterSelection, EnvironmentSelection},
     identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };
@@ -97,7 +98,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     let environment_selection: EnvironmentSelection = args.environment.0.clone().into();
     let identity_selection: IdentitySelection = args.identity.clone().into();
 
-    let canisters = resolve_targets(ctx, &environment_selection, &args.names).await?;
+    let canisters = resolve_targets(&ctx.host, &environment_selection, &args.names).await?;
 
     // Skip doing any work if no canisters are targeted. Say so: an environment
     // whose `canisters` lists leave out everything in scope is otherwise an
@@ -114,9 +115,16 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
+    // Resolved up front and used for the whole run, including the URLs printed
+    // at the end: one agent means one identity unlock and, for a network whose
+    // root key is fetched, one fetch rather than one per phase.
+    let agent = ctx
+        .get_agent_for_env(&identity_selection, &environment_selection)
+        .await?;
+    let pkg_cache = ctx.dirs.package_cache()?;
+
     let params = DeployParams {
         environment: environment_selection.clone(),
-        identity: identity_selection.clone(),
         canisters: canisters.clone(),
         mode: args.mode.clone(),
         subnet: args.subnet,
@@ -132,7 +140,15 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // command having to await it phase by phase.
     let mut report = DeployReport::default();
     let result = rendered(ctx.debug, async |reporter| {
-        deploy(ctx, &params, reporter, &mut report).await
+        deploy(
+            &ctx.host,
+            &agent,
+            &pkg_cache,
+            &params,
+            reporter,
+            &mut report,
+        )
+        .await
     })
     .await;
 
@@ -147,9 +163,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     }
     result?;
 
-    let agent = ctx
-        .get_agent_for_env(&identity_selection, &environment_selection)
-        .await?;
     print_canister_urls(ctx, &environment_selection, agent, &canisters, args.json).await?;
 
     Ok(())
@@ -228,12 +241,12 @@ async fn print_canister_urls(
 ) -> Result<(), anyhow::Error> {
     use icp::network::custom_domains::{canister_gateway_url, gateway_domain};
 
-    let env = ctx.get_environment(environment_selection).await?;
+    let env = ctx.host.get_environment(environment_selection).await?;
 
     // Get the network URL
     let (http_gateway_url, has_friendly) = match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
-            let access = ctx.network.access(&env.network).await?;
+            let access = ctx.host.network.access(&env.network).await?;
             (access.http_gateway_url.clone(), access.use_friendly_domains)
         }
         NetworkConfiguration::Connected { connected } => {
@@ -253,6 +266,7 @@ async fn print_canister_urls(
 
     for name in canister_names {
         let canister_id = match ctx
+            .host
             .get_canister_id_for_env(
                 &CanisterSelection::Named(name.clone()),
                 environment_selection,
@@ -386,12 +400,12 @@ async fn get_candid_ui_id(
     ctx: &Context,
     environment_selection: &EnvironmentSelection,
 ) -> Option<Principal> {
-    let env = ctx.get_environment(environment_selection).await.ok()?;
+    let env = ctx.host.get_environment(environment_selection).await.ok()?;
 
     match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
             // Try to get the candid UI ID from the network descriptor
-            let nd = ctx.network.get_network_directory(&env.network).ok()?;
+            let nd = ctx.host.network.get_network_directory(&env.network).ok()?;
             if let Ok(Some(desc)) = nd.load_network_descriptor().await
                 && let Some(candid_ui) = desc.candid_ui_canister_id
             {

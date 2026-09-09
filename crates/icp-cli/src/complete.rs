@@ -77,7 +77,7 @@ fn project() -> Option<&'static Project> {
     static PROJECT: OnceLock<Option<Project>> = OnceLock::new();
 
     PROJECT
-        .get_or_init(|| block_on(context()?.project.load())?.ok())
+        .get_or_init(|| block_on(context()?.host.project.load())?.ok())
         .as_ref()
 }
 

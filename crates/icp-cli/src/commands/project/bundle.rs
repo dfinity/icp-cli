@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
-use icp::context::{Context, EnvironmentSelection};
+use icp::context::Context;
+use icp::host::EnvironmentSelection;
 use icp::prelude::*;
 use tracing::warn;
 
@@ -32,9 +33,14 @@ pub(crate) struct BundleArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow::Error> {
-    let project = ctx.project.load().await.context("failed to load project")?;
+    let project = ctx
+        .host
+        .project
+        .load()
+        .await
+        .context("failed to load project")?;
     let environment_selection = EnvironmentSelection::Named(args.environment.clone());
-    let env = ctx.get_environment(&environment_selection).await?;
+    let env = ctx.host.get_environment(&environment_selection).await?;
 
     let canisters: Vec<_> = project.canisters.into_values().collect();
     let selected: HashSet<String> = env.canisters.keys().cloned().collect();
@@ -52,8 +58,8 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
             canisters,
             &selected,
             &args.environment,
-            ctx.builder.clone(),
-            ctx.artifacts.clone(),
+            ctx.host.builder.clone(),
+            ctx.host.artifacts.clone(),
             &pkg_cache,
             reporter,
             &args.output,

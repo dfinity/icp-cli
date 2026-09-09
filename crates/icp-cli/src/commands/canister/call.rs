@@ -4,13 +4,16 @@ use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use clap::{Args, ValueHint};
 use ic_agent::agent::EffectiveId;
-use icp::context::{Context, EnvironmentSelection, NetworkSelection};
 use icp::manifest::ArgsFormat;
 use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
 use icp::parsers::{CyclesAmount, DurationAmount};
 use icp::prelude::*;
 use icp::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
+};
+use icp::{
+    context::{Context, NetworkSelection},
+    host::EnvironmentSelection,
 };
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -505,7 +508,7 @@ async fn resolve_network_offline(
         | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
             bail!("You can't specify both an environment and a network")
         }
-        (_, NetworkSelection::Default) => ctx.get_environment(environment).await?.network,
+        (_, NetworkSelection::Default) => ctx.host.get_environment(environment).await?.network,
         (EnvironmentSelection::Default, _) => ctx.get_network(network).await?,
     };
 
@@ -525,7 +528,7 @@ async fn resolve_network_offline(
         // A managed network's root key comes out of the descriptor this machine
         // wrote when it started the network: a local file, not a request.
         NetworkConfiguration::Managed { .. } => {
-            let access = ctx.network.access(&net).await?;
+            let access = ctx.host.network.access(&net).await?;
             Ok((access.api_url, RootKeySpec::Explicit(access.root_key)))
         }
     }
@@ -550,11 +553,11 @@ fn floor_to_minute(t: OffsetDateTime) -> OffsetDateTime {
 /// by principal rather than by name, simply yields nothing.
 async fn local_candid_type(
     ctx: &Context,
-    canister: &icp::context::CanisterSelection,
+    canister: &icp::host::CanisterSelection,
 ) -> Option<CanisterInterface> {
-    let icp::context::CanisterSelection::Named(name) = canister else {
+    let icp::host::CanisterSelection::Named(name) = canister else {
         return None;
     };
-    let wasm = ctx.artifacts.lookup(name).await.ok()?;
+    let wasm = ctx.host.artifacts.lookup(name).await.ok()?;
     CanisterInterface::from_text(extract_candid_service(&wasm)?).ok()
 }

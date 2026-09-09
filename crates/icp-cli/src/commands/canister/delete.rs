@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::{CanisterSelection, Context};
+use icp::{context::Context, host::CanisterSelection};
 
 use icp::operations::{proxy_management, recover_cycles};
 
@@ -68,9 +68,12 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
 
     // Remove canister ID from the id store if it was referenced by name
     if let CanisterSelection::Named(canister_name) = &selections.canister {
-        ctx.remove_canister_id_for_env(canister_name, &selections.environment)
+        ctx.host
+            .remove_canister_id_for_env(canister_name, &selections.environment)
             .await?;
-        ctx.update_custom_domains(&selections.environment).await;
+        ctx.host
+            .update_custom_domains(&selections.environment)
+            .await;
     }
 
     Ok(())

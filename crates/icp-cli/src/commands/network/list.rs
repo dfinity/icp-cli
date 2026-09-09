@@ -7,7 +7,7 @@ pub(crate) struct ListArgs;
 
 pub(crate) async fn exec(ctx: &Context, _: &ListArgs) -> Result<(), anyhow::Error> {
     // Load project
-    let pm = ctx.project.load().await?;
+    let pm = ctx.host.project.load().await?;
 
     for e in pm.networks.keys() {
         println!("{e}");

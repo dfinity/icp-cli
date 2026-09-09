@@ -10,8 +10,8 @@ use ic_management_canister_types::{
 };
 use icp::ProjectLoadError;
 use icp::canister::Visibility;
-use icp::context::{CanisterSelection, Context};
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
+use icp::{context::Context, host::CanisterSelection};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
@@ -412,7 +412,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         .await?;
 
     let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
-        match ctx.project.load().await {
+        match ctx.host.project.load().await {
             Ok(p) => p.canisters[name].1.settings.clone(),
             Err(ProjectLoadError::Locate { .. }) => <_>::default(),
             Err(e) => bail!("failed to load project: {}", e),

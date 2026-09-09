@@ -24,13 +24,10 @@ use icp_events::TaskOutcome;
 use itertools::Itertools;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::context::{
-    CanisterSelection, Context, EnvironmentSelection, GetAgentForEnvError,
-    GetCanisterIdForEnvError, GetEnvCanisterError, GetEnvironmentError, GetIdsByEnvironmentError,
-    SetCanisterIdForEnvError,
+use crate::host::{
+    CanisterSelection, EnvironmentSelection, GetCanisterIdForEnvError, GetEnvCanisterError,
+    GetEnvironmentError, GetIdsByEnvironmentError, Host, SetCanisterIdForEnvError,
 };
-use crate::fs::lock::LockError;
-use crate::identity::IdentitySelection;
 use crate::operations::{
     binding_env_vars::{SetBindingEnvVarsManyError, set_binding_env_vars_many},
     build::{BuildManyError, build_many},
@@ -48,6 +45,7 @@ use crate::operations::{
     sync::{SyncOperationError, sync_many},
     task::{Reporter, Task, TaskReporter, notice},
 };
+use crate::package::PackageCache;
 use crate::project::ArgsField;
 use crate::{CanisterArgsToBytesError, ProjectLoadError};
 
@@ -63,16 +61,10 @@ pub enum DeployError {
     ResolveBuildTargets { source: GetEnvCanisterError },
 
     #[snafu(transparent)]
-    PackageCache { source: LockError },
-
-    #[snafu(transparent)]
     Build { source: BuildManyError },
 
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(transparent)]
-    GetAgent { source: GetAgentForEnvError },
 
     #[snafu(transparent)]
     GetIds { source: GetIdsByEnvironmentError },
@@ -162,6 +154,9 @@ pub enum ResolveTargetsError {
     LoadEnvironment { source: GetEnvironmentError },
 
     #[snafu(transparent)]
+    ResolveNamedCanister { source: GetEnvCanisterError },
+
+    #[snafu(transparent)]
     LoadProject { source: ProjectLoadError },
 
     #[snafu(transparent)]
@@ -179,7 +174,6 @@ pub enum ResolveTargetsError {
 /// command so this layer never touches clap.
 pub struct DeployParams {
     pub environment: EnvironmentSelection,
-    pub identity: IdentitySelection,
     /// Canisters to deploy, already resolved from the command line (or from
     /// the environment when none were named).
     pub canisters: Vec<String>,
@@ -210,9 +204,14 @@ pub struct DeployReport {
 
 /// Run a full deploy, reporting progress as one task tree.
 ///
+/// `agent` speaks for the identity the caller resolved: which identity that is,
+/// and how its key was unlocked, is not this layer's business.
+///
 /// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
-    ctx: &Context,
+    host: &Host,
+    agent: &Agent,
+    pkg_cache: &PackageCache,
     params: &DeployParams,
     reporter: &Reporter,
     report: &mut DeployReport,
@@ -223,30 +222,26 @@ pub async fn deploy(
     let canisters_to_build = try_join_all(
         cnames
             .iter()
-            .map(|name| ctx.get_canister_and_path_for_env(name, environment_selection)),
+            .map(|name| host.get_canister_and_path_for_env(name, environment_selection)),
     )
     .await?;
 
     // Build
-    let pkg_cache = ctx.dirs.package_cache()?;
     let phase = reporter.task(Task::phase("Building canisters:"));
     let result = build_many(
         canisters_to_build,
         environment_selection.name(),
-        ctx.builder.clone(),
-        ctx.artifacts.clone(),
-        &pkg_cache,
+        host.builder.clone(),
+        host.artifacts.clone(),
+        pkg_cache,
         &phase.reporter(),
     )
     .await;
     finish(&phase, result)?;
 
     // Create any canisters that do not exist yet
-    let env = ctx.get_environment(environment_selection).await?;
-    let agent = ctx
-        .get_agent_for_env(&params.identity, environment_selection)
-        .await?;
-    let existing_canisters = ctx.ids_by_environment(environment_selection).await?;
+    let env = host.get_environment(environment_selection).await?;
+    let existing_canisters = host.ids_by_environment(environment_selection).await?;
     let canisters_to_create = cnames
         .iter()
         .filter(|name| !existing_canisters.contains_key(*name))
@@ -262,9 +257,9 @@ pub async fn deploy(
     } else {
         let phase = reporter.task(Task::phase("Creating canisters:"));
         let result = create_canisters(
-            ctx,
+            host,
             params,
-            &agent,
+            agent,
             &env,
             &canisters_to_create,
             existing_canisters.into_values().collect(),
@@ -275,14 +270,14 @@ pub async fn deploy(
         finish(&phase, result)?;
     }
 
-    ctx.update_custom_domains(environment_selection).await;
+    host.update_custom_domains(environment_selection).await;
 
     // Wire canister ids into each other's environment variables, then apply
     // manifest settings.
-    let env = ctx.get_environment(environment_selection).await?;
+    let env = host.get_environment(environment_selection).await?;
     let env_canisters = &env.canisters;
     let target_canisters = try_join_all(cnames.iter().map(|name| async move {
-        let cid = ctx
+        let cid = host
             .get_canister_id_for_env(
                 &CanisterSelection::Named(name.clone()),
                 environment_selection,
@@ -295,7 +290,7 @@ pub async fn deploy(
     }))
     .await?;
 
-    let canister_list = ctx.ids_by_environment(environment_selection).await?;
+    let canister_list = host.ids_by_environment(environment_selection).await?;
 
     let phase = reporter.task(Task::phase("Setting environment variables:"));
     let result = set_binding_env_vars_many(
@@ -325,7 +320,7 @@ pub async fn deploy(
     let canisters = try_join_all(cnames.iter().map(|name| {
         let agent = agent.clone();
         async move {
-            let cid = ctx
+            let cid = host
                 .get_canister_id_for_env(
                     &CanisterSelection::Named(name.clone()),
                     environment_selection,
@@ -336,7 +331,7 @@ pub async fn deploy(
                 resolve_install_mode_and_status(&agent, params.proxy, name, &cid, &params.mode)
                     .await?;
 
-            let env = ctx.get_environment(environment_selection).await?;
+            let env = host.get_environment(environment_selection).await?;
             let (_canister_path, canister_info) = env
                 .get_canister_info(name)
                 .map_err(|message| DeployError::CanisterNotInEnvironment { message })?;
@@ -382,7 +377,7 @@ pub async fn deploy(
             canisters
                 .iter()
                 .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
-            ctx.artifacts.clone(),
+            host.artifacts.clone(),
             &phase.reporter(),
         )
         .await;
@@ -395,13 +390,13 @@ pub async fn deploy(
         agent.clone(),
         params.proxy,
         canisters,
-        ctx.artifacts.clone(),
+        host.artifacts.clone(),
         &phase.reporter(),
     )
     .await;
     finish(&phase, result)?;
 
-    sync(ctx, params, &agent, reporter).await?;
+    sync(host, pkg_cache, params, agent, reporter).await?;
 
     Ok(())
 }
@@ -412,7 +407,7 @@ pub async fn deploy(
 /// anything that could still fail, so a partial run still reports what it made.
 #[allow(clippy::too_many_arguments)]
 async fn create_canisters(
-    ctx: &Context,
+    host: &Host,
     params: &DeployParams,
     agent: &Agent,
     env: &crate::Environment,
@@ -473,14 +468,14 @@ async fn create_canisters(
                 // Scoped to this canister rather than the loop, so a failure here
                 // holds up only its own follow-up work.
                 let result = async {
-                    ctx.set_canister_id_for_env(canister_name, id, &params.environment)
+                    host.set_canister_id_for_env(canister_name, id, &params.environment)
                         .await?;
                     // Apply controller settings for any already-created canister that
                     // was waiting for this one to exist (e.g. created via
                     // `icp canister create`). Skipped when the id never reached the
                     // store, since that is what a dependent would be looking it up in.
                     sync_controller_dependents(
-                        ctx,
+                        host,
                         agent,
                         params.proxy,
                         canister_name,
@@ -511,17 +506,18 @@ async fn create_canisters(
 
 /// Run the sync steps of every canister that has any.
 async fn sync(
-    ctx: &Context,
+    host: &Host,
+    pkg_cache: &PackageCache,
     params: &DeployParams,
     agent: &Agent,
     reporter: &Reporter,
 ) -> Result<(), DeployError> {
     let environment_selection = &params.environment;
-    let env = ctx.get_environment(environment_selection).await?;
+    let env = host.get_environment(environment_selection).await?;
 
     let env_canisters = &env.canisters;
     let sync_canisters = try_join_all(params.canisters.iter().map(|name| async move {
-        let cid = ctx
+        let cid = host
             .get_canister_id_for_env(
                 &CanisterSelection::Named(name.clone()),
                 environment_selection,
@@ -588,19 +584,18 @@ async fn sync(
     // canister) will fail because the user's identity lacks the required permissions.
     // The fix is to make a proxy call to the frontend canister's `grant_permission`
     // method to permit the user identity to upload assets directly before syncing.
-    let canister_ids: BTreeMap<String, Principal> = ctx
+    let canister_ids: BTreeMap<String, Principal> = host
         .ids_by_environment(environment_selection)
         .await?
         .into_iter()
         .collect();
 
-    let pkg_cache = ctx.dirs.package_cache()?;
-    let project_dir = ctx.project.load().await?.dir;
-    let urls = ctx.network.urls(&env.network).await?;
+    let project_dir = host.project.load().await?.dir;
+    let urls = host.network.urls(&env.network).await?;
 
     let phase = reporter.task(Task::phase("Syncing canisters:"));
     let result = sync_many(
-        ctx.syncer.clone(),
+        host.syncer.clone(),
         agent.clone(),
         sync_canisters,
         project_dir,
@@ -609,7 +604,7 @@ async fn sync(
         urls,
         canister_ids,
         proxy,
-        &pkg_cache,
+        pkg_cache,
         &phase.reporter(),
     )
     .await;
@@ -633,11 +628,11 @@ fn finish<T, E: std::fmt::Display>(phase: &TaskReporter, result: Result<T, E>) -
 /// Resolve the canisters a deploy targets, and check that a member-scoped
 /// deploy is not about to wire canisters to dependencies that do not exist.
 pub async fn resolve_targets(
-    ctx: &Context,
+    host: &Host,
     environment_selection: &EnvironmentSelection,
     named: &[String],
 ) -> Result<Vec<String>, ResolveTargetsError> {
-    let env = ctx.get_environment(environment_selection).await?;
+    let env = host.get_environment(environment_selection).await?;
 
     let mut member_scoped = false;
     let cnames: Vec<String> = if named.is_empty() {
@@ -645,8 +640,8 @@ pub async fn resolve_targets(
         // command is run inside a vendored member — then scope to that member's
         // own canisters. (The resolved-root notice is emitted centrally during
         // project load.)
-        let project = ctx.project.load().await?;
-        let member_dir = ctx.project.member_dir();
+        let project = host.project.load().await?;
+        let member_dir = host.project.member_dir();
         match crate::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
             Some(scoped) => {
                 member_scoped = true;
@@ -655,6 +650,15 @@ pub async fn resolve_targets(
             None => env.canisters.keys().cloned().collect(),
         }
     } else {
+        // Check the names while this is still a pure question about the
+        // project. The build phase would reject a typo too, but only after the
+        // caller has resolved an identity and an endpoint — so on a network
+        // that is not running, the network would answer first and the typo
+        // would never get mentioned.
+        for name in named {
+            host.get_canister_and_path_for_env(name, environment_selection)
+                .await?;
+        }
         named.to_vec()
     };
 
@@ -665,7 +669,7 @@ pub async fn resolve_targets(
     // deploying an unwired canister.
     if member_scoped {
         let scoped: HashSet<&str> = cnames.iter().map(String::as_str).collect();
-        let deployed: BTreeMap<String, Principal> = ctx
+        let deployed: BTreeMap<String, Principal> = host
             .ids_by_environment(environment_selection)
             .await?
             .into_iter()

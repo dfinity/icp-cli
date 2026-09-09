@@ -1,7 +1,7 @@
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
-use icp::context::{CanisterSelection, Context};
+use icp::{context::Context, host::CanisterSelection};
 use tracing::warn;
 
 use crate::commands::args::CanisterCommandArgs;
@@ -24,6 +24,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     };
 
     let (_, canister) = ctx
+        .host
         .get_canister_and_path_for_env(name, &selections.environment)
         .await?;
 
@@ -42,6 +43,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         )
         .await?;
     let ids = ctx
+        .host
         .ids_by_environment(&selections.environment)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;

@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
+use candid::Principal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use snafu::prelude::*;
@@ -344,6 +345,25 @@ pub enum AccessError {
     GetNetworkAccess { source: GetNetworkAccessError },
 }
 
+/// One environment's friendly-name mappings, as collected from the project.
+///
+/// The project layer knows which canisters have ids and what they are called;
+/// which of those a running network actually serves, and where the mapping is
+/// written, is this layer's business. So the project hands over every
+/// environment it has and lets [`Access::publish_friendly_domains`] pick.
+#[derive(Clone, Debug)]
+pub struct FriendlyDomains {
+    /// Environment the mappings belong to.
+    pub environment: String,
+
+    /// Name of the network that environment targets.
+    pub network: String,
+
+    /// `(friendly name, canister id)`, one entry per friendly name — so several
+    /// for a de-duplicated shared dependency canister.
+    pub entries: Vec<(String, Principal)>,
+}
+
 #[async_trait]
 pub trait Access: Sync + Send {
     fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError>;
@@ -353,6 +373,15 @@ pub trait Access: Sync + Send {
     /// key, so a caller that only needs an endpoint does not make a connected
     /// network fetch one.
     async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError>;
+
+    /// Rewrites the friendly-domain mapping a running managed network serves.
+    ///
+    /// Best-effort by contract: a network that is not running, or is not
+    /// managed, or whose mapping cannot be written, is not an error — this is
+    /// called on paths (canister creation, deletion) that must not fail because
+    /// a convenience URL is stale. Implementations that serve no friendly
+    /// domains need not override it.
+    async fn publish_friendly_domains(&self, _network: &Network, _envs: &[FriendlyDomains]) {}
 }
 
 pub struct Accessor {
@@ -407,6 +436,47 @@ impl Access for Accessor {
                 api_url: cfg.api_url.clone(),
                 http_gateway_url: cfg.http_gateway_url.clone(),
             }),
+        }
+    }
+
+    async fn publish_friendly_domains(&self, network: &Network, envs: &[FriendlyDomains]) {
+        let Configuration::Managed { .. } = &network.configuration else {
+            return;
+        };
+        let Ok(nd) = self.get_network_directory(network) else {
+            return;
+        };
+        let Ok(Some(desc)) = nd.load_network_descriptor().await else {
+            return;
+        };
+        let Some(status_dir) = &desc.status_dir else {
+            return;
+        };
+        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
+        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
+            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
+            return;
+        };
+        let Some(domain) = custom_domains::gateway_domain(&gateway_url) else {
+            return;
+        };
+
+        // The descriptor names the network the gateway is actually serving, so
+        // it — not the environment's own view — decides which environments share
+        // this network and therefore this mapping file.
+        let env_entries: BTreeMap<String, Vec<(String, Principal)>> = envs
+            .iter()
+            .filter(|e| e.network == desc.network)
+            .map(|e| (e.environment.clone(), e.entries.clone()))
+            .collect();
+
+        let extra: Vec<_> = custom_domains::ii_custom_domain_entry(desc.ii, domain)
+            .into_iter()
+            .collect();
+        if let Err(e) =
+            custom_domains::write_custom_domains(status_dir, domain, &env_entries, &extra)
+        {
+            tracing::warn!("Failed to update custom domains: {e}");
         }
     }
 }

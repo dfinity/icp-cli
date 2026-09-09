@@ -2,15 +2,15 @@ use bip39::{Language, Mnemonic};
 use clap::{ArgGroup, Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::identity::{
+use icp::{
+    fs::{json, read_to_string},
+    prelude::*,
+};
+use icp_app::identity::{
     delegation::DelegationChain,
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_key_from_seed_slip10,
-};
-use icp::{
-    fs::{json, read_to_string},
-    prelude::*,
 };
 use itertools::Itertools;
 use k256::Secp256k1;
@@ -24,7 +24,7 @@ use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tracing::{info, warn};
 
-use icp::context::Context;
+use icp_app::context::Context;
 
 use crate::commands::identity::StorageMode;
 

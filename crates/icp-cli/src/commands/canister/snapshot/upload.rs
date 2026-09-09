@@ -3,8 +3,8 @@ use std::io::stdout;
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::{Args, ValueHint};
-use icp::context::Context;
 use icp::prelude::*;
+use icp_app::context::Context;
 use serde::Serialize;
 use tracing::info;
 
@@ -14,7 +14,7 @@ use super::SnapshotId;
 use crate::commands::args;
 use crate::render::rendered_task;
 use icp::operations::misc::format_timestamp;
-use icp::operations::snapshot_transfer::{
+use icp_app::operations::snapshot_transfer::{
     BlobType, SnapshotPaths, SnapshotTransferError, UploadProgress, delete_upload_progress,
     load_metadata, load_upload_progress, save_upload_progress, upload_blob_from_file,
     upload_snapshot_metadata, upload_wasm_chunk,

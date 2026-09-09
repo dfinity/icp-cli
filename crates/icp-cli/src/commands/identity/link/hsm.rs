@@ -1,9 +1,9 @@
 use clap::{Args, ValueHint};
 use dialoguer::Password;
-use icp::{
+use icp::prelude::*;
+use icp_app::{
     context::Context,
     identity::{key::link_hsm_identity, manifest::IdentityList},
-    prelude::*,
 };
 use snafu::{ResultExt, Snafu, ensure};
 use tracing::info;
@@ -88,7 +88,7 @@ pub(crate) enum HsmError {
 
     #[snafu(display("failed to load identity list"))]
     LoadIdentityList {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: icp_app::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(transparent)]
@@ -96,6 +96,6 @@ pub(crate) enum HsmError {
 
     #[snafu(display("failed to link HSM identity"))]
     LinkHsm {
-        source: icp::identity::key::LinkHsmIdentityError,
+        source: icp_app::identity::key::LinkHsmIdentityError,
     },
 }

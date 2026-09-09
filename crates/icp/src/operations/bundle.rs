@@ -191,7 +191,7 @@ pub enum BundleError {
     #[snafu(display("failed to resolve plugin wasm for canister '{canister}'"))]
     ResolvePlugin {
         canister: String,
-        source: wasm::WasmError,
+        source: wasm::FetchError,
     },
 
     #[snafu(display("failed to read plugin wasm for canister '{canister}'"))]

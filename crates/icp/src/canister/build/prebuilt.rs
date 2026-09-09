@@ -8,7 +8,7 @@ use super::Params;
 #[derive(Debug, Snafu)]
 pub enum PrebuiltError {
     #[snafu(transparent)]
-    Wasm { source: wasm::WasmError },
+    Wasm { source: wasm::FetchError },
 
     #[snafu(display("failed to copy wasm to output file"))]
     CopyFile { source: crate::fs::CopyError },

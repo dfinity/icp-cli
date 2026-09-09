@@ -14,11 +14,11 @@ use std::time::Duration;
 use clap::CommandFactory as _;
 use clap_complete::CompleteEnv;
 use clap_complete::engine::CompletionCandidate;
-use icp::context::Context;
-use icp::identity::manifest::IdentityList;
 use icp::network::Configuration;
 use icp::prelude::*;
 use icp::{Environment, Network, Project};
+use icp_app::context::Context;
+use icp_app::identity::manifest::IdentityList;
 
 /// Answer a completion request and exit, if this invocation is one.
 ///
@@ -61,7 +61,7 @@ fn context() -> Option<&'static Context> {
 
     CONTEXT
         .get_or_init(|| {
-            icp::context::initialize(
+            icp_app::context::initialize(
                 std::env::var("ICP_PROJECT_ROOT").ok().map(PathBuf::from),
                 false,
                 Arc::new(|| Err("cannot prompt while completing".to_string())),

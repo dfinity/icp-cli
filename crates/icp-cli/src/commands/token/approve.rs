@@ -4,8 +4,8 @@ use anyhow::Context as _;
 use bigdecimal::BigDecimal;
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
 use icp::parsers::{DurationAmount, parse_token_amount};
+use icp_app::context::Context;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
 use crate::commands::token::format_expiry;
-use icp::operations::token::approve::approve;
+use icp_app::operations::token::approve::approve;
 
 /// Approve a spender to transfer tokens on your behalf (ICRC-2) (default token: icp)
 ///

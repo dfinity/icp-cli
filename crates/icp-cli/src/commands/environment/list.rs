@@ -1,5 +1,5 @@
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// List the environments defined in this project, one per line.
 ///

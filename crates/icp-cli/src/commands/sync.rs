@@ -4,11 +4,9 @@ use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
-use icp::identity::IdentitySelection;
-use icp::{
-    context::Context,
-    host::{CanisterSelection, EnvironmentSelection},
-};
+use icp::host::{CanisterSelection, EnvironmentSelection};
+use icp_app::context::Context;
+use icp_app::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 

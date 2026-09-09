@@ -1,7 +1,7 @@
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::Context;
+use icp_app::context::Context;
 
 use crate::commands::args;
 use icp::operations::proxy_management;

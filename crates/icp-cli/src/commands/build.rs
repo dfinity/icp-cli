@@ -1,7 +1,8 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::{context::Context, host::EnvironmentSelection};
+use icp::host::EnvironmentSelection;
+use icp_app::context::Context;
 
 use tracing::info;
 

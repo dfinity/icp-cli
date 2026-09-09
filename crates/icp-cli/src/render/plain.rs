@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use icp_events::{EventKind, TaskId, TaskOutcome};
 use tracing::{debug, info};
 
-use icp::operations::task::{Event, Widget};
+use icp_project::operations::task::{Event, Widget};
 
 use super::{INDENT, TaskLog, dump_failures};
 

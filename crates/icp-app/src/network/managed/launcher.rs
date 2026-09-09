@@ -10,7 +10,7 @@ use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
 use tracing::{info, warn};
 
 use crate::network::config::ChildLocator;
-use icp::{
+use icp_project::{
     network::{ManagedLauncherConfig, Port},
     prelude::*,
 };
@@ -178,7 +178,7 @@ fn premature_exit_detail(background: bool, stderr_file: &Path) -> String {
     if !background {
         return String::new();
     }
-    match icp::fs::read_to_string(stderr_file) {
+    match icp_project::fs::read_to_string(stderr_file) {
         Ok(contents) => {
             let tail = output_tail(&contents);
             if tail.is_empty() {
@@ -334,7 +334,7 @@ pub enum WaitForFileError {
     },
 
     #[snafu(transparent)]
-    ReadFile { source: icp::fs::IoError },
+    ReadFile { source: icp_project::fs::IoError },
 }
 
 /// Waits for a file to be created and have a full line of content. Call the function before initing the external process,
@@ -378,7 +378,7 @@ pub fn wait_for_single_line_file(
             };
             let event = res.context(ReadEventSnafu { path: &dir })?;
             if event.kind.is_modify() || event.kind.is_create() {
-                match icp::fs::read_to_string(&path) {
+                match icp_project::fs::read_to_string(&path) {
                     Ok(content) => {
                         if content.ends_with('\n') {
                             return Ok(content);
@@ -506,7 +506,7 @@ mod tests {
     fn premature_exit_detail_includes_captured_output() {
         let dir = camino_tempfile::Utf8TempDir::new().unwrap();
         let file = dir.path().join("stderr.log");
-        icp::fs::write(&file, b"Address already in use (os error 48)\n").unwrap();
+        icp_project::fs::write(&file, b"Address already in use (os error 48)\n").unwrap();
         let detail = premature_exit_detail(true, &file);
         assert!(detail.starts_with('\n'));
         assert!(detail.contains("Address already in use"));

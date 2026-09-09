@@ -2,7 +2,7 @@ use indoc::formatdoc;
 use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};
-use icp::{fs::write_string, prelude::*};
+use icp_project::{fs::write_string, prelude::*};
 
 mod common;
 
@@ -61,7 +61,7 @@ async fn canister_link_records_id() {
     let path = mapping_path(&project_dir);
     assert!(path.exists(), "ID mapping file should exist at {path}");
 
-    let mapping = icp::fs::read_to_string(&path).expect("failed to read mapping file");
+    let mapping = icp_project::fs::read_to_string(&path).expect("failed to read mapping file");
     assert!(
         mapping.contains(LINKED_ID),
         "mapping should contain the linked ID, got: {mapping}"
@@ -150,7 +150,8 @@ async fn canister_link_existing_requires_force() {
     // With --force it overwrites the recorded ID.
     link(other_id, true).assert().success();
 
-    let mapping = icp::fs::read_to_string(&mapping_path(&project_dir)).expect("read mapping");
+    let mapping =
+        icp_project::fs::read_to_string(&mapping_path(&project_dir)).expect("read mapping");
     assert!(
         mapping.contains(other_id) && !mapping.contains(LINKED_ID),
         "mapping should hold the forced ID only, got: {mapping}"

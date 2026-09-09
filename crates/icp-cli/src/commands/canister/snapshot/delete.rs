@@ -6,7 +6,7 @@ use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 /// Delete a canister snapshot
 #[derive(Debug, Args)]

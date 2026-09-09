@@ -5,13 +5,13 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::fs;
-use icp::host::CanisterSelection;
-use icp::prelude::*;
 use icp_app::context::Context;
+use icp_project::fs;
+use icp_project::host::CanisterSelection;
+use icp_project::prelude::*;
 use tracing::{info, warn};
 
-use icp::operations::{
+use icp_project::operations::{
     candid_compat::{CandidCompatibility, check_candid_compatibility},
     install::{
         WasmMemoryPersistenceOpt, install_canister, is_eop_canister,

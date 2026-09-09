@@ -9,7 +9,7 @@ use tracing::info;
 
 use super::SnapshotId;
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 /// Restore a canister from a snapshot
 #[derive(Debug, Args)]

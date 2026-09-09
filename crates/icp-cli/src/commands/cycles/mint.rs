@@ -3,8 +3,8 @@ use std::io::stdout;
 use anyhow::bail;
 use bigdecimal::BigDecimal;
 use clap::Args;
-use icp::parsers::{CyclesAmount, parse_token_amount};
 use icp_app::context::Context;
+use icp_project::parsers::{CyclesAmount, parse_token_amount};
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;

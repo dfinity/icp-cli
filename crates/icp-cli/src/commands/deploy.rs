@@ -3,15 +3,15 @@ use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError};
-use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
-use icp::parsers::CyclesAmount;
-use icp::{
+use icp_app::{context::Context, identity::IdentitySelection};
+use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use icp_project::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
+use icp_project::parsers::CyclesAmount;
+use icp_project::{
     agent::LazyAgent,
     host::{CanisterSelection, EnvironmentSelection},
     network::Configuration as NetworkConfiguration,
 };
-use icp_app::{context::Context, identity::IdentitySelection};
-use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
 use tracing::info;
 

@@ -9,8 +9,8 @@
 //! Projects — manifests, building, installing, syncing, deploying — are
 //! [`icp`], which this crate depends on and which does not depend on this one.
 //! The seams that project code reaches the machine through
-//! ([`icp::network::Access`], [`icp::canister::wasm::Fetch`],
-//! [`icp::canister::recipe::Resolve`], [`icp::host::Observe`]) are declared
+//! ([`icp_project::network::Access`], [`icp_project::canister::wasm::Fetch`],
+//! [`icp_project::canister::recipe::Resolve`], [`icp_project::host::Observe`]) are declared
 //! there and implemented here.
 
 pub mod agent;

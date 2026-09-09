@@ -203,7 +203,7 @@ pub(crate) async fn update_check(ctx: &icp_app::context::Context) -> Option<Stri
     let nag_path = ctx.dirs.cli_update_nag_timestamp();
 
     // Throttle to at most once per day
-    if let Ok(contents) = icp::fs::read_to_string(&nag_path)
+    if let Ok(contents) = icp_project::fs::read_to_string(&nag_path)
         && let Ok(ts) = contents.trim().parse::<u64>()
     {
         let then = SystemTime::UNIX_EPOCH + Duration::from_secs(ts);
@@ -218,8 +218,8 @@ pub(crate) async fn update_check(ctx: &icp_app::context::Context) -> Option<Stri
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("since epoch")
         .as_secs();
-    let _ = icp::fs::create_dir_all(nag_path.parent().unwrap());
-    let _ = icp::fs::write(&nag_path, format!("{now}\n").as_bytes());
+    let _ = icp_project::fs::create_dir_all(nag_path.parent().unwrap());
+    let _ = icp_project::fs::write(&nag_path, format!("{now}\n").as_bytes());
 
     let client = reqwest::Client::new();
     dist_check_for_updates(&client, beta).await

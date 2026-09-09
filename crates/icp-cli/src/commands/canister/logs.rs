@@ -5,15 +5,15 @@ use candid::Principal;
 use clap::Args;
 use ic_agent::Agent;
 use ic_management_canister_types::{CanisterLogFilter, CanisterLogRecord, FetchCanisterLogsArgs};
-use icp::signal::stop_signal;
 use icp_app::context::Context;
+use icp_project::signal::stop_signal;
 use itertools::Itertools;
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::select;
 
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 /// Fetch and display canister logs
 #[derive(Debug, Args)]

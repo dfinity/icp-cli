@@ -7,7 +7,7 @@
 //! operation.
 //!
 //! `icp_events` is generic over the task payload and knows nothing about what
-//! is being run; the vocabulary comes from [`icp::operations::task`], where
+//! is being run; the vocabulary comes from [`icp_project::operations::task`], where
 //! each kind of work describes itself. What lives here is only how those
 //! descriptions are drawn on a terminal.
 //!
@@ -17,8 +17,8 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use icp::operations::task::{Failure, Presentation, Task};
 use icp_events::{TaskId, TaskOutcome};
+use icp_project::operations::task::{Failure, Presentation, Task};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
@@ -31,7 +31,7 @@ pub(crate) use interactive::InteractiveRenderer;
 pub(crate) use plain::PlainRenderer;
 pub(crate) use spinner::{ProgressManager, ProgressManagerSettings};
 
-use icp::operations::task::{Event, Reporter, TaskReporter};
+use icp_project::operations::task::{Event, Reporter, TaskReporter};
 
 /// The maximum number of lines to display for a step output
 const MAX_LINES_PER_STEP: usize = 10_000;

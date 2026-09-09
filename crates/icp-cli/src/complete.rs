@@ -14,11 +14,11 @@ use std::time::Duration;
 use clap::CommandFactory as _;
 use clap_complete::CompleteEnv;
 use clap_complete::engine::CompletionCandidate;
-use icp::network::Configuration;
-use icp::prelude::*;
-use icp::{Environment, Network, Project};
 use icp_app::context::Context;
 use icp_app::identity::manifest::IdentityList;
+use icp_project::network::Configuration;
+use icp_project::prelude::*;
+use icp_project::{Environment, Network, Project};
 
 /// Answer a completion request and exit, if this invocation is one.
 ///

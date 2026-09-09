@@ -5,14 +5,14 @@ use snafu::prelude::*;
 use crate::context::Context;
 use crate::directories::{Access as _, Directories};
 use crate::recipe::RecipeFetcher;
-use icp::canister::build::Builder;
-use icp::canister::sync::Syncer;
-use icp::prelude::*;
-use icp::store_artifact::ArtifactStore;
+use icp_project::canister::build::Builder;
+use icp_project::canister::sync::Syncer;
+use icp_project::prelude::*;
+use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
+use icp_project::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -28,10 +28,14 @@ pub enum ContextInitError {
     Utf8Path { source: FromPathBufError },
 
     #[snafu(display("failed to lock identity directory"))]
-    IdentityDirectory { source: icp::fs::lock::LockError },
+    IdentityDirectory {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to lock package cache directory"))]
-    PackageCache { source: icp::fs::lock::LockError },
+    PackageCache {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 pub fn initialize(

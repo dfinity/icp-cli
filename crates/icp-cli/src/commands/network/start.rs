@@ -3,9 +3,6 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::Args;
-use icp::network::Configuration;
-use icp::network::ManagedMode;
-use icp::prelude::*;
 use icp_app::{
     identity::manifest::IdentityList,
     network::{
@@ -20,6 +17,9 @@ use icp_app::{
     },
     settings::Settings,
 };
+use icp_project::network::Configuration;
+use icp_project::network::ManagedMode;
+use icp_project::prelude::*;
 use tracing::{debug, info, warn};
 
 use crate::render::{ProgressManager, ProgressManagerSettings};

@@ -24,8 +24,8 @@ use crate::network::{
     config::ChildLocator,
     managed::launcher::{CUSTOM_DOMAINS_FEATURE, NetworkInstance},
 };
-use icp::network::ManagedImageConfig;
-use icp::prelude::*;
+use icp_project::network::ManagedImageConfig;
+use icp_project::prelude::*;
 
 use super::launcher::{
     MAX_OUTPUT_TAIL_BYTES, MAX_OUTPUT_TAIL_LINES, output_tail, wait_for_launcher_status,

@@ -1,5 +1,5 @@
 use candid::Principal;
-use icp::prelude::*;
+use icp_project::prelude::*;
 
 use crate::common::TestContext;
 

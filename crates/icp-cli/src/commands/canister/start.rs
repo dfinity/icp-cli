@@ -4,7 +4,7 @@ use ic_management_canister_types::CanisterIdRecord;
 use icp_app::context::Context;
 
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 /// Start a canister on a network
 #[derive(Debug, Args)]

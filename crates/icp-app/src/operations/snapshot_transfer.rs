@@ -13,10 +13,10 @@ use ic_management_canister_types::{
     UploadCanisterSnapshotMetadataResult,
 };
 
-use icp::operations::proxy::UpdateOrProxyError;
-use icp::operations::proxy_management;
-use icp::operations::task::TaskReporter;
-use icp::{
+use icp_project::operations::proxy::UpdateOrProxyError;
+use icp_project::operations::proxy_management;
+use icp_project::operations::task::TaskReporter;
+use icp_project::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
@@ -79,9 +79,9 @@ impl SnapshotPaths {
     }
 
     /// Ensure the directory and wasm chunk store subdirectory exist.
-    pub fn ensure_dirs(&self) -> Result<(), icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir)?;
-        icp::fs::create_dir_all(&self.wasm_chunk_store_dir())?;
+    pub fn ensure_dirs(&self) -> Result<(), icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir)?;
+        icp_project::fs::create_dir_all(&self.wasm_chunk_store_dir())?;
         Ok(())
     }
 
@@ -147,13 +147,17 @@ pub enum SnapshotTransferError {
     },
 
     #[snafu(transparent)]
-    FsIo { source: icp::fs::IoError },
+    FsIo { source: icp_project::fs::IoError },
 
     #[snafu(transparent)]
-    FsRename { source: icp::fs::RenameError },
+    FsRename {
+        source: icp_project::fs::RenameError,
+    },
 
     #[snafu(transparent)]
-    Json { source: icp::fs::json::Error },
+    Json {
+        source: icp_project::fs::json::Error,
+    },
 
     #[snafu(transparent)]
     Lock { source: LockError },
@@ -505,7 +509,7 @@ pub async fn download_blob_to_file(
     let output_path = paths.blob_path(blob_type);
 
     if total_size == 0 {
-        icp::fs::write(&output_path, &[])?;
+        icp_project::fs::write(&output_path, &[])?;
         return Ok(());
     }
 
@@ -632,7 +636,7 @@ pub async fn download_wasm_chunk(
     .await
     .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
 
-    icp::fs::write(&output_path, &result.chunk)?;
+    icp_project::fs::write(&output_path, &result.chunk)?;
 
     Ok(())
 }
@@ -769,7 +773,7 @@ pub async fn upload_wasm_chunk(
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
     let chunk_path = paths.wasm_chunk_path(chunk_hash);
-    let chunk = icp::fs::read(&chunk_path)?;
+    let chunk = icp_project::fs::read(&chunk_path)?;
 
     let args = UploadCanisterSnapshotDataArgs {
         canister_id,
@@ -795,7 +799,7 @@ pub fn save_upload_progress(
     progress: &UploadProgress,
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    icp::fs::json::save(&paths.upload_progress_path(), progress)?;
+    icp_project::fs::json::save(&paths.upload_progress_path(), progress)?;
     Ok(())
 }
 
@@ -809,14 +813,14 @@ pub fn load_upload_progress(
             path: paths.dir().to_path_buf(),
         });
     }
-    Ok(icp::fs::json::load(&progress_path)?)
+    Ok(icp_project::fs::json::load(&progress_path)?)
 }
 
 /// Delete upload progress file.
 pub fn delete_upload_progress(paths: LWrite<&SnapshotPaths>) -> Result<(), SnapshotTransferError> {
     let progress_path = paths.upload_progress_path();
     if progress_path.exists() {
-        icp::fs::remove_file(&progress_path)?;
+        icp_project::fs::remove_file(&progress_path)?;
     }
     Ok(())
 }
@@ -843,7 +847,7 @@ pub fn save_download_progress(
     drop(file);
 
     // Atomic rename
-    icp::fs::rename(&tmp_path, &target_path)?;
+    icp_project::fs::rename(&tmp_path, &target_path)?;
 
     Ok(())
 }
@@ -852,7 +856,7 @@ pub fn save_download_progress(
 pub fn load_download_progress(
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<DownloadProgress, SnapshotTransferError> {
-    Ok(icp::fs::json::load_or_default(
+    Ok(icp_project::fs::json::load_or_default(
         &paths.download_progress_path(),
     )?)
 }
@@ -863,7 +867,7 @@ pub fn delete_download_progress(
 ) -> Result<(), SnapshotTransferError> {
     let progress_path = paths.download_progress_path();
     if progress_path.exists() {
-        icp::fs::remove_file(&progress_path)?;
+        icp_project::fs::remove_file(&progress_path)?;
     }
     Ok(())
 }
@@ -873,7 +877,7 @@ pub fn save_metadata(
     metadata: &ReadCanisterSnapshotMetadataResult,
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    icp::fs::json::save(&paths.metadata_path(), metadata)?;
+    icp_project::fs::json::save(&paths.metadata_path(), metadata)?;
     Ok(())
 }
 
@@ -887,5 +891,5 @@ pub fn load_metadata(
             path: metadata_path,
         });
     }
-    Ok(icp::fs::json::load(&metadata_path)?)
+    Ok(icp_project::fs::json::load(&metadata_path)?)
 }

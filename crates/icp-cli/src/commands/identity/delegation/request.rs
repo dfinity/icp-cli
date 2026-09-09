@@ -1,8 +1,8 @@
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::{fs::read_to_string, prelude::*};
 use icp_app::{context::Context, identity::key};
+use icp_project::{fs::read_to_string, prelude::*};
 use pem::Pem;
 use snafu::{ResultExt, Snafu};
 use tracing::warn;
@@ -73,13 +73,15 @@ pub(crate) async fn exec(ctx: &Context, args: &RequestArgs) -> Result<(), Reques
 #[derive(Debug, Snafu)]
 pub(crate) enum RequestError {
     #[snafu(display("failed to read storage password file"))]
-    ReadStoragePasswordFile { source: icp::fs::IoError },
+    ReadStoragePasswordFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to read storage password from terminal"))]
     StoragePasswordTermRead { source: dialoguer::Error },
 
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to create pending delegation identity"))]
     Create {

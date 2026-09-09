@@ -35,7 +35,7 @@ use crate::identity::{
         LoadIdentityManifestError, PemFormat, WriteIdentityManifestError,
     },
 };
-use icp::{
+use icp_project::{
     fs::{
         self,
         lock::{LRead, LWrite},
@@ -66,7 +66,7 @@ pub enum ExportFormat {
 #[derive(Debug, Snafu)]
 pub enum LoadIdentityError {
     #[snafu(transparent)]
-    ReadFileError { source: icp::fs::IoError },
+    ReadFileError { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to load PEM from `{origin}`: failed to parse"))]
     ParsePemError {
@@ -99,7 +99,9 @@ pub enum LoadIdentityError {
     GetPasswordError { message: String },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to load keyring entry"))]
     LoadEntryError { source: keyring::Error },
@@ -403,7 +405,7 @@ fn try_load_pem_session(dirs: LRead<&IdentityPaths>, name: &str) -> Option<Arc<d
 #[derive(Debug, Snafu)]
 pub enum CreateExplicitPemSessionError {
     #[snafu(transparent)]
-    ReadFile { source: icp::fs::IoError },
+    ReadFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to parse PEM from `{path}`"))]
     ParsePemForSession {
@@ -425,7 +427,7 @@ pub enum CreateExplicitPemSessionError {
     SetSessionKeyringPassword { source: keyring::Error },
 
     #[snafu(display("failed to create session delegation directory"))]
-    EnsureSessionDelegationDir { source: icp::fs::IoError },
+    EnsureSessionDelegationDir { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to save session delegation chain to `{path}`"))]
     SaveSessionDelegation {
@@ -915,7 +917,7 @@ pub enum CreateIdentityError {
     CreateIdentityDelegationExpired,
 
     #[snafu(display("failed to create delegation directory"))]
-    CreateIdentityDelegationDir { source: icp::fs::IoError },
+    CreateIdentityDelegationDir { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     CreateIdentitySaveDelegation {
@@ -1111,13 +1113,15 @@ pub fn create_identity(
 #[derive(Debug, Snafu)]
 pub enum WriteIdentityError {
     #[snafu(display("failed to write file"))]
-    WriteFileError { source: icp::fs::IoError },
+    WriteFileError { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to create directory"))]
-    CreateDirectoryError { source: icp::fs::IoError },
+    CreateDirectoryError { source: icp_project::fs::IoError },
 
     #[snafu(transparent)]
-    LockError { source: icp::fs::lock::LockError },
+    LockError {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to create keyring entry"))]
     CreateEntryError { source: keyring::Error },
@@ -1638,11 +1642,11 @@ pub enum CreatePendingDelegationError {
     #[snafu(display("failed to write session key PEM file for `{name}`"))]
     DlgWritePemFile {
         name: String,
-        source: icp::fs::IoError,
+        source: icp_project::fs::IoError,
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    DlgCreateDelegationDir { source: icp::fs::IoError },
+    DlgCreateDelegationDir { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     DlgSaveDelegation {
@@ -1819,7 +1823,7 @@ pub enum UpdateWebAuthDelegationError {
     },
 
     #[snafu(display("failed to create delegation directory"))]
-    UpdateWebAuthCreateDir { source: icp::fs::IoError },
+    UpdateWebAuthCreateDir { source: icp_project::fs::IoError },
 }
 
 /// Updates the delegation chain for an existing web-based identity.
@@ -1943,7 +1947,7 @@ pub enum CompleteDelegationError {
     DecodeDelegationChainKey { source: hex::FromHexError },
 
     #[snafu(display("failed to create delegation directory"))]
-    CreateDelegationChainDir { source: icp::fs::IoError },
+    CreateDelegationChainDir { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to save delegation chain to `{path}`"))]
     SaveDelegationChain {

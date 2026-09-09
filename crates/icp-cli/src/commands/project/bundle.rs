@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
-use icp::host::EnvironmentSelection;
-use icp::prelude::*;
 use icp_app::context::Context;
+use icp_project::host::EnvironmentSelection;
+use icp_project::prelude::*;
 use tracing::warn;
 
-use icp::operations::bundle::create_bundle;
+use icp_project::operations::bundle::create_bundle;
 
 use crate::render::rendered;
 

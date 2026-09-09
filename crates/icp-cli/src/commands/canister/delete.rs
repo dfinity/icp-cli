@@ -2,10 +2,10 @@ use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::host::CanisterSelection;
 use icp_app::context::Context;
+use icp_project::host::CanisterSelection;
 
-use icp::operations::{proxy_management, recover_cycles};
+use icp_project::operations::{proxy_management, recover_cycles};
 
 use crate::commands::args;
 

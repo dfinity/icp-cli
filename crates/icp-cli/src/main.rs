@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Error;
 use clap::{CommandFactory, Parser, ValueHint};
 use commands::Command;
-use icp::prelude::*;
 use icp_app::directories::Access;
+use icp_project::prelude::*;
 use tracing::{Instrument, debug, info, subscriber::set_global_default, trace_span};
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
@@ -164,7 +164,7 @@ async fn run() -> Result<(), Error> {
 
     let password_func: icp_app::identity::PasswordFunc = match cli.identity_password_file {
         Some(path) => Arc::new(move || {
-            icp::fs::read_to_string(&path)
+            icp_project::fs::read_to_string(&path)
                 .map(|s| s.trim().to_string())
                 .map_err(|e| e.to_string())
         }),

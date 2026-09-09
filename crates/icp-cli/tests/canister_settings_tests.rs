@@ -5,7 +5,7 @@ use crate::common::{
     ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext,
     clients::{self, icp_cli},
 };
-use icp::{
+use icp_project::{
     fs::{create_dir_all, write_string},
     prelude::*,
 };

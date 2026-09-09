@@ -8,7 +8,7 @@ The project model is built hierarchically through manifest consolidation:
 2. **Canister Manifest** (`canister.yaml`): Per-canister configuration for build and sync steps
 3. **Consolidated Project**: Final `Project` struct combining all manifests into a unified view
 
-Key types in `crates/icp/src/lib.rs`:
+Key types in `crates/icp-project/src/lib.rs`:
 - `Project`: Contains all canisters, networks, and environments
 - `Environment`: Links a network with a set of canisters
 - `Network`: Configuration for local (managed) or remote (connected) networks
@@ -22,21 +22,21 @@ Manifests are YAML files that define project structure. The system supports:
 - **Path references**: Reference external manifest files
 - **Glob patterns**: For canisters, use globs like `canisters/*` to auto-discover
 
-The `consolidate_manifest` function in `crates/icp/src/project.rs` transforms raw manifests into the final `Project` structure. The serde structs in the `icp::manifest` module represent the format that the user's YAML files can be written in, while the serde structs with identical meaning outside `icp::manifest` are instead the canonical form, with defaults filled in and normalizations applied. Code should always deal with the canonical form.
+The `consolidate_manifest` function in `crates/icp-project/src/project.rs` transforms raw manifests into the final `Project` structure. The serde structs in the `icp_project::manifest` module represent the format that the user's YAML files can be written in, while the serde structs with identical meaning outside `icp_project::manifest` are instead the canonical form, with defaults filled in and normalizations applied. Code should always deal with the canonical form.
 
 ## Build Adapters
 
-Canisters are built using adapter pipelines defined in `crates/icp/src/manifest/adapter/`:
+Canisters are built using adapter pipelines defined in `crates/icp-project/src/manifest/adapter/`:
 
 - **Script Adapter**: Runs shell commands with environment variables (e.g., `$ICP_WASM_OUTPUT_PATH`)
 - **Prebuilt Adapter**: Uses pre-compiled WASM from local files, URLs, or registry
 - **Assets Adapter**: Packages static assets for frontend canisters
 
-Build steps are executed sequentially in `crates/icp/src/canister/build/`.
+Build steps are executed sequentially in `crates/icp-project/src/canister/build/`.
 
 ## Recipe System
 
-Recipes are Handlebars templates that generate build/sync configuration. Implementation in `crates/icp/src/canister/recipe/`:
+Recipes are Handlebars templates that generate build/sync configuration. Implementation in `crates/icp-project/src/canister/recipe/`:
 
 - **Registry recipes**: `@dfinity/rust@v3.0.0` resolves to GitHub releases URL
 - **Local recipes**: `file://path/to/recipe.hbs`
@@ -46,7 +46,7 @@ The `@dfinity` prefix is hardcoded to `https://github.com/dfinity/icp-cli-recipe
 
 ## Network Management
 
-Two network types in `crates/icp/src/network/`:
+Two network types, modelled in `crates/icp-project/src/network/` and run from `crates/icp-app/src/network/`:
 
 - **Managed Networks**: Local test networks launched via `icp-cli-network-launcher` (wraps PocketIC)
 - **Connected Networks**: Remote networks (mainnet, testnets) accessed via HTTP
@@ -62,11 +62,11 @@ Corresponding implicit environments are also provided:
 - **`local` environment**: Uses the `local` network with all project canisters. This is the default environment when none is specified.
 - **`ic` environment**: Uses the `ic` network with all project canisters.
 
-These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` and are used throughout the codebase.
+These constants are defined in `crates/icp-project/src/prelude.rs` as `LOCAL` and `IC` and are used throughout the codebase.
 
 ## Identity & Canister IDs
 
-- **Identities**: Stored in platform-specific directories as PEM files (Secp256k1 or Ed25519):
+- **Identities** (`crates/icp-app/src/identity/`): Stored in platform-specific directories as PEM files (Secp256k1 or Ed25519):
   - macOS: `~/Library/Application Support/org.dfinity.icp-cli/identity/`
   - Linux: `~/.local/share/icp-cli/identity/`
   - Windows: `%APPDATA%\icp-cli\data\identity\`
@@ -75,7 +75,7 @@ These constants are defined in `crates/icp/src/prelude.rs` as `LOCAL` and `IC` a
   - Managed networks (local) use `.icp/cache/mappings/`
   - Connected networks (mainnet) use `.icp/data/mappings/`
 
-Store management is in `crates/icp/src/store_id.rs`.
+Store management is in `crates/icp-project/src/store_id.rs`.
 
 ## Telemetry
 

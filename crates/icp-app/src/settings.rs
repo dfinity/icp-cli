@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 
-use icp::{
+use icp_project::{
     fs::{
         json,
         lock::{DirectoryStructureLock, LRead, LWrite, LockError, PathsAccess},
@@ -32,8 +32,8 @@ impl SettingsPaths {
     }
 
     /// Ensures the settings directory exists and returns the path to the settings file.
-    pub fn ensure_settings_path(&self) -> Result<PathBuf, icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir)?;
+    pub fn ensure_settings_path(&self) -> Result<PathBuf, icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir)?;
         Ok(self.settings_path())
     }
 }
@@ -137,7 +137,7 @@ pub enum WriteSettingsError {
     WriteJsonError { source: json::Error },
 
     #[snafu(transparent)]
-    CreateDirectoryError { source: icp::fs::IoError },
+    CreateDirectoryError { source: icp_project::fs::IoError },
 }
 
 #[derive(Debug, Snafu)]

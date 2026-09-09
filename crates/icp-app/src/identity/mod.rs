@@ -16,7 +16,7 @@ use crate::{
     },
     telemetry_data::{IdentityStorageType, TelemetryData},
 };
-use icp::{
+use icp_project::{
     fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
     prelude::*,
 };
@@ -46,8 +46,8 @@ impl IdentityPaths {
         self.dir.join(IDENTITY_DEFAULTS)
     }
 
-    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir)?;
+    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir)?;
         Ok(self.dir.join(IDENTITY_DEFAULTS))
     }
 
@@ -55,8 +55,8 @@ impl IdentityPaths {
         self.dir.join(IDENTITIES_LIST)
     }
 
-    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir)?;
+    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir)?;
         Ok(self.dir.join(IDENTITIES_LIST))
     }
 
@@ -64,8 +64,8 @@ impl IdentityPaths {
         self.dir.join(format!("keys/{name}.pem"))
     }
 
-    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir.join("keys"))?;
+    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir.join("keys"))?;
         Ok(self.dir.join(format!("keys/{name}.pem")))
     }
 
@@ -73,8 +73,11 @@ impl IdentityPaths {
         self.dir.join(format!("delegations/{name}.json"))
     }
 
-    pub fn ensure_delegation_chain_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir.join("delegations"))?;
+    pub fn ensure_delegation_chain_path(
+        &self,
+        name: &str,
+    ) -> Result<PathBuf, icp_project::fs::IoError> {
+        icp_project::fs::create_dir_all(&self.dir.join("delegations"))?;
         Ok(self.dir.join(format!("delegations/{name}.json")))
     }
 }

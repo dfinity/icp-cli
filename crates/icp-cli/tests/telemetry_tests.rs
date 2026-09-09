@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use camino_tempfile::tempdir;
 use httptest::{Expectation, Server, matchers::*, responders::*};
-use icp::prelude::*; // brings in camino Path / PathBuf
+use icp_project::prelude::*; // brings in camino Path / PathBuf
 use predicates::str as predstr;
 use serde_json::Value;
 use time::OffsetDateTime;

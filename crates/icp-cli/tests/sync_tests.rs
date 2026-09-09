@@ -1,4 +1,4 @@
-use icp::{
+use icp_project::{
     fs::{create_dir_all, write_string},
     prelude::*,
     store_id::IdMapping,
@@ -205,7 +205,7 @@ async fn sync_aborts_when_canister_not_running() {
     // sync aborts early with an actionable message; the `echo "syncing"` step
     // never runs, so its runtime progress output must not appear. (The `--debug`
     // config dump echoes the step's command text, so we check for the runtime
-    // `DEBUG icp::render::plain: [my-canister] syncing` marker rather than the bare word "syncing".)
+    // `DEBUG icp_project::render::plain: [my-canister] syncing` marker rather than the bare word "syncing".)
     ctx.icp()
         .current_dir(&project_dir)
         .env("NO_COLOR", "1")
@@ -940,7 +940,7 @@ async fn sync_script_icp_env_vars() {
         .assert()
         .success();
 
-    let id_mapping: IdMapping = icp::fs::json::load(
+    let id_mapping: IdMapping = icp_project::fs::json::load(
         &project_dir
             .join(".icp")
             .join("cache")

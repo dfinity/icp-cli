@@ -11,12 +11,12 @@ use candid_parser::utils::CandidSource;
 use clap::ValueEnum;
 use dialoguer::console::Term;
 use ic_agent::Agent;
-use icp::prelude::*;
+use icp_project::prelude::*;
 use serde::Serialize;
 use std::io::{self, Write};
 use tracing::error;
 
-use icp::operations::misc::fetch_canister_metadata;
+use icp_project::operations::misc::fetch_canister_metadata;
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
@@ -196,7 +196,7 @@ pub(crate) fn load_candid_from_file(path: &Path) -> Result<CanisterInterface, an
     Ok(CanisterInterface {
         env: type_env,
         ty: actor,
-        source: icp::fs::read_to_string(path)?,
+        source: icp_project::fs::read_to_string(path)?,
     })
 }
 

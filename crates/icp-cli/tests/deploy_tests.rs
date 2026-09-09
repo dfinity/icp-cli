@@ -10,7 +10,7 @@ use crate::common::{
     ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
     TestContext, build_sync_plugin_example, clients,
 };
-use icp::{
+use icp_project::{
     fs::{create_dir_all, read_to_string, write_string},
     prelude::*,
     store_id::IdMapping,
@@ -1433,7 +1433,7 @@ async fn deploy_sync_script_icp_env_vars() {
         .stderr(contains("NET=random-network"));
 
     // Read the assigned canister IDs and verify CID vars and cross-canister visibility.
-    let id_mapping: IdMapping = icp::fs::json::load(
+    let id_mapping: IdMapping = icp_project::fs::json::load(
         &project_dir
             .join(".icp")
             .join("cache")

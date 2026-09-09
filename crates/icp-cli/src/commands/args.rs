@@ -4,12 +4,12 @@ use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use icp::host::{CanisterSelection, EnvironmentSelection};
-use icp::manifest::ArgsFormat;
-use icp::prelude::PathBuf;
-use icp::{CanisterArgs, fs};
 use icp_app::context::NetworkSelection;
 use icp_app::identity::IdentitySelection;
+use icp_project::host::{CanisterSelection, EnvironmentSelection};
+use icp_project::manifest::ArgsFormat;
+use icp_project::prelude::PathBuf;
+use icp_project::{CanisterArgs, fs};
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
@@ -169,7 +169,7 @@ impl Display for Canister {
     }
 }
 
-pub(crate) use icp::parsers::FlexibleAccountId;
+pub(crate) use icp_project::parsers::FlexibleAccountId;
 
 /// Grouped flags for specifying canister install arguments, shared by `canister install`, and `deploy`.
 #[derive(Args, Clone, Debug, Default)]

@@ -13,13 +13,13 @@ use crate::package::{
     PackageCache, cache_registry_recipe, cache_uri_recipe, read_cached_registry_recipe,
     read_cached_uri_recipe,
 };
-use icp::{
+use icp_project::{
     fs::read,
     manifest::recipe::{Recipe, RecipeType},
     prelude::*,
 };
 
-use icp::canister::recipe::{Fetched, Resolve, ResolveError};
+use icp_project::canister::recipe::{Fetched, Resolve, ResolveError};
 
 /// Fetches recipe templates over HTTP, caching downloads in the package cache.
 /// Template *rendering* is a separate stage
@@ -76,7 +76,7 @@ enum TemplateSource {
 #[derive(Debug, Snafu)]
 pub enum RecipeFetchError {
     #[snafu(display("failed to read local recipe template file"))]
-    ReadFile { source: icp::fs::IoError },
+    ReadFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
@@ -106,7 +106,9 @@ pub enum RecipeFetchError {
     },
 
     #[snafu(display("failed to acquire lock on package cache"))]
-    LockCache { source: icp::fs::lock::LockError },
+    LockCache {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 impl RecipeFetcher {
@@ -352,7 +354,7 @@ fn parse_bytes_to_string(bytes: Vec<u8>) -> Result<String, RecipeFetchError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use icp::manifest::recipe::{Recipe, RecipeType};
+    use icp_project::manifest::recipe::{Recipe, RecipeType};
 
     fn fetcher(cache_dir: &Path) -> RecipeFetcher {
         RecipeFetcher {
@@ -478,11 +480,11 @@ mod tests {
         );
 
         // Rendering fails, so the caller never commits.
-        let ctx = icp::canister::recipe::RecipeContext {
+        let ctx = icp_project::canister::recipe::RecipeContext {
             canister_name: "c".to_owned(),
         };
         assert!(
-            icp::canister::recipe::render_recipe(&fetched.template, &recipe, &ctx).is_err(),
+            icp_project::canister::recipe::render_recipe(&fetched.template, &recipe, &ctx).is_err(),
             "fixture template must fail to render"
         );
 

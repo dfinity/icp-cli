@@ -28,7 +28,6 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use crate::{
-    context::IC_ROOT_KEY,
     fs::{
         self,
         lock::{LRead, LWrite},

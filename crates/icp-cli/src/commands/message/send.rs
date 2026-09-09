@@ -2,7 +2,6 @@ use anyhow::{Context as _, bail};
 use candid::{IDLArgs, TypeEnv, types::Function};
 use clap::{Args, ValueHint};
 use ic_agent::agent::CallResponse;
-use icp::context::{Context, IC_ROOT_KEY};
 use icp::identity::IdentitySelection;
 use icp::network::RootKeySpec;
 use icp::prelude::*;
@@ -10,6 +9,7 @@ use icp::signed_message::{
     CallType, Destination, SUBMISSION_WINDOW, SignedMessage, Validated, WindowState,
     format_timestamp,
 };
+use icp::{context::Context, prelude::IC_ROOT_KEY};
 use std::io::{self, IsTerminal, Read};
 use time::{Duration, OffsetDateTime};
 use tracing::warn;

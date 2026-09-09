@@ -29,7 +29,7 @@ pub struct RecipeFetcher {
     /// Http client for fetching remote recipe templates
     pub http_client: reqwest::Client,
     /// Package cache for caching downloaded recipe templates
-    pub pkg_cache: PackageCache,
+    pub pkg_cache: std::sync::Arc<PackageCache>,
 }
 
 /// The result of the fetch stage.
@@ -325,7 +325,7 @@ mod tests {
     fn fetcher(cache_dir: &Path) -> RecipeFetcher {
         RecipeFetcher {
             http_client: reqwest::Client::new(),
-            pkg_cache: PackageCache::new(cache_dir.to_owned()).unwrap(),
+            pkg_cache: std::sync::Arc::new(PackageCache::new(cache_dir.to_owned()).unwrap()),
         }
     }
 

@@ -7,7 +7,6 @@ use url::Url;
 
 use crate::{
     agent::{Create, CreateAgentError},
-    context::IC_ROOT_KEY,
     manifest::network::RootKeySpec,
     network::{
         Connected, NetworkDirectory, config::NetworkDescriptorModel,

@@ -2,6 +2,7 @@ use std::{env::current_dir, sync::Arc};
 
 use snafu::prelude::*;
 
+use crate::canister;
 use crate::canister::build::Builder;
 use crate::canister::recipe::fetch::RecipeFetcher;
 use crate::canister::sync::Syncer;
@@ -87,8 +88,16 @@ pub fn initialize(
     // Prepare http client
     let http_client = reqwest::Client::new();
 
-    // Package cache
-    let pkg_cache = dirs.package_cache().context(PackageCacheSnafu)?;
+    // Package cache. One instance, shared by everything that reads or writes
+    // it, so the directory lock is taken once per process rather than once per
+    // holder.
+    let pkg_cache = Arc::new(dirs.package_cache().context(PackageCacheSnafu)?);
+
+    // Wasm modules named by a manifest but not contained in the project
+    let wasm = Arc::new(canister::wasm::Fetcher::new(
+        http_client.clone(),
+        pkg_cache.clone(),
+    ));
 
     // Recipes
     let recipe = Arc::new(RecipeFetcher {
@@ -97,10 +106,10 @@ pub fn initialize(
     });
 
     // Canister builder
-    let builder = Arc::new(Builder);
+    let builder = Arc::new(Builder::new(wasm.clone()));
 
     // Canister syncer
-    let syncer = Arc::new(Syncer::host());
+    let syncer = Arc::new(Syncer::host(wasm.clone()));
 
     // Project loader
     let pload = ProjectLoadImpl {
@@ -147,13 +156,15 @@ pub fn initialize(
             artifacts,
             builder,
             syncer,
+            wasm,
             network: netaccess,
-            telemetry_data,
+            observer: telemetry_data.clone(),
         },
         dirs,
         identity: idload,
         agent: agent_creator,
         debug,
+        telemetry_data,
         password_func,
     })
 }

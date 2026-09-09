@@ -132,7 +132,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .into_iter()
         .collect();
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     let project_dir = ctx.host.project.load().await?.dir;
     let urls = ctx.host.network.urls(&env.network).await?;
 
@@ -147,7 +146,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             urls,
             canister_ids,
             args.proxy,
-            &pkg_cache,
             reporter,
         )
         .await

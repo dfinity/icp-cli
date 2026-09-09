@@ -1,21 +1,21 @@
 use anyhow::{anyhow, bail};
+use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp_app::{
     context::{Context, NetworkSelection},
     identity::IdentitySelection,
 };
+use icp_project::calls::{CanisterCalls, TypedCallError};
 use icp_project::{
     canister::Visibility,
     host::{CanisterSelection, EnvironmentSelection},
 };
 use serde::Serialize;
 use std::fmt::Write;
-use tracing::debug;
 
-use icp_project::operations::{proxy::UpdateOrProxyError, proxy_management};
+use icp_project::operations::proxy_management;
 
 use crate::{
     commands::{
@@ -39,13 +39,9 @@ const E_STATUS_ACCESS_DENIED: [&str; 3] = ["IC0512", "IC0541", "IC0542"];
 /// The replica checks who may read the status both when accepting the ingress
 /// message and again during execution, so the same denial arrives uncertified
 /// from the first and certified from the second.
-fn direct_call_reject(err: &UpdateOrProxyError) -> Option<&RejectResponse> {
+fn rejection_code(err: &TypedCallError) -> Option<&str> {
     match err {
-        UpdateOrProxyError::DirectUpdateCall {
-            source:
-                AgentError::CertifiedReject { reject, .. }
-                | AgentError::UncertifiedReject { reject, .. },
-        } => Some(reject),
+        TypedCallError::Call { source } if source.is_rejection() => source.code(),
         _ => None,
     }
 }
@@ -151,61 +147,27 @@ async fn get_principals(
     Ok(cids)
 }
 
-async fn read_state_tree_canister_controllers(
-    agent: &Agent,
-    cid: Principal,
-) -> Result<Option<Vec<Principal>>, anyhow::Error> {
-    let controllers = match agent.read_state_canister_controllers(cid).await {
-        Ok(controllers) => controllers,
-        Err(AgentError::LookupPathAbsent(_)) => {
-            debug!("Couldn't find a path to the controllers in the state tree for {cid}");
-            return Err(anyhow!("Canister {cid} was not found."));
-        }
-        Err(AgentError::InvalidCborData(_)) => {
-            return Err(anyhow!(
-                "Invalid cbor data in controllers canister info for canister {cid}"
-            ));
-        }
-        Err(e) => {
-            return Err(anyhow!(
-                "Error fetching controllers from the state tree for {cid}: {e}"
-            ));
-        }
-    };
-    Ok(Some(controllers))
-}
-
-/// None can indicate either of these, but we can't tell from here:
-/// - the canister doesn't exist
-/// - the canister exists but does not have a module installed
-async fn read_state_tree_canister_module_hash(
-    agent: &Agent,
-    cid: Principal,
-) -> Result<Option<Vec<u8>>, anyhow::Error> {
-    let module_hash = match agent.read_state_canister_module_hash(cid).await {
-        Ok(blob) => Some(blob),
-        Err(AgentError::LookupPathAbsent(_)) => None,
-        Err(e) => {
-            return Err(anyhow!(
-                "Error reading the module hash from the state tree for {cid}: {e}"
-            ));
-        }
-    };
-
-    Ok(module_hash)
-}
-
+/// The status a canister publishes about itself, for a caller that management
+/// access was refused to.
+///
+/// Both facts come back certified; whether that took a state-tree read or a
+/// management call is the caller implementation's business.
 async fn build_public_status(
-    agent: &Agent,
+    calls: &dyn CanisterCalls,
     cid: Principal,
     maybe_name: Option<String>,
 ) -> Result<PublicCanisterStatusResult, anyhow::Error> {
-    let controllers = match read_state_tree_canister_controllers(agent, cid).await? {
-        Some(controllers) => controllers.iter().map(|p| p.to_string()).collect(),
-        None => Vec::new(),
-    };
-    let module_hash = read_state_tree_canister_module_hash(agent, cid)
-        .await?
+    let controllers = calls
+        .controllers(cid)
+        .await
+        .map_err(|e| anyhow!("could not read the controllers of canister {cid}: {e}"))?
+        .iter()
+        .map(|p| p.to_string())
+        .collect();
+    let module_hash = calls
+        .module_hash(cid)
+        .await
+        .map_err(|e| anyhow!("could not read the module hash of canister {cid}: {e}"))?
         .map(|hash| {
             format!(
                 "0x{}",
@@ -257,12 +219,14 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
         )
         .await?;
 
+    let calls = icp_app::calls::calls(agent.clone(), args.options.proxy)?;
+
     for (i, (maybe_name, cid)) in cids.iter().enumerate() {
         let output = match args.options.public {
             true => {
                 // We construct the status out of the state tree
                 let status =
-                    build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
+                    build_public_status(calls.as_ref(), cid.to_owned(), maybe_name.clone()).await?;
 
                 match args.options.json_format {
                     true => serde_json::to_string(&status)
@@ -274,8 +238,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
             false => {
                 // Retrieve canister status from management canister
                 match proxy_management::canister_status(
-                    &agent,
-                    args.options.proxy,
+                    calls.as_ref(),
                     CanisterIdRecord { canister_id: *cid },
                 )
                 .await
@@ -295,29 +258,20 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                         }
                     }
                     Err(e) => {
-                        let Some(reject) = direct_call_reject(&e) else {
-                            bail!("Unknown error fetching canister {cid} status: {e}");
-                        };
+                        let code = rejection_code(&e);
 
-                        if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
+                        if code == Some(E_CANISTER_NOT_FOUND) {
                             bail!("Canister {cid} was not found.");
                         }
 
-                        if !reject
-                            .error_code
-                            .as_deref()
-                            .is_some_and(|code| E_STATUS_ACCESS_DENIED.contains(&code))
-                        {
-                            bail!(
-                                "Error looking up canister {cid}: {:?} - {}",
-                                reject.error_code,
-                                reject.reject_message
-                            );
+                        if !code.is_some_and(|code| E_STATUS_ACCESS_DENIED.contains(&code)) {
+                            bail!("Error looking up canister {cid} status: {e}");
                         }
 
                         // Access was denied, so fall back on fetching the public status
                         let status =
-                            build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
+                            build_public_status(calls.as_ref(), cid.to_owned(), maybe_name.clone())
+                                .await?;
 
                         match args.options.json_format {
                             true => serde_json::to_string(&status)
@@ -614,42 +568,35 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
 
 #[cfg(test)]
 mod tests {
-    use ic_agent::agent::{RejectCode, RejectResponse};
-
     use super::*;
 
     /// A denial arrives uncertified when ingress inspection catches it and
     /// certified when execution does, so the fallback has to see both. Anything
     /// that is not a reject must keep surfacing as an error.
     #[test]
-    fn both_reject_forms_are_recognised() {
-        let reject = || RejectResponse {
-            reject_code: RejectCode::CanisterError,
-            reject_message: "denied".to_string(),
-            error_code: Some("IC0542".to_string()),
-        };
-
-        for source in [
-            AgentError::CertifiedReject {
-                reject: reject(),
-                operation: None,
-            },
-            AgentError::UncertifiedReject {
-                reject: reject(),
-                operation: None,
-            },
-        ] {
-            let err = UpdateOrProxyError::DirectUpdateCall { source };
-            let found = direct_call_reject(&err).expect("reject should be extracted");
-            assert!(E_STATUS_ACCESS_DENIED.contains(&found.error_code.as_deref().unwrap()));
+    fn access_denied_codes_are_recognised() {
+        for code in E_STATUS_ACCESS_DENIED {
+            let err = TypedCallError::Call {
+                source: icp_project::calls::CallError::Rejected {
+                    canister: Principal::anonymous(),
+                    method: "canister_status".to_owned(),
+                    code: Some(code.to_string()),
+                    message: "access denied".to_owned(),
+                },
+            };
+            assert_eq!(rejection_code(&err), Some(code));
         }
 
-        assert!(
-            direct_call_reject(&UpdateOrProxyError::ProxyCall {
-                message: "boom".to_string(),
-            })
-            .is_none()
-        );
+        // A call that reached no verdict has no code to branch on, so the
+        // caller must not read it as an access refusal.
+        let no_verdict = TypedCallError::Call {
+            source: icp_project::calls::CallError::failed(
+                Principal::anonymous(),
+                "canister_status",
+                std::io::Error::other("connection reset"),
+            ),
+        };
+        assert_eq!(rejection_code(&no_verdict), None);
     }
 
     /// `--json` renders visibility as a tagged `{"type", "value"}` object, which

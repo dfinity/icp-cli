@@ -1,11 +1,12 @@
+use icp_project::calls::{CanisterCalls, TypedCallError};
 use std::{
     collections::{BTreeMap, HashSet},
     io::SeekFrom,
 };
 
 use backoff::{ExponentialBackoff, backoff::Backoff};
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesUnordered};
-use ic_agent::{Agent, AgentError, export::Principal};
 use ic_management_canister_types::{
     ChunkHash, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
     ReadCanisterSnapshotMetadataResult, SnapshotDataKind, SnapshotDataOffset,
@@ -13,7 +14,6 @@ use ic_management_canister_types::{
     UploadCanisterSnapshotMetadataResult,
 };
 
-use icp_project::operations::proxy::UpdateOrProxyError;
 use icp_project::operations::proxy_management;
 use icp_project::operations::task::TaskReporter;
 use icp_project::{
@@ -107,43 +107,43 @@ pub enum SnapshotTransferError {
     #[snafu(display("Failed to read snapshot metadata for canister {canister_id}"))]
     ReadMetadata {
         canister_id: Principal,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(display("Failed to read snapshot data chunk at offset {offset}"))]
     ReadDataChunk {
         offset: u64,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(display("Failed to read WASM chunk with hash {hash}"))]
     ReadWasmChunk {
         hash: String,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(display("Failed to upload snapshot metadata for canister {canister_id}"))]
     UploadMetadata {
         canister_id: Principal,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(display("Failed to upload snapshot data chunk at offset {offset}"))]
     UploadDataChunk {
         offset: u64,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(display("Failed to upload WASM chunk with hash {hash}"))]
     UploadWasmChunk {
         hash: String,
-        #[snafu(source(from(UpdateOrProxyError, Box::new)))]
-        source: Box<UpdateOrProxyError>,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
     },
 
     #[snafu(transparent)]
@@ -384,28 +384,25 @@ impl BlobType {
     }
 }
 
-/// Check if an agent error is retryable.
-fn is_retryable_agent_error(error: &AgentError) -> bool {
-    matches!(
-        error,
-        AgentError::TimeoutWaitingForResponse() | AgentError::TransportError(_)
-    )
-}
-
-/// Check if an `UpdateOrProxyError` is retryable (by inspecting the inner agent error).
-fn is_retryable(error: &UpdateOrProxyError) -> bool {
+/// Whether a failed call is worth trying again.
+///
+/// A rejection is the network's verdict and will be the same next time. Every
+/// other failure means the call reached no verdict — a timeout, a dropped
+/// connection — and the transfer can pick up where it left off. Encoding and
+/// decoding failures fall on this side too; they are deterministic, so the
+/// retry budget absorbs one wasted attempt rather than hiding a real problem.
+fn is_retryable(error: &TypedCallError) -> bool {
     match error {
-        UpdateOrProxyError::DirectUpdateCall { source }
-        | UpdateOrProxyError::ProxyUpdateCall { source } => is_retryable_agent_error(source),
-        _ => false,
+        TypedCallError::Call { source } => !source.is_rejection(),
+        TypedCallError::Encode { .. } | TypedCallError::Decode { .. } => false,
     }
 }
 
 /// Execute an async operation with exponential backoff retry.
-async fn with_retry<F, Fut, T>(operation: F) -> Result<T, UpdateOrProxyError>
+async fn with_retry<F, Fut, T>(operation: F) -> Result<T, TypedCallError>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<T, UpdateOrProxyError>>,
+    Fut: std::future::Future<Output = Result<T, TypedCallError>>,
 {
     let mut backoff = ExponentialBackoff {
         max_elapsed_time: Some(std::time::Duration::from_secs(60)),
@@ -430,8 +427,7 @@ where
 
 /// Read snapshot metadata from a canister.
 pub async fn read_snapshot_metadata(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     snapshot_id: &[u8],
 ) -> Result<ReadCanisterSnapshotMetadataResult, SnapshotTransferError> {
@@ -442,7 +438,7 @@ pub async fn read_snapshot_metadata(
 
     let metadata = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::read_canister_snapshot_metadata(agent, proxy, args).await }
+        async move { proxy_management::read_canister_snapshot_metadata(calls, args).await }
     })
     .await
     .context(ReadMetadataSnafu { canister_id })?;
@@ -452,8 +448,7 @@ pub async fn read_snapshot_metadata(
 
 /// Upload snapshot metadata to create a new snapshot.
 pub async fn upload_snapshot_metadata(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     metadata: &ReadCanisterSnapshotMetadataResult,
     replace_snapshot: Option<&[u8]>,
@@ -482,7 +477,7 @@ pub async fn upload_snapshot_metadata(
 
     let result = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::upload_canister_snapshot_metadata(agent, proxy, args).await }
+        async move { proxy_management::upload_canister_snapshot_metadata(calls, args).await }
     })
     .await
     .context(UploadMetadataSnafu { canister_id })?;
@@ -496,8 +491,7 @@ pub async fn upload_snapshot_metadata(
 /// Tracks progress so gaps can be filled on resume.
 /// The agent handles rate limiting and semaphoring internally.
 pub async fn download_blob_to_file(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     snapshot_id: &[u8],
     blob_type: BlobType,
@@ -559,9 +553,7 @@ pub async fn download_blob_to_file(
             in_progress.push(async move {
                 let result = with_retry(|| {
                     let args = args.clone();
-                    async move {
-                        proxy_management::read_canister_snapshot_data(agent, proxy, args).await
-                    }
+                    async move { proxy_management::read_canister_snapshot_data(calls, args).await }
                 })
                 .await
                 .context(ReadDataChunkSnafu {
@@ -611,8 +603,7 @@ pub async fn download_blob_to_file(
 
 /// Download a single WASM chunk by hash.
 pub async fn download_wasm_chunk(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     snapshot_id: &[u8],
     chunk_hash: &ChunkHash,
@@ -631,7 +622,7 @@ pub async fn download_wasm_chunk(
 
     let result = with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::read_canister_snapshot_data(agent, proxy, args).await }
+        async move { proxy_management::read_canister_snapshot_data(calls, args).await }
     })
     .await
     .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
@@ -647,8 +638,7 @@ pub async fn download_wasm_chunk(
 /// Saves progress after each successful chunk for resume support.
 /// Returns the final byte offset after all uploads complete.
 pub async fn upload_blob_from_file(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     snapshot_id: &[u8],
     blob_type: BlobType,
@@ -709,9 +699,7 @@ pub async fn upload_blob_from_file(
         in_progress.push(async move {
             with_retry(|| {
                 let args = args.clone();
-                async move {
-                    proxy_management::upload_canister_snapshot_data(agent, proxy, args).await
-                }
+                async move { proxy_management::upload_canister_snapshot_data(calls, args).await }
             })
             .await
             .context(UploadDataChunkSnafu { offset })?;
@@ -765,8 +753,7 @@ pub async fn upload_blob_from_file(
 
 /// Upload a single WASM chunk.
 pub async fn upload_wasm_chunk(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
     snapshot_id: &[u8],
     chunk_hash: &[u8],
@@ -786,7 +773,7 @@ pub async fn upload_wasm_chunk(
 
     with_retry(|| {
         let args = args.clone();
-        async move { proxy_management::upload_canister_snapshot_data(agent, proxy, args).await }
+        async move { proxy_management::upload_canister_snapshot_data(calls, args).await }
     })
     .await
     .context(UploadWasmChunkSnafu { hash: hash_hex })?;

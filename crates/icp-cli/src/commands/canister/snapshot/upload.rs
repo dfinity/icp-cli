@@ -61,6 +61,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -111,7 +113,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                 // Upload metadata to create a new snapshot
                 let replace_snapshot = args.replace.as_ref().map(|s| s.0.as_slice());
                 let result =
-                    upload_snapshot_metadata(&agent, args.proxy, cid, &metadata, replace_snapshot)
+                    upload_snapshot_metadata(calls.as_ref(), cid, &metadata, replace_snapshot)
                         .await?;
 
                 let snapshot_id_hex = hex::encode(&result.snapshot_id);
@@ -139,8 +141,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         ),
                         async |task| {
                             upload_blob_from_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 &snapshot_id_bytes,
                                 BlobType::WasmModule,
@@ -170,8 +171,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         ),
                         async |task| {
                             upload_blob_from_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 &snapshot_id_bytes,
                                 BlobType::WasmMemory,
@@ -201,8 +201,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                         ),
                         async |task| {
                             upload_blob_from_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 &snapshot_id_bytes,
                                 BlobType::StableMemory,
@@ -230,8 +229,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UploadArgs) -> Result<(), anyhow:
                     let hash_hex = hex::encode(&chunk_hash.hash);
                     if !progress.wasm_chunks_uploaded.contains(&hash_hex) {
                         upload_wasm_chunk(
-                            &agent,
-                            args.proxy,
+                            calls.as_ref(),
                             cid,
                             &snapshot_id_bytes,
                             &chunk_hash.hash,

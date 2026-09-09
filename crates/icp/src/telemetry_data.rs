@@ -44,7 +44,7 @@ impl TelemetryData {
         *self.network_type.lock().unwrap()
     }
 
-    pub fn set_project(&self, project: &crate::Project) {
+    fn set_project(&self, project: &crate::Project) {
         let recipes: Vec<String> = project
             .canisters
             .values()
@@ -60,6 +60,20 @@ impl TelemetryData {
 
     pub fn recipes(&self) -> Option<Vec<String>> {
         self.recipes.lock().unwrap().clone()
+    }
+}
+
+/// The project facts telemetry keeps are established during environment
+/// resolution, so the bag receives them from there rather than the other way
+/// around.
+impl crate::host::Observe for TelemetryData {
+    fn environment_resolved(&self, project: &crate::Project, environment: &crate::Environment) {
+        let network_type = match &environment.network.configuration {
+            crate::network::Configuration::Managed { .. } => NetworkType::Managed,
+            crate::network::Configuration::Connected { .. } => NetworkType::Connected,
+        };
+        self.set_network_type(network_type);
+        self.set_project(project);
     }
 }
 

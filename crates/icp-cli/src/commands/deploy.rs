@@ -124,7 +124,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // creates it.
     let (identity, environment) = (&identity_selection, &environment_selection);
     let agent = LazyAgent::new(move || ctx.get_agent_for_env(identity, environment));
-    let pkg_cache = ctx.dirs.package_cache()?;
 
     let params = DeployParams {
         environment: environment_selection.clone(),
@@ -143,15 +142,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // command having to await it phase by phase.
     let mut report = DeployReport::default();
     let result = rendered(ctx.debug, async |reporter| {
-        deploy(
-            &ctx.host,
-            &agent,
-            &pkg_cache,
-            &params,
-            reporter,
-            &mut report,
-        )
-        .await
+        deploy(&ctx.host, &agent, &params, reporter, &mut report).await
     })
     .await;
 

@@ -749,17 +749,11 @@ fn build_delegated_identity(
 
 /// Verifies every link of a chain as far as it can be verified without a root key.
 ///
-/// A canister signature is an IC certificate, and trusting one needs the root key of the network
-/// whose canister produced it. Everything else about it is checked by
-/// [`verify_canister_signature_structure`]; only the BLS trust check is skipped.
-///
 /// Links are classified by the type of the key that signed them, never by the error they produced:
 /// ic-agent reports corruption through the same `InvalidCanisterSignature` variant as a trust-root
-/// mismatch, so an error alone cannot say whether a link is unverifiable or damaged.
-///
-/// Only a leading run of canister-signed links is set aside, because ic-agent verifies a chain
-/// from its root outwards and cannot resume past one further in. Every link after that run is
-/// verified in full, including the last, which must hand authority to `session`.
+/// mismatch, so an error alone cannot say whether a link is unverifiable or damaged. Only a
+/// leading run of canister-signed links is set aside, since ic-agent verifies a chain from its
+/// root outwards and cannot resume past one further in.
 fn verify_past_canister_signatures(
     from_key: &[u8],
     delegations: &[AgentSignedDelegation],
@@ -871,7 +865,7 @@ fn verify_canister_signature_structure(
 ///
 /// The key's BIT STRING is `canister_id_length | canister_id | seed` per the IC interface spec.
 fn parse_canister_signature_key(der: &[u8]) -> Option<(Principal, Vec<u8>)> {
-    let spki = decode_public_key(der)?;
+    let spki = SubjectPublicKeyInfoRef::from_der(der).ok()?;
     let raw = spki.subject_public_key.raw_bytes();
 
     let (&length, rest) = raw.split_first()?;
@@ -888,13 +882,7 @@ fn is_canister_signature_key(der: &[u8]) -> bool {
     const CANISTER_SIG_OID: pkcs8::ObjectIdentifier =
         pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.56387.1.2");
 
-    decode_public_key(der).is_some_and(|spki| spki.algorithm.oid == CANISTER_SIG_OID)
-}
-
-/// Decodes a DER `SubjectPublicKeyInfo`, rejecting anything trailing it: a key is only what it
-/// claims to be if the whole slice is that key.
-fn decode_public_key(der: &[u8]) -> Option<SubjectPublicKeyInfoRef<'_>> {
-    SubjectPublicKeyInfoRef::from_der(der).ok()
+    SubjectPublicKeyInfoRef::from_der(der).is_ok_and(|spki| spki.algorithm.oid == CANISTER_SIG_OID)
 }
 
 /// Returns the DER-encoded public key for a stored web-auth session key.
@@ -2892,5 +2880,63 @@ mod tests {
             load(&chain, session, None),
             Err(LoadIdentityError::ValidateDelegationChain { .. })
         ));
+    }
+
+    /// Stands in for the session key a chain was issued to. Verification only asks the session
+    /// identity for its principal, so a real chain can be checked without committing its key.
+    struct SessionStub(Principal);
+
+    impl Identity for SessionStub {
+        fn sender(&self) -> Result<Principal, String> {
+            Ok(self.0)
+        }
+
+        fn public_key(&self) -> Option<Vec<u8>> {
+            None
+        }
+
+        fn sign(
+            &self,
+            _: &ic_agent::agent::EnvelopeContent,
+        ) -> Result<ic_agent::Signature, String> {
+            unreachable!("verification never signs")
+        }
+    }
+
+    /// A chain a local Internet Identity actually issued, with the root key of the replica that
+    /// issued it.
+    ///
+    /// Every other canister-signature fixture here is encoded by the same types the production
+    /// code decodes with, so it is self-consistent by construction: a change that shifts encoding
+    /// and decoding together — a new `ic-certification` hash-tree layout, say — would keep those
+    /// tests green while rejecting every real signature. Only captured bytes catch that.
+    #[test]
+    fn a_real_local_ii_chain_verifies_against_the_network_that_issued_it() {
+        let chain: delegation::DelegationChain =
+            serde_json::from_str(include_str!("testdata/local_ii_chain.json"))
+                .expect("fixture parses");
+        let local_root_key = hex::decode(include_str!("testdata/local_ii_root_key.hex").trim())
+            .expect("fixture root key is hex");
+
+        let (_, delegations) = delegation::to_agent_types(&chain).expect("chain converts");
+        let session_key = &delegations.last().expect("a link").delegation.pubkey;
+        let session: Arc<dyn Identity> =
+            Arc::new(SessionStub(Principal::self_authenticating(session_key)));
+
+        load(&chain, Arc::clone(&session), Some(&local_root_key))
+            .expect("verifies against the root key of the network that issued it");
+
+        // With no network resolved, the canister signature cannot be trusted, but everything else
+        // about the chain still checks out.
+        load(&chain, Arc::clone(&session), None)
+            .expect("accepted unverified when no root key is available");
+
+        assert!(
+            matches!(
+                load(&chain, session, Some(IC_ROOT_KEY)),
+                Err(LoadIdentityError::ValidateDelegationChainNetwork { .. })
+            ),
+            "mainnet's root key must reject a chain issued by a local replica"
+        );
     }
 }

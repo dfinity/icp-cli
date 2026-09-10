@@ -23,6 +23,7 @@ cargo fmt && cargo clippy            # Run after changes pass tests
 - **`crates/icp-cli`**: Main CLI binary (`icp`): argument parsing, command implementations, and all terminal presentation
 - **`crates/icp-app`**: Everything about the machine the tool runs on: identities and the keyring, user settings, the global directory layout, the package cache, local networks and the launcher that runs them, telemetry, offline message signing, and the operations that act on a canister by principal
 - **`crates/icp-project`**: Everything about a project: the project model, manifest loading and consolidation, canister management, and the operations that build, install, sync and deploy
+- **`crates/icp-sync-plugin`**: The wasmtime Component Model runtime for sync plugins — one implementation of `icp-project`'s plugin-runner seam
 - **`crates/icp-events`**: Typed progress events passed from operations to the CLI's renderers
 - **`crates/icp-canister-interfaces`**: Canister interface definitions for ICP system canisters
 - **`crates/schema-gen`**: JSON schema generation for manifest validation
@@ -42,12 +43,23 @@ even though it takes a principal, and `icp-app` calls down into it.
 
 `icp-project` is meant to end up runnable inside a canister, so it must not
 reach the host directly. What it needs from the machine it asks for through a
-trait declared there and implemented in `icp-app`:
+trait declared there and implemented elsewhere — in `icp-app`, or in
+`icp-sync-plugin`, which likewise depends on `icp-project` and never the
+reverse:
 
+- `files::FileSystem` — the files a project is made of
+- `calls::CanisterCalls` — submitting a call, and reading a certified fact
 - `network::Access` — a network's endpoints, root key and friendly domains
 - `canister::wasm::Fetch` — a wasm module a manifest names by URL
 - `canister::recipe::Resolve` — a recipe's Handlebars template
+- `canister::sync::plugin::Run` — running one sync plugin
+- `canister::sync::script::ScriptRunner` — running one sync script
+- `store_id::Access` / `store_artifact::Access` — the project's `.icp` stores
 - `host::Observe` — what resolution turned up, for telemetry
+
+Host implementations of the first, the last two stores and the script runner
+ship in `icp-project` itself behind the default-on `host` feature; the rest
+have no implementation there at all.
 
 Because those are implemented across a crate boundary, their error types carry
 their cause boxed and pass it through with `#[snafu(transparent)]`, which leaves

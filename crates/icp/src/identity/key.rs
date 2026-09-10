@@ -719,10 +719,7 @@ fn build_delegated_identity(
     ) {
         Ok(delegated) => Ok(Arc::new(delegated)),
 
-        // Nothing here resolved a network, so a canister signature from another provider — a local
-        // Internet Identity, say — cannot be checked at all: that provider's root key is not
-        // derivable from anything the identity stores. Rather than make callers such as
-        // `icp identity principal` unusable, verify what needs no root key and accept the rest.
+        // No root key to check the signature against, so verify what needs none and accept.
         Err(DelegationError::InvalidCanisterSignature(_)) if network_root_key.is_none() => {
             verify_past_canister_signatures(&from_key, &signed_delegations, &inner)
                 .context(ValidateDelegationChainSnafu { path: chain_path })?;

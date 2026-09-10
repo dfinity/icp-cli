@@ -48,7 +48,6 @@ use crate::operations::{
 };
 use crate::project::ArgsField;
 use crate::{CanisterArgsToBytesError, ProjectLoadError};
-use ic_agent::Agent;
 
 /// Everything that can stop a deploy. Each phase's failure keeps the typed
 /// error of the operation that produced it, so a caller can still tell a
@@ -208,19 +207,15 @@ pub struct DeployReport {
 
 /// Run a full deploy, reporting progress as one task tree.
 ///
-/// `calls` and `agent` speak for the identity the caller resolved: which
-/// identity that is, and how its key was unlocked, is not this layer's
-/// business. Both are resolved once the build has succeeded and not before — a
-/// deploy that cannot build has no business unlocking a key or reaching a
-/// network.
+/// `calls` speaks for the identity the caller resolved: which identity that is,
+/// and how its key was unlocked, is not this layer's business. It is resolved
+/// once the build has succeeded and not before — a deploy that cannot build has
+/// no business unlocking a key or reaching a network.
 ///
 /// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
     host: &Host,
     calls: &Deferred<'_, Arc<dyn CanisterCalls>>,
-    // Sync steps still run against an agent, because the wasmtime plugin
-    // runtime does. That goes when the step runners move behind their own seam.
-    agent: &Deferred<'_, Agent>,
     params: &DeployParams,
     reporter: &Reporter,
     report: &mut DeployReport,
@@ -252,7 +247,6 @@ pub async fn deploy(
     // is asked for the means — and where the identity it speaks for gets
     // unlocked.
     let calls = calls.get().await?;
-    let agent = agent.get().await?;
 
     // Create any canisters that do not exist yet
     let env = host.get_environment(environment_selection).await?;
@@ -407,7 +401,7 @@ pub async fn deploy(
     .await;
     finish(&phase, result)?;
 
-    sync(host, params, calls, agent, reporter).await?;
+    sync(host, params, calls, reporter).await?;
 
     Ok(())
 }
@@ -519,7 +513,6 @@ async fn sync(
     host: &Host,
     params: &DeployParams,
     calls: &Arc<dyn CanisterCalls>,
-    agent: &Agent,
     reporter: &Reporter,
 ) -> Result<(), DeployError> {
     let environment_selection = &params.environment;
@@ -604,7 +597,7 @@ async fn sync(
     let phase = reporter.task(Task::phase("Syncing canisters:"));
     let result = sync_many(
         host.syncer.clone(),
-        agent.clone(),
+        calls.clone(),
         sync_canisters,
         project_dir,
         environment_selection.name().to_owned(),

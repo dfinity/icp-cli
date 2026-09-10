@@ -3,16 +3,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use candid::Principal;
-use ic_agent::Agent;
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
+use crate::calls::CanisterCalls;
 use crate::canister::wasm;
 use crate::manifest::canister::SyncStep;
 use crate::network::NetworkUrls;
 use crate::prelude::*;
 
-mod plugin;
+pub mod declared;
+pub mod plugin;
 pub mod script;
 
 use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
@@ -58,28 +59,36 @@ pub trait Synchronize: Sync + Send {
         &self,
         step: &SyncStep,
         params: &Params,
-        agent: &Agent,
+        calls: &Arc<dyn CanisterCalls>,
         reporter: &StepReporter,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
 
-/// Dispatches each sync step to the machinery that runs it. Plugin steps run in
-/// the wasmtime WASI sandbox, which this drives directly; script steps go through
-/// an injected [`ScriptRunner`], since spawning a subprocess is not available
-/// everywhere.
+/// Dispatches each sync step to the machinery that runs it. Neither kind can be
+/// run from here: a script step needs a subprocess and a plugin step needs a
+/// wasm component runtime, so each goes through an injected runner.
 pub struct Syncer {
     scripts: Arc<dyn ScriptRunner>,
     wasm: Arc<dyn wasm::Fetch>,
+    plugins: Arc<dyn plugin::Run>,
 }
 
 impl Syncer {
     /// A syncer that runs script steps as host subprocesses.
-    pub fn host(wasm: Arc<dyn wasm::Fetch>) -> Self {
-        Self::new(Arc::new(HostScripts), wasm)
+    pub fn host(wasm: Arc<dyn wasm::Fetch>, plugins: Arc<dyn plugin::Run>) -> Self {
+        Self::new(Arc::new(HostScripts), wasm, plugins)
     }
 
-    pub fn new(scripts: Arc<dyn ScriptRunner>, wasm: Arc<dyn wasm::Fetch>) -> Self {
-        Self { scripts, wasm }
+    pub fn new(
+        scripts: Arc<dyn ScriptRunner>,
+        wasm: Arc<dyn wasm::Fetch>,
+        plugins: Arc<dyn plugin::Run>,
+    ) -> Self {
+        Self {
+            scripts,
+            wasm,
+            plugins,
+        }
     }
 }
 
@@ -89,7 +98,7 @@ impl Synchronize for Syncer {
         &self,
         step: &SyncStep,
         params: &Params,
-        agent: &Agent,
+        calls: &Arc<dyn CanisterCalls>,
         reporter: &StepReporter,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
@@ -100,11 +109,10 @@ impl Synchronize for Syncer {
             SyncStep::Plugin(adapter) => Ok(plugin::sync(
                 adapter,
                 params,
-                agent,
-                &params.environment,
-                params.proxy,
+                calls,
                 reporter,
                 self.wasm.as_ref(),
+                self.plugins.as_ref(),
             )
             .await?),
         }
@@ -123,7 +131,7 @@ impl Synchronize for UnimplementedMockSyncer {
         &self,
         _step: &SyncStep,
         _params: &Params,
-        _agent: &Agent,
+        _calls: &Arc<dyn CanisterCalls>,
         _reporter: &StepReporter,
     ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
@@ -157,20 +165,18 @@ mod tests {
         }
     }
 
-    fn dummy_agent() -> Agent {
-        Agent::builder()
-            .with_url("http://127.0.0.1:4943")
-            .build()
-            .expect("build test agent")
-    }
-
     /// A script step reaches the injected runner fully resolved: the commands
     /// from the manifest, the canister directory as cwd, and the `ICP_CLI_*`
     /// environment assembled from the sync params. Nothing is spawned.
     #[tokio::test]
     async fn script_steps_are_dispatched_to_the_injected_runner() {
         let scripts = Arc::new(RecordingScripts::default());
-        let syncer = Syncer::new(scripts.clone(), Arc::new(wasm::UnimplementedMockFetch));
+        let syncer = Syncer::new(
+            scripts.clone(),
+            Arc::new(wasm::UnimplementedMockFetch),
+            Arc::new(plugin::UnimplementedMockRun),
+        );
+        let calls: Arc<dyn CanisterCalls> = Arc::new(crate::calls::UnimplementedMockCalls);
 
         let cid = Principal::from_slice(&[7; 4]);
         let params = Params {
@@ -195,7 +201,7 @@ mod tests {
         });
 
         let retained = syncer
-            .sync(&step, &params, &dummy_agent(), &StepReporter::null())
+            .sync(&step, &params, &calls, &StepReporter::null())
             .await
             .expect("script step should dispatch");
         assert!(retained.is_empty());

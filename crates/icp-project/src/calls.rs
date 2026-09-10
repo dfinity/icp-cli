@@ -212,11 +212,17 @@ pub trait CanisterCalls: Send + Sync {
     ///
     /// `Ok(None)` means the section is certified *absent* from a canister that
     /// exists. A canister that does not exist is an error, since the two are
-    /// otherwise indistinguishable and callers use this to tell them apart.
+    /// otherwise indistinguishable and callers use this to tell them apart. A
+    /// section the reader is not allowed to have is an error too: it is not
+    /// absent, and reporting it as such would be a guess.
+    ///
+    /// `authority` decides who is doing the reading, which is what a private
+    /// section is gated on.
     async fn metadata_section(
         &self,
         canister: Principal,
         path: &str,
+        authority: Authority,
     ) -> Result<Option<Vec<u8>>, CallError>;
 
     /// A canister's controllers, or `None` when there is no such canister.
@@ -245,6 +251,52 @@ pub trait CanisterCalls: Send + Sync {
     /// reason the certified reads above are: a caller inside a canister cannot
     /// consult the registry, and would have to ask a management canister.
     async fn subnet_uses_engine_operator(&self, subnet: Principal) -> Result<bool, CallError>;
+}
+
+#[cfg(any(test, feature = "test-util"))]
+/// Unimplemented mock implementation of [`CanisterCalls`], for a code path
+/// under test that is not supposed to reach a canister at all.
+pub struct UnimplementedMockCalls;
+
+#[cfg(any(test, feature = "test-util"))]
+#[async_trait]
+impl CanisterCalls for UnimplementedMockCalls {
+    fn caller(&self) -> Principal {
+        Principal::anonymous()
+    }
+
+    async fn update(&self, _call: Call) -> Result<Vec<u8>, CallError> {
+        unimplemented!("UnimplementedMockCalls::update")
+    }
+
+    async fn query(&self, _call: Call) -> Result<Vec<u8>, CallError> {
+        unimplemented!("UnimplementedMockCalls::query")
+    }
+
+    async fn metadata_section(
+        &self,
+        _canister: Principal,
+        _path: &str,
+        _authority: Authority,
+    ) -> Result<Option<Vec<u8>>, CallError> {
+        unimplemented!("UnimplementedMockCalls::metadata_section")
+    }
+
+    async fn controllers(&self, _canister: Principal) -> Result<Option<Vec<Principal>>, CallError> {
+        unimplemented!("UnimplementedMockCalls::controllers")
+    }
+
+    async fn module_hash(&self, _canister: Principal) -> Result<Option<Vec<u8>>, CallError> {
+        unimplemented!("UnimplementedMockCalls::module_hash")
+    }
+
+    async fn subnet_of(&self, _canister: Principal) -> Result<Principal, CallError> {
+        unimplemented!("UnimplementedMockCalls::subnet_of")
+    }
+
+    async fn subnet_uses_engine_operator(&self, _subnet: Principal) -> Result<bool, CallError> {
+        unimplemented!("UnimplementedMockCalls::subnet_uses_engine_operator")
+    }
 }
 
 /// A typed call failed, or its arguments or reply would not encode.

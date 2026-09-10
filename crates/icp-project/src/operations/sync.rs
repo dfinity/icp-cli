@@ -1,12 +1,12 @@
 use crate::{
     Canister,
+    calls::CanisterCalls,
     canister::sync::{Params, Synchronize, SynchronizeError},
     network::NetworkUrls,
     prelude::{Path, PathBuf},
 };
 use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::Agent;
 use icp_events::{StepOutcome, TaskOutcome};
 
 use crate::operations::task::{Reporter, Task, TaskReporter};
@@ -25,7 +25,7 @@ pub struct SyncOperationError {
 #[allow(clippy::too_many_arguments)]
 async fn sync_canister(
     syncer: &Arc<dyn Synchronize>,
-    agent: &Agent,
+    calls: &Arc<dyn CanisterCalls>,
     canister_path: PathBuf,
     project_dir: &Path,
     canister_id: Principal,
@@ -57,7 +57,7 @@ async fn sync_canister(
                     canister_ids: canister_ids.clone(),
                     proxy,
                 },
-                agent,
+                calls,
                 &reporter,
             )
             .await;
@@ -87,7 +87,7 @@ fn error_causes(error: &dyn std::error::Error) -> Vec<String> {
 /// Orchestrates syncing multiple canisters concurrently.
 pub async fn sync_many(
     syncer: Arc<dyn Synchronize>,
-    agent: Agent,
+    calls: Arc<dyn CanisterCalls>,
     canisters: Vec<(Principal, PathBuf, Canister)>,
     project_dir: PathBuf,
     environment: String,
@@ -103,7 +103,7 @@ pub async fn sync_many(
         let task = reporter.task(Task::sync(canister_info.name.clone(), cid));
 
         let fut = {
-            let agent = agent.clone();
+            let calls = calls.clone();
             let syncer = syncer.clone();
             let environment = environment.clone();
             let network = network.clone();
@@ -114,7 +114,7 @@ pub async fn sync_many(
             async move {
                 let result = sync_canister(
                     &syncer,
-                    &agent,
+                    &calls,
                     canister_path,
                     &project_dir,
                     cid,

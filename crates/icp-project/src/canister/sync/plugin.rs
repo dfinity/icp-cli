@@ -1,23 +1,156 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+use async_trait::async_trait;
 use candid::Principal;
-use ic_agent::Agent;
 use icp_events::StepReporter;
-use icp_sync_plugin::{
-    CallableCanisters, DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV,
-    PluginInvocation, RunPluginError, run_plugin,
-};
 use snafu::prelude::*;
+use url::Url;
 
 use crate::{
+    calls::CanisterCalls,
     canister::wasm,
     manifest::adapter::plugin::{Adapter, NamedPaths},
+    prelude::*,
 };
 
 use super::Params;
 
-/// Convert a manifest [`NamedPaths`] (or its absence) into the runtime's
+/// Default seconds of compute a plugin may use. This is a runaway guard, not a
+/// security boundary: it protects the machine running `icp sync` from a plugin
+/// that never terminates. Legitimately heavy plugins (e.g.
+/// brotli-compressing a large asset bundle) can exceed it, especially on
+/// slower CI runners, so it is overridable via the [`PLUGIN_COMPUTE_LIMIT_ENV`]
+/// environment variable.
+pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
+/// Environment variable that overrides [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
+pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
+
+/// A path a step declared, tagged with the map key it was declared under.
+///
+/// The key is `None` when the manifest wrote the setting as a plain list, and
+/// `Some(name)` when it wrote a map. It is *non-unique*: several paths share a
+/// key when a map key resolves to a list of paths. Which form a plugin accepts
+/// depends on the interface it was built against, which only the runner can
+/// know, so both forms are passed on as written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyedPath {
+    /// The map key this path was declared under, or `None` for a plain-list entry.
+    pub key: Option<String>,
+    /// Manifest-relative path, anchored at the invocation's `base_dir`.
+    pub path: String,
+}
+
+/// The canisters a sync plugin is permitted to call, beyond the canister being
+/// synced.
+///
+/// Resolved here from the step's `canisters` list against the project's
+/// canister ID table, because a name in a manifest means what the project says
+/// it means. The runner only enforces the resulting set.
+#[derive(Clone, Debug, Default)]
+pub struct CallableCanisters {
+    /// Canisters callable by name. Maps the name — as it appears in the
+    /// canister ID table — to the principal it resolves to.
+    pub by_name: BTreeMap<String, Principal>,
+}
+
+/// Everything needed to load and drive one sync plugin.
+pub struct Invocation {
+    /// The plugin's wasm component.
+    pub wasm_path: PathBuf,
+    /// Directory the declared `dirs`/`files` are anchored at (the canister dir).
+    pub base_dir: PathBuf,
+    /// The project directory: the sandbox boundary. A declared path may rise
+    /// out of `base_dir` with `..` and reach anything inside the project, but
+    /// nothing above it.
+    ///
+    /// A `base_dir` that does not lie within this directory — a dependency
+    /// project reached by an out-of-tree `path:` — is its own boundary instead,
+    /// which grants nothing above the canister directory.
+    pub project_dir: PathBuf,
+    /// The step's `dirs:` entries, in written order.
+    pub dirs: Vec<KeyedPath>,
+    /// The step's `files:` entries, in written order. Depending on the
+    /// interface the plugin implements these may name directories too.
+    pub files: Vec<KeyedPath>,
+    /// Key-value fields to pass to the plugin inline.
+    pub fields: BTreeMap<String, String>,
+    /// The canister being synced: the default target of the plugin's calls.
+    pub host_canister_id: Principal,
+    /// How the plugin's canister calls and metadata reads are made. Its
+    /// [`caller`](CanisterCalls::caller) is also surfaced to the plugin as the
+    /// identity acting on its behalf.
+    pub calls: Arc<dyn CanisterCalls>,
+    /// The proxy canister `--proxy` named, when one was. Informational: the
+    /// plugin is told which canister is acting for it, while routing calls
+    /// through it is [`calls`](Self::calls)'s business.
+    pub proxy: Option<Principal>,
+    /// Name of the environment being synced.
+    pub environment: String,
+    /// The network's API endpoint — where canister calls are submitted.
+    pub api_url: Url,
+    /// The network's HTTP gateway, when it exposes one.
+    pub gateway_url: Option<Url>,
+    /// Compute-time budget in seconds. See
+    /// [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
+    pub compute_limit_secs: u64,
+    /// The project's canister ID table for this environment, as exposed to the
+    /// plugin. Same-project canisters appear both under their fully-qualified
+    /// key and their bare local name.
+    pub canister_ids: BTreeMap<String, Principal>,
+    /// Canisters the step declared callable, beyond the one being synced.
+    pub callable: CallableCanisters,
+    /// Reporter the plugin's live stdout/stderr is emitted on.
+    pub reporter: StepReporter,
+}
+
+/// Running a plugin failed.
+///
+/// What runs a wasm component is the implementation's business — a component
+/// runtime, a sandbox, a compute deadline — so the cause is carried whole and
+/// displayed as itself.
+#[derive(Debug, Snafu)]
+#[snafu(display("{source}"))]
+pub struct RunError {
+    pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
+}
+
+impl RunError {
+    /// Wraps an implementation's own error for the trait boundary.
+    pub fn new(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            source: Box::new(source),
+        }
+    }
+}
+
+/// Runs a sync plugin.
+///
+/// Everything above this line is manifest work: which paths were declared,
+/// which canisters a name resolves to, what the plugin is allowed to call.
+/// Loading a wasm component and giving it a sandbox to run in is not, so it is
+/// asked for through this. The runner reaches canisters through the
+/// invocation's [`CanisterCalls`], which is the whole reason this crate can
+/// describe a sync without being able to perform one.
+#[async_trait]
+pub trait Run: Send + Sync {
+    /// Run the plugin, returning the stderr lines it asked to have retained.
+    async fn run(&self, invocation: Invocation) -> Result<Vec<String>, RunError>;
+}
+
+#[cfg(any(test, feature = "test-util"))]
+/// Unimplemented mock implementation of [`Run`].
+pub struct UnimplementedMockRun;
+
+#[cfg(any(test, feature = "test-util"))]
+#[async_trait]
+impl Run for UnimplementedMockRun {
+    async fn run(&self, _invocation: Invocation) -> Result<Vec<String>, RunError> {
+        unimplemented!("UnimplementedMockRun::run")
+    }
+}
+
+/// Convert a manifest [`NamedPaths`] (or its absence) into the runner's
 /// key-tagged path list. A missing setting yields an empty list.
 fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
     paths
@@ -35,16 +168,13 @@ pub enum PluginError {
     #[snafu(transparent)]
     Wasm { source: wasm::FetchError },
 
-    #[snafu(display("failed to get identity principal: {err}"))]
-    GetIdentityPrincipal { err: String },
-
     #[snafu(display(
         "invalid {PLUGIN_COMPUTE_LIMIT_ENV} value '{value}': expected a positive integer number of seconds"
     ))]
     InvalidComputeLimit { value: String },
 
     #[snafu(display("failed to run plugin"))]
-    Run { source: RunPluginError },
+    RunPlugin { source: RunError },
 
     #[snafu(display(
         "sync plugin lists canister '{name}' as callable, but no canister by that name \
@@ -84,18 +214,17 @@ fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
 pub(super) async fn sync(
     adapter: &Adapter,
     params: &Params,
-    agent: &Agent,
-    environment: &str,
-    proxy: Option<Principal>,
+    calls: &Arc<dyn CanisterCalls>,
     reporter: &StepReporter,
     wasm_fetch: &dyn wasm::Fetch,
+    plugins: &dyn Run,
 ) -> Result<Vec<String>, PluginError> {
     // 0. Resolve the compute-time limit up front so a malformed
     //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
     //    wasm or touching the network — rather than after doing that work.
     let compute_limit_secs = resolve_compute_limit_secs()?;
 
-    // 1. Determine the on-disk path for the wasm. run_plugin needs a path, not raw bytes.
+    // 1. Determine the on-disk path for the wasm. The runner needs a path, not raw bytes.
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
     //      stable cache path is returned — no temp file needed.
@@ -108,14 +237,12 @@ pub(super) async fn sync(
         )
         .await?;
 
-    // 2. Collect inputs as manifest strings. `run_plugin` opens the declared
+    // 2. Collect inputs as manifest strings. The runner opens the declared
     //    paths itself — preopening or reading each by what is on disk, anchored
-    //    at `base_dir`, confined to `project_dir`, and subject to the runtime's
+    //    at `base_dir`, confined to `project_dir`, and subject to its
     //    path-safety checks (no escaping or symlinked paths). It also decides
     //    which of the two settings the plugin's interface accepts, so both are
     //    forwarded as written.
-    let base_dir = Utf8PathBuf::from(params.path.as_str());
-    let project_dir = Utf8PathBuf::from(params.project_dir.as_str());
     let dirs = keyed_paths(adapter.dirs.as_ref());
     let files = keyed_paths(adapter.files.as_ref());
     let fields: BTreeMap<String, String> = adapter.fields.clone().unwrap_or_default();
@@ -123,39 +250,30 @@ pub(super) async fn sync(
     // 3. Build the canister ID table exposed to the plugin, then resolve the
     //    step's `canisters` list against it.
     let canister_ids = exposed_canister_ids(params);
-    let callable = resolve_callable(adapter, &canister_ids, environment)?;
+    let callable = resolve_callable(adapter, &canister_ids, &params.environment)?;
 
-    // 4. Run the plugin (blocking call — signal Tokio that this thread will block).
-    let identity_principal = agent
-        .get_principal()
-        .map_err(|err| PluginError::GetIdentityPrincipal { err })?;
-
-    let agent_clone = agent.clone();
-    let environment_owned = environment.to_owned();
-    let reporter_clone = reporter.clone();
-
-    tokio::task::block_in_place(|| {
-        run_plugin(PluginInvocation {
+    // 4. Hand it all to the runner.
+    plugins
+        .run(Invocation {
             wasm_path,
-            base_dir,
-            project_dir,
+            base_dir: params.path.clone(),
+            project_dir: params.project_dir.clone(),
             dirs,
             files,
             fields,
             host_canister_id: params.cid,
-            agent: agent_clone,
-            proxy,
-            identity_principal,
-            environment: environment_owned,
+            calls: calls.clone(),
+            proxy: params.proxy,
+            environment: params.environment.clone(),
             api_url: params.urls.api_url.clone(),
             gateway_url: params.urls.http_gateway_url.clone(),
             compute_limit_secs,
             canister_ids,
             callable,
-            reporter: reporter_clone,
+            reporter: reporter.clone(),
         })
-    })
-    .context(RunSnafu)
+        .await
+        .context(RunPluginSnafu)
 }
 
 /// The canister ID table exposed to a sync plugin: every named canister in the

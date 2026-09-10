@@ -12,15 +12,14 @@ bytes.workspace = true
 camino.workspace = true
 candid.workspace = true
 console.workspace = true
-hex.workspace = true
-ic-agent.workspace = true
-ic-management-canister-types.workspace = true
-icp-canister-interfaces.workspace = true
 icp-events.workspace = true
+# Only for the seams the runtime is driven through — the plugin invocation and
+# the canister calls it makes — never for `host`-feature code, which is what
+# this crate is an implementation of.
+icp-project = { path = "../icp-project", default-features = false }
 semver.workspace = true
 snafu.workspace = true
 tokio.workspace = true
-url.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 
@@ -29,6 +28,10 @@ camino.workspace = true
 
 [dev-dependencies]
 camino-tempfile.workspace = true
+# The mocks these tests use are host-side, so this one keeps the default
+# features the library half deliberately does without.
+icp-project = { path = "../icp-project", features = ["test-util"] }
+url.workspace = true
 
 [lints]
 workspace = true

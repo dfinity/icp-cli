@@ -135,7 +135,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     rendered(ctx.debug, async |reporter| {
         sync_many(
             ctx.host.syncer.clone(),
-            agent,
+            calls,
             sync_canisters,
             project_dir,
             environment_selection.name().to_owned(),

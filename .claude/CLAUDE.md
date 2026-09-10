@@ -12,6 +12,8 @@ cargo test                           # Run all tests (launcher auto-downloads on
 cargo test -p icp-cli                # Tests for a specific package
 cargo test --test <file> -- <name>   # Specific test
 cargo fmt && cargo clippy            # Run after changes pass tests
+# `icp-project`'s core must reach nothing only a host has — see the boundary below
+cargo clippy -p icp-project --no-default-features --target wasm32-unknown-unknown
 ./scripts/generate-cli-docs.sh       # Regenerate CLI docs when commands change
 ./scripts/generate-config-schemas.sh # Regenerate schema when manifest types change
 ```
@@ -52,14 +54,26 @@ reverse:
 - `network::Access` — a network's endpoints, root key and friendly domains
 - `canister::wasm::Fetch` — a wasm module a manifest names by URL
 - `canister::recipe::Resolve` — a recipe's Handlebars template
+- `canister::build::Build` — running one build step
 - `canister::sync::plugin::Run` — running one sync plugin
 - `canister::sync::script::ScriptRunner` — running one sync script
 - `store_id::Access` / `store_artifact::Access` — the project's `.icp` stores
+- `random::Random` — a choice that cannot be made by arithmetic
 - `host::Observe` — what resolution turned up, for telemetry
 
-Host implementations of the first, the last two stores and the script runner
-ship in `icp-project` itself behind the default-on `host` feature; the rest
-have no implementation there at all.
+Some of those have a host implementation in `icp-project` itself, behind the
+default-on **`host`** feature: `HostFileSystem`, the two stores, `HostScripts`,
+`HostRandom`, and `Builder`. The rest have none there at all.
+
+`host` must be **strictly additive** — it may add implementations, never change
+what the rest of the crate does. CI checks the core with
+`cargo clippy -p icp-project --no-default-features --target
+wasm32-unknown-unknown`, on a target where reaching the host does not compile;
+if `host` changed behaviour rather than adding to it, that check would prove
+nothing about the shipped binary. Whole modules that are irreducibly host-side
+sit behind it too — `operations::bundle` writes a `.tar.gz` and walks a
+directory tree for symlinks, which no seam over `FileSystem` reproduces
+faithfully.
 
 Because those are implemented across a crate boundary, their error types carry
 their cause boxed and pass it through with `#[snafu(transparent)]`, which leaves

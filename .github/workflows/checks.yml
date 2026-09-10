@@ -84,6 +84,55 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+  # `icp-project` is meant to end up runnable inside a canister, so its core
+  # must reach nothing that only a host has. Nothing else expresses this: a
+  # `--workspace` build unifies the `host` feature back on, because `icp-cli`
+  # enables it. So this builds that one crate, alone, for a target where
+  # reaching the host does not compile.
+  canister-target:
+    name: canister-target:required
+    needs: [changes, compile]
+    if: needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup image (Linux)
+        run: ./.github/scripts/provision-linux-build.sh
+
+      # rust-cache hashes all installed toolchains; the runner image's `stable`
+      # drifts as the image updates, which moves the cache key and causes misses.
+      # Remove it so only the rust-toolchain.toml-pinned version remains.
+      - name: Remove the runner's bundled Rust toolchain
+        run: rustup toolchain remove stable 2>/dev/null || true
+
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
+        with:
+          target: wasm32-unknown-unknown
+          cache-shared-key: ${{ runner.os }}-canister-target
+          cache-bin: false
+
+      - name: Check icp-project without a host
+        run: |
+          cargo clippy -p icp-project --no-default-features \
+            --target wasm32-unknown-unknown -- -D warnings
+        env:
+          RUST_BACKTRACE: 1
+
+      # The check above proves the core reaches no host. This proves it reaches
+      # no *crate above it* either, which no build would catch, because a cycle
+      # is what cargo would report and there is no cycle to report until
+      # someone writes one.
+      - name: Check the dependency direction
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          grep -n 'icp-app' crates/icp-project/Cargo.toml crates/icp-sync-plugin/Cargo.toml \
+            && fail "icp-project and icp-sync-plugin must not depend on icp-app"
+          grep -rn 'pub use icp_project' crates/icp-app/src \
+            && fail "icp-app must not re-export icp-project: a command reaches for the crate that owns what it needs"
+          echo "the boundary holds"
+
   format:
     name: fmt:required
     needs: [changes, compile]

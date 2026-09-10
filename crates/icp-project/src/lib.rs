@@ -39,6 +39,7 @@ pub mod operations;
 pub mod parsers;
 pub mod prelude;
 pub mod project;
+pub mod random;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;

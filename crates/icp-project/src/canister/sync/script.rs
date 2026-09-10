@@ -21,6 +21,7 @@ use crate::prelude::*;
 
 use super::Params;
 
+#[cfg(feature = "host")]
 use super::super::script::execute_commands;
 
 /// A fully-resolved script sync step: the command(s), the working directory, and
@@ -96,8 +97,10 @@ pub trait ScriptRunner: Sync + Send {
 }
 
 /// The [`ScriptRunner`] that spawns each command as a host subprocess.
+#[cfg(feature = "host")]
 pub struct HostScripts;
 
+#[cfg(feature = "host")]
 #[async_trait]
 impl ScriptRunner for HostScripts {
     async fn run_script(

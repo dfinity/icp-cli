@@ -307,8 +307,13 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
 
-    let create_operation =
-        CreateOperation::new(calls, args.create_target(), args.funding(), vec![]);
+    let create_operation = CreateOperation::new(
+        calls,
+        ctx.host.random.clone(),
+        args.create_target(),
+        args.funding(),
+        vec![],
+    );
 
     let canister_settings = args.canister_settings();
 
@@ -376,6 +381,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     let create_operation = CreateOperation::new(
         calls.clone(),
+        ctx.host.random.clone(),
         args.create_target(),
         args.funding(),
         ids.values().copied().collect(),

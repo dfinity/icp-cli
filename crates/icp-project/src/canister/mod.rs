@@ -15,6 +15,7 @@ pub mod recipe;
 pub mod sync;
 pub mod visibility;
 
+#[cfg(feature = "host")]
 mod script;
 pub mod wasm;
 

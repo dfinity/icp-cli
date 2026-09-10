@@ -187,6 +187,7 @@ pub enum PluginError {
 /// [`PLUGIN_COMPUTE_LIMIT_ENV`] override. Fails loudly on a malformed value so
 /// a typo doesn't silently fall back to the default and leave the caller
 /// wondering why their raised limit had no effect.
+#[cfg(feature = "host")]
 fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
     match std::env::var(PLUGIN_COMPUTE_LIMIT_ENV) {
         Ok(value) => parse_compute_limit(&value),
@@ -201,6 +202,13 @@ fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
     }
 }
 
+/// The default, where there are no environment variables to override it with.
+#[cfg(not(feature = "host"))]
+fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
+    Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS)
+}
+
+#[cfg(feature = "host")]
 fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
     match value.trim().parse::<u64>() {
         Ok(secs) if secs >= 1 => Ok(secs),

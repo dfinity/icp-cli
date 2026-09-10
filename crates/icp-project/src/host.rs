@@ -77,6 +77,9 @@ pub struct Host {
     /// Network resolution: endpoints, root keys, friendly domains
     pub network: Arc<dyn crate::network::Access>,
 
+    /// Source of randomness, for picking a subnet out of several
+    pub random: Arc<dyn crate::random::Random>,
+
     /// Where to report what resolution turned up. See [`Observe`].
     pub observer: Arc<dyn Observe>,
 }
@@ -117,6 +120,7 @@ impl Host {
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             wasm: Arc::new(crate::canister::wasm::UnimplementedMockFetch),
             network: Arc::new(crate::network::MockNetworkAccessor::new()),
+            random: Arc::new(crate::random::FirstChoice),
             observer: Arc::new(Ignore),
         }
     }

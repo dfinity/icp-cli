@@ -3826,7 +3826,6 @@ dependencies = [
  "schemars",
  "semver",
  "serde",
- "serde_cbor",
  "serde_json",
  "serde_yaml",
  "sha2 0.11.0",

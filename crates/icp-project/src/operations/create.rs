@@ -27,7 +27,6 @@ use icp_canister_interfaces::{
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
-use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
 use tracing::{info, warn};
@@ -174,6 +173,7 @@ pub enum CreateTarget {
 
 struct CreateOperationInner {
     calls: Arc<dyn CanisterCalls>,
+    random: Arc<dyn crate::random::Random>,
     target: CreateTarget,
     funding: CreateFunding,
     existing_canisters: Vec<Principal>,
@@ -195,6 +195,7 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         calls: Arc<dyn CanisterCalls>,
+        random: Arc<dyn crate::random::Random>,
         target: CreateTarget,
         funding: CreateFunding,
         existing_canisters: Vec<Principal>,
@@ -202,6 +203,7 @@ impl CreateOperation {
         Self {
             inner: Arc::new(CreateOperationInner {
                 calls,
+                random,
                 target,
                 funding,
                 existing_canisters,
@@ -648,9 +650,14 @@ impl CreateOperation {
                         .await
                         .map_err(|e| e.to_string())?;
 
-                    subnets
-                        .choose(&mut rand::rng())
-                        .copied()
+                    let chosen = self
+                        .inner
+                        .random
+                        .index_below(subnets.len())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    chosen
+                        .and_then(|i| subnets.get(i).copied())
                         .ok_or_else(|| "no available subnets found".to_string())
                 }
             })

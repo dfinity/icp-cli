@@ -1,5 +1,9 @@
 pub mod binding_env_vars;
 pub mod build;
+// Host-side: a bundle is a `.tar.gz` on a disk, and a plugin's declared
+// directory goes into it as a tree walked for symlinks, which no seam over
+// `FileSystem` can reproduce faithfully.
+#[cfg(feature = "host")]
 pub mod bundle;
 pub mod candid_compat;
 pub mod create;

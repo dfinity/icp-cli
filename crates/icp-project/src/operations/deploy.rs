@@ -428,6 +428,7 @@ async fn create_canisters(
     };
     let create_operation = CreateOperation::new(
         calls.clone(),
+        host.random.clone(),
         target,
         CreateFunding::Cycles(params.cycles),
         existing_ids,

@@ -3,13 +3,18 @@ use async_trait::async_trait;
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
+#[cfg(feature = "host")]
 use std::sync::Arc;
 
+#[cfg(feature = "host")]
 use crate::canister::wasm;
 use crate::manifest::canister::BuildStep;
 use crate::prelude::*;
 
+// Both halves of the one implementation below, which is host-side.
+#[cfg(feature = "host")]
 mod prebuilt;
+#[cfg(feature = "host")]
 mod script;
 
 pub struct Params {
@@ -20,8 +25,10 @@ pub struct Params {
 
 #[derive(Debug, Snafu)]
 pub enum BuildError {
+    #[cfg(feature = "host")]
     #[snafu(transparent)]
     Script { source: super::script::ScriptError },
+    #[cfg(feature = "host")]
     #[snafu(transparent)]
     Prebuilt { source: prebuilt::PrebuiltError },
 }
@@ -38,17 +45,23 @@ pub trait Build: Sync + Send {
 
 /// Runs each build step where it has to be run: a script step in a subprocess,
 /// a pre-built step by asking [`wasm::Fetch`] for the module.
+///
+/// Only a host can run the script half, so this whole implementation is
+/// host-side; somewhere without subprocesses supplies its own [`Build`].
+#[cfg(feature = "host")]
 pub struct Builder {
     wasm: Arc<dyn wasm::Fetch>,
     files: Arc<dyn crate::files::FileSystem>,
 }
 
+#[cfg(feature = "host")]
 impl Builder {
     pub fn new(wasm: Arc<dyn wasm::Fetch>, files: Arc<dyn crate::files::FileSystem>) -> Self {
         Self { wasm, files }
     }
 }
 
+#[cfg(feature = "host")]
 #[async_trait]
 impl Build for Builder {
     async fn build(

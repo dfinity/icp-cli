@@ -157,13 +157,13 @@ async fn build_public_status(
     cid: Principal,
     maybe_name: Option<String>,
 ) -> Result<PublicCanisterStatusResult, anyhow::Error> {
-    let controllers = calls
-        .controllers(cid)
-        .await
-        .map_err(|e| anyhow!("could not read the controllers of canister {cid}: {e}"))?
-        .iter()
-        .map(|p| p.to_string())
-        .collect();
+    let controllers = match calls.controllers(cid).await {
+        Ok(Some(controllers)) => controllers.iter().map(|p| p.to_string()).collect(),
+        // No controllers means no canister, which is the more useful thing to
+        // say than that a read of them came back empty-handed.
+        Ok(None) => bail!("Canister {cid} was not found."),
+        Err(e) => bail!("could not read the controllers of canister {cid}: {e}"),
+    };
     let module_hash = calls
         .module_hash(cid)
         .await

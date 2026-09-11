@@ -189,8 +189,13 @@ pub trait CanisterCalls: Send + Sync {
         path: &str,
     ) -> Result<Option<Vec<u8>>, CallError>;
 
-    /// A canister's controllers.
-    async fn controllers(&self, canister: Principal) -> Result<Vec<Principal>, CallError>;
+    /// A canister's controllers, or `None` when there is no such canister.
+    ///
+    /// Controllers are set when a canister is created, so a caller may read
+    /// their absence as the canister's — and an implementation reads it the
+    /// same way, to tell a certified absence apart from a canister that was
+    /// never there.
+    async fn controllers(&self, canister: Principal) -> Result<Option<Vec<Principal>>, CallError>;
 
     /// The hash of a canister's installed module, or `None` when it has none.
     ///

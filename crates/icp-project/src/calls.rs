@@ -107,7 +107,7 @@ pub enum CallError {
     /// The call never reached a verdict — a transport failure, a timeout, a
     /// malformed reply. The cause is carried whole because what a call travels
     /// over is the implementation's business.
-    #[snafu(display("call to '{method}' on {canister} failed: {source}"))]
+    #[snafu(display("call to '{method}' on {canister} failed"))]
     Failed {
         canister: Principal,
         method: String,

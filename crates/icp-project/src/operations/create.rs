@@ -53,8 +53,13 @@ pub enum CreateOperationError {
     #[snafu(display("failed to create canister: {message}"))]
     CreateCanister { message: String },
 
-    #[snafu(display("failed to get subnet for canister"))]
-    GetSubnet { source: crate::calls::CallError },
+    #[snafu(display(
+        "failed to check whether subnet {subnet} creates canisters through an engine operator"
+    ))]
+    CheckEngineOperator {
+        source: crate::calls::CallError,
+        subnet: Principal,
+    },
 
     #[snafu(display("failed to submit create_canister to subnet {subnet}"))]
     SubmitSubnetCreate {
@@ -236,7 +241,9 @@ impl CreateOperation {
             .calls
             .subnet_uses_engine_operator(selected_subnet)
             .await
-            .context(GetSubnetSnafu)?;
+            .context(CheckEngineOperatorSnafu {
+                subnet: selected_subnet,
+            })?;
         let cid = if uses_engine_operator {
             // Resolve the subnet's engine-operator first. Only a definitive
             // "could not resolve an operator" resolution failure falls back to

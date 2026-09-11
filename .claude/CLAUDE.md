@@ -50,9 +50,14 @@ trait declared there and implemented in `icp-app`:
 - `host::Observe` — what resolution turned up, for telemetry
 
 Because those are implemented across a crate boundary, their error types carry
-their cause boxed and render it with `#[snafu(display("{source}"))]`. This is
-the one exception to the error-handling rule below: on a trait whose
-implementation the crate cannot name, there is no variant to write.
+their cause boxed and pass it through with `#[snafu(transparent)]`, which leaves
+the wrapper out of the source chain so the cause is reported once rather than
+both restated as the wrapper's message and reported beneath it.
+
+This is the one exception to the error-handling rule below, and to both of its
+halves: on a trait whose implementation the crate cannot name there is no
+variant to write, and what `transparent` passes through here is a boxed foreign
+error rather than one of this repo's.
 
 ### Command Structure
 

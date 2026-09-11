@@ -43,7 +43,7 @@ pub struct Fetched {
 /// project. This layer knows only that it can fail, so the cause is carried
 /// whole and displayed as itself.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct ResolveError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

@@ -12,6 +12,7 @@
 //! not reach for it.
 
 use async_trait::async_trait;
+use camino::Utf8Component;
 use snafu::{ResultExt, Snafu};
 
 use crate::prelude::*;
@@ -145,6 +146,11 @@ pub enum GlobError {
 /// `**` standing for any number of directories — the same shape `glob`
 /// supports, and the same one the manifest reference documents.
 ///
+/// A component that cannot match anything is instead resolved the way joining
+/// it onto `base` would resolve it: `..` climbs, and an absolute pattern starts
+/// from its own root with `base` dropped. So a pattern with no metacharacters
+/// at all names the same path here as `base.join(pattern)` does.
+///
 /// Only paths that exist are returned, and each directory's entries are listed
 /// in sorted order, so the result is the same on every run.
 pub async fn expand_glob(
@@ -154,45 +160,70 @@ pub async fn expand_glob(
 ) -> Result<Vec<PathBuf>, GlobError> {
     let mut frontier = vec![base.to_path_buf()];
 
-    for component in pattern.split('/') {
-        if component.is_empty() || component == "." {
-            continue;
-        }
+    for component in Path::new(pattern).components() {
+        match component {
+            // A root — or, on Windows, a drive prefix — is what makes a pattern
+            // absolute. Pushing it is what leaves `base` behind, by the same
+            // rule that joining an absolute path onto another discards the
+            // other.
+            Utf8Component::Prefix(_) | Utf8Component::RootDir => {
+                for dir in &mut frontier {
+                    dir.push(component.as_str());
+                }
+            }
 
-        if component == "**" {
-            // `**` matches zero or more directories, so every reachable
-            // directory — including the ones already in hand — carries forward.
-            let mut reached = frontier.clone();
-            let mut stack = frontier;
-            while let Some(dir) = stack.pop() {
-                for entry in list(files, &dir, pattern).await? {
-                    if files.is_dir(&entry).await {
-                        reached.push(entry.clone());
-                        stack.push(entry);
+            Utf8Component::CurDir => {}
+
+            // No listing ever turns up an entry named `..`, so this names a
+            // directory rather than matching one. It still has to be one, or
+            // the pattern describes no path from here.
+            Utf8Component::ParentDir => {
+                let mut next = Vec::new();
+                for dir in &frontier {
+                    let parent = dir.join("..");
+                    if files.is_dir(&parent).await {
+                        next.push(parent);
                     }
                 }
+                frontier = next;
             }
-            reached.sort();
-            reached.dedup();
-            frontier = reached;
-            continue;
-        }
 
-        let matcher = glob::Pattern::new(component).context(PatternSnafu {
-            pattern: pattern.to_owned(),
-        })?;
-
-        let mut next = Vec::new();
-        for dir in &frontier {
-            for entry in list(files, dir, pattern).await? {
-                if entry.file_name().is_some_and(|name| matcher.matches(name)) {
-                    next.push(entry);
+            // `**` matches zero or more directories, so every reachable
+            // directory — including the ones already in hand — carries forward.
+            Utf8Component::Normal("**") => {
+                let mut reached = frontier.clone();
+                let mut stack = frontier;
+                while let Some(dir) = stack.pop() {
+                    for entry in list(files, &dir, pattern).await? {
+                        if files.is_dir(&entry).await {
+                            reached.push(entry.clone());
+                            stack.push(entry);
+                        }
+                    }
                 }
+                reached.sort();
+                reached.dedup();
+                frontier = reached;
+            }
+
+            Utf8Component::Normal(component) => {
+                let matcher = glob::Pattern::new(component).context(PatternSnafu {
+                    pattern: pattern.to_owned(),
+                })?;
+
+                let mut next = Vec::new();
+                for dir in &frontier {
+                    for entry in list(files, dir, pattern).await? {
+                        if entry.file_name().is_some_and(|name| matcher.matches(name)) {
+                            next.push(entry);
+                        }
+                    }
+                }
+                next.sort();
+                next.dedup();
+                frontier = next;
             }
         }
-        next.sort();
-        next.dedup();
-        frontier = next;
     }
 
     Ok(frontier)
@@ -232,7 +263,13 @@ mod tests {
     }
 
     async fn expand(root: &Path, pattern: &str) -> Vec<String> {
-        expand_glob(&HostFileSystem, root, pattern)
+        expand_from(root, root, pattern).await
+    }
+
+    /// As [`expand`], but expanding from a `base` the pattern may leave: results
+    /// are still spelled relative to `root`.
+    async fn expand_from(base: &Path, root: &Path, pattern: &str) -> Vec<String> {
+        expand_glob(&HostFileSystem, base, pattern)
             .await
             .expect("expand")
             .into_iter()
@@ -310,6 +347,43 @@ mod tests {
     async fn results_are_sorted_so_a_run_is_reproducible() {
         let d = tree(&["c/z/x", "c/a/x", "c/m/x"]);
         assert_eq!(expand(d.path(), "c/*").await, ["c/a", "c/m", "c/z"]);
+    }
+
+    /// A dependency next to the project, rather than under it, is named by
+    /// climbing out of it — the shape a workspace of sibling projects uses.
+    #[tokio::test]
+    async fn a_parent_component_climbs_out_of_the_base() {
+        let d = tree(&[
+            "proj/icp.yaml",
+            "shared/a/canister.yaml",
+            "shared/b/canister.yaml",
+        ]);
+        assert_eq!(
+            expand_from(&d.path().join("proj"), d.path(), "../shared/*").await,
+            ["proj/../shared/a", "proj/../shared/b"]
+        );
+    }
+
+    /// `..` has to name a directory that is there, like any other component.
+    #[tokio::test]
+    async fn climbing_to_nowhere_matches_nothing() {
+        let d = tree(&["proj/icp.yaml"]);
+        assert!(
+            expand_from(&d.path().join("proj/nonexistent"), d.path(), "../*")
+                .await
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_absolute_pattern_leaves_the_base_behind() {
+        let d = tree(&["shared/a/canister.yaml", "shared/b/canister.yaml"]);
+        let elsewhere = tree(&["unrelated/canister.yaml"]);
+        let pattern = format!("{}/*", d.path().join("shared"));
+        assert_eq!(
+            expand_from(elsewhere.path(), d.path(), &pattern).await,
+            ["shared/a", "shared/b"]
+        );
     }
 
     #[tokio::test]

@@ -13,7 +13,6 @@ use snafu::prelude::*;
 use crate::{
     canister::wasm,
     manifest::adapter::plugin::{Adapter, NamedPaths},
-    package::PackageCache,
 };
 
 use super::Params;
@@ -34,7 +33,7 @@ fn keyed_paths(paths: Option<&NamedPaths>) -> Vec<KeyedPath> {
 #[derive(Debug, Snafu)]
 pub enum PluginError {
     #[snafu(transparent)]
-    Wasm { source: wasm::WasmError },
+    Wasm { source: wasm::FetchError },
 
     #[snafu(display("failed to get identity principal: {err}"))]
     GetIdentityPrincipal { err: String },
@@ -89,7 +88,7 @@ pub(super) async fn sync(
     environment: &str,
     proxy: Option<Principal>,
     reporter: &StepReporter,
-    pkg_cache: &PackageCache,
+    wasm_fetch: &dyn wasm::Fetch,
 ) -> Result<Vec<String>, PluginError> {
     // 0. Resolve the compute-time limit up front so a malformed
     //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
@@ -100,14 +99,14 @@ pub(super) async fn sync(
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
     //      stable cache path is returned — no temp file needed.
-    let wasm_path = wasm::resolve(
-        &adapter.source,
-        &params.path,
-        adapter.sha256.as_deref(),
-        reporter,
-        pkg_cache,
-    )
-    .await?;
+    let wasm_path = wasm_fetch
+        .wasm(
+            &adapter.source,
+            &params.path,
+            adapter.sha256.as_deref(),
+            reporter,
+        )
+        .await?;
 
     // 2. Collect inputs as manifest strings. `run_plugin` opens the declared
     //    paths itself — preopening or reading each by what is on disk, anchored

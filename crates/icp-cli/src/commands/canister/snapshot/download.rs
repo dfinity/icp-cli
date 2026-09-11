@@ -1,8 +1,8 @@
 use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::{Args, ValueHint};
-use icp::context::Context;
 use icp::prelude::*;
+use icp_app::context::Context;
 use tracing::info;
 
 use icp::operations::task::{Task, TransferBlob, TransferDirection};
@@ -11,7 +11,7 @@ use super::SnapshotId;
 use crate::commands::args;
 use crate::render::rendered_task;
 use icp::operations::misc::format_timestamp;
-use icp::operations::snapshot_transfer::{
+use icp_app::operations::snapshot_transfer::{
     BlobType, SnapshotPaths, SnapshotTransferError, delete_download_progress,
     download_blob_to_file, download_wasm_chunk, load_download_progress, load_metadata,
     read_snapshot_metadata, save_metadata,

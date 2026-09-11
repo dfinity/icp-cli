@@ -1,0 +1,253 @@
+//! Directory management for ICP CLI.
+//!
+//! This module provides utilities for determining and managing directory paths
+//! used by the ICP CLI tool. It handles both standard system directories and
+//! custom overrides, primarily for storing user data like identities and cache.
+
+use crate::{
+    identity::{IdentityDirectories, IdentityPaths},
+    package::PackageCache,
+    settings::{SettingsDirectories, SettingsPaths},
+};
+use directories::ProjectDirs;
+use icp::{fs::lock::LockError, prelude::*};
+use snafu::prelude::*;
+
+/// Trait for accessing global ICP CLI directories.
+pub trait Access: Sync + Send {
+    /// Returns the path to the identity directory.
+    fn identity(&self) -> Result<IdentityDirectories, LockError>;
+
+    /// Returns the path to the global port descriptors directory.
+    fn port_descriptor(&self) -> PathBuf;
+
+    /// Returns the path to the package cache for managed packages.
+    fn package_cache(&self) -> Result<PackageCache, LockError>;
+
+    /// Returns the path to the user settings directory.
+    fn settings(&self) -> Result<SettingsDirectories, LockError>;
+
+    /// Returns the path to the telemetry data directory.
+    fn telemetry_data(&self) -> PathBuf;
+
+    /// Returns the path to the CLI update-nag timestamp file.
+    fn cli_update_nag_timestamp(&self) -> PathBuf;
+}
+
+/// Inner structure holding data and cache directory paths.
+///
+/// This struct is used when the directories are determined using standard
+/// system conventions via the `directories` crate.
+#[derive(Debug, Clone)]
+pub struct DirectoriesInner {
+    /// Path to the config directory for storing user preferences.
+    config: PathBuf,
+    /// Path to the data directory for storing user data.
+    data: PathBuf,
+    /// Path to the data directory for storing machine-specific data,
+    /// or cached copies of data whose source-of-truth is elsewhere.
+    data_local: PathBuf,
+    /// Path to the cache directory for temporary files.
+    cache: PathBuf,
+}
+
+/// Implementation for creating `DirectoriesInner` from `ProjectDirs`.
+impl DirectoriesInner {
+    /// Creates a `DirectoriesInner` from a `ProjectDirs` instance.
+    ///
+    /// This method extracts the data and cache directory paths from the
+    /// `ProjectDirs` and converts them to UTF-8 validated paths.
+    ///
+    /// # Errors
+    /// Returns `FromPathBufError` if the paths contain non-UTF-8 characters.
+    pub fn from_dirs(dirs: ProjectDirs) -> Result<Self, FromPathBufError> {
+        Ok(Self {
+            config: dirs.config_dir().to_owned().try_into()?,
+            data: dirs.data_dir().to_owned().try_into()?,
+            data_local: dirs.data_local_dir().to_owned().try_into()?,
+            cache: dirs.cache_dir().to_owned().try_into()?,
+        })
+    }
+}
+
+/// Enumeration representing the directory configuration.
+///
+/// This enum allows for two modes of directory management:
+/// - Standard: Uses system-standard directories determined by the `directories` crate.
+/// - Overridden: Uses a custom base path, typically set via the `ICP_HOME` environment variable.
+#[derive(Debug, Clone)]
+pub enum Directories {
+    /// Standard directories based on system conventions.
+    Standard(DirectoriesInner),
+    /// Custom directory path override.
+    Overridden(PathBuf),
+}
+
+/// Errors that can occur when working with directories.
+#[derive(Debug, Snafu)]
+pub enum DirectoriesError {
+    /// Failed to locate the user's home directory.
+    #[snafu(display("home directory could not be located"))]
+    LocateHome,
+
+    /// Directory paths contain non-UTF-8 characters.
+    #[snafu(display("user directories are non-UTF-8"))]
+    Utf8 { source: FromPathBufError },
+}
+
+/// Implementation of directory creation and management.
+impl Directories {
+    /// Creates a new `Directories` instance.
+    ///
+    /// This method first checks for the `ICP_HOME` environment variable to allow
+    /// overriding the default directory location. If not set, it uses standard
+    /// system directories via the `directories` crate for the DFINITY organization
+    /// and ICP CLI application.
+    ///
+    /// # Returns
+    /// - `Ok(Directories::Overridden(_))` if `ICP_HOME` is set
+    /// - `Ok(Directories::Standard(_))` using system directories
+    /// - `Err(DirectoriesError)` if directories cannot be determined
+    pub fn new() -> Result<Self, DirectoriesError> {
+        // Allow overriding home directory
+        if let Ok(v) = std::env::var("ICP_HOME") {
+            return Ok(Self::Overridden(v.into()));
+        }
+
+        let dirs = ProjectDirs::from(
+            "org.dfinity", // qualifier
+            "",            // organization
+            "icp-cli",     // application
+        )
+        .ok_or(DirectoriesError::LocateHome)?;
+
+        // Convert to utf8 paths
+        let dirs = DirectoriesInner::from_dirs(dirs).context(Utf8Snafu)?;
+
+        Ok(Self::Standard(dirs))
+    }
+}
+
+/// Implementation providing access to specific directory paths.
+impl Directories {
+    /// Returns the base config directory path.
+    ///
+    /// For standard directories, this is the system config directory.
+    /// For overridden directories, this is the custom path.
+    fn config(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.config.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
+    /// Returns the base data directory path.
+    ///
+    /// For standard directories, this is the system data directory.
+    /// For overridden directories, this is the custom path.
+    fn data(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.data.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
+    fn data_local(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.data_local.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+
+    /// Returns the base cache directory path.
+    ///
+    /// For standard directories, this is the system cache directory.
+    /// For overridden directories, this is the custom path.
+    fn cache(&self) -> PathBuf {
+        match self {
+            Self::Standard(dirs) => dirs.cache.clone(),
+            Self::Overridden(path) => path.clone(),
+        }
+    }
+}
+
+/// Implementation of Access trait for Directories.
+impl Access for Directories {
+    /// Returns the path to the identity directory.
+    ///
+    /// This directory stores user identity files, keys, and related data.
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
+        IdentityPaths::new(self.data().join("identity"))
+    }
+
+    /// Returns the path to the global port descriptors directory.
+    ///
+    /// See [`crate::network::directory`] for how this directory is used to prevent
+    /// port conflicts between projects using fixed-port managed networks.
+    fn port_descriptor(&self) -> PathBuf {
+        self.cache().join("port-descriptors")
+    }
+
+    /// Returns the path to the package cache for managed packages.
+    ///
+    /// This directory stores downloaded versions of managed packages like icp-cli-network-launcher.
+    fn package_cache(&self) -> Result<PackageCache, LockError> {
+        crate::package::open(self.data_local().join("pkg"))
+    }
+
+    /// Returns the path to the user settings directory.
+    ///
+    /// This directory stores user preferences and configuration.
+    fn settings(&self) -> Result<SettingsDirectories, LockError> {
+        SettingsPaths::new(self.config().join("settings"))
+    }
+
+    /// Returns the path to the telemetry data directory.
+    ///
+    /// This directory stores telemetry events and state files.
+    ///
+    /// Unlike [`Self::settings`] or [`Self::identity`], this intentionally
+    /// returns a plain path without a directory lock. Telemetry files are
+    /// append-only or write-once, so concurrent access is harmless and
+    /// locking would risk blocking the CLI on a best-effort subsystem.
+    fn telemetry_data(&self) -> PathBuf {
+        self.data().join("telemetry")
+    }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        self.cache().join(".cli-update-nag-timestamp")
+    }
+}
+
+#[cfg(test)]
+/// Unimplemented mock implementation of `Access`.
+/// All methods panic with `unimplemented!()` when called.
+#[derive(Debug, Clone)]
+pub struct UnimplementedMockDirs;
+
+#[cfg(test)]
+impl Access for UnimplementedMockDirs {
+    fn identity(&self) -> Result<IdentityDirectories, LockError> {
+        unimplemented!("UnimplementedMockDirs::identity")
+    }
+
+    fn port_descriptor(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::port_descriptor")
+    }
+
+    fn package_cache(&self) -> Result<PackageCache, LockError> {
+        unimplemented!("UnimplementedMockDirs::package_cache")
+    }
+
+    fn settings(&self) -> Result<SettingsDirectories, LockError> {
+        unimplemented!("UnimplementedMockDirs::settings")
+    }
+
+    fn telemetry_data(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::telemetry_data")
+    }
+
+    fn cli_update_nag_timestamp(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::cli_update_nag_timestamp")
+    }
+}

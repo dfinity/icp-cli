@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::{
     Canister,
     canister::build::{Build, BuildError, Params},
-    package::PackageCache,
     prelude::*,
 };
 use camino_tempfile::tempdir;
@@ -46,7 +45,6 @@ pub async fn build(
     task: &TaskReporter,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
-    pkg_cache: &PackageCache,
 ) -> Result<(), BuildOperationError> {
     let build_dir = tempdir().context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
@@ -64,7 +62,6 @@ pub async fn build(
                     environment: environment.to_owned(),
                 },
                 &reporter,
-                pkg_cache,
             )
             .await;
 
@@ -95,7 +92,6 @@ pub async fn build_many(
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
-    pkg_cache: &PackageCache,
     reporter: &Reporter,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
@@ -113,7 +109,6 @@ pub async fn build_many(
                 &task,
                 builder,
                 artifacts,
-                pkg_cache,
             )
             .await;
 

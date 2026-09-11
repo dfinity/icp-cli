@@ -1,5 +1,3 @@
-use std::{collections::BTreeMap, sync::Arc};
-
 use async_trait::async_trait;
 use candid::Principal;
 use schemars::JsonSchema;
@@ -7,31 +5,19 @@ use serde::{Deserialize, Deserializer, Serialize};
 use snafu::prelude::*;
 
 pub use crate::manifest::network::RootKeySpec;
-pub use access::{NetworkUrls, RootKeySource};
-pub use directory::{LoadPidError, NetworkDirectory, SavePidError};
-pub use managed::run::{RunNetworkError, run_network};
+pub use access::{NetworkAccess, NetworkUrls, RootKeySource};
 use strum::EnumString;
 use url::Url;
 
 use crate::{
-    CACHE_DIR, ICP_BASE, Network,
-    manifest::{
-        ProjectRootLocate, ProjectRootLocateError,
-        network::{Connected as ManifestConnected, Endpoints, Gateway as ManifestGateway, Mode},
+    Network,
+    manifest::network::{
+        Connected as ManifestConnected, Endpoints, Gateway as ManifestGateway, Mode,
     },
-    network::access::{
-        GetNetworkAccessError, NetworkAccess, get_connected_network_access,
-        get_managed_network_access, get_managed_network_urls,
-    },
-    prelude::*,
     project::DEFAULT_LOCAL_NETWORK_PORT,
 };
 
 pub mod access;
-pub mod config;
-pub mod custom_domains;
-pub mod directory;
-pub mod managed;
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, Serialize)]
 pub enum Port {
@@ -336,13 +322,26 @@ impl From<Mode> for Configuration {
     }
 }
 
+/// A network could not be reached, or could not be described.
+///
+/// What that took is the implementation's business: locating the project,
+/// reading a descriptor some launcher wrote, fetching a root key over HTTP.
+/// This layer knows only that it can fail and that whatever went wrong is what
+/// the user needs to be told, so the cause is carried whole and displayed as
+/// itself rather than being restated here.
 #[derive(Debug, Snafu)]
-pub enum AccessError {
-    #[snafu(display("failed to find project root"))]
-    ProjectRootLocate { source: ProjectRootLocateError },
+#[snafu(transparent)]
+pub struct AccessError {
+    pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
+}
 
-    #[snafu(transparent)]
-    GetNetworkAccess { source: GetNetworkAccessError },
+impl AccessError {
+    /// Wraps an implementation's own error for the trait boundary.
+    pub fn new(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            source: Box::new(source),
+        }
+    }
 }
 
 /// One environment's friendly-name mappings, as collected from the project.
@@ -367,7 +366,8 @@ pub type CollectFriendlyDomains<'a> = dyn Fn(&str) -> Vec<FriendlyDomains> + Sen
 
 #[async_trait]
 pub trait Access: Sync + Send {
-    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError>;
+    /// The network's endpoints together with the trust material needed to
+    /// verify what it says.
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError>;
 
     /// The network's URLs alone. Unlike [`Access::access`] this resolves no root
@@ -393,118 +393,24 @@ pub trait Access: Sync + Send {
     );
 }
 
-pub struct Accessor {
-    // Project root
-    pub project_root_locate: Arc<dyn ProjectRootLocate>,
-
-    // Port descriptors dir
-    pub descriptors: PathBuf,
-
-    // Used to build a bootstrap agent when a connected network fetches its root key
-    pub agent: Arc<dyn crate::agent::Create>,
-}
-
-#[async_trait]
-impl Access for Accessor {
-    /// The network directory is located at `<project_root>/.icp/cache/networks/<network_name>`.
-    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
-        let dir = self
-            .project_root_locate
-            .locate()
-            .context(ProjectRootLocateSnafu)?;
-        Ok(NetworkDirectory::new(
-            &network.name,
-            &dir.join(ICP_BASE)
-                .join(CACHE_DIR)
-                .join("networks")
-                .join(&network.name),
-            &self.descriptors,
-        ))
-    }
-    async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        match &network.configuration {
-            Configuration::Managed { managed: _ } => {
-                let nd = self.get_network_directory(network)?;
-                Ok(get_managed_network_access(nd).await?)
-            }
-            Configuration::Connected { connected: cfg } => {
-                Ok(get_connected_network_access(cfg, &self.agent).await?)
-            }
-        }
-    }
-
-    async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError> {
-        match &network.configuration {
-            Configuration::Managed { managed: _ } => {
-                let nd = self.get_network_directory(network)?;
-                Ok(get_managed_network_urls(nd).await?)
-            }
-            // A connected network's endpoints are configured, so there is
-            // nothing to resolve.
-            Configuration::Connected { connected: cfg } => Ok(NetworkUrls {
-                api_url: cfg.api_url.clone(),
-                http_gateway_url: cfg.http_gateway_url.clone(),
-            }),
-        }
-    }
-
-    async fn publish_friendly_domains(
-        &self,
-        network: &Network,
-        collect: &CollectFriendlyDomains<'_>,
-    ) {
-        let Configuration::Managed { .. } = &network.configuration else {
-            return;
-        };
-        let Ok(nd) = self.get_network_directory(network) else {
-            return;
-        };
-        let Ok(Some(desc)) = nd.load_network_descriptor().await else {
-            return;
-        };
-        let Some(status_dir) = &desc.status_dir else {
-            return;
-        };
-        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
-        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
-            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
-            return;
-        };
-        let Some(domain) = custom_domains::gateway_domain(&gateway_url) else {
-            return;
-        };
-
-        // Only here, past every way this can turn out to have nothing to write,
-        // is the project asked for any mappings. The descriptor names the
-        // network the gateway is actually serving, so it — not the
-        // environment's own view — decides which environments share this
-        // network and therefore this mapping file.
-        let env_entries: BTreeMap<String, Vec<(String, Principal)>> = collect(&desc.network)
-            .into_iter()
-            .map(|e| (e.environment, e.entries))
-            .collect();
-
-        let extra: Vec<_> = custom_domains::ii_custom_domain_entry(desc.ii, domain)
-            .into_iter()
-            .collect();
-        if let Err(e) =
-            custom_domains::write_custom_domains(status_dir, domain, &env_entries, &extra)
-        {
-            tracing::warn!("Failed to update custom domains: {e}");
-        }
-    }
-}
-
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 use std::collections::HashMap;
 
-#[cfg(test)]
+/// A [`MockNetworkAccessor`] was asked about a network it was not given.
+#[cfg(any(test, feature = "test-util"))]
+#[derive(Debug, Snafu)]
+#[snafu(display("the {network} network for this project is not running"))]
+pub struct NotConfigured {
+    pub network: String,
+}
+
+#[cfg(any(test, feature = "test-util"))]
 pub struct MockNetworkAccessor {
     /// Network-specific access configurations by network name
     networks: HashMap<String, NetworkAccess>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 impl MockNetworkAccessor {
     /// Creates a new empty mock network accessor.
     pub fn new() -> Self {
@@ -520,32 +426,22 @@ impl MockNetworkAccessor {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 impl Default for MockNetworkAccessor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 #[async_trait]
 impl Access for MockNetworkAccessor {
-    fn get_network_directory(&self, network: &Network) -> Result<NetworkDirectory, AccessError> {
-        Ok(NetworkDirectory {
-            network_name: network.name.clone(),
-            network_root: PathBuf::new(),
-            port_descriptor_dir: PathBuf::new(),
-        })
-    }
     async fn access(&self, network: &Network) -> Result<NetworkAccess, AccessError> {
-        self.networks
-            .get(&network.name)
-            .cloned()
-            .ok_or_else(|| AccessError::GetNetworkAccess {
-                source: GetNetworkAccessError::NetworkNotRunning {
-                    network: network.name.clone(),
-                },
+        self.networks.get(&network.name).cloned().ok_or_else(|| {
+            AccessError::new(NotConfigured {
+                network: network.name.clone(),
             })
+        })
     }
 
     async fn urls(&self, network: &Network) -> Result<NetworkUrls, AccessError> {

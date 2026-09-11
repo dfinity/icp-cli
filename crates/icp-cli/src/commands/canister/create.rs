@@ -6,14 +6,12 @@ use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::canister::resolve_controllers;
-use icp::identity::IdentitySelection;
+use icp::host::EnvironmentSelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp::store_id::IdMapping;
 use icp::{Canister, host::CanisterSelection, prelude::*};
-use icp::{
-    context::{Context, NetworkSelection},
-    host::EnvironmentSelection,
-};
+use icp_app::context::{Context, NetworkSelection};
+use icp_app::identity::IdentitySelection;
 use serde::Serialize;
 use tracing::{info, warn};
 

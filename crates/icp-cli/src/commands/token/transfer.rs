@@ -2,13 +2,13 @@ use std::io::stdout;
 
 use bigdecimal::BigDecimal;
 use clap::Args;
-use icp::context::Context;
 use icp::parsers::parse_token_amount;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
 use crate::commands::parsers::parse_subaccount;
-use icp::operations::token::transfer::transfer;
+use icp_app::operations::token::transfer::transfer;
 
 /// Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 #[derive(Debug, Args)]

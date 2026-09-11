@@ -2,14 +2,14 @@ use std::io::stdout;
 
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
 use crate::commands::token::format_expiry;
-use icp::operations::token::allowance::get_allowance;
+use icp_app::operations::token::allowance::get_allowance;
 
 /// Display the allowance granted to a spender (ICRC-2) (default token: icp)
 ///

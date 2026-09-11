@@ -1,7 +1,7 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::Context;
-use icp::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
+use icp_app::context::Context;
+use icp_app::identity::manifest::{IdentityDefaults, IdentityList, change_default_identity};
 use tracing::info;
 
 /// Display or set the currently selected identity

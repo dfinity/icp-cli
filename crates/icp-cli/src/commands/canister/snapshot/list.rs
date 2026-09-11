@@ -4,7 +4,7 @@ use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::Context;
+use icp_app::context::Context;
 use itertools::Itertools;
 use serde::Serialize;
 

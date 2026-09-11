@@ -5,17 +5,14 @@ use bip39::{Language, Mnemonic, MnemonicType};
 use clap::{Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::{
-    fs::write_string,
-    identity::{
-        key::{CreateFormat, create_identity, validate_password},
-        manifest::{IdentityKeyAlgorithm, IdentityList},
-        seed::derive_key_from_seed_slip10,
-    },
-    prelude::*,
+use icp::{fs::write_string, prelude::*};
+use icp_app::identity::{
+    key::{CreateFormat, create_identity, validate_password},
+    manifest::{IdentityKeyAlgorithm, IdentityList},
+    seed::derive_key_from_seed_slip10,
 };
 
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 use tracing::{info, warn};
 

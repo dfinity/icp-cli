@@ -2,7 +2,8 @@ use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::{context::Context, host::CanisterSelection};
+use icp::host::CanisterSelection;
+use icp_app::context::Context;
 
 use icp::operations::{proxy_management, recover_cycles};
 

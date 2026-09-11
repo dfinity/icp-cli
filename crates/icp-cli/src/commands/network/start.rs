@@ -3,12 +3,12 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::Args;
+use icp::network::Configuration;
 use icp::network::ManagedMode;
 use icp::prelude::*;
-use icp::{
+use icp_app::{
     identity::manifest::IdentityList,
     network::{
-        Configuration,
         managed::{
             cache::{
                 check_launcher_update_available, download_launcher_version,
@@ -25,7 +25,7 @@ use tracing::{debug, info, warn};
 use crate::render::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// Run a given network.
 ///
@@ -87,7 +87,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
     let pdir = &p.dir;
 
     // Network directory
-    let nd = ctx.host.network.get_network_directory(&network)?;
+    let nd = ctx.network_dirs.get_network_directory(&network)?;
     nd.ensure_exists()
         .context("failed to create network directory")?;
 
@@ -135,7 +135,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StartArgs) -> Result<(), anyhow::
         .identity()?
         .with_read(async |dirs| {
             let ids = IdentityList::load_from(dirs)?;
-            let defaults = icp::identity::manifest::IdentityDefaults::load_from(dirs)?;
+            let defaults = icp_app::identity::manifest::IdentityDefaults::load_from(dirs)?;
             Ok::<_, anyhow::Error>((ids, defaults))
         })
         .await??;

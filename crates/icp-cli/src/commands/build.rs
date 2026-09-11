@@ -1,7 +1,8 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::{context::Context, host::EnvironmentSelection};
+use icp::host::EnvironmentSelection;
+use icp_app::context::Context;
 
 use tracing::info;
 
@@ -58,14 +59,12 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
     // Build the selected canisters
     info!("Building canisters:");
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     rendered(ctx.debug, async |reporter| {
         build_many(
             canisters_to_build,
             environment_selection.name(),
             ctx.host.builder.clone(),
             ctx.host.artifacts.clone(),
-            &pkg_cache,
             reporter,
         )
         .await

@@ -1,0 +1,346 @@
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use ic_agent::Identity;
+use snafu::prelude::*;
+
+use std::collections::HashMap;
+
+use crate::{
+    identity::{
+        key::{LoadIdentityError, LoadIdentityInContextError, load_identity},
+        manifest::{IdentityList, LoadIdentityManifestError},
+    },
+    telemetry_data::{IdentityStorageType, TelemetryData},
+};
+use icp::{
+    fs::lock::{DirectoryStructureLock, LockError, PathsAccess},
+    prelude::*,
+};
+
+pub mod delegation;
+pub mod key;
+pub mod keyring_mock;
+pub mod manifest;
+pub mod seed;
+
+/// Name of the default identities file
+const IDENTITY_DEFAULTS: &str = "identity_defaults.json";
+
+/// Name of the identities list file
+const IDENTITIES_LIST: &str = "identity_list.json";
+
+pub struct IdentityPaths {
+    dir: PathBuf,
+}
+
+impl IdentityPaths {
+    pub fn new(dir: PathBuf) -> Result<IdentityDirectories, LockError> {
+        DirectoryStructureLock::open_or_create(Self { dir })
+    }
+
+    pub fn identity_defaults_path(&self) -> PathBuf {
+        self.dir.join(IDENTITY_DEFAULTS)
+    }
+
+    pub fn ensure_identity_defaults_path(&self) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir)?;
+        Ok(self.dir.join(IDENTITY_DEFAULTS))
+    }
+
+    pub fn identity_list_path(&self) -> PathBuf {
+        self.dir.join(IDENTITIES_LIST)
+    }
+
+    pub fn ensure_identity_list_path(&self) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir)?;
+        Ok(self.dir.join(IDENTITIES_LIST))
+    }
+
+    pub fn key_pem_path(&self, name: &str) -> PathBuf {
+        self.dir.join(format!("keys/{name}.pem"))
+    }
+
+    pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir.join("keys"))?;
+        Ok(self.dir.join(format!("keys/{name}.pem")))
+    }
+
+    pub fn delegation_chain_path(&self, name: &str) -> PathBuf {
+        self.dir.join(format!("delegations/{name}.json"))
+    }
+
+    pub fn ensure_delegation_chain_path(&self, name: &str) -> Result<PathBuf, icp::fs::IoError> {
+        icp::fs::create_dir_all(&self.dir.join("delegations"))?;
+        Ok(self.dir.join(format!("delegations/{name}.json")))
+    }
+}
+
+pub type IdentityDirectories = DirectoryStructureLock<IdentityPaths>;
+
+impl PathsAccess for IdentityPaths {
+    fn lock_file(&self) -> PathBuf {
+        self.dir.join(".lock")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IdentitySelection {
+    /// Current default
+    Default,
+
+    /// Anonymous
+    Anonymous,
+
+    /// By name
+    Named(String),
+}
+
+#[derive(Debug, Snafu)]
+pub enum LoadError {
+    #[snafu(transparent)]
+    LoadIdentityInContext { source: LoadIdentityInContextError },
+
+    #[snafu(transparent)]
+    LoadIdentity { source: LoadIdentityError },
+
+    #[snafu(transparent)]
+    LoadIdentityManifest { source: LoadIdentityManifestError },
+
+    #[snafu(transparent)]
+    LockIdentityDirError { source: LockError },
+}
+
+#[async_trait]
+pub trait Load: Sync + Send {
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError>;
+}
+
+/// A function that prompts for a password and returns it, or an error message.
+pub type PasswordFunc = Arc<dyn Fn() -> Result<String, String> + Send + Sync>;
+
+pub struct Loader {
+    dir: IdentityDirectories,
+    password_func: PasswordFunc,
+    pem_session_duration: Option<Duration>,
+    telemetry_data: Arc<TelemetryData>,
+    #[allow(clippy::type_complexity)]
+    cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
+}
+
+impl Loader {
+    pub fn new(
+        dir: IdentityDirectories,
+        password_func: PasswordFunc,
+        pem_session_duration: Option<Duration>,
+        telemetry_data: Arc<TelemetryData>,
+    ) -> Self {
+        Self {
+            dir,
+            password_func,
+            pem_session_duration,
+            telemetry_data,
+            cache: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl Load for Loader {
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError> {
+        if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&id) {
+            if let Some(t) = storage_type {
+                self.telemetry_data.set_identity_type(*t);
+            }
+            return Ok(Arc::clone(cached));
+        }
+
+        let pem_session_duration = self.pem_session_duration;
+        let password_func = self.password_func.clone();
+        let nrk = network_root_key.as_deref();
+        let (identity, storage_type) = match &id {
+            IdentitySelection::Default => {
+                self.dir
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
+                        let default_name =
+                            manifest::IdentityDefaults::load_from(dirs.read())?.default;
+                        let identity = load_identity(
+                            dirs,
+                            &list,
+                            &default_name,
+                            password_func,
+                            nrk,
+                            pem_session_duration,
+                        )?;
+                        let storage_type =
+                            list.identities.get(&default_name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
+                    })
+                    .await??
+            }
+
+            IdentitySelection::Anonymous => {
+                self.dir
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        Ok((
+                            load_identity(
+                                dirs,
+                                &IdentityList::load_from(dirs.read())?,
+                                "anonymous",
+                                Arc::new(|| unreachable!()),
+                                None,
+                                None,
+                            )?,
+                            Some(IdentityStorageType::Anonymous),
+                        ))
+                    })
+                    .await??
+            }
+
+            IdentitySelection::Named(name) => {
+                self.dir
+                    .with_write(async |dirs| -> Result<_, LoadIdentityInContextError> {
+                        let list = IdentityList::load_from(dirs.read())?;
+                        let identity = load_identity(
+                            dirs,
+                            &list,
+                            name,
+                            password_func,
+                            nrk,
+                            pem_session_duration,
+                        )?;
+                        let storage_type = list.identities.get(name).map(|spec| spec.into());
+                        Ok((identity, storage_type))
+                    })
+                    .await??
+            }
+        };
+
+        if let Some(t) = storage_type {
+            self.telemetry_data.set_identity_type(t);
+        }
+        self.cache
+            .lock()
+            .unwrap()
+            .insert(id, (Arc::clone(&identity), storage_type));
+        Ok(identity)
+    }
+}
+
+#[cfg(test)]
+pub struct MockIdentityLoader {
+    /// The default identity to return when IdentitySelection::Default is used
+    default: Arc<dyn Identity>,
+
+    /// Named identities that can be selected
+    named: HashMap<String, Arc<dyn Identity>>,
+}
+
+#[cfg(test)]
+impl MockIdentityLoader {
+    /// Creates a new mock identity loader with the given default identity.
+    pub fn new(default: Arc<dyn Identity>) -> Self {
+        Self {
+            default,
+            named: HashMap::new(),
+        }
+    }
+
+    /// Creates a mock identity loader with anonymous as the default.
+    pub fn anonymous() -> Self {
+        Self::new(Arc::new(ic_agent::identity::AnonymousIdentity))
+    }
+
+    /// Adds a named identity to the loader.
+    pub fn with_identity(mut self, name: impl Into<String>, identity: Arc<dyn Identity>) -> Self {
+        self.named.insert(name.into(), identity);
+        self
+    }
+
+    /// Sets the default identity.
+    pub fn with_default(mut self, identity: Arc<dyn Identity>) -> Self {
+        self.default = identity;
+        self
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl Load for MockIdentityLoader {
+    async fn load(
+        &self,
+        id: IdentitySelection,
+        _network_root_key: Option<Vec<u8>>,
+    ) -> Result<Arc<dyn Identity>, LoadError> {
+        Ok(match id {
+            IdentitySelection::Default => Arc::clone(&self.default),
+
+            IdentitySelection::Anonymous => Arc::new(ic_agent::identity::AnonymousIdentity),
+
+            IdentitySelection::Named(name) => {
+                self.named
+                    .get(&name)
+                    .map(Arc::clone)
+                    .ok_or_else(|| LoadError::LoadIdentity {
+                        source: LoadIdentityError::NoSuchIdentity { name: name.clone() },
+                    })?
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use k256::SecretKey;
+    use rand::{Rng, rng};
+
+    use crate::identity::key::{CreateFormat, IdentityKey};
+
+    use super::*;
+    #[tokio::test]
+    async fn cached_identities() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let dirs = IdentityPaths::new(tmp.path().to_path_buf()).unwrap();
+        let mut k = [0; 32];
+        rng().fill_bytes(&mut k);
+        dirs.with_write(async |dirs| {
+            crate::identity::key::create_identity(
+                dirs,
+                "test",
+                IdentityKey::Secp256k1(SecretKey::from_bytes(&k.into()).unwrap()),
+                CreateFormat::Plaintext,
+                None,
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+        let loader = Loader::new(
+            dirs,
+            Arc::new(|| unimplemented!()),
+            None,
+            Arc::new(TelemetryData::default()),
+        );
+        let i1 = loader
+            .load(IdentitySelection::Named("test".to_string()), None)
+            .await
+            .unwrap();
+        let i2 = loader
+            .load(IdentitySelection::Named("test".to_string()), None)
+            .await
+            .unwrap();
+        assert!(Arc::ptr_eq(&i1, &i2));
+    }
+}

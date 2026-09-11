@@ -2,15 +2,15 @@ use std::io::stdout;
 
 use anyhow::ensure;
 use clap::Args;
-use icp::context::Context;
 use icp::parsers::CyclesAmount;
+use icp_app::context::Context;
 use icp_canister_interfaces::cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use icp::operations::token::transfer::icrc1_transfer;
+use icp_app::operations::token::transfer::icrc1_transfer;
 
 /// Transfer cycles to another principal
 #[derive(Debug, Args)]

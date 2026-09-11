@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
-use icp::context::Context;
 use icp::host::EnvironmentSelection;
 use icp::prelude::*;
+use icp_app::context::Context;
 use tracing::warn;
 
 use icp::operations::bundle::create_bundle;
@@ -51,7 +51,6 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
         );
     }
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     rendered(ctx.debug, async |reporter| {
         create_bundle(
             &project.dir,
@@ -60,7 +59,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
             &args.environment,
             ctx.host.builder.clone(),
             ctx.host.artifacts.clone(),
-            &pkg_cache,
+            ctx.host.wasm.as_ref(),
             reporter,
             &args.output,
         )

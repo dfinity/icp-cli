@@ -1,13 +1,11 @@
 use anyhow::bail;
 use clap::Args;
-use icp::{
-    fs::remove_file,
-    network::{Configuration, config::ChildLocator, managed::run::stop_network},
-};
+use icp::{fs::remove_file, network::Configuration};
+use icp_app::network::{config::ChildLocator, managed::run::stop_network};
 use tracing::info;
 
 use super::args::NetworkOrEnvironmentArgs;
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// Stop a background network
 #[derive(Args, Debug)]
@@ -47,7 +45,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     };
 
     // Network directory
-    let nd = ctx.host.network.get_network_directory(&network)?;
+    let nd = ctx.network_dirs.get_network_directory(&network)?;
 
     let descriptor = nd
         .load_network_descriptor()

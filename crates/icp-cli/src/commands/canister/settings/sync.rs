@@ -1,7 +1,8 @@
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
-use icp::{context::Context, host::CanisterSelection};
+use icp::host::CanisterSelection;
+use icp_app::context::Context;
 use tracing::warn;
 
 use crate::commands::args::CanisterCommandArgs;

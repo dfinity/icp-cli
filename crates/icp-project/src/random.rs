@@ -15,7 +15,7 @@ use snafu::Snafu;
 /// management-canister call — so the cause is carried whole and displayed as
 /// itself.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct RandomError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

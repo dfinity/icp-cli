@@ -6,25 +6,25 @@ use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
 pub enum UpdateOrProxyError {
-    #[snafu(display("failed to encode proxy call arguments: {source}"))]
+    #[snafu(display("failed to encode proxy call arguments"))]
     ProxyEncode { source: candid::Error },
 
-    #[snafu(display("direct update call failed: {source}"))]
+    #[snafu(display("direct update call failed"))]
     DirectUpdateCall { source: ic_agent::AgentError },
 
-    #[snafu(display("proxy update call failed: {source}"))]
+    #[snafu(display("proxy update call failed"))]
     ProxyUpdateCall { source: ic_agent::AgentError },
 
-    #[snafu(display("failed to decode proxy canister response: {source}"))]
+    #[snafu(display("failed to decode proxy canister response"))]
     ProxyDecode { source: candid::Error },
 
     #[snafu(display("proxy call failed: {message}"))]
     ProxyCall { message: String },
 
-    #[snafu(display("failed to encode call arguments: {source}"))]
+    #[snafu(display("failed to encode call arguments"))]
     CandidEncode { source: candid::Error },
 
-    #[snafu(display("failed to decode call response: {source}"))]
+    #[snafu(display("failed to decode call response"))]
     CandidDecode { source: candid::Error },
 }
 

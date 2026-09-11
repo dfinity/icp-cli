@@ -201,16 +201,16 @@ pub async fn clear_chunk_store(
 
 #[derive(Debug, Snafu)]
 pub enum FetchCanisterLogsError {
-    #[snafu(display("failed to encode call arguments: {source}"))]
+    #[snafu(display("failed to encode call arguments"))]
     CandidEncode { source: candid::Error },
 
-    #[snafu(display("failed to decode call response: {source}"))]
+    #[snafu(display("failed to decode call response"))]
     CandidDecode { source: candid::Error },
 
-    #[snafu(display("direct query call failed: {source}"))]
+    #[snafu(display("direct query call failed"))]
     DirectQueryCall { source: ic_agent::AgentError },
 
-    #[snafu(display("proxied call failed: {source}"))]
+    #[snafu(display("proxied call failed"))]
     ProxiedCall { source: UpdateOrProxyError },
 }
 

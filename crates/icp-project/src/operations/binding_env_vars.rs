@@ -1,16 +1,17 @@
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use crate::Canister;
+use candid::Principal;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
 use icp_events::TaskOutcome;
 
+use crate::calls::{CanisterCalls, TypedCallError};
 use crate::operations::task::{Reporter, Task};
 use snafu::Snafu;
 use tracing::error;
 
-use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 #[derive(Debug, Snafu)]
@@ -22,7 +23,7 @@ pub enum BindingEnvVarsOperationError {
     },
 
     #[snafu(transparent)]
-    UpdateOrProxy { source: UpdateOrProxyError },
+    UpdateOrProxy { source: TypedCallError },
 }
 
 #[derive(Debug, Snafu)]
@@ -32,8 +33,7 @@ pub struct SetBindingEnvVarsManyError {
 }
 
 pub async fn set_env_vars_for_canister(
-    agent: &Agent,
-    proxy: Option<Principal>,
+    calls: &dyn CanisterCalls,
     canister_id: &Principal,
     canister_info: &Canister,
     binding_vars: &[(String, String)],
@@ -55,8 +55,7 @@ pub async fn set_env_vars_for_canister(
         .collect::<Vec<_>>();
 
     proxy_management::update_settings(
-        agent,
-        proxy,
+        calls,
         UpdateSettingsArgs {
             canister_id: *canister_id,
             settings: CanisterSettings {
@@ -73,8 +72,7 @@ pub async fn set_env_vars_for_canister(
 
 /// Orchestrates setting environment variables for multiple canisters concurrently.
 pub async fn set_binding_env_vars_many(
-    agent: Agent,
-    proxy: Option<Principal>,
+    calls: Arc<dyn CanisterCalls>,
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
@@ -133,9 +131,10 @@ pub async fn set_binding_env_vars_many(
             })
             .collect();
 
-        let agent = agent.clone();
+        let calls = calls.clone();
         futs.push_back(async move {
-            let result = set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await;
+            let result =
+                set_env_vars_for_canister(calls.as_ref(), &cid, &info, &binding_vars).await;
 
             match &result {
                 Ok(()) => task.finish(TaskOutcome::succeeded()),

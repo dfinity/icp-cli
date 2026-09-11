@@ -14,17 +14,18 @@
 //! all.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use candid::Principal;
 use futures::{StreamExt, future::try_join_all, stream::FuturesOrdered};
-use ic_agent::{Agent, AgentError};
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterInstallMode};
 use icp_events::TaskOutcome;
 use itertools::Itertools;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::agent::{LazyAgent, LazyAgentError};
+use crate::calls::{Call, CallError, CanisterCalls};
+use crate::defer::{Deferred, DeferredError};
 use crate::host::{
     CanisterSelection, EnvironmentSelection, GetCanisterIdForEnvError, GetEnvCanisterError,
     GetEnvironmentError, GetIdsByEnvironmentError, Host, SetCanisterIdForEnvError,
@@ -37,7 +38,6 @@ use crate::operations::{
     install::{
         InstallManyError, ResolveInstallModeError, install_many, resolve_install_mode_and_status,
     },
-    proxy::UpdateOrProxyError,
     proxy_management,
     settings::{
         SyncControllerDependentsError, SyncSettingsManyError, sync_controller_dependents,
@@ -48,6 +48,7 @@ use crate::operations::{
 };
 use crate::project::ArgsField;
 use crate::{CanisterArgsToBytesError, ProjectLoadError};
+use ic_agent::Agent;
 
 /// Everything that can stop a deploy. Each phase's failure keeps the typed
 /// error of the operation that produced it, so a caller can still tell a
@@ -64,7 +65,7 @@ pub enum DeployError {
     Build { source: BuildManyError },
 
     #[snafu(transparent)]
-    CreateAgent { source: LazyAgentError },
+    Deferred { source: DeferredError },
 
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },
@@ -128,7 +129,7 @@ pub enum DeployError {
     #[snafu(display("Failed to start canister {canister_id} before syncing it"))]
     StartCanister {
         canister_id: Principal,
-        source: UpdateOrProxyError,
+        source: crate::calls::TypedCallError,
     },
 
     #[snafu(display(
@@ -207,15 +208,19 @@ pub struct DeployReport {
 
 /// Run a full deploy, reporting progress as one task tree.
 ///
-/// `agent` speaks for the identity the caller resolved: which identity that is,
-/// and how its key was unlocked, is not this layer's business. It is resolved
-/// once the build has succeeded and not before — a deploy that cannot build has
-/// no business unlocking a key or reaching a network.
+/// `calls` and `agent` speak for the identity the caller resolved: which
+/// identity that is, and how its key was unlocked, is not this layer's
+/// business. Both are resolved once the build has succeeded and not before — a
+/// deploy that cannot build has no business unlocking a key or reaching a
+/// network.
 ///
 /// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
     host: &Host,
-    agent: &LazyAgent<'_>,
+    calls: &Deferred<'_, Arc<dyn CanisterCalls>>,
+    // Sync steps still run against an agent, because the wasmtime plugin
+    // runtime does. That goes when the step runners move behind their own seam.
+    agent: &Deferred<'_, Agent>,
     params: &DeployParams,
     reporter: &Reporter,
     report: &mut DeployReport,
@@ -243,8 +248,10 @@ pub async fn deploy(
     .await;
     finish(&phase, result)?;
 
-    // Everything from here on talks to the network, so this is where the agent
-    // gets made — and where the identity it speaks for gets unlocked.
+    // Everything from here on talks to the network, so this is where the caller
+    // is asked for the means — and where the identity it speaks for gets
+    // unlocked.
+    let calls = calls.get().await?;
     let agent = agent.get().await?;
 
     // Create any canisters that do not exist yet
@@ -267,7 +274,7 @@ pub async fn deploy(
         let result = create_canisters(
             host,
             params,
-            agent,
+            calls,
             &env,
             &canisters_to_create,
             existing_canisters.into_values().collect(),
@@ -302,8 +309,7 @@ pub async fn deploy(
 
     let phase = reporter.task(Task::phase("Setting environment variables:"));
     let result = set_binding_env_vars_many(
-        agent.clone(),
-        params.proxy,
+        calls.clone(),
         &env.name,
         target_canisters.clone(),
         canister_list.clone(),
@@ -314,8 +320,7 @@ pub async fn deploy(
 
     let phase = reporter.task(Task::phase("Applying canister settings:"));
     let result = sync_settings_many(
-        agent.clone(),
-        params.proxy,
+        calls.clone(),
         target_canisters,
         canister_list,
         &env,
@@ -326,7 +331,7 @@ pub async fn deploy(
 
     // Resolve install plans
     let canisters = try_join_all(cnames.iter().map(|name| {
-        let agent = agent.clone();
+        let calls = calls.clone();
         async move {
             let cid = host
                 .get_canister_id_for_env(
@@ -336,8 +341,7 @@ pub async fn deploy(
                 .await?;
 
             let (mode, status) =
-                resolve_install_mode_and_status(&agent, params.proxy, name, &cid, &params.mode)
-                    .await?;
+                resolve_install_mode_and_status(calls.as_ref(), name, &cid, &params.mode).await?;
 
             let env = host.get_environment(environment_selection).await?;
             let (_canister_path, canister_info) = env
@@ -381,7 +385,7 @@ pub async fn deploy(
     if !params.yes {
         let phase = reporter.task(Task::phase("Checking compatibility:"));
         let result = check_candid_compatibility_many(
-            agent.clone(),
+            calls.clone(),
             canisters
                 .iter()
                 .map(|(name, cid, mode, _, _)| (&**name, *cid, *mode)),
@@ -395,8 +399,7 @@ pub async fn deploy(
     // Install
     let phase = reporter.task(Task::phase("Installing canisters:"));
     let result = install_many(
-        agent.clone(),
-        params.proxy,
+        calls.clone(),
         canisters,
         host.artifacts.clone(),
         &phase.reporter(),
@@ -404,7 +407,7 @@ pub async fn deploy(
     .await;
     finish(&phase, result)?;
 
-    sync(host, params, agent, reporter).await?;
+    sync(host, params, calls, agent, reporter).await?;
 
     Ok(())
 }
@@ -417,7 +420,7 @@ pub async fn deploy(
 async fn create_canisters(
     host: &Host,
     params: &DeployParams,
-    agent: &Agent,
+    calls: &Arc<dyn CanisterCalls>,
     env: &crate::Environment,
     canisters_to_create: &[&String],
     existing_ids: Vec<Principal>,
@@ -430,7 +433,7 @@ async fn create_canisters(
         _ => CreateTarget::None,
     };
     let create_operation = CreateOperation::new(
-        agent.clone(),
+        calls.clone(),
         target,
         CreateFunding::Cycles(params.cycles),
         existing_ids,
@@ -484,8 +487,7 @@ async fn create_canisters(
                     // store, since that is what a dependent would be looking it up in.
                     sync_controller_dependents(
                         host,
-                        agent,
-                        params.proxy,
+                        calls.as_ref(),
                         canister_name,
                         &params.environment,
                     )
@@ -516,6 +518,7 @@ async fn create_canisters(
 async fn sync(
     host: &Host,
     params: &DeployParams,
+    calls: &Arc<dyn CanisterCalls>,
     agent: &Agent,
     reporter: &Reporter,
 ) -> Result<(), DeployError> {
@@ -554,14 +557,12 @@ async fn sync(
     // not Running here. Start each canister we're about to sync. Per the IC spec
     // start_canister is synchronous — its Ok reply means the canister is already
     // Running, so no status poll is needed — and idempotent (no-op if Running).
-    let proxy = params.proxy;
     try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
-        let agent = agent.clone();
+        let calls = calls.clone();
         let cid = *cid;
         async move {
             proxy_management::start_canister(
-                &agent,
-                proxy,
+                calls.as_ref(),
                 CanisterIdRecord {
                     canister_id: CanisterId::from(cid),
                 },
@@ -580,9 +581,9 @@ async fn sync(
     // with a transient IC0508 right after a restart. Wait until the query path
     // consistently sees the canister Running before handing off.
     try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
-        let agent = agent.clone();
+        let calls = calls.clone();
         let cid = *cid;
-        async move { wait_until_serving_queries(&agent, cid).await }
+        async move { wait_until_serving_queries(calls.as_ref(), cid).await }
     }))
     .await?;
 
@@ -610,7 +611,7 @@ async fn sync(
         env.network.name.clone(),
         urls,
         canister_ids,
-        proxy,
+        params.proxy,
         &phase.reporter(),
     )
     .await;
@@ -743,7 +744,7 @@ const READINESS_PROBE_METHOD: &str = "<icp-cli readiness probe>";
 /// a hard guarantee — query reads are per-node and boundary nodes load-balance
 /// across replicas — but it makes the post-restart race rare.
 async fn wait_until_serving_queries(
-    agent: &Agent,
+    calls: &dyn CanisterCalls,
     canister_id: Principal,
 ) -> Result<(), DeployError> {
     const REQUIRED_CONSECUTIVE: u32 = 2;
@@ -758,10 +759,11 @@ async fn wait_until_serving_queries(
     let poll = async {
         let mut consecutive_ready: u32 = 0;
         loop {
-            let probe = agent
-                .query(&canister_id, READINESS_PROBE_METHOD)
-                .with_arg(Vec::<u8>::new())
-                .call();
+            // Directly: what this waits for is what a single replica can see,
+            // and an intermediary would answer from certified state instead —
+            // as an update, which the probe timeout below has no room for.
+            let probe =
+                calls.query(Call::new(canister_id, READINESS_PROBE_METHOD, Vec::new()).direct());
             let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
                 Ok(Ok(_)) => true,                       // replied -> Running
                 Ok(Err(err)) => is_serving_reject(&err), // non-stopped reject -> Running
@@ -793,39 +795,33 @@ async fn wait_until_serving_queries(
 /// True when a query error is a *reject from the replica* that indicates the
 /// canister is Running and serving — i.e. a positive readiness signal.
 ///
-/// A reject means the replica processed the request to a verdict (e.g. "no such
-/// query method"), so the canister is up — unless the reject says it is
+/// A rejection means the replica processed the request to a verdict (e.g. "no
+/// such query method"), so the canister is up — unless the rejection says it is
 /// stopped/stopping (IC0508/IC0509, with a message-substring fallback), which is
-/// a replica still lagging behind the restart. Every other `AgentError`
-/// (transport, HTTP, timeout, …) is inconclusive — not evidence the canister is
-/// serving — and returns false so the caller retries rather than proceeding.
-fn is_serving_reject(err: &AgentError) -> bool {
-    let reject = match err {
-        AgentError::CertifiedReject { reject, .. }
-        | AgentError::UncertifiedReject { reject, .. } => reject,
-        _ => return false,
-    };
-    let stopped = matches!(
-        reject.error_code.as_deref(),
-        Some("IC0508") | Some("IC0509")
-    ) || reject.reject_message.contains("is stopped")
-        || reject.reject_message.contains("is stopping");
+/// a replica still lagging behind the restart. A call that reached no verdict at
+/// all is inconclusive — not evidence the canister is serving — and returns
+/// false so the caller retries rather than proceeding.
+fn is_serving_reject(err: &CallError) -> bool {
+    if !err.is_rejection() {
+        return false;
+    }
+    let message = err.message().unwrap_or_default();
+    let stopped = matches!(err.code(), Some("IC0508") | Some("IC0509"))
+        || message.contains("is stopped")
+        || message.contains("is stopping");
     !stopped
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_agent::agent::{RejectCode, RejectResponse};
 
-    fn reject(error_code: Option<&str>, reject_message: &str) -> AgentError {
-        AgentError::UncertifiedReject {
-            reject: RejectResponse {
-                reject_code: RejectCode::CanisterError,
-                reject_message: reject_message.to_string(),
-                error_code: error_code.map(String::from),
-            },
-            operation: None,
+    fn reject(code: Option<&str>, message: &str) -> CallError {
+        CallError::Rejected {
+            canister: Principal::anonymous(),
+            method: READINESS_PROBE_METHOD.to_owned(),
+            code: code.map(String::from),
+            message: message.to_owned(),
         }
     }
 
@@ -852,8 +848,12 @@ mod tests {
     }
 
     #[test]
-    fn a_transport_error_is_inconclusive() {
+    fn a_call_that_reached_no_verdict_is_inconclusive() {
         // Not evidence of anything; the caller must retry.
-        assert!(!is_serving_reject(&AgentError::InvalidReplicaStatus));
+        assert!(!is_serving_reject(&CallError::failed(
+            Principal::anonymous(),
+            READINESS_PROBE_METHOD,
+            std::io::Error::other("connection reset"),
+        )));
     }
 }

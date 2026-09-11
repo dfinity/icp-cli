@@ -49,12 +49,11 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    let result = proxy_management::canister_status(
-        &agent,
-        args.proxy,
-        CanisterIdRecord { canister_id: cid },
-    )
-    .await?;
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+
+    let result =
+        proxy_management::canister_status(calls.as_ref(), CanisterIdRecord { canister_id: cid })
+            .await?;
 
     let output = if args.json_format {
         serde_json::to_string(&result.settings).expect("Serializing settings to json failed")

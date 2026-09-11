@@ -1,14 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::calls::{Call, CanisterCalls, RouteTo};
 use crate::parsers::to_token_unit_amount;
 use crate::signal::stop_signal;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_agent::{
-    Agent, AgentError,
-    agent::{CallResponse, EffectiveId, RejectCode, SubnetType},
-};
 use ic_ledger_types::{
     AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
 };
@@ -35,7 +32,6 @@ use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
 use tracing::{info, warn};
 
-use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 #[derive(Debug, Snafu)]
@@ -46,27 +42,28 @@ pub enum CreateOperationError {
     #[snafu(display("failed to decode candid"))]
     CandidDecode { source: candid::Error },
 
-    #[snafu(display("agent error"))]
-    Agent { source: AgentError },
+    #[snafu(display("a canister call failed"))]
+    Call { source: crate::calls::CallError },
+
+    #[snafu(transparent)]
+    TypedCall {
+        source: crate::calls::TypedCallError,
+    },
 
     #[snafu(display("failed to create canister: {message}"))]
     CreateCanister { message: String },
 
-    #[snafu(display("failed to get subnet for canister"))]
-    GetSubnet { source: AgentError },
-
-    #[snafu(display("failed to sign the subnet-scoped create_canister call"))]
-    SignSubnetCreate { source: AgentError },
-
-    #[snafu(display("failed to submit create_canister to subnet {subnet}"))]
-    SubmitSubnetCreate {
-        source: AgentError,
+    #[snafu(display(
+        "failed to check whether subnet {subnet} creates canisters through an engine operator"
+    ))]
+    CheckEngineOperator {
+        source: crate::calls::CallError,
         subnet: Principal,
     },
 
-    #[snafu(display("failed to await create_canister on subnet {subnet}"))]
-    AwaitSubnetCreate {
-        source: AgentError,
+    #[snafu(display("failed to submit create_canister to subnet {subnet}"))]
+    SubmitSubnetCreate {
+        source: crate::calls::CallError,
         subnet: Principal,
     },
 
@@ -74,7 +71,7 @@ pub enum CreateOperationError {
     EngineCanisterId { message: String },
 
     #[snafu(display("failed to query the engine-canister registry"))]
-    EngineCanisterQuery { source: AgentError },
+    EngineCanisterQuery { source: crate::calls::CallError },
 
     #[snafu(display(
         "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
@@ -91,7 +88,7 @@ pub enum CreateOperationError {
     MissingSubnetId,
 
     #[snafu(display("failed to get available subnets"))]
-    GetAvailableSubnets { source: AgentError },
+    GetAvailableSubnets { source: crate::calls::CallError },
 
     #[snafu(display("no available subnets found"))]
     NoAvailableSubnets,
@@ -109,7 +106,7 @@ pub enum CreateOperationError {
     InvalidIcpAmount { message: String },
 
     #[snafu(display("failed to transfer ICP to the cycles minting canister"))]
-    TransferIcp { source: AgentError },
+    TransferIcp { source: crate::calls::CallError },
 
     #[snafu(display("ICP ledger transfer failed: {message}"))]
     TransferFailed { message: String },
@@ -130,9 +127,6 @@ pub enum CreateOperationError {
          Complete the creation by running:\n\n    {command}\n"
     ))]
     NotifyCreateInterrupted { height: u64, command: String },
-
-    #[snafu(transparent)]
-    UpdateOrProxyCall { source: UpdateOrProxyError },
 }
 
 /// How long to keep retrying `notify_create_canister` before giving up.
@@ -179,7 +173,7 @@ pub enum CreateTarget {
 }
 
 struct CreateOperationInner {
-    agent: Agent,
+    calls: Arc<dyn CanisterCalls>,
     target: CreateTarget,
     funding: CreateFunding,
     existing_canisters: Vec<Principal>,
@@ -200,14 +194,14 @@ impl Clone for CreateOperation {
 
 impl CreateOperation {
     pub fn new(
-        agent: Agent,
+        calls: Arc<dyn CanisterCalls>,
         target: CreateTarget,
         funding: CreateFunding,
         existing_canisters: Vec<Principal>,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
-                agent,
+                calls,
                 target,
                 funding,
                 existing_canisters,
@@ -242,13 +236,15 @@ impl CreateOperation {
             .get_subnet()
             .await
             .map_err(|e| CreateOperationError::SubnetResolution { message: e })?;
-        let subnet_info = self
+        let uses_engine_operator = self
             .inner
-            .agent
-            .get_subnet_by_id(&selected_subnet)
+            .calls
+            .subnet_uses_engine_operator(selected_subnet)
             .await
-            .context(GetSubnetSnafu)?;
-        let cid = if let Some(SubnetType::CloudEngine) = subnet_info.subnet_type() {
+            .context(CheckEngineOperatorSnafu {
+                subnet: selected_subnet,
+            })?;
+        let cid = if uses_engine_operator {
             // Resolve the subnet's engine-operator first. Only a definitive
             // "could not resolve an operator" resolution failure falls back to
             // the legacy management-canister path — this covers both no operator
@@ -309,12 +305,14 @@ impl CreateOperation {
         // Call cycles ledger create_canister
         let resp = self
             .inner
-            .agent
-            .update(&CYCLES_LEDGER_PRINCIPAL, "create_canister")
-            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
-            .call_and_wait()
+            .calls
+            .update(Call::new(
+                CYCLES_LEDGER_PRINCIPAL,
+                "create_canister",
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
             .await
-            .context(AgentSnafu)?;
+            .context(CallSnafu)?;
         let resp: CreateCanisterResponse =
             Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
         let cid = match resp {
@@ -342,10 +340,12 @@ impl CreateOperation {
         };
         let resp = match self
             .inner
-            .agent
-            .query(&engine_registry, GET_ENGINE_OPERATOR_BY_SUBNET_METHOD)
-            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
-            .call()
+            .calls
+            .query(Call::new(
+                engine_registry,
+                GET_ENGINE_OPERATOR_BY_SUBNET_METHOD,
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
             .await
         {
             Ok(resp) => resp,
@@ -395,12 +395,14 @@ impl CreateOperation {
 
         let resp = self
             .inner
-            .agent
-            .update(&operator, "create_canister")
-            .with_arg(Encode!(&arg).context(CandidEncodeSnafu)?)
-            .call_and_wait()
+            .calls
+            .update(Call::new(
+                operator,
+                "create_canister",
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
             .await
-            .context(AgentSnafu)?;
+            .context(CallSnafu)?;
         let resp: CreateCanisterResponse =
             Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
         let cid = match resp {
@@ -427,36 +429,18 @@ impl CreateOperation {
     ) -> Result<Principal, CreateOperationError> {
         let arg = encode_create_canister_arg(settings).context(CandidEncodeSnafu)?;
 
-        // Subnet-scoped routing is its own endpoint rather than an effective
-        // canister id, so this cannot go through `update_or_proxy`.
-        let agent = &self.inner.agent;
-        let effective_id = EffectiveId::Subnet(subnet);
-        let signed = agent
-            .update(&Principal::management_canister(), "create_canister")
-            .with_arg(arg)
-            .sign()
-            .context(SignSubnetCreateSnafu)?;
-        let response = agent
-            .update_signed(effective_id, signed.signed_update)
+        // A subnet-scoped call is routed to the subnet rather than to any
+        // canister on it; what that takes to submit and await is the caller
+        // implementation's business.
+        let bytes = self
+            .inner
+            .calls
+            .update(
+                Call::new(Principal::management_canister(), "create_canister", arg)
+                    .with_route(RouteTo::Subnet(subnet)),
+            )
             .await
             .context(SubmitSubnetCreateSnafu { subnet })?;
-        let bytes = match response {
-            CallResponse::Response(bytes) => bytes,
-            CallResponse::Poll(request_id) => {
-                let signed_status = agent
-                    .sign_request_status(effective_id, request_id)
-                    .context(AwaitSubnetCreateSnafu { subnet })?;
-                agent
-                    .wait_signed(
-                        &request_id,
-                        effective_id,
-                        signed_status.signed_request_status,
-                    )
-                    .await
-                    .context(AwaitSubnetCreateSnafu { subnet })?
-                    .0
-            }
-        };
         let (record,): (CanisterIdRecord,) =
             candid::decode_args(&bytes).context(CandidDecodeSnafu)?;
         Ok(record.canister_id)
@@ -472,8 +456,12 @@ impl CreateOperation {
             sender_canister_version: None,
         };
 
+        // Routing through the proxy is ambient — the caller's `--proxy` is part
+        // of how every call in the command is made. What the target decides is
+        // where the cycles come from.
+        let _ = proxy;
         let result =
-            proxy_management::create_canister(&self.inner.agent, Some(proxy), self.cycles(), args)
+            proxy_management::create_canister(self.inner.calls.as_ref(), self.cycles(), args)
                 .await?;
 
         Ok(result.canister_id)
@@ -490,11 +478,7 @@ impl CreateOperation {
         icp: &BigDecimal,
         recovery_flags: &str,
     ) -> Result<Principal, CreateOperationError> {
-        let caller = self
-            .inner
-            .agent
-            .get_principal()
-            .map_err(|message| CreateOperationError::GetPrincipal { message })?;
+        let caller = self.inner.calls.caller();
 
         // ICP ledger amounts are denominated in e8s (10^-8 ICP). Reject any amount
         // with more precision than e8s can represent rather than silently
@@ -526,10 +510,12 @@ impl CreateOperation {
         };
         let transfer_result = self
             .inner
-            .agent
-            .update(&ICP_LEDGER_PRINCIPAL, "transfer")
-            .with_arg(Encode!(&transfer_args).context(CandidEncodeSnafu)?)
-            .call_and_wait()
+            .calls
+            .update(Call::new(
+                ICP_LEDGER_PRINCIPAL,
+                "transfer",
+                Encode!(&transfer_args).context(CandidEncodeSnafu)?,
+            ))
             .await
             .context(TransferIcpSnafu)?;
         let block_index =
@@ -606,10 +592,12 @@ impl CreateOperation {
     async fn notify_create(&self, arg_bytes: &[u8]) -> Result<NotifyStep, CreateOperationError> {
         let resp = match self
             .inner
-            .agent
-            .update(&CYCLES_MINTING_CANISTER_PRINCIPAL, "notify_create_canister")
-            .with_arg(arg_bytes.to_vec())
-            .call_and_wait()
+            .calls
+            .update(Call::new(
+                CYCLES_MINTING_CANISTER_PRINCIPAL,
+                "notify_create_canister",
+                arg_bytes.to_vec(),
+            ))
             .await
         {
             Ok(resp) => resp,
@@ -649,16 +637,14 @@ impl CreateOperation {
                 }
 
                 if let Some(canister) = self.inner.existing_canisters.first() {
-                    let subnet = &self
-                        .inner
-                        .agent
-                        .get_subnet_by_canister(canister)
+                    self.inner
+                        .calls
+                        .subnet_of(*canister)
                         .await
-                        .map_err(|e| e.to_string())?;
-                    Ok(subnet.id())
+                        .map_err(|e| e.to_string())
                 } else {
                     // If no canisters exist, pick a random available subnet
-                    let subnets = get_available_subnets(&self.inner.agent)
+                    let subnets = get_available_subnets(self.inner.calls.as_ref())
                         .await
                         .map_err(|e| e.to_string())?;
 
@@ -709,23 +695,39 @@ pub fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
-/// Whether `err` is a replica rejection meaning the target canister does not
-/// exist on this network — reject code `DestinationInvalid` (IC0301,
-/// "Canister ... not found"). Used to treat a missing engine-canister registry
-/// as "no operator registered" so the CloudEngine path can fall back safely.
-fn is_canister_not_found(err: &AgentError) -> bool {
-    matches!(
-        err,
-        AgentError::CertifiedReject { reject, .. } | AgentError::UncertifiedReject { reject, .. }
-            if reject.reject_code == RejectCode::DestinationInvalid
-    )
+/// Whether `err` is a rejection meaning the target canister does not exist on
+/// this network (IC0301, "Canister ... not found"). Used to treat a missing
+/// engine-canister registry as "no operator registered" so the CloudEngine path
+/// can fall back safely.
+///
+/// A rejection specifically: a call that never reached a verdict says nothing
+/// about whether the canister is there, and must not be read as absence.
+///
+/// A replica that populated no error code leaves only the message to go on, so
+/// that is the fallback — and a call with no verdict has no message either,
+/// which is what keeps it out of this.
+fn is_canister_not_found(err: &crate::calls::CallError) -> bool {
+    match err.code() {
+        Some(code) => code == CANISTER_NOT_FOUND,
+        None => err
+            .message()
+            .is_some_and(|message| message.contains("Canister") && message.contains("not found")),
+    }
 }
 
-async fn get_available_subnets(agent: &Agent) -> Result<Vec<Principal>, CreateOperationError> {
-    let bs = agent
-        .query(&CYCLES_MINTING_CANISTER_PRINCIPAL, "get_default_subnets")
-        .with_arg(Encode!(&()).context(CandidEncodeSnafu)?)
-        .call()
+/// The replica's error code for a call addressed to a canister that does not
+/// exist.
+const CANISTER_NOT_FOUND: &str = "IC0301";
+
+async fn get_available_subnets(
+    calls: &dyn CanisterCalls,
+) -> Result<Vec<Principal>, CreateOperationError> {
+    let bs = calls
+        .query(Call::new(
+            CYCLES_MINTING_CANISTER_PRINCIPAL,
+            "get_default_subnets",
+            Encode!(&()).context(CandidEncodeSnafu)?,
+        ))
         .await
         .context(GetAvailableSubnetsSnafu)?;
 
@@ -822,44 +824,37 @@ mod tests {
 
     #[test]
     fn detects_canister_not_found_rejections() {
-        use ic_agent::agent::RejectResponse;
-
-        let not_found = |certified: bool| {
-            let reject = RejectResponse {
-                reject_code: RejectCode::DestinationInvalid,
-                reject_message: "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found".to_string(),
-                error_code: Some("IC0301".to_string()),
-            };
-            if certified {
-                AgentError::CertifiedReject {
-                    reject,
-                    operation: None,
-                }
-            } else {
-                AgentError::UncertifiedReject {
-                    reject,
-                    operation: None,
-                }
-            }
+        let rejected = |code: Option<&str>, message: &str| crate::calls::CallError::Rejected {
+            canister: Principal::anonymous(),
+            method: "get_engine_operator_by_subnet".to_owned(),
+            code: code.map(String::from),
+            message: message.to_owned(),
         };
 
-        // A `DestinationInvalid` rejection means the registry canister is not
-        // deployed — both the certified and uncertified spellings count.
-        assert!(is_canister_not_found(&not_found(true)));
-        assert!(is_canister_not_found(&not_found(false)));
+        // IC0301 means the registry canister is not deployed here.
+        assert!(is_canister_not_found(&rejected(
+            Some("IC0301"),
+            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+        )));
 
-        // Other reject codes (e.g. a canister trap) must NOT be treated as
+        // So does the same rejection from a replica that gave no error code,
+        // which leaves nothing but the message to read it from.
+        assert!(is_canister_not_found(&rejected(
+            None,
+            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+        )));
+
+        // Other rejections (e.g. a canister trap) must NOT be treated as
         // "not found" — they should propagate rather than fall back.
-        assert!(!is_canister_not_found(&AgentError::CertifiedReject {
-            reject: RejectResponse {
-                reject_code: RejectCode::CanisterError,
-                reject_message: "trapped".to_string(),
-                error_code: None,
-            },
-            operation: None,
-        }));
+        assert!(!is_canister_not_found(&rejected(None, "trapped")));
+        assert!(!is_canister_not_found(&rejected(Some("IC0503"), "trapped")));
 
-        // A non-reject error is never "not found".
-        assert!(!is_canister_not_found(&AgentError::InvalidReplicaStatus));
+        // Neither may a call that reached no verdict at all: it says nothing
+        // about whether the canister is there.
+        assert!(!is_canister_not_found(&crate::calls::CallError::failed(
+            Principal::anonymous(),
+            "get_engine_operator_by_subnet",
+            std::io::Error::other("connection reset"),
+        )));
     }
 }

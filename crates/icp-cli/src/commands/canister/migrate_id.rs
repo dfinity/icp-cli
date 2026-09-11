@@ -65,6 +65,8 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
         )
         .await?;
 
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+
     let source_cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -114,16 +116,14 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         // Fetch status of both canisters
         let source_status = proxy_management::canister_status(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: source_cid,
             },
         )
         .await?;
         let target_status = proxy_management::canister_status(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -176,8 +176,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         // Check target canister has no snapshots
         let snapshots = proxy_management::list_canister_snapshots(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -215,8 +214,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             let mut new_controllers = source_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 UpdateSettingsArgs {
                     canister_id: source_cid,
                     settings: CanisterSettings {
@@ -235,8 +233,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             let mut new_controllers = target_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 UpdateSettingsArgs {
                     canister_id: target_cid,
                     settings: CanisterSettings {

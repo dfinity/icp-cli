@@ -28,6 +28,7 @@ use crate::{
 pub mod calls;
 pub mod canister;
 pub mod defer;
+pub mod error;
 pub mod files;
 #[cfg(feature = "host")]
 pub mod fs;

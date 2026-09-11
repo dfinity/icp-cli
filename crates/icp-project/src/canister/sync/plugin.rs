@@ -365,6 +365,7 @@ fn resolve_callable(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "host")]
     #[test]
     fn parse_compute_limit_accepts_positive_integers() {
         assert_eq!(parse_compute_limit("300").unwrap(), 300);
@@ -372,6 +373,7 @@ mod tests {
         assert_eq!(parse_compute_limit("  42 ").unwrap(), 42);
     }
 
+    #[cfg(feature = "host")]
     #[test]
     fn parse_compute_limit_rejects_invalid_values() {
         for bad in ["0", "abc", "30O", "-5", "1.5", ""] {

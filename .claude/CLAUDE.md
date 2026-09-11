@@ -14,6 +14,8 @@ cargo test --test <file> -- <name>   # Specific test
 cargo fmt && cargo clippy            # Run after changes pass tests
 # `icp-project`'s core must reach nothing only a host has — see the boundary below
 cargo clippy -p icp-project --no-default-features --target wasm32-unknown-unknown
+./scripts/check-no-host-reach.sh     # ...which a build alone does not prove
+cargo test -p icp-project --no-default-features
 ./scripts/generate-cli-docs.sh       # Regenerate CLI docs when commands change
 ./scripts/generate-config-schemas.sh # Regenerate schema when manifest types change
 ```
@@ -66,14 +68,24 @@ default-on **`host`** feature: `HostFileSystem`, the two stores, `HostScripts`,
 `HostRandom`, and `Builder`. The rest have none there at all.
 
 `host` must be **strictly additive** — it may add implementations, never change
-what the rest of the crate does. CI checks the core with
-`cargo clippy -p icp-project --no-default-features --target
-wasm32-unknown-unknown`, on a target where reaching the host does not compile;
-if `host` changed behaviour rather than adding to it, that check would prove
-nothing about the shipped binary. Whole modules that are irreducibly host-side
-sit behind it too — `operations::bundle` writes a `.tar.gz` and walks a
-directory tree for symlinks, which no seam over `FileSystem` reproduces
-faithfully.
+what the rest of the crate does; if it changed behaviour rather than adding to
+it, the checks below would prove nothing about the shipped binary. CI runs
+three of them on the core with default features off:
+
+- a build for `wasm32-unknown-unknown`, which rejects a *dependency* that
+  reaches the host, because such a crate gates that code on
+  `cfg(unix)`/`cfg(windows)` and is left with nothing to compile;
+- `scripts/check-no-host-reach.sh`, which reads the imports back out of that
+  build's object files and rejects a call this crate itself makes into
+  `std::fs`, `std::process`, `std::env` and their neighbours. The build alone
+  does not catch those: `wasm32-unknown-unknown` ships a full `std` whose host
+  backends compile and fail at runtime;
+- the crate's own tests, which are the only thing that exercises it with
+  `host` off, and so run in that configuration too.
+
+Whole modules that are irreducibly host-side sit behind it too —
+`operations::bundle` writes a `.tar.gz` and walks a directory tree for
+symlinks, which no seam over `FileSystem` reproduces faithfully.
 
 Because those are implemented across a crate boundary, their error types carry
 their cause boxed and pass it through with `#[snafu(transparent)]`, which leaves

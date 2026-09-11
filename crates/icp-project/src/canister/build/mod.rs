@@ -31,6 +31,24 @@ pub enum BuildError {
     #[cfg(feature = "host")]
     #[snafu(transparent)]
     Prebuilt { source: prebuilt::PrebuiltError },
+    /// A [`Build`] this crate cannot name failed. How it runs a step is its own
+    /// business, so the cause is carried whole and displayed as itself.
+    ///
+    /// This is the only variant a build off this machine has, and without it
+    /// the enum would be uninhabited there.
+    #[snafu(transparent)]
+    Other {
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
+}
+
+impl BuildError {
+    /// Wraps an implementation's own error for the trait boundary.
+    pub fn new(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Other {
+            source: Box::new(source),
+        }
+    }
 }
 
 #[async_trait]

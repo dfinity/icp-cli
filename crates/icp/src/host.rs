@@ -284,10 +284,11 @@ impl Host {
     /// Republishes the friendly canister domains of the managed network the
     /// given environment targets.
     ///
-    /// Collects the `friendly name -> canister id` mappings of every
-    /// environment in the project and hands them to the network layer, which
-    /// owns where they are written and which of them the running network
-    /// actually serves.
+    /// Hands the network layer the means to collect the project's
+    /// `friendly name -> canister id` mappings, rather than the mappings
+    /// themselves: it owns where they are written and which network is actually
+    /// being served, and only it knows whether there is anything to write at
+    /// all — so it decides whether the id store is read.
     ///
     /// This is a best-effort operation: a failure to update friendly domains
     /// should not block canister creation or deletion, so nothing here is
@@ -299,45 +300,59 @@ impl Host {
         let NetworkConfiguration::Managed { .. } = &env.network.configuration else {
             return;
         };
+        // The load is cached, so this costs a clone; the per-environment id
+        // lookups are what the callback defers.
         let Ok(project) = self.project.load().await else {
             return;
         };
 
-        // For each environment, turn its stored `store_key -> principal`
-        // mapping into `(friendly_name, principal)` entries by joining against
-        // the consolidated canisters (keyed by the same store key). A canister
-        // contributes one entry per friendly name — several for a de-duplicated
-        // shared dependency canister.
-        let mut collected = Vec::new();
-        for (env_name, env) in &project.environments {
-            let is_cache = matches!(
-                env.network.configuration,
-                NetworkConfiguration::Managed { .. }
-            );
-            let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name) else {
-                continue;
-            };
-            let mut entries = Vec::new();
-            for (store_key, principal) in &mapping {
-                if let Some((_, canister)) = env.canisters.get(store_key) {
-                    for friendly_name in &canister.friendly_names {
-                        entries.push((friendly_name.clone(), *principal));
-                    }
-                }
-            }
-            if !entries.is_empty() {
-                collected.push(FriendlyDomains {
-                    environment: env_name.clone(),
-                    network: env.network.name.clone(),
-                    entries,
-                });
-            }
-        }
-
         self.network
-            .publish_friendly_domains(&env.network, &collected)
+            .publish_friendly_domains(&env.network, &|network| {
+                collect_friendly_domains(&project, &*self.ids, network)
+            })
             .await;
     }
+}
+
+/// The friendly-name mappings of every environment targeting `network`.
+///
+/// Turns each environment's stored `store_key -> principal` mapping into
+/// `(friendly_name, principal)` entries by joining against the consolidated
+/// canisters (keyed by the same store key). A canister contributes one entry per
+/// friendly name — several for a de-duplicated shared dependency canister.
+fn collect_friendly_domains(
+    project: &crate::Project,
+    ids: &dyn crate::store_id::Access,
+    network: &str,
+) -> Vec<FriendlyDomains> {
+    let mut collected = Vec::new();
+    for (env_name, env) in &project.environments {
+        if env.network.name != network {
+            continue;
+        }
+        let is_cache = matches!(
+            env.network.configuration,
+            NetworkConfiguration::Managed { .. }
+        );
+        let Ok(mapping) = ids.lookup_by_environment(is_cache, env_name) else {
+            continue;
+        };
+        let mut entries = Vec::new();
+        for (store_key, principal) in &mapping {
+            if let Some((_, canister)) = env.canisters.get(store_key) {
+                for friendly_name in &canister.friendly_names {
+                    entries.push((friendly_name.clone(), *principal));
+                }
+            }
+        }
+        if !entries.is_empty() {
+            collected.push(FriendlyDomains {
+                environment: env_name.clone(),
+                entries,
+            });
+        }
+    }
+    collected
 }
 
 #[derive(Debug, Snafu)]

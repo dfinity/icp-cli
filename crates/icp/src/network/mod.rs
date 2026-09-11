@@ -346,23 +346,24 @@ pub enum AccessError {
 }
 
 /// One environment's friendly-name mappings, as collected from the project.
-///
-/// The project layer knows which canisters have ids and what they are called;
-/// which of those a running network actually serves, and where the mapping is
-/// written, is this layer's business. So the project hands over every
-/// environment it has and lets [`Access::publish_friendly_domains`] pick.
 #[derive(Clone, Debug)]
 pub struct FriendlyDomains {
     /// Environment the mappings belong to.
     pub environment: String,
 
-    /// Name of the network that environment targets.
-    pub network: String,
-
     /// `(friendly name, canister id)`, one entry per friendly name — so several
     /// for a de-duplicated shared dependency canister.
     pub entries: Vec<(String, Principal)>,
 }
+
+/// Collects the mappings of every environment that targets the named network.
+///
+/// The project layer knows which canisters have ids and what they are called;
+/// which network is actually being served, and where the mapping is written, is
+/// this layer's business. So the project hands over the means to collect rather
+/// than a finished collection, and [`Access::publish_friendly_domains`] names
+/// the network — and decides whether to ask at all.
+pub type CollectFriendlyDomains<'a> = dyn Fn(&str) -> Vec<FriendlyDomains> + Send + Sync + 'a;
 
 #[async_trait]
 pub trait Access: Sync + Send {
@@ -379,9 +380,17 @@ pub trait Access: Sync + Send {
     /// Best-effort by contract: a network that is not running, or is not
     /// managed, or whose mapping cannot be written, is not an error — this is
     /// called on paths (canister creation, deletion) that must not fail because
-    /// a convenience URL is stale. Implementations that serve no friendly
-    /// domains need not override it.
-    async fn publish_friendly_domains(&self, _network: &Network, _envs: &[FriendlyDomains]) {}
+    /// a convenience URL is stale.
+    ///
+    /// Call `collect` only once it is settled that there is something to
+    /// publish, and only for the network being served: reading the mappings
+    /// costs an id-store read per environment, and a stopped network should
+    /// cost none.
+    async fn publish_friendly_domains(
+        &self,
+        network: &Network,
+        collect: &CollectFriendlyDomains<'_>,
+    );
 }
 
 pub struct Accessor {
@@ -439,7 +448,11 @@ impl Access for Accessor {
         }
     }
 
-    async fn publish_friendly_domains(&self, network: &Network, envs: &[FriendlyDomains]) {
+    async fn publish_friendly_domains(
+        &self,
+        network: &Network,
+        collect: &CollectFriendlyDomains<'_>,
+    ) {
         let Configuration::Managed { .. } = &network.configuration else {
             return;
         };
@@ -461,13 +474,14 @@ impl Access for Accessor {
             return;
         };
 
-        // The descriptor names the network the gateway is actually serving, so
-        // it — not the environment's own view — decides which environments share
-        // this network and therefore this mapping file.
-        let env_entries: BTreeMap<String, Vec<(String, Principal)>> = envs
-            .iter()
-            .filter(|e| e.network == desc.network)
-            .map(|e| (e.environment.clone(), e.entries.clone()))
+        // Only here, past every way this can turn out to have nothing to write,
+        // is the project asked for any mappings. The descriptor names the
+        // network the gateway is actually serving, so it — not the
+        // environment's own view — decides which environments share this
+        // network and therefore this mapping file.
+        let env_entries: BTreeMap<String, Vec<(String, Principal)>> = collect(&desc.network)
+            .into_iter()
+            .map(|e| (e.environment, e.entries))
             .collect();
 
         let extra: Vec<_> = custom_domains::ii_custom_domain_entry(desc.ii, domain)
@@ -540,6 +554,14 @@ impl Access for MockNetworkAccessor {
             api_url: access.api_url,
             http_gateway_url: access.http_gateway_url,
         })
+    }
+
+    /// The mock serves no friendly domains, so it never asks for any.
+    async fn publish_friendly_domains(
+        &self,
+        _network: &Network,
+        _collect: &CollectFriendlyDomains<'_>,
+    ) {
     }
 }
 

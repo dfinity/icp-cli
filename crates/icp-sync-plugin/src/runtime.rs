@@ -20,6 +20,7 @@ use icp_project::canister::sync::declared::covering_dirs;
 use icp_project::canister::sync::plugin::{
     CallableCanisters, Invocation, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV, Run, RunError,
 };
+use icp_project::error;
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
 // Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
@@ -149,7 +150,9 @@ impl HostState {
                 false => calls.update(call).await,
                 true => calls.query(call).await,
             }
-            .map_err(|err| err.to_string())
+            // The guest gets one string, and a `CallError`'s own message names
+            // only the call it was; the reason it failed is down the chain.
+            .map_err(|err| error::flatten(&err))
         });
         self.refund_host_call_time(start);
         result
@@ -181,7 +184,7 @@ impl HostState {
             calls
                 .metadata_section(target, &name, authority)
                 .await
-                .map_err(|err| err.to_string())
+                .map_err(|err| error::flatten(&err))
         });
         self.refund_host_call_time(start);
         result
@@ -1441,14 +1444,9 @@ mod tests {
         let mut inv = invocation(wasm_path, "spin");
         inv.compute_limit_secs = 1;
         let err = run_plugin(inv).expect_err("spinning plugin should hit the compute limit");
-        // The trap surfaces through the CallExec source chain, so walk it and
-        // assert the message names both the limit and the override env var.
-        let mut chain = err.to_string();
-        let mut cur: &dyn std::error::Error = &err;
-        while let Some(src) = cur.source() {
-            chain = format!("{chain}: {src}");
-            cur = src;
-        }
+        // The trap surfaces through the CallExec source chain, so flatten it
+        // and assert the message names both the limit and the override env var.
+        let chain = error::flatten(&err);
         assert!(
             chain.contains("compute-time limit") && chain.contains(PLUGIN_COMPUTE_LIMIT_ENV),
             "unexpected error chain: {chain}"

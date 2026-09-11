@@ -122,6 +122,54 @@ impl FileSystem for HostFileSystem {
     }
 }
 
+#[cfg(any(test, feature = "test-util"))]
+/// A [`FileSystem`] for tests on paths that never reach a file.
+pub struct UnimplementedMockFileSystem;
+
+#[cfg(any(test, feature = "test-util"))]
+#[async_trait]
+impl FileSystem for UnimplementedMockFileSystem {
+    async fn read(&self, _path: &Path) -> Result<Vec<u8>, FsError> {
+        unimplemented!("UnimplementedMockFileSystem::read")
+    }
+
+    async fn read_to_string(&self, _path: &Path) -> Result<String, FsError> {
+        unimplemented!("UnimplementedMockFileSystem::read_to_string")
+    }
+
+    async fn write(&self, _path: &Path, _contents: &[u8]) -> Result<(), FsError> {
+        unimplemented!("UnimplementedMockFileSystem::write")
+    }
+
+    async fn create_dir_all(&self, _path: &Path) -> Result<(), FsError> {
+        unimplemented!("UnimplementedMockFileSystem::create_dir_all")
+    }
+
+    async fn copy(&self, _from: &Path, _to: &Path) -> Result<(), FsError> {
+        unimplemented!("UnimplementedMockFileSystem::copy")
+    }
+
+    async fn exists(&self, _path: &Path) -> bool {
+        unimplemented!("UnimplementedMockFileSystem::exists")
+    }
+
+    async fn is_file(&self, _path: &Path) -> bool {
+        unimplemented!("UnimplementedMockFileSystem::is_file")
+    }
+
+    async fn is_dir(&self, _path: &Path) -> bool {
+        unimplemented!("UnimplementedMockFileSystem::is_dir")
+    }
+
+    async fn read_dir(&self, _path: &Path) -> Result<Vec<PathBuf>, FsError> {
+        unimplemented!("UnimplementedMockFileSystem::read_dir")
+    }
+
+    async fn canonicalize(&self, _path: &Path) -> Option<PathBuf> {
+        unimplemented!("UnimplementedMockFileSystem::canonicalize")
+    }
+}
+
 /// A glob pattern could not be understood.
 #[derive(Debug, Snafu)]
 pub enum GlobError {

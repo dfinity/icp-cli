@@ -110,7 +110,7 @@ impl Host {
     pub fn mocked() -> Self {
         Self {
             project: Arc::new(crate::MockProjectLoader::minimal()),
-            files: Arc::new(crate::files::HostFileSystem),
+            files: Arc::new(crate::files::UnimplementedMockFileSystem),
             ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),

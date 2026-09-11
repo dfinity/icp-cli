@@ -3,13 +3,12 @@ use std::collections::BTreeMap;
 use ic_agent::export::Principal;
 use snafu::Snafu;
 
+use crate::manifest::ProjectRootLocateError;
 #[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, DATA_DIR, ICP_BASE,
     fs::{create_dir_all, json, remove_file},
-};
-use crate::{
-    manifest::{ProjectRootLocate, ProjectRootLocateError},
+    manifest::ProjectRootLocate,
     prelude::*,
 };
 #[cfg(feature = "host")]
@@ -315,6 +314,10 @@ impl AccessImpl {
 #[cfg(any(test, feature = "test-util"))]
 pub mod mock {
     use super::*;
+    // Not from `super`: its `Mutex` belongs to the host implementation, which a
+    // hostless build leaves out while still exposing these mocks.
+    use std::sync::Mutex;
+
     /// In-memory mock implementation of `Access`.
     ///
     /// There are two separate stores for cache and data, to allow testing both paths.

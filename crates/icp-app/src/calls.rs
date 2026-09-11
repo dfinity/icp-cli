@@ -163,11 +163,15 @@ impl CanisterCalls for AgentCalls {
     }
 
     async fn update(&self, call: Call) -> Result<Vec<u8>, CallError> {
-        if let Some(proxy) = self.mediator(&call) {
-            return self.through_proxy(proxy, &call).await;
-        }
+        // A subnet-scoped call names the subnet it acts on, and a proxy could
+        // only act on the subnet it lives on itself — so this comes first,
+        // rather than dropping the one thing the call is about. The commands
+        // that can name a subnet refuse to name a proxy as well.
         if let RouteTo::Subnet(subnet) = call.route {
             return self.to_subnet(subnet, &call).await;
+        }
+        if let Some(proxy) = self.mediator(&call) {
+            return self.through_proxy(proxy, &call).await;
         }
         let mut builder = self
             .agent

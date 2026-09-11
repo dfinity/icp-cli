@@ -73,17 +73,6 @@ async fn sync_canister(
     Ok(stderr_lines)
 }
 
-/// The rendered `source()` chain of an error, outermost cause first.
-fn error_causes(error: &dyn std::error::Error) -> Vec<String> {
-    let mut causes = Vec::new();
-    let mut cause = error.source();
-    while let Some(err) = cause {
-        causes.push(err.to_string());
-        cause = err.source();
-    }
-    causes
-}
-
 /// Orchestrates syncing multiple canisters concurrently.
 pub async fn sync_many(
     syncer: Arc<dyn Synchronize>,
@@ -137,7 +126,7 @@ pub async fn sync_many(
                     }),
                     Err(error) => task.finish(TaskOutcome::Failed {
                         message: error.to_string(),
-                        causes: error_causes(error),
+                        causes: crate::error::causes(error),
                     }),
                 }
 

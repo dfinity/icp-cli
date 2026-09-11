@@ -13,7 +13,7 @@ use crate::prelude::*;
 /// request and a write to a cache outside the project. This layer knows only
 /// that it can fail, so the cause is carried whole and displayed as itself.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct FetchError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

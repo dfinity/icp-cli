@@ -59,7 +59,7 @@ impl<'a> LazyAgent<'a> {
 /// cause is carried whole and displayed as itself rather than being restated
 /// here.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct LazyAgentError {
     pub source: Box<dyn Error + Send + Sync + 'static>,
 }

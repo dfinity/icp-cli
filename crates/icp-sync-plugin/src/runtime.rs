@@ -10,30 +10,22 @@ use std::time::{Duration, Instant};
 const MAX_PLUGIN_OUTPUT: usize = 1024 * 1024; // 1 MiB per stream
 // Maximum wasm call-stack depth (in bytes).
 const MAX_WASM_STACK: usize = 512 * 1024;
-/// Default seconds of pure wasm compute a plugin may use (host-call latency is
-/// excluded). This is a runaway guard, not a security boundary: the plugin runs
-/// locally in a read-only WASI sandbox, so the limit only protects the machine
-/// running `icp sync` from a plugin that never terminates. Legitimately heavy
-/// plugins (e.g. brotli-compressing a large asset bundle) can exceed it,
-/// especially on slower CI runners, so it is overridable via the
-/// [`PLUGIN_COMPUTE_LIMIT_ENV`] environment variable.
-pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
-/// Environment variable that overrides [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
-pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use camino::{Utf8Path, Utf8PathBuf};
-use candid::{Encode, Principal};
-use ic_agent::Agent;
-use ic_agent::hash_tree::{Label, LookupResult};
-use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
-use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
+use candid::Principal;
+use icp_project::calls::{Authority, Call, CanisterCalls};
+use icp_project::canister::sync::declared::covering_dirs;
+use icp_project::canister::sync::plugin::{
+    CallableCanisters, Invocation, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV, Run, RunError,
+};
+use icp_project::error;
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
 // Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
 use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
-use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
@@ -61,21 +53,6 @@ mod v1 {
 
 use v2::icp::sync_plugin::types::{CallTarget, CallType, CanisterIdEntry};
 
-/// A manifest path passed to a plugin, tagged with the map key it was declared
-/// under. Both `dirs` and `files` are lists of these.
-///
-/// The key is `None` when the manifest wrote the setting as a plain list, and
-/// `Some(name)` when it wrote a map. It is *non-unique*: several paths share a
-/// key when a map key resolves to a list of paths. Which form a plugin accepts
-/// depends on the interface it was built against — see [`PluginAbi`].
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeyedPath {
-    /// The map key this path was declared under, or `None` for a plain-list entry.
-    pub key: Option<String>,
-    /// Manifest-relative path, anchored at the invocation's `base_dir`.
-    pub path: String,
-}
-
 /// A declared entry the host has resolved to a location on disk, and what it
 /// found there. Held version-agnostically so it can be converted to whichever
 /// interface version's records the plugin turns out to use.
@@ -90,100 +67,6 @@ struct ResolvedEntry {
     host_path: Utf8PathBuf,
     /// The file's contents, or `None` for a directory.
     content: Option<String>,
-}
-
-/// The canisters a sync plugin is permitted to call, beyond the canister being
-/// synced (which is always reachable via [`CallTarget::Host`]).
-///
-/// Built by the CLI from the plugin step's `canisters` list, resolved against
-/// the project's canister ID table. Keeping the resolution on the CLI side
-/// keeps this runtime crate free of any manifest knowledge.
-#[derive(Clone, Debug, Default)]
-pub struct CallableCanisters {
-    /// Canisters callable by name ([`CallTarget::Name`]). Maps the name — as it
-    /// appears in the canister ID table — to the principal it resolves to.
-    pub by_name: BTreeMap<String, Principal>,
-}
-
-/// What a certificate says about a metadata section. A section the reader may
-/// not have is neither of these: the state tree will not certify it, so it
-/// reaches the caller as an error like any other failed read.
-enum CertifiedSection {
-    Present(Vec<u8>),
-    Absent,
-}
-
-/// Ask the target's subnet to certify a metadata section, reporting only what
-/// the certificate proves.
-///
-/// The section path is requested together with `controllers`, because a
-/// metadata path proven absent is equally what a canister that was never created
-/// looks like — `controllers` is written at creation, so its presence is what
-/// separates the two. A canister with no module installed has no sections at
-/// all, which the certificate reports as an absent path under a canister that
-/// exists, and so as [`CertifiedSection::Absent`].
-async fn certified_metadata_section(
-    agent: &Agent,
-    target: Principal,
-    name: &str,
-) -> Result<CertifiedSection, String> {
-    let metadata_path: Vec<Label<Vec<u8>>> = vec![
-        "canister".into(),
-        Label::from_bytes(target.as_slice()),
-        "metadata".into(),
-        name.into(),
-    ];
-    let controllers_path: Vec<Label<Vec<u8>>> = vec![
-        "canister".into(),
-        Label::from_bytes(target.as_slice()),
-        "controllers".into(),
-    ];
-    let cert = agent
-        .read_state_raw(
-            vec![metadata_path.clone(), controllers_path.clone()],
-            target,
-        )
-        .await
-        .map_err(|err| format!("metadata read failed: {err}"))?;
-
-    match cert.tree.lookup_path(&metadata_path) {
-        LookupResult::Found(bytes) => Ok(CertifiedSection::Present(bytes.to_vec())),
-        LookupResult::Absent => match cert.tree.lookup_path(&controllers_path) {
-            LookupResult::Found(_) => Ok(CertifiedSection::Absent),
-            LookupResult::Absent => Err(format!("canister {target} does not exist")),
-            _ => Err(format!(
-                "metadata read failed: certificate proves nothing about canister {target}"
-            )),
-        },
-        // Not proof of absence, just a certificate that says nothing about the
-        // path — reporting the section missing off this would be a guess.
-        _ => Err(format!(
-            "metadata read failed: certificate proves nothing about section `{name}` \
-             of canister {target}"
-        )),
-    }
-}
-
-/// Whether the management canister rejected a metadata read by claiming the
-/// target has no such section, rather than because the read itself failed.
-///
-/// The claim is not proof: the same rejection covers a section private to
-/// someone other than the proxy, so the caller confirms it against a
-/// certificate. A proxied read reaches the plugin as reject text with no code
-/// attached, so recognizing the claim at all means matching the replica's
-/// wording. Both sentences name the canister and one names the section, so the
-/// match is anchored on the values this call supplied rather than on a loose
-/// phrase that text relayed from elsewhere might happen to contain. A reword
-/// upstream turns the claim into an error rather than into a wrong answer.
-fn rejected_as_no_such_section(message: &str, target: Principal, name: &str) -> bool {
-    // A canister with no module installed has no sections at all, so it reports
-    // absence in its own words. The certificate says the same thing about it:
-    // the metadata path is absent while the canister itself is there.
-    message.contains(&format!(
-        "The canister {target} has no Wasm module and hence no metadata is available."
-    )) || message.contains(&format!(
-        "The canister {target} has no metadata section with the name {name}."
-    ))
 }
 
 /// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
@@ -211,10 +94,10 @@ struct HostState {
     host_canister_id: Principal,
     /// Canisters the plugin declared in `canisters` and may also call.
     callable: CallableCanisters,
-    agent: Arc<Agent>,
-    /// Proxy canister to route update calls and metadata reads through, if
-    /// configured.
-    proxy: Option<Principal>,
+    /// How the plugin's calls and metadata reads are made. Whether they go
+    /// through a proxy canister, and what certification a read takes, is
+    /// entirely behind this.
+    calls: Arc<dyn CanisterCalls>,
     // WASI context. Preopened directories in this context are the only
     // filesystem locations the plugin can access.
     wasi_ctx: wasmtime_wasi::WasiCtx,
@@ -248,132 +131,60 @@ impl HostState {
         direct: bool,
         cycles: u64,
     ) -> Result<Vec<u8>, String> {
-        let agent = Arc::clone(&self.agent);
-        let proxy = if direct { None } else { self.proxy };
+        let calls = Arc::clone(&self.calls);
+        let query = matches!(call_type, CallType::Query);
+        let mut call = Call::new(target, method, arg_bytes).with_cycles(cycles.into());
+        // A query goes to the target itself whichever way the plugin asked,
+        // which is what the interface documents: an intermediary that only
+        // accepts updates would otherwise turn one into an update, and the
+        // plugin would have paid for it.
+        if direct || query {
+            call = call.direct();
+        }
 
-        // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
+        // We are already inside tokio::task::block_in_place (see `Wasmtime`),
         // so blocking the thread here is safe.
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
-            match call_type {
-                CallType::Update => {
-                    if let Some(proxy_cid) = proxy {
-                        let proxy_args = ProxyArgs {
-                            canister_id: target,
-                            method: method.clone(),
-                            args: arg_bytes,
-                            cycles: candid::Nat::from(cycles),
-                        };
-                        let encoded = Encode!(&proxy_args)
-                            .map_err(|e| format!("proxy encode failed: {e}"))?;
-                        let raw = agent
-                            .update(&proxy_cid, "proxy")
-                            .with_arg(encoded)
-                            .await
-                            .map_err(|e| format!("proxy call failed: {e}"))?;
-                        let (result,): (ProxyResult,) = candid::decode_args(&raw)
-                            .map_err(|e| format!("proxy decode failed: {e}"))?;
-                        match result {
-                            ProxyResult::Ok(ok) => Ok(ok.result),
-                            ProxyResult::Err(err) => Err(err.format_error()),
-                        }
-                    } else {
-                        agent
-                            .update(&target, &method)
-                            .with_arg(arg_bytes)
-                            .await
-                            .map_err(|e| format!("canister call failed: {e}"))
-                    }
-                }
-                CallType::Query => agent
-                    .query(&target, &method)
-                    .with_arg(arg_bytes)
-                    .call()
-                    .await
-                    .map_err(|e| format!("canister call failed: {e}")),
+            match query {
+                false => calls.update(call).await,
+                true => calls.query(call).await,
             }
+            // The guest gets one string, and a `CallError`'s own message names
+            // only the call it was; the reason it failed is down the chain.
+            .map_err(|err| error::flatten(&err))
         });
         self.refund_host_call_time(start);
         result
     }
 
     /// Read a metadata section from an already-resolved target principal.
-    /// `Ok(None)` means a certificate proved the target has no such section,
-    /// kept distinct from a failed read so a plugin can probe for an optional
-    /// section without inspecting error text. A section the reader may not have
-    /// is a failed read, not an absent one, whichever route asked.
+    /// `Ok(None)` means the target provably has no such section, kept distinct
+    /// from a failed read so a plugin can probe for an optional section
+    /// without inspecting error text.
     ///
-    /// A direct read is a certified `read_state` signed by the sync identity —
-    /// `read_state` is not a canister method, so it cannot be forwarded. A
-    /// proxied read therefore goes the other way around: the proxy calls the
-    /// management canister's `canister_metadata` on the plugin's behalf, which
-    /// checks the *proxy* against the target's controllers and so reaches
-    /// sections private to it. The management canister does not distinguish
-    /// absence from privacy, so a proxied read that comes back claiming absence
-    /// is confirmed against a certificate before it is reported as one.
+    /// `direct` picks who does the reading, which is what a private section is
+    /// gated on: the sync identity itself, or whatever is acting on its behalf.
+    /// Everything that takes — a certificate to verify, a management-canister
+    /// call to make — is behind the seam.
     fn do_canister_metadata_section(
         &mut self,
         target: Principal,
         name: String,
         direct: bool,
     ) -> Result<Option<Vec<u8>>, String> {
-        let agent = Arc::clone(&self.agent);
-        let proxy = if direct { None } else { self.proxy };
+        let calls = Arc::clone(&self.calls);
+        let authority = match direct {
+            true => Authority::Direct,
+            false => Authority::Mediated,
+        };
 
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
-            let Some(proxy_cid) = proxy else {
-                return certified_metadata_section(&agent, target, &name)
-                    .await
-                    .map(|section| match section {
-                        CertifiedSection::Present(bytes) => Some(bytes),
-                        CertifiedSection::Absent => None,
-                    });
-            };
-
-            let metadata_args = Encode!(&CanisterMetadataArgs {
-                canister_id: target,
-                name: name.clone(),
-            })
-            .map_err(|e| format!("metadata encode failed: {e}"))?;
-            let proxy_args = ProxyArgs {
-                canister_id: Principal::management_canister(),
-                method: "canister_metadata".to_string(),
-                args: metadata_args,
-                cycles: candid::Nat::from(0u8),
-            };
-            let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
-            let raw = agent
-                .update(&proxy_cid, "proxy")
-                .with_arg(encoded)
+            calls
+                .metadata_section(target, &name, authority)
                 .await
-                .map_err(|e| format!("proxy call failed: {e}"))?;
-            let (result,): (ProxyResult,) =
-                candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
-            match result {
-                ProxyResult::Ok(ok) => {
-                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&ok.result)
-                        .map_err(|e| format!("metadata decode failed: {e}"))?;
-                    Ok(Some(metadata.value))
-                }
-                ProxyResult::Err(err) => {
-                    let message = err.format_error();
-                    if !rejected_as_no_such_section(&message, target, &name) {
-                        return Err(format!("metadata read failed: {message}"));
-                    }
-                    // The management canister says the same thing about a
-                    // section that isn't there and one that is private to
-                    // someone else, so its word alone cannot be reported as
-                    // absence. Only a certificate proves the section absent.
-                    match certified_metadata_section(&agent, target, &name).await? {
-                        CertifiedSection::Absent => Ok(None),
-                        CertifiedSection::Present(_) => Err(format!(
-                            "metadata read failed: canister {target} does not let the proxy \
-                             read section `{name}`"
-                        )),
-                    }
-                }
-            }
+                .map_err(|err| error::flatten(&err))
         });
         self.refund_host_call_time(start);
         result
@@ -720,65 +531,25 @@ fn resolve_entries<'a>(
     Ok(entries)
 }
 
-/// Everything [`run_plugin`] needs to load and drive one sync plugin.
-#[derive(Debug)]
-pub struct PluginInvocation {
-    /// On-disk path to the plugin's wasm component.
-    pub wasm_path: Utf8PathBuf,
-    /// Directory the declared `dirs`/`files` are anchored at (the canister dir).
-    pub base_dir: Utf8PathBuf,
-    /// The project directory: the sandbox boundary. A declared path may rise
-    /// out of `base_dir` with `..` and reach anything inside the project, but
-    /// nothing above it.
-    ///
-    /// A `base_dir` that does not lie within this directory — a dependency
-    /// project reached by an out-of-tree `path:` — is its own boundary instead,
-    /// which grants nothing above the canister directory.
-    pub project_dir: Utf8PathBuf,
-    /// The manifest's `dirs:` entries: directories to preopen read-only. Only
-    /// v0.1.0 plugins have a `dirs` list to receive them; declaring any
-    /// alongside a v0.2.0 plugin is an error.
-    pub dirs: Vec<KeyedPath>,
-    /// The manifest's `files:` entries. For a v0.1.0 plugin these are files to
-    /// read and pass inline; for a v0.2.0 plugin the list holds directories
-    /// too, and the host preopens or reads each by what is on disk.
-    pub files: Vec<KeyedPath>,
-    /// Key-value fields to pass inline. Passed to v0.2.0 plugins; ignored by
-    /// v0.1.0 plugins, whose interface has no `fields`.
-    pub fields: BTreeMap<String, String>,
-    /// The canister being synced. Reachable via `call-target::host`.
-    pub host_canister_id: Principal,
-    /// Agent used for canister calls.
-    pub agent: Agent,
-    /// Proxy canister to route update calls and metadata reads through, if
-    /// configured.
-    pub proxy: Option<Principal>,
-    /// Signing identity principal, surfaced to the plugin.
-    pub identity_principal: Principal,
-    /// Name of the environment being synced.
-    pub environment: String,
-    /// The network's API endpoint — where canister calls are submitted.
-    /// Surfaced to v0.2.0 plugins; v0.1.0 plugins have no field for it.
-    pub api_url: Url,
-    /// The network's HTTP gateway, when it exposes one. Surfaced to v0.2.0
-    /// plugins; v0.1.0 plugins have no field for it.
-    pub gateway_url: Option<Url>,
-    /// Pure-wasm compute-time budget in seconds.
-    pub compute_limit_secs: u64,
-    /// The project's canister ID table for this environment, as exposed to the
-    /// plugin. Same-project canisters appear both under their fully-qualified
-    /// key and their bare local name (see the WIT `canister-id-entry` docs).
-    pub canister_ids: BTreeMap<String, Principal>,
-    /// Canisters the plugin declared in `canisters` and may call, beyond the
-    /// canister being synced. Ignored by v0.1.0 plugins, which can only reach
-    /// the canister being synced.
-    pub callable: CallableCanisters,
-    /// Reporter the plugin's live stdout/stderr is emitted on.
-    pub reporter: StepReporter,
+/// The wasmtime Component Model runtime for sync plugins: the host half of the
+/// `icp:sync-plugin` world, which loads a plugin component, hands it a
+/// read-only WASI sandbox, and serves the imports it declares.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Wasmtime;
+
+#[async_trait]
+impl Run for Wasmtime {
+    async fn run(&self, invocation: Invocation) -> Result<Vec<String>, RunError> {
+        // The runtime is synchronous — a wasm import cannot suspend — and it
+        // blocks on the calls the plugin makes, so it needs a thread it is
+        // allowed to occupy. Only the runtime knows that; the operation
+        // driving the sync does not.
+        tokio::task::block_in_place(|| run_plugin(invocation)).map_err(RunError::new)
+    }
 }
 
-pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError> {
-    let PluginInvocation {
+fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
+    let Invocation {
         wasm_path,
         base_dir,
         project_dir,
@@ -786,9 +557,8 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         files,
         fields,
         host_canister_id,
-        agent,
+        calls,
         proxy,
-        identity_principal,
         environment,
         api_url,
         gateway_url,
@@ -891,7 +661,7 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         .map(|entry| (entry.path.as_str(), &entry.host_path))
         .collect();
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
-    for dir in crate::path::covering_dirs(declared_dirs.iter().map(|entry| entry.path.as_str())) {
+    for dir in covering_dirs(declared_dirs.iter().map(|entry| entry.path.as_str())) {
         // `covering_dirs` returns a subset of the spellings it was given, so
         // every one of them is in the map.
         let host_path = host_paths[dir];
@@ -920,11 +690,11 @@ pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPlugin
         .stderr(stderr_capture.clone());
 
     let epoch_extension = Arc::new(AtomicU64::new(0));
+    let identity_principal = calls.caller();
     let host_state = HostState {
         host_canister_id,
         callable,
-        agent: Arc::new(agent),
-        proxy,
+        calls,
         wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
         epoch_extension: epoch_extension.clone(),
@@ -1220,14 +990,9 @@ mod tests {
     use super::*;
 
     use candid::Principal;
-    use ic_agent::Agent;
-
-    fn dummy_agent() -> Agent {
-        Agent::builder()
-            .with_url("http://127.0.0.1:4943")
-            .build()
-            .expect("build test agent")
-    }
+    use icp_project::calls::UnimplementedMockCalls;
+    use icp_project::canister::sync::plugin::DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS;
+    use url::Url;
 
     fn anon() -> Principal {
         Principal::anonymous()
@@ -1257,13 +1022,13 @@ mod tests {
             .collect()
     }
 
-    /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
-    /// and identity, no proxy, no declared callable canisters, the default
-    /// compute limit, a local network with no gateway of its own, and the
-    /// current directory as both the base and the project. Tests override the
-    /// few fields they care about.
-    fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
-        PluginInvocation {
+    /// An [`Invocation`] with test-friendly defaults: an anonymous canister,
+    /// a caller that panics if the plugin actually calls one, no proxy, no
+    /// declared callable canisters, the default compute limit, a local network
+    /// with no gateway of its own, and the current directory as both the base
+    /// and the project. Tests override the few fields they care about.
+    fn invocation(wasm_path: &str, environment: &str) -> Invocation {
+        Invocation {
             wasm_path: wasm_path.into(),
             base_dir: ".".into(),
             project_dir: ".".into(),
@@ -1271,9 +1036,8 @@ mod tests {
             files: vec![],
             fields: BTreeMap::new(),
             host_canister_id: anon(),
-            agent: dummy_agent(),
+            calls: Arc::new(UnimplementedMockCalls),
             proxy: None,
-            identity_principal: anon(),
             environment: environment.to_string(),
             api_url: Url::parse("http://127.0.0.1:4943").expect("valid api url"),
             gateway_url: None,
@@ -1670,46 +1434,6 @@ mod tests {
         );
     }
 
-    /// The replica's own wording for the two ways a target reports it has no
-    /// section, copied from `CanisterManagerError` in the IC repo. Both are
-    /// absence, not failure, so both must reach the plugin as `none`.
-    #[test]
-    fn management_canister_absence_rejects_are_recognized() {
-        let target = Principal::from_text("aaaaa-aa").unwrap();
-        let other = Principal::from_text("2vxsx-fae").unwrap();
-
-        let no_module = format!(
-            "Proxy call failed: The canister {target} has no Wasm module and hence no metadata is available."
-        );
-        let no_section = format!(
-            "Proxy call failed: The canister {target} has no metadata section with the name candid:service."
-        );
-        assert!(rejected_as_no_such_section(
-            &no_module,
-            target,
-            "candid:service"
-        ));
-        assert!(rejected_as_no_such_section(
-            &no_section,
-            target,
-            "candid:service"
-        ));
-
-        // A section by another name, a canister other than the one asked about,
-        // and an unrelated failure are all reads that failed.
-        assert!(!rejected_as_no_such_section(&no_section, target, "dfx"));
-        assert!(!rejected_as_no_such_section(
-            &no_module,
-            other,
-            "candid:service"
-        ));
-        assert!(!rejected_as_no_such_section(
-            &format!("Proxy call failed: Canister {target} not found."),
-            target,
-            "candid:service"
-        ));
-    }
-
     #[test]
     fn plugin_exceeding_compute_limit_is_trapped() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
@@ -1720,14 +1444,9 @@ mod tests {
         let mut inv = invocation(wasm_path, "spin");
         inv.compute_limit_secs = 1;
         let err = run_plugin(inv).expect_err("spinning plugin should hit the compute limit");
-        // The trap surfaces through the CallExec source chain, so walk it and
-        // assert the message names both the limit and the override env var.
-        let mut chain = err.to_string();
-        let mut cur: &dyn std::error::Error = &err;
-        while let Some(src) = cur.source() {
-            chain = format!("{chain}: {src}");
-            cur = src;
-        }
+        // The trap surfaces through the CallExec source chain, so flatten it
+        // and assert the message names both the limit and the override env var.
+        let chain = error::flatten(&err);
         assert!(
             chain.contains("compute-time limit") && chain.contains(PLUGIN_COMPUTE_LIMIT_ENV),
             "unexpected error chain: {chain}"

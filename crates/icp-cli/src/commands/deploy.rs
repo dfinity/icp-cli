@@ -145,7 +145,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // command having to await it phase by phase.
     let mut report = DeployReport::default();
     let result = rendered(ctx.debug, async |reporter| {
-        deploy(&ctx.host, &calls, &agent, &params, reporter, &mut report).await
+        deploy(&ctx.host, &calls, &params, reporter, &mut report).await
     })
     .await;
 

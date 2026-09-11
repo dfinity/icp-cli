@@ -24,13 +24,13 @@ use crate::{
 };
 use camino::Utf8Component;
 use flate2::{Compression, write::GzEncoder};
-use icp_sync_plugin::{covering_dirs, distinct_paths};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
 use tracing::warn;
 
 use icp_events::StepReporter;
 
+use crate::canister::sync::declared::{covering_dirs, distinct_paths};
 use crate::operations::task::Reporter;
 
 use crate::operations::build::{BuildManyError, build_many};

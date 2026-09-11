@@ -27,7 +27,6 @@ use icp_canister_interfaces::{
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
-use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
 use tracing::{info, warn};
@@ -174,6 +173,7 @@ pub enum CreateTarget {
 
 struct CreateOperationInner {
     calls: Arc<dyn CanisterCalls>,
+    random: Arc<dyn crate::random::Random>,
     target: CreateTarget,
     funding: CreateFunding,
     existing_canisters: Vec<Principal>,
@@ -195,6 +195,7 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         calls: Arc<dyn CanisterCalls>,
+        random: Arc<dyn crate::random::Random>,
         target: CreateTarget,
         funding: CreateFunding,
         existing_canisters: Vec<Principal>,
@@ -202,6 +203,7 @@ impl CreateOperation {
         Self {
             inner: Arc::new(CreateOperationInner {
                 calls,
+                random,
                 target,
                 funding,
                 existing_canisters,
@@ -647,11 +649,26 @@ impl CreateOperation {
                     let subnets = get_available_subnets(self.inner.calls.as_ref())
                         .await
                         .map_err(|e| e.to_string())?;
+                    if subnets.is_empty() {
+                        return Err("no available subnets found".to_string());
+                    }
 
-                    subnets
-                        .choose(&mut rand::rng())
-                        .copied()
-                        .ok_or_else(|| "no available subnets found".to_string())
+                    let chosen = self
+                        .inner
+                        .random
+                        .index_below(subnets.len())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    // `index_below` promises an index below the count, and the
+                    // count is not zero, so a miss is the seam's bug and says so
+                    // rather than posing as an empty list.
+                    chosen.and_then(|i| subnets.get(i).copied()).ok_or_else(|| {
+                        format!(
+                            "randomness chose {chosen:?}, which is not one of the {} \
+                             available subnets",
+                            subnets.len()
+                        )
+                    })
                 }
             })
             .await;

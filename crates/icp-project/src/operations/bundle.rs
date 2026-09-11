@@ -379,6 +379,7 @@ impl Pruned<'_> {
     }
 }
 
+/// Assemble a bundle from a workspace and write it out as a `.tar.gz`.
 pub async fn create_bundle(
     files: &dyn FileSystem,
     project_dir: &Path,

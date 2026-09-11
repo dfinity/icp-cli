@@ -1438,7 +1438,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.exists() || !path.is_file() {
+                if !files.is_file(&path).await {
                     return NotFoundSnafu {
                         kind: "network".to_string(),
                         path: path.to_string(),
@@ -1518,7 +1518,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.exists() || !path.is_file() {
+                if !files.is_file(&path).await {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: path.to_string(),
@@ -1672,7 +1672,7 @@ pub async fn consolidate_manifest(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod recipe_sync_tests {
     use super::*;
     use crate::canister::recipe::{Fetched, Resolve, ResolveError};
@@ -1780,7 +1780,7 @@ mod recipe_sync_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod dependency_tests {
     use super::*;
     use crate::canister::recipe::{Fetched, Resolve, ResolveError};

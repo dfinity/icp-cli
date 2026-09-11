@@ -167,6 +167,7 @@ pub fn initialize(
             syncer,
             wasm,
             network: netaccess.clone(),
+            random: Arc::new(icp_project::random::HostRandom),
             observer: telemetry_data.clone(),
         },
         dirs,

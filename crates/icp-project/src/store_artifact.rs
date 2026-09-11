@@ -144,6 +144,32 @@ impl ArtifactStore {
     }
 }
 
+/// Carries what went wrong inside the store into [`SaveError::SaveStore`],
+/// whole: the cause's own chain is what says which file it was and why it
+/// failed, and this layer has nothing to add to it.
+///
+/// A free function rather than a closure because the store's several steps fail
+/// in their own types — a lock, a write — and each is carried as itself.
+#[cfg(feature = "host")]
+fn save_store(name: &str, source: impl std::error::Error + Send + Sync + 'static) -> SaveError {
+    SaveError::SaveStore {
+        source: StoreCause::new(source),
+        name: name.to_owned(),
+    }
+}
+
+/// As [`save_store`], for [`LookupArtifactError::LookupStore`].
+#[cfg(feature = "host")]
+fn lookup_store(
+    name: &str,
+    source: impl std::error::Error + Send + Sync + 'static,
+) -> LookupArtifactError {
+    LookupArtifactError::LookupStore {
+        source: StoreCause::new(source),
+        name: name.to_owned(),
+    }
+}
+
 #[async_trait]
 #[cfg(feature = "host")]
 impl Access for ArtifactStore {
@@ -155,17 +181,13 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
-        let store_err = |e: &dyn std::fmt::Display| SaveError::SaveStore {
-            source: StoreCause::new(std::io::Error::other(e.to_string())),
-            name: name.to_owned(),
-        };
         self.lock()
-            .map_err(|e| store_err(&e))?
+            .map_err(|e| save_store(name, e))?
             .with_write(async |store| {
-                write(&store.artifact_by_name(name), wasm).map_err(|e| store_err(&e))
+                write(&store.artifact_by_name(name), wasm).map_err(|e| save_store(name, e))
             })
             .await
-            .map_err(|e| store_err(&e))?
+            .map_err(|e| save_store(name, e))?
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
@@ -176,12 +198,8 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
-        let store_err = |e: &dyn std::fmt::Display| LookupArtifactError::LookupStore {
-            source: StoreCause::new(std::io::Error::other(e.to_string())),
-            name: name.to_owned(),
-        };
         self.lock()
-            .map_err(|e| store_err(&e))?
+            .map_err(|e| lookup_store(name, e))?
             .with_read(async |store| {
                 let artifact = store.artifact_by_name(name);
                 // Not Found
@@ -192,10 +210,10 @@ impl Access for ArtifactStore {
                     .fail();
                 }
 
-                read(&artifact).map_err(|e| store_err(&e))
+                read(&artifact).map_err(|e| lookup_store(name, e))
             })
             .await
-            .map_err(|e| store_err(&e))?
+            .map_err(|e| lookup_store(name, e))?
     }
 }
 

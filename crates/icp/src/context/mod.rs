@@ -62,9 +62,6 @@ pub struct Context {
     /// Whether debug is enabled
     pub debug: bool,
 
-    /// Telemetry data collected during command execution
-    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
-
     /// Password reader for identity decryption; shared with the identity loader.
     pub password_func: Arc<dyn Fn() -> Result<String, String> + Send + Sync>,
 }
@@ -138,7 +135,7 @@ impl Context {
             NetworkConfiguration::Managed { .. } => NetworkType::Managed,
             NetworkConfiguration::Connected { .. } => NetworkType::Connected,
         };
-        self.telemetry_data.set_network_type(network_type);
+        self.host.telemetry_data.set_network_type(network_type);
 
         Ok(network)
     }
@@ -320,10 +317,8 @@ impl Context {
     #[cfg(test)]
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
-        let host = Host::mocked();
         Context {
-            telemetry_data: host.telemetry_data.clone(),
-            host,
+            host: Host::mocked(),
             dirs: Arc::new(crate::directories::UnimplementedMockDirs),
             identity: Arc::new(crate::identity::MockIdentityLoader::anonymous()),
             agent: Arc::new(crate::agent::Creator),

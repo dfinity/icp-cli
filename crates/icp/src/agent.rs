@@ -1,8 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{error::Error, fmt, future::Future, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use ic_agent::{Agent, AgentError, Identity};
 use snafu::prelude::*;
+use tokio::sync::OnceCell;
 
 use crate::prelude::*;
 
@@ -54,6 +56,67 @@ impl Create for Creator {
             .with_ingress_expiry(ingress_expiry);
 
         Ok(b.build().context(AgentSnafu)?)
+    }
+}
+
+/// An [`Agent`] created on first use.
+///
+/// Creating an agent unlocks an identity — a password prompt, for an encrypted
+/// one — and, on a network whose root key is fetched, costs a round trip. An
+/// operation that can fail before it ever speaks to the network, such as a
+/// deploy whose build fails, should cost neither: it takes one of these and the
+/// first phase that actually needs the network pays for it.
+pub struct LazyAgent<'a> {
+    cell: OnceCell<Agent>,
+    create: Box<dyn Fn() -> BoxFuture<'a, Result<Agent, LazyAgentError>> + Send + Sync + 'a>,
+}
+
+impl<'a> LazyAgent<'a> {
+    /// Wraps whatever the caller does to produce an agent.
+    ///
+    /// `create` runs on the first [`get`](Self::get), and on a later one only
+    /// while it keeps failing; the first agent it yields is the one every
+    /// caller sees.
+    pub fn new<F, Fut, E>(create: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'a,
+        Fut: Future<Output = Result<Agent, E>> + Send + 'a,
+        E: Error + Send + Sync + 'static,
+    {
+        Self {
+            cell: OnceCell::new(),
+            create: Box::new(move || {
+                let creating = create();
+                Box::pin(async move { creating.await.map_err(|e| LazyAgentError(Box::new(e))) })
+            }),
+        }
+    }
+
+    /// The agent, creating it if this is the first call.
+    pub async fn get(&self) -> Result<&Agent, LazyAgentError> {
+        self.cell.get_or_try_init(|| (self.create)()).await
+    }
+}
+
+/// Whatever went wrong in a [`LazyAgent`]'s creation function.
+///
+/// Type-erased, and hand-written rather than a Snafu variant, because how an
+/// identity is resolved and unlocked belongs to the caller: an operation holding
+/// a `LazyAgent` cannot name that error, and does nothing with it but report it.
+/// So this adds no message of its own — display and source both pass straight
+/// through, as `snafu(transparent)` would.
+#[derive(Debug)]
+pub struct LazyAgentError(Box<dyn Error + Send + Sync>);
+
+impl fmt::Display for LazyAgentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Error for LazyAgentError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
     }
 }
 

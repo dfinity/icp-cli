@@ -6,6 +6,7 @@ use ic_agent::{Agent, AgentError};
 use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp::parsers::CyclesAmount;
 use icp::{
+    agent::LazyAgent,
     context::Context,
     host::{CanisterSelection, EnvironmentSelection},
     identity::IdentitySelection,
@@ -115,12 +116,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
-    // Resolved up front and used for the whole run, including the URLs printed
-    // at the end: one agent means one identity unlock and, for a network whose
-    // root key is fetched, one fetch rather than one per phase.
-    let agent = ctx
-        .get_agent_for_env(&identity_selection, &environment_selection)
-        .await?;
+    // One agent for the whole run, including the URLs printed at the end: one
+    // identity unlock and, for a network whose root key is fetched, one fetch
+    // rather than one per phase. Deferred rather than made here, because
+    // unlocking a key and reaching a network are exactly what a deploy that
+    // fails to build should not do; the first phase that needs the network
+    // creates it.
+    let (identity, environment) = (&identity_selection, &environment_selection);
+    let agent = LazyAgent::new(move || ctx.get_agent_for_env(identity, environment));
     let pkg_cache = ctx.dirs.package_cache()?;
 
     let params = DeployParams {
@@ -163,7 +166,14 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     }
     result?;
 
-    print_canister_urls(ctx, &environment_selection, agent, &canisters, args.json).await?;
+    print_canister_urls(
+        ctx,
+        &environment_selection,
+        agent.get().await?,
+        &canisters,
+        args.json,
+    )
+    .await?;
 
     Ok(())
 }
@@ -235,7 +245,7 @@ fn is_method_not_found(err: &AgentError) -> bool {
 async fn print_canister_urls(
     ctx: &Context,
     environment_selection: &EnvironmentSelection,
-    agent: Agent,
+    agent: &Agent,
     canister_names: &[String],
     json: bool,
 ) -> Result<(), anyhow::Error> {
@@ -289,7 +299,7 @@ async fn print_canister_urls(
             continue;
         };
 
-        if has_http_request(&agent, canister_id).await {
+        if has_http_request(agent, canister_id).await {
             // A canister carries one friendly name normally, or several when
             // it's a de-duplicated shared dependency canister reached via
             // multiple alias chains — print one URL for each. Fall back to a

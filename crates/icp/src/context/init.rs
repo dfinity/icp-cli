@@ -148,13 +148,12 @@ pub fn initialize(
             builder,
             syncer,
             network: netaccess,
-            telemetry_data: telemetry_data.clone(),
+            telemetry_data,
         },
         dirs,
         identity: idload,
         agent: agent_creator,
         debug,
-        telemetry_data,
         password_func,
     })
 }

@@ -89,6 +89,22 @@ impl AgentCalls {
         }
     }
 
+    /// Whether `canister` exists, as far as the certified state tree says.
+    ///
+    /// The `controllers` path is written when a canister is created, so its
+    /// presence is what separates a canister with nothing in it from one that
+    /// was never created at all.
+    ///
+    /// A check that could not be made reads as "does not exist": every caller
+    /// asks this while deciding whether to report a read failure of its own,
+    /// and an existence check that failed too is no reason to suppress it.
+    async fn exists(&self, canister: Principal) -> bool {
+        self.agent
+            .read_state_canister_controllers(canister)
+            .await
+            .is_ok()
+    }
+
     /// A subnet-scoped update: routed to a subnet rather than to any canister
     /// on it, which the agent only exposes through a signed submission.
     async fn to_subnet(&self, subnet: Principal, call: &Call) -> Result<Vec<u8>, CallError> {
@@ -190,15 +206,9 @@ impl CanisterCalls for AgentCalls {
             Ok(bytes) => Ok(Some(bytes)),
             Err(err) => {
                 // A path the certificate will not certify looks the same as a
-                // canister that was never created. `controllers` is written at
-                // creation, so its presence is what separates "no such section"
-                // from "no such canister".
-                if self
-                    .agent
-                    .read_state_canister_controllers(canister)
-                    .await
-                    .is_ok()
-                {
+                // canister that was never created, which is the error this
+                // reports rather than "no such section".
+                if self.exists(canister).await {
                     Ok(None)
                 } else {
                     Err(Self::wrap(canister, "read_state(metadata)", err))
@@ -215,11 +225,16 @@ impl CanisterCalls for AgentCalls {
     }
 
     async fn module_hash(&self, canister: Principal) -> Result<Option<Vec<u8>>, CallError> {
-        self.agent
-            .read_state_canister_module_hash(canister)
-            .await
-            .map(Some)
-            .map_err(|e| Self::wrap(canister, "read_state(module_hash)", e))
+        let err = match self.agent.read_state_canister_module_hash(canister).await {
+            Ok(hash) => return Ok(Some(hash)),
+            Err(err) => err,
+        };
+        // No module-hash path means nothing is installed — or that there is no
+        // canister to install into, which is not an answer this can give.
+        if matches!(err, AgentError::LookupPathAbsent(_)) && self.exists(canister).await {
+            return Ok(None);
+        }
+        Err(Self::wrap(canister, "read_state(module_hash)", err))
     }
 
     async fn subnet_of(&self, canister: Principal) -> Result<Principal, CallError> {

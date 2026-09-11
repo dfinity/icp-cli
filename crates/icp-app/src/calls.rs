@@ -6,9 +6,11 @@
 //!
 //! It also owns *proxy routing*. `--proxy` names a canister that forwards
 //! management calls on the caller's behalf, and it applies to the whole
-//! command, so it is a property of the caller rather than of any one call. A
-//! query made through a proxy necessarily becomes an update, which is why the
-//! trait leaves how a query is answered to the implementation.
+//! command, so it is a property of the caller rather than of any one call —
+//! the proxy is the [`Authority::Mediated`] one, and a request that asks for
+//! [`Authority::Direct`] skips it. A query made through a proxy necessarily
+//! becomes an update, which is why the trait leaves how a query is answered to
+//! the implementation.
 
 use async_trait::async_trait;
 use candid::{Encode, Nat, Principal};
@@ -17,7 +19,7 @@ use ic_agent::{
     agent::{CallResponse, EffectiveId, SubnetType},
 };
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
-use icp_project::calls::{Call, CallError, CanisterCalls, RouteTo};
+use icp_project::calls::{Authority, Call, CallError, CanisterCalls, RouteTo};
 
 /// [`CanisterCalls`] over an `ic-agent`, optionally forwarding through a proxy
 /// canister.
@@ -42,6 +44,15 @@ impl AgentCalls {
             proxy,
             caller,
         })
+    }
+
+    /// The proxy `call` should go through, if any: none when no proxy was
+    /// configured, and none when the call asked to be made directly.
+    fn mediator(&self, call: &Call) -> Option<Principal> {
+        match call.authority {
+            Authority::Mediated => self.proxy,
+            Authority::Direct => None,
+        }
     }
 
     /// Turns an agent error into the shape the trait speaks in: a rejection is
@@ -152,7 +163,7 @@ impl CanisterCalls for AgentCalls {
     }
 
     async fn update(&self, call: Call) -> Result<Vec<u8>, CallError> {
-        if let Some(proxy) = self.proxy {
+        if let Some(proxy) = self.mediator(&call) {
             return self.through_proxy(proxy, &call).await;
         }
         if let RouteTo::Subnet(subnet) = call.route {
@@ -173,7 +184,7 @@ impl CanisterCalls for AgentCalls {
     async fn query(&self, call: Call) -> Result<Vec<u8>, CallError> {
         // A proxy only accepts updates, so a query through one becomes an
         // update. The reply is the same either way.
-        if let Some(proxy) = self.proxy {
+        if let Some(proxy) = self.mediator(&call) {
             return self.through_proxy(proxy, &call).await;
         }
         let mut builder = self

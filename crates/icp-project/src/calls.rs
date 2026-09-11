@@ -32,6 +32,24 @@ pub enum RouteTo {
     Subnet(Principal),
 }
 
+/// Which of a caller's authorities a request is made under.
+///
+/// A caller may reach canisters through an *intermediary* that acts on its
+/// behalf — `icp-cli`'s `--proxy` canister, say. The intermediary is what the
+/// canister sees as its caller, so its permissions are the ones that apply,
+/// and a request can ask to skip it and be made by the caller itself instead.
+/// A caller with no intermediary has one authority, and both of these mean the
+/// same thing for it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Authority {
+    /// However the caller normally reaches canisters: through its
+    /// intermediary, if it has one.
+    #[default]
+    Mediated,
+    /// The caller itself, skipping any intermediary.
+    Direct,
+}
+
 /// One canister call.
 #[derive(Clone, Debug)]
 pub struct Call {
@@ -50,6 +68,9 @@ pub struct Call {
     /// Cycles to attach. Only meaningful for a call an implementation can fund
     /// — one made through a proxy canister, or from a canister of its own.
     pub cycles: u128,
+
+    /// Whose authority to make the call under. See [`Authority`].
+    pub authority: Authority,
 }
 
 impl Call {
@@ -61,6 +82,7 @@ impl Call {
             arg,
             route: RouteTo::Callee,
             cycles: 0,
+            authority: Authority::Mediated,
         }
     }
 
@@ -73,6 +95,7 @@ impl Call {
             arg,
             route: RouteTo::Canister(target),
             cycles: 0,
+            authority: Authority::Mediated,
         }
     }
 
@@ -83,6 +106,13 @@ impl Call {
 
     pub fn with_cycles(mut self, cycles: u128) -> Self {
         self.cycles = cycles;
+        self
+    }
+
+    /// Make the call under the caller's own authority, skipping any
+    /// intermediary it otherwise goes through.
+    pub fn direct(mut self) -> Self {
+        self.authority = Authority::Direct;
         self
     }
 }
@@ -252,13 +282,11 @@ where
 {
     let arg = candid::encode_args(args).context(EncodeSnafu { method })?;
     let reply = calls
-        .update(Call {
-            canister,
-            method: method.to_owned(),
-            arg,
-            route,
-            cycles,
-        })
+        .update(
+            Call::new(canister, method, arg)
+                .with_route(route)
+                .with_cycles(cycles),
+        )
         .await?;
     candid::decode_args(&reply).context(DecodeSnafu { method })
 }

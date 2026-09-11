@@ -759,7 +759,11 @@ async fn wait_until_serving_queries(
     let poll = async {
         let mut consecutive_ready: u32 = 0;
         loop {
-            let probe = calls.query(Call::new(canister_id, READINESS_PROBE_METHOD, Vec::new()));
+            // Directly: what this waits for is what a single replica can see,
+            // and an intermediary would answer from certified state instead —
+            // as an update, which the probe timeout below has no room for.
+            let probe =
+                calls.query(Call::new(canister_id, READINESS_PROBE_METHOD, Vec::new()).direct());
             let ready = match tokio::time::timeout(PROBE_TIMEOUT, probe).await {
                 Ok(Ok(_)) => true,                       // replied -> Running
                 Ok(Err(err)) => is_serving_reject(&err), // non-stopped reject -> Running

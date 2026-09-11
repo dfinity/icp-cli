@@ -167,14 +167,15 @@ pub async fn recover_cycles_before_delete(
         .await
         .context(StartCanisterSnafu { canister_id })?;
 
-    // Direct (non-proxied) call: the destination is the install arg, not the
-    // caller, so proxy routing is irrelevant here.
     let bytes = calls
-        .update(crate::calls::Call::new(
-            canister_id,
-            "recover_cycles",
-            Encode!().context(EncodeArgsSnafu)?,
-        ))
+        .update(
+            crate::calls::Call::new(
+                canister_id,
+                "recover_cycles",
+                Encode!().context(EncodeArgsSnafu)?,
+            )
+            .direct(),
+        )
         .await
         .context(CallRecoverSnafu { canister_id })?;
     let result = Decode!(&bytes, RecoverResult).context(DecodeResultSnafu { canister_id })?;

@@ -198,8 +198,10 @@ async fn has_http_request(calls: &dyn CanisterCalls, canister_id: Principal) -> 
     // zero-argument `http_request` reply, while a single-argument one still
     // fails to decode and traps; either way the method exists.
     let empty_args = candid::encode_args(()).expect("encoding () never fails");
+    // Directly: the probe reads *why* the call failed, and a rejection relayed
+    // by an intermediary arrives as text with no error code to read.
     let result = calls
-        .query(Call::new(canister_id, "http_request", empty_args))
+        .query(Call::new(canister_id, "http_request", empty_args).direct())
         .await;
 
     match result {

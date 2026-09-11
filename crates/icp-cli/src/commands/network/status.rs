@@ -56,12 +56,12 @@ struct NetworkStatus {
 
 pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow::Error> {
     // Load project
-    let _ = ctx.project.load().await?;
+    let _ = ctx.host.project.load().await?;
 
     // Convert args to selection and get network
     let selection: Result<_, _> = args.network_selection.clone().into();
     let network = ctx.get_network_or_environment(&selection?).await?;
-    let network_access = ctx.network.access(&network).await.context(format!(
+    let network_access = ctx.host.network.access(&network).await.context(format!(
         "unable to access network '{}', is it running?",
         network.name
     ))?;
@@ -69,7 +69,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
     let status = match &network.configuration {
         Configuration::Managed { managed: _ } => {
             // Network directory
-            let nd = ctx.network.get_network_directory(&network)?;
+            let nd = ctx.host.network.get_network_directory(&network)?;
 
             // Load network descriptor
             let descriptor = nd

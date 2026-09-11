@@ -2,15 +2,16 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::{
-    Canister,
     agent::CreateAgentError,
-    canister::{build::Build, sync::Synchronize},
     directories,
+    host::{
+        CanisterSelection, EnvironmentSelection, GetCanisterIdForEnvError, GetEnvironmentError,
+        Host,
+    },
     identity::IdentitySelection,
     manifest::network::RootKeySpec,
     network::{Configuration as NetworkConfiguration, access::NetworkAccess},
     prelude::*,
-    store_id::{IdMapping, LookupIdError},
     telemetry_data::NetworkType,
 };
 use candid::Principal;
@@ -35,24 +36,6 @@ pub enum NetworkSelection {
     Url(Url, RootKeySpec),
 }
 
-/// Selection type for environments - similar to IdentitySelection
-#[derive(Clone, Debug, PartialEq)]
-pub enum EnvironmentSelection {
-    /// Use the default environment (local)
-    Default,
-    /// Use a named environment
-    Named(String),
-}
-
-impl EnvironmentSelection {
-    pub fn name(&self) -> &str {
-        match self {
-            EnvironmentSelection::Default => LOCAL,
-            EnvironmentSelection::Named(name) => name,
-        }
-    }
-}
-
 /// Selection type for network commands that accept either network name or environment
 #[derive(Clone, Debug, PartialEq)]
 pub enum NetworkOrEnvironmentSelection {
@@ -62,49 +45,22 @@ pub enum NetworkOrEnvironmentSelection {
     Environment(String),
 }
 
-/// Selection type for canisters - similar to IdentitySelection
-#[derive(Clone, Debug, PartialEq)]
-pub enum CanisterSelection {
-    /// Use a canister by name (requires project context)
-    Named(String),
-    /// Use a canister by principal
-    Principal(Principal),
-}
-
 #[derive(Clone)]
 pub struct Context {
+    /// The project-side resources operations run against.
+    pub host: Host,
+
     /// Various cli-related directories (cache, configuration, etc).
     pub dirs: Arc<dyn directories::Access>,
-
-    /// Canisters ID Store for lookup and storage
-    pub ids: Arc<dyn crate::store_id::Access>,
-
-    /// An artifact store for canister build artifacts
-    pub artifacts: Arc<dyn crate::store_artifact::Access>,
-
-    /// Project loader
-    pub project: Arc<dyn crate::ProjectLoad>,
 
     /// Identity loader
     identity: Arc<dyn crate::identity::Load>,
 
-    /// NetworkAccess loader
-    pub network: Arc<dyn crate::network::Access>,
-
     /// Agent creator
     agent: Arc<dyn crate::agent::Create>,
 
-    /// Canister builder
-    pub builder: Arc<dyn Build>,
-
-    /// Canister synchronizer
-    pub syncer: Arc<dyn Synchronize>,
-
     /// Whether debug is enabled
     pub debug: bool,
-
-    /// Telemetry data collected during command execution
-    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
 
     /// Password reader for identity decryption; shared with the identity loader.
     pub password_func: Arc<dyn Fn() -> Result<String, String> + Send + Sync>,
@@ -126,49 +82,6 @@ impl Context {
             })
     }
 
-    /// Gets an environment by name from the currently loaded project.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the project cannot be loaded or if the environment is not found.
-    pub async fn get_environment(
-        &self,
-        environment: &EnvironmentSelection,
-    ) -> Result<crate::Environment, GetEnvironmentError> {
-        // Load project
-        let p = self.project.load().await?;
-
-        // Load target environment
-        let env = p
-            .environments
-            .get(environment.name())
-            .context(EnvironmentNotFoundSnafu {
-                name: environment.name().to_owned(),
-            })?;
-
-        // Strict rule: every vendored member must declare the selected
-        // environment. Enforced here (not at load time) so a member missing some
-        // other environment never blocks deploys to the ones it does declare.
-        if let Some(missing) = p.member_missing_envs.get(environment.name())
-            && let Some(member) = missing.first()
-        {
-            return MissingDependencyEnvironmentSnafu {
-                environment: environment.name().to_owned(),
-                member: member.clone(),
-            }
-            .fail();
-        }
-
-        let network_type = match &env.network.configuration {
-            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
-            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
-        };
-        self.telemetry_data.set_network_type(network_type);
-        self.telemetry_data.set_project(&p);
-
-        Ok(env.clone())
-    }
-
     /// Gets an Network by name from the currently loaded project.
     ///
     /// # Errors
@@ -180,8 +93,8 @@ impl Context {
     ) -> Result<crate::Network, GetNetworkError> {
         let network = match network_selection {
             NetworkSelection::Named(network_name) => {
-                if self.project.exists().await? {
-                    let p = self.project.load().await?;
+                if self.host.project.exists().await? {
+                    let p = self.host.project.load().await?;
                     let net = p.networks.get(network_name).context(NetworkNotFoundSnafu {
                         name: network_name.to_owned(),
                     })?;
@@ -222,7 +135,7 @@ impl Context {
             NetworkConfiguration::Managed { .. } => NetworkType::Managed,
             NetworkConfiguration::Connected { .. } => NetworkType::Connected,
         };
-        self.telemetry_data.set_network_type(network_type);
+        self.host.telemetry_data.set_network_type(network_type);
 
         Ok(network)
     }
@@ -243,137 +156,10 @@ impl Context {
             }
             NetworkOrEnvironmentSelection::Environment(env_name) => {
                 let env_selection = EnvironmentSelection::Named(env_name.clone());
-                let env = self.get_environment(&env_selection).await?;
+                let env = self.host.get_environment(&env_selection).await?;
                 Ok(env.network)
             }
         }
-    }
-
-    pub async fn get_canister_and_path_for_env(
-        &self,
-        canister_name: &str,
-        environment: &EnvironmentSelection,
-    ) -> Result<(PathBuf, Canister), GetEnvCanisterError> {
-        let p = self.project.load().await?;
-        let Some((path, canister)) = p.get_canister(canister_name) else {
-            return CanisterNotFoundInProjectSnafu {
-                canister_name: canister_name.to_owned(),
-            }
-            .fail();
-        };
-
-        let env = self.get_environment(environment).await?;
-        if !env.contains_canister(canister_name) {
-            return CanisterNotInEnvSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            }
-            .fail();
-        }
-        Ok((path.clone(), canister.clone()))
-    }
-
-    /// Gets the canister ID for a given canister selection in a specified environment.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the environment cannot be loaded or if the canister ID cannot be found.
-    pub async fn get_canister_id_for_env(
-        &self,
-        canister: &CanisterSelection,
-        environment: &EnvironmentSelection,
-    ) -> Result<Principal, GetCanisterIdForEnvError> {
-        let principal = match canister {
-            CanisterSelection::Named(canister_name) => {
-                let env = self.get_environment(environment).await?;
-                let is_cache = match env.network.configuration {
-                    NetworkConfiguration::Managed { .. } => true,
-                    NetworkConfiguration::Connected { .. } => false,
-                };
-
-                if !env.canisters.contains_key(canister_name) {
-                    return CanisterNotFoundInEnvSnafu {
-                        canister_name: canister_name.to_owned(),
-                        environment_name: environment.name().to_owned(),
-                    }
-                    .fail();
-                }
-
-                // Lookup the canister id
-                self.ids
-                    .lookup(is_cache, &env.name, canister_name)
-                    .context(CanisterIdLookupSnafu {
-                        canister_name: canister_name.to_owned(),
-                        environment_name: environment.name().to_owned(),
-                    })?
-            }
-            CanisterSelection::Principal(principal) => {
-                // Make sure a valid environment was requested
-                let _ = self.get_environment(environment).await?;
-                *principal
-            }
-        };
-
-        Ok(principal)
-    }
-
-    /// Sets the canister ID for a given canister name in a specified environment.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the environment cannot be loaded or if the canister ID cannot be registered.
-    pub async fn set_canister_id_for_env(
-        &self,
-        canister_name: &str,
-        canister_id: Principal,
-        environment: &EnvironmentSelection,
-    ) -> Result<(), SetCanisterIdForEnvError> {
-        let env = self.get_environment(environment).await?;
-        let is_cache = match env.network.configuration {
-            NetworkConfiguration::Managed { .. } => true,
-            NetworkConfiguration::Connected { .. } => false,
-        };
-
-        if !env.canisters.contains_key(canister_name) {
-            return SetCanisterNotFoundInEnvSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            }
-            .fail();
-        }
-
-        // Register the canister id
-        self.ids
-            .register(is_cache, &env.name, canister_name, canister_id)
-            .context(CanisterIdRegisterSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            })?;
-
-        Ok(())
-    }
-
-    /// Removes the canister ID for a given canister name in a specified environment.
-    pub async fn remove_canister_id_for_env(
-        &self,
-        canister_name: &str,
-        environment: &EnvironmentSelection,
-    ) -> Result<(), RemoveCanisterIdForEnvError> {
-        let env = self.get_environment(environment).await?;
-        let is_cache = match env.network.configuration {
-            NetworkConfiguration::Managed { .. } => true,
-            NetworkConfiguration::Connected { .. } => false,
-        };
-
-        // Unregister the canister id
-        self.ids
-            .unregister(is_cache, &env.name, canister_name)
-            .context(CanisterIdUnregisterSnafu {
-                canister_name: canister_name.to_owned(),
-                environment_name: environment.name().to_owned(),
-            })?;
-
-        Ok(())
     }
 
     /// Creates an agent for a given identity and environment.
@@ -382,8 +168,8 @@ impl Context {
         identity: &IdentitySelection,
         environment: &EnvironmentSelection,
     ) -> Result<Agent, GetAgentForEnvError> {
-        let env = self.get_environment(environment).await?;
-        let access = self.network.access(&env.network).await?;
+        let env = self.host.get_environment(environment).await?;
+        let access = self.host.network.access(&env.network).await?;
         let id = self
             .get_identity(identity, Some(access.root_key.clone()))
             .await?;
@@ -397,7 +183,7 @@ impl Context {
         network_selection: &NetworkSelection,
     ) -> Result<Agent, GetAgentForNetworkError> {
         let network = self.get_network(network_selection).await?;
-        let access = self.network.access(&network).await?;
+        let access = self.host.network.access(&network).await?;
         let id = self
             .get_identity(identity, Some(access.root_key.clone()))
             .await?;
@@ -519,107 +305,12 @@ impl Context {
                     }
 
                     // Only environment specified
-                    (_, NetworkSelection::Default) => {
-                        Ok(self.get_canister_id_for_env(canister, environment).await?)
-                    }
+                    (_, NetworkSelection::Default) => Ok(self
+                        .host
+                        .get_canister_id_for_env(canister, environment)
+                        .await?),
                 }
             }
-        }
-    }
-
-    pub async fn ids_by_environment(
-        &self,
-        environment: &EnvironmentSelection,
-    ) -> Result<IdMapping, GetIdsByEnvironmentError> {
-        let env = self.get_environment(environment).await?;
-        let is_cache = match env.network.configuration {
-            NetworkConfiguration::Managed { .. } => true,
-            NetworkConfiguration::Connected { .. } => false,
-        };
-        self.ids
-            .lookup_by_environment(is_cache, environment.name())
-            .context(IdsByEnvironmentLookupSnafu {
-                environment_name: environment.name().to_owned(),
-            })
-    }
-
-    /// Updates the `custom-domains.txt` file for the managed network used by the
-    /// given environment. Collects ID mappings from all environments that share
-    /// the same managed network, then writes the file to the network's status
-    /// directory.
-    ///
-    /// This is a best-effort operation: errors are logged but not propagated,
-    /// because a failure to update friendly domains should not block canister
-    /// creation or deletion.
-    pub async fn update_custom_domains(&self, environment: &EnvironmentSelection) {
-        let Ok(env) = self.get_environment(environment).await else {
-            return;
-        };
-        let NetworkConfiguration::Managed { .. } = &env.network.configuration else {
-            return;
-        };
-        let Ok(nd) = self.network.get_network_directory(&env.network) else {
-            return;
-        };
-        let Ok(Some(desc)) = nd.load_network_descriptor().await else {
-            return;
-        };
-        let Some(status_dir) = &desc.status_dir else {
-            return;
-        };
-        let gateway_url_str = format!("http://{}:{}", desc.gateway.host, desc.gateway.port);
-        let Ok(gateway_url) = Url::parse(&gateway_url_str) else {
-            tracing::warn!("Failed to parse gateway URL {gateway_url_str:?} for custom domains");
-            return;
-        };
-        let domain = crate::network::custom_domains::gateway_domain(&gateway_url);
-        let Some(domain) = domain else {
-            return;
-        };
-        // Collect mappings from all environments that use this network
-        let Ok(project) = self.project.load().await else {
-            return;
-        };
-        // For each environment sharing this network, turn its stored
-        // `store_key -> principal` mapping into `(friendly_name, principal)`
-        // entries by joining against the consolidated canisters (keyed by the
-        // same store key). A canister contributes one entry per friendly name —
-        // several for a de-duplicated shared dependency canister (§17.3).
-        let mut env_entries: std::collections::BTreeMap<String, Vec<(String, candid::Principal)>> =
-            std::collections::BTreeMap::new();
-        for (env_name, env) in &project.environments {
-            if env.network.name != desc.network {
-                continue;
-            }
-            let is_cache = matches!(
-                env.network.configuration,
-                NetworkConfiguration::Managed { .. }
-            );
-            let Ok(mapping) = self.ids.lookup_by_environment(is_cache, env_name) else {
-                continue;
-            };
-            let mut entries = Vec::new();
-            for (store_key, principal) in &mapping {
-                if let Some((_, canister)) = env.canisters.get(store_key) {
-                    for friendly_name in &canister.friendly_names {
-                        entries.push((friendly_name.clone(), *principal));
-                    }
-                }
-            }
-            if !entries.is_empty() {
-                env_entries.insert(env_name.clone(), entries);
-            }
-        }
-        let extra: Vec<_> = crate::network::custom_domains::ii_custom_domain_entry(desc.ii, domain)
-            .into_iter()
-            .collect();
-        if let Err(e) = crate::network::custom_domains::write_custom_domains(
-            status_dir,
-            domain,
-            &env_entries,
-            &extra,
-        ) {
-            tracing::warn!("Failed to update custom domains: {e}");
         }
     }
 
@@ -627,17 +318,11 @@ impl Context {
     /// Creates a test context with all mocks
     pub fn mocked() -> Context {
         Context {
+            host: Host::mocked(),
             dirs: Arc::new(crate::directories::UnimplementedMockDirs),
-            ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
-            artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
-            project: Arc::new(crate::MockProjectLoader::minimal()),
             identity: Arc::new(crate::identity::MockIdentityLoader::anonymous()),
-            network: Arc::new(crate::network::MockNetworkAccessor::new()),
             agent: Arc::new(crate::agent::Creator),
-            builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
-            syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
             debug: false,
-            telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
             password_func: Arc::new(|| Err("no password available in mock context".to_string())),
         }
     }
@@ -650,21 +335,6 @@ pub enum GetIdentityError {
         source: crate::identity::LoadError,
         identity: IdentitySelection,
     },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetEnvironmentError {
-    #[snafu(transparent)]
-    ProjectLoad { source: crate::ProjectLoadError },
-
-    #[snafu(display("project does not contain an environment named '{}'", name))]
-    EnvironmentNotFound { name: String },
-
-    #[snafu(display(
-        "environment '{environment}' is not defined by dependency '{member}'; \
-         a dependency must declare every environment the workspace targets"
-    ))]
-    MissingDependencyEnvironment { environment: String, member: String },
 }
 
 #[derive(Debug, Snafu)]
@@ -689,79 +359,6 @@ pub enum GetNetworkOrEnvironmentError {
 
     #[snafu(transparent)]
     EnvironmentResolution { source: GetEnvironmentError },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetCanisterIdForEnvError {
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display(
-        "canister '{}' not found in environment '{}'",
-        canister_name,
-        environment_name
-    ))]
-    CanisterNotFoundInEnv {
-        canister_name: String,
-        environment_name: String,
-    },
-
-    #[snafu(display(
-        "failed to lookup canister ID for canister '{}' in environment '{}'",
-        canister_name,
-        environment_name
-    ))]
-    CanisterIdLookup {
-        #[snafu(source(from(LookupIdError, Box::new)))]
-        source: Box<LookupIdError>,
-        canister_name: String,
-        environment_name: String,
-    },
-}
-
-#[derive(Debug, Snafu)]
-pub enum SetCanisterIdForEnvError {
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display(
-        "canister '{}' not found in environment '{}'",
-        canister_name,
-        environment_name
-    ))]
-    SetCanisterNotFoundInEnv {
-        canister_name: String,
-        environment_name: String,
-    },
-
-    #[snafu(display(
-        "failed to register canister ID for canister '{}' in environment '{}'",
-        canister_name,
-        environment_name
-    ))]
-    CanisterIdRegister {
-        source: crate::store_id::RegisterError,
-        canister_name: String,
-        environment_name: String,
-    },
-}
-
-#[derive(Debug, Snafu)]
-pub enum RemoveCanisterIdForEnvError {
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display(
-        "failed to unregister canister ID for canister '{}' in environment '{}': {}",
-        canister_name,
-        environment_name,
-        source
-    ))]
-    CanisterIdUnregister {
-        source: crate::store_id::UnregisterError,
-        canister_name: String,
-        environment_name: String,
-    },
 }
 
 #[derive(Debug, Snafu)]
@@ -860,38 +457,6 @@ pub enum GetCanisterIdError {
 
     #[snafu(transparent)]
     GetCanisterIdForEnv { source: GetCanisterIdForEnvError },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetIdsByEnvironmentError {
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display("failed to lookup IDs for environment '{environment_name}'"))]
-    IdsByEnvironmentLookup {
-        source: crate::store_id::LookupIdError,
-        environment_name: String,
-    },
-}
-
-#[derive(Debug, Snafu)]
-pub enum GetEnvCanisterError {
-    #[snafu(transparent)]
-    ProjectLoad { source: crate::ProjectLoadError },
-
-    #[snafu(transparent)]
-    GetEnvironment { source: GetEnvironmentError },
-
-    #[snafu(display("project does not contain a canister named '{canister_name}'"))]
-    CanisterNotFoundInProject { canister_name: String },
-
-    #[snafu(display(
-        "environment '{environment_name}' does not contain a canister named '{canister_name}'"
-    ))]
-    CanisterNotInEnv {
-        canister_name: String,
-        environment_name: String,
-    },
 }
 
 #[cfg(test)]

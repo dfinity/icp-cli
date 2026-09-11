@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     Environment, MockProjectLoader, Network, Project,
+    host::SetCanisterIdForEnvError,
     identity::MockIdentityLoader,
     network::{
         Configuration, Gateway, Managed, ManagedLauncherConfig, ManagedMode, MockNetworkAccessor,
@@ -70,11 +71,15 @@ async fn test_get_identity_named_not_found() {
 #[tokio::test]
 async fn test_get_environment_success() {
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     let env = ctx
+        .host
         .get_environment(&EnvironmentSelection::Named("dev".to_string()))
         .await
         .unwrap();
@@ -87,6 +92,7 @@ async fn test_get_environment_not_found() {
     let ctx = Context::mocked();
 
     let result = ctx
+        .host
         .get_environment(&EnvironmentSelection::Named("nonexistent".to_string()))
         .await;
 
@@ -99,7 +105,10 @@ async fn test_get_environment_not_found() {
 #[tokio::test]
 async fn test_get_network_success() {
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -136,12 +145,16 @@ async fn test_get_canister_id_for_env_success() {
         .unwrap();
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     let cid = ctx
+        .host
         .get_canister_id_for_env(
             &CanisterSelection::Named("backend".to_string()),
             &EnvironmentSelection::Named("dev".to_string()),
@@ -155,12 +168,16 @@ async fn test_get_canister_id_for_env_success() {
 #[tokio::test]
 async fn test_get_canister_id_for_env_canister_not_in_env() {
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     // "database" is only in "dev" environment, not in "test"
     let result = ctx
+        .host
         .get_canister_id_for_env(
             &CanisterSelection::Named("database".to_string()),
             &EnvironmentSelection::Named("test".to_string()),
@@ -179,12 +196,16 @@ async fn test_get_canister_id_for_env_canister_not_in_env() {
 #[tokio::test]
 async fn test_get_canister_id_for_env_id_not_registered() {
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     // Environment exists and canister is in it, but ID not registered
     let result = ctx
+        .host
         .get_canister_id_for_env(
             &CanisterSelection::Named("backend".to_string()),
             &EnvironmentSelection::Named("dev".to_string()),
@@ -206,21 +227,25 @@ async fn test_set_canister_id_for_env_success() {
     let ids_store = Arc::new(MockInMemoryIdStore::new());
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store.clone() as Arc<dyn IdAccess>,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
 
     // Set the canister ID
-    ctx.set_canister_id_for_env(
-        "backend",
-        canister_id,
-        &EnvironmentSelection::Named("dev".to_string()),
-    )
-    .await
-    .unwrap();
+    ctx.host
+        .set_canister_id_for_env(
+            "backend",
+            canister_id,
+            &EnvironmentSelection::Named("dev".to_string()),
+        )
+        .await
+        .unwrap();
 
     // Verify it was registered by reading it back
     let registered_id = ids_store.lookup(true, "dev", "backend").unwrap();
@@ -231,7 +256,10 @@ async fn test_set_canister_id_for_env_success() {
 #[tokio::test]
 async fn test_set_canister_id_for_env_canister_not_in_env() {
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -239,6 +267,7 @@ async fn test_set_canister_id_for_env_canister_not_in_env() {
 
     // "database" is only in "dev" environment, not in "test"
     let result = ctx
+        .host
         .set_canister_id_for_env(
             "database",
             canister_id,
@@ -266,14 +295,18 @@ async fn test_set_canister_id_for_env_already_registered() {
         .unwrap();
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     // Try to register a different ID for the same canister
     let second_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
     let result = ctx
+        .host
         .set_canister_id_for_env(
             "backend",
             second_id,
@@ -298,8 +331,11 @@ async fn test_remove_canister_id_for_env_success() {
         .unwrap();
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store.clone() as Arc<dyn IdAccess>,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -308,7 +344,8 @@ async fn test_remove_canister_id_for_env_success() {
     assert_eq!(lookup_result, canister_id);
 
     // Remove the canister ID
-    ctx.remove_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
+    ctx.host
+        .remove_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
         .await
         .unwrap();
 
@@ -324,13 +361,17 @@ async fn test_remove_canister_id_for_env_success() {
 async fn test_remove_canister_id_for_env_nonexistent_canister() {
     let ids_store = Arc::new(MockInMemoryIdStore::new());
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store.clone() as Arc<dyn IdAccess>,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store.clone() as Arc<dyn IdAccess>,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     // Remove a canister that was never registered - should not fail
     let result = ctx
+        .host
         .remove_canister_id_for_env("backend", &EnvironmentSelection::Named("dev".to_string()))
         .await;
     assert!(result.is_ok());
@@ -343,30 +384,33 @@ async fn test_get_agent_for_env_uses_environment_network() {
 
     // Complex project has "test" environment which uses "staging" network
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        network: Arc::new(
-            MockNetworkAccessor::new()
-                .with_network(
-                    "local",
-                    NetworkAccess {
-                        root_key: local_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse("http://localhost:8000").unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                )
-                .with_network(
-                    "staging",
-                    NetworkAccess {
-                        root_key: staging_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse("http://staging:9000").unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                ),
-        ),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            network: Arc::new(
+                MockNetworkAccessor::new()
+                    .with_network(
+                        "local",
+                        NetworkAccess {
+                            root_key: local_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse("http://localhost:8000").unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    )
+                    .with_network(
+                        "staging",
+                        NetworkAccess {
+                            root_key: staging_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse("http://staging:9000").unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    ),
+            ),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -405,7 +449,10 @@ async fn test_get_agent_for_env_network_not_configured() {
     // Environment "dev" exists in project and uses "local" network,
     // but "local" network is not configured in MockNetworkAccessor
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         // MockNetworkAccessor has no networks configured
         ..Context::mocked()
     };
@@ -430,17 +477,20 @@ async fn test_get_agent_for_network_success() {
     let root_key = vec![1, 2, 3];
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        network: Arc::new(MockNetworkAccessor::new().with_network(
-            "local",
-            NetworkAccess {
-                root_key: root_key.clone(),
-                root_key_source: crate::network::RootKeySource::Configured,
-                api_url: Url::parse("http://localhost:8000").unwrap(),
-                http_gateway_url: None,
-                use_friendly_domains: false,
-            },
-        )),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            network: Arc::new(MockNetworkAccessor::new().with_network(
+                "local",
+                NetworkAccess {
+                    root_key: root_key.clone(),
+                    root_key_source: crate::network::RootKeySource::Configured,
+                    api_url: Url::parse("http://localhost:8000").unwrap(),
+                    http_gateway_url: None,
+                    use_friendly_domains: false,
+                },
+            )),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -478,7 +528,10 @@ async fn test_get_agent_for_network_network_not_found() {
 async fn test_get_agent_for_network_not_configured() {
     // Network "local" exists in project but is not configured in MockNetworkAccessor
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ..Host::mocked()
+        },
         // MockNetworkAccessor has no networks configured
         ..Context::mocked()
     };
@@ -523,8 +576,11 @@ async fn test_get_canister_id_for_env() {
         .unwrap();
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -532,13 +588,14 @@ async fn test_get_canister_id_for_env() {
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     assert!(
-        matches!(ctx.get_canister_id_for_env(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
+        matches!(ctx.host.get_canister_id_for_env(&canister_selection, &environment_selection).await, Ok(id) if id == canister_id)
     );
 
     let canister_selection = CanisterSelection::Named("INVALID".to_string());
     let environment_selection = EnvironmentSelection::Named("dev".to_string());
 
     let res = ctx
+        .host
         .get_canister_id_for_env(&canister_selection, &environment_selection)
         .await;
     assert!(
@@ -562,12 +619,16 @@ async fn test_ids_by_environment() {
         .unwrap();
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        ids: ids_store,
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            ids: ids_store,
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
     let result = ctx
+        .host
         .ids_by_environment(&EnvironmentSelection::Named("dev".to_string()))
         .await
         .unwrap();
@@ -580,7 +641,10 @@ async fn test_ids_by_environment() {
 #[tokio::test]
 async fn test_get_agent_defaults_outside_project() {
     let ctx = Context {
-        project: Arc::new(crate::NoProjectLoader),
+        host: Host {
+            project: Arc::new(crate::NoProjectLoader),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -646,17 +710,20 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
     };
 
     let ctx = Context {
-        project: Arc::new(crate::MockProjectLoader::new(project)),
-        network: Arc::new(MockNetworkAccessor::new().with_network(
-            LOCAL,
-            NetworkAccess {
-                root_key: local_root_key.clone(),
-                root_key_source: crate::network::RootKeySource::Configured,
-                api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                http_gateway_url: None,
-                use_friendly_domains: false,
-            },
-        )),
+        host: Host {
+            project: Arc::new(crate::MockProjectLoader::new(project)),
+            network: Arc::new(MockNetworkAccessor::new().with_network(
+                LOCAL,
+                NetworkAccess {
+                    root_key: local_root_key.clone(),
+                    root_key_source: crate::network::RootKeySource::Configured,
+                    api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                    http_gateway_url: None,
+                    use_friendly_domains: false,
+                },
+            )),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -721,17 +788,20 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
     let custom_root_key = vec![1, 2, 3, 4];
 
     let ctx = Context {
-        project: Arc::new(crate::MockProjectLoader::new(project)),
-        network: Arc::new(MockNetworkAccessor::new().with_network(
-            LOCAL,
-            NetworkAccess {
-                root_key: custom_root_key.clone(),
-                root_key_source: crate::network::RootKeySource::Configured,
-                api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
-                http_gateway_url: None,
-                use_friendly_domains: false,
-            },
-        )),
+        host: Host {
+            project: Arc::new(crate::MockProjectLoader::new(project)),
+            network: Arc::new(MockNetworkAccessor::new().with_network(
+                LOCAL,
+                NetworkAccess {
+                    root_key: custom_root_key.clone(),
+                    root_key_source: crate::network::RootKeySource::Configured,
+                    api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
+                    http_gateway_url: None,
+                    use_friendly_domains: false,
+                },
+            )),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -821,30 +891,33 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
     let custom_root_key = vec![5, 6, 7, 8];
 
     let ctx = Context {
-        project: Arc::new(crate::MockProjectLoader::new(project)),
-        network: Arc::new(
-            MockNetworkAccessor::new()
-                .with_network(
-                    LOCAL,
-                    NetworkAccess {
-                        root_key: local_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                )
-                .with_network(
-                    "custom",
-                    NetworkAccess {
-                        root_key: custom_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse("http://localhost:7000").unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                ),
-        ),
+        host: Host {
+            project: Arc::new(crate::MockProjectLoader::new(project)),
+            network: Arc::new(
+                MockNetworkAccessor::new()
+                    .with_network(
+                        LOCAL,
+                        NetworkAccess {
+                            root_key: local_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    )
+                    .with_network(
+                        "custom",
+                        NetworkAccess {
+                            root_key: custom_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse("http://localhost:7000").unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    ),
+            ),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -867,30 +940,33 @@ async fn test_get_agent_explicit_network_inside_project() {
     let staging_root_key = vec![12, 13, 14];
 
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        network: Arc::new(
-            MockNetworkAccessor::new()
-                .with_network(
-                    LOCAL,
-                    NetworkAccess {
-                        root_key: local_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                )
-                .with_network(
-                    "staging",
-                    NetworkAccess {
-                        root_key: staging_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse("http://localhost:8001").unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                ),
-        ),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            network: Arc::new(
+                MockNetworkAccessor::new()
+                    .with_network(
+                        LOCAL,
+                        NetworkAccess {
+                            root_key: local_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    )
+                    .with_network(
+                        "staging",
+                        NetworkAccess {
+                            root_key: staging_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse("http://localhost:8001").unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    ),
+            ),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 
@@ -914,30 +990,33 @@ async fn test_get_agent_explicit_environment_inside_project() {
 
     // complex() has "test" environment using "staging" network
     let ctx = Context {
-        project: Arc::new(MockProjectLoader::complex()),
-        network: Arc::new(
-            MockNetworkAccessor::new()
-                .with_network(
-                    LOCAL,
-                    NetworkAccess {
-                        root_key: local_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                )
-                .with_network(
-                    "staging",
-                    NetworkAccess {
-                        root_key: staging_root_key.clone(),
-                        root_key_source: crate::network::RootKeySource::Configured,
-                        api_url: Url::parse("http://localhost:8001").unwrap(),
-                        http_gateway_url: None,
-                        use_friendly_domains: false,
-                    },
-                ),
-        ),
+        host: Host {
+            project: Arc::new(MockProjectLoader::complex()),
+            network: Arc::new(
+                MockNetworkAccessor::new()
+                    .with_network(
+                        LOCAL,
+                        NetworkAccess {
+                            root_key: local_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    )
+                    .with_network(
+                        "staging",
+                        NetworkAccess {
+                            root_key: staging_root_key.clone(),
+                            root_key_source: crate::network::RootKeySource::Configured,
+                            api_url: Url::parse("http://localhost:8001").unwrap(),
+                            http_gateway_url: None,
+                            use_friendly_domains: false,
+                        },
+                    ),
+            ),
+            ..Host::mocked()
+        },
         ..Context::mocked()
     };
 

@@ -6,11 +6,14 @@ use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp::canister::resolve_controllers;
-use icp::context::{Context, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp::store_id::IdMapping;
-use icp::{Canister, context::CanisterSelection, prelude::*};
+use icp::{Canister, host::CanisterSelection, prelude::*};
+use icp::{
+    context::{Context, NetworkSelection},
+    host::EnvironmentSelection,
+};
 use serde::Serialize;
 use tracing::{info, warn};
 
@@ -340,12 +343,13 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };
 
-    let env = ctx.get_environment(&selections.environment).await?;
+    let env = ctx.host.get_environment(&selections.environment).await?;
     let (_, canister_info) = env.get_canister_info(&canister).map_err(|e| anyhow!(e))?;
 
     if ctx
+        .host
         .get_canister_id_for_env(
-            &icp::context::CanisterSelection::Named(canister.clone()),
+            &icp::host::CanisterSelection::Named(canister.clone()),
             &selections.environment,
         )
         .await
@@ -363,6 +367,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
     let ids = ctx
+        .host
         .ids_by_environment(&selections.environment)
         .await
         .map_err(|e| anyhow!(e))?;
@@ -385,11 +390,12 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     let id = create_operation.create(&canister_settings).await?;
 
-    ctx.set_canister_id_for_env(&canister, id, &selections.environment)
+    ctx.host
+        .set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
     icp::operations::settings::sync_controller_dependents(
-        ctx,
+        &ctx.host,
         &agent,
         args.proxy,
         &canister,
@@ -398,7 +404,9 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     .await
     .map_err(|e| anyhow!(e))?;
 
-    ctx.update_custom_domains(&selections.environment).await;
+    ctx.host
+        .update_custom_domains(&selections.environment)
+        .await;
 
     if args.quiet {
         println!("{id}");

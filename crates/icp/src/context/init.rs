@@ -12,7 +12,8 @@ use crate::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{
-    Lazy, ProjectLoadImpl, agent, identity, identity::PasswordFunc, manifest, network, store_id,
+    Lazy, ProjectLoadImpl, agent, host::Host, identity, identity::PasswordFunc, manifest, network,
+    store_id,
 };
 
 #[derive(Debug, Snafu)]
@@ -140,17 +141,19 @@ pub fn initialize(
 
     // Setup environment
     Ok(Context {
+        host: Host {
+            project: pload,
+            ids,
+            artifacts,
+            builder,
+            syncer,
+            network: netaccess,
+            telemetry_data,
+        },
         dirs,
-        ids,
-        artifacts,
-        project: pload,
         identity: idload,
-        network: netaccess,
         agent: agent_creator,
-        builder,
-        syncer,
         debug,
-        telemetry_data,
         password_func,
     })
 }

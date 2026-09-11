@@ -110,7 +110,7 @@ pub struct Invocation {
 /// runtime, a sandbox, a compute deadline — so the cause is carried whole and
 /// displayed as itself.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct RunError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

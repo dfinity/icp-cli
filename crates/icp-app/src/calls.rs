@@ -89,20 +89,16 @@ impl AgentCalls {
         }
     }
 
-    /// Whether `canister` exists, as far as the certified state tree says.
-    ///
-    /// The `controllers` path is written when a canister is created, so its
-    /// presence is what separates a canister with nothing in it from one that
-    /// was never created at all.
+    /// Whether `canister` exists, which its controllers answer — see
+    /// [`CanisterCalls::controllers`].
     ///
     /// A check that could not be made reads as "does not exist": every caller
     /// asks this while deciding whether to report a read failure of its own,
     /// and an existence check that failed too is no reason to suppress it.
     async fn exists(&self, canister: Principal) -> bool {
-        self.agent
-            .read_state_canister_controllers(canister)
+        self.controllers(canister)
             .await
-            .is_ok()
+            .is_ok_and(|controllers| controllers.is_some())
     }
 
     /// A subnet-scoped update: routed to a subnet rather than to any canister
@@ -217,11 +213,12 @@ impl CanisterCalls for AgentCalls {
         }
     }
 
-    async fn controllers(&self, canister: Principal) -> Result<Vec<Principal>, CallError> {
-        self.agent
-            .read_state_canister_controllers(canister)
-            .await
-            .map_err(|e| Self::wrap(canister, "read_state(controllers)", e))
+    async fn controllers(&self, canister: Principal) -> Result<Option<Vec<Principal>>, CallError> {
+        match self.agent.read_state_canister_controllers(canister).await {
+            Ok(controllers) => Ok(Some(controllers)),
+            Err(AgentError::LookupPathAbsent(_)) => Ok(None),
+            Err(err) => Err(Self::wrap(canister, "read_state(controllers)", err)),
+        }
     }
 
     async fn module_hash(&self, canister: Principal) -> Result<Option<Vec<u8>>, CallError> {

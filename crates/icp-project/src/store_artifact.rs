@@ -261,7 +261,7 @@ impl Access for MockInMemoryArtifactStore {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod tests {
     use super::{artifact_name_overflow, sanitize_artifact_name};
 

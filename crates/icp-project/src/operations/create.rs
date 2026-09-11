@@ -649,6 +649,9 @@ impl CreateOperation {
                     let subnets = get_available_subnets(self.inner.calls.as_ref())
                         .await
                         .map_err(|e| e.to_string())?;
+                    if subnets.is_empty() {
+                        return Err("no available subnets found".to_string());
+                    }
 
                     let chosen = self
                         .inner
@@ -656,9 +659,16 @@ impl CreateOperation {
                         .index_below(subnets.len())
                         .await
                         .map_err(|e| e.to_string())?;
-                    chosen
-                        .and_then(|i| subnets.get(i).copied())
-                        .ok_or_else(|| "no available subnets found".to_string())
+                    // `index_below` promises an index below the count, and the
+                    // count is not zero, so a miss is the seam's bug and says so
+                    // rather than posing as an empty list.
+                    chosen.and_then(|i| subnets.get(i).copied()).ok_or_else(|| {
+                        format!(
+                            "randomness chose {chosen:?}, which is not one of the {} \
+                             available subnets",
+                            subnets.len()
+                        )
+                    })
                 }
             })
             .await;

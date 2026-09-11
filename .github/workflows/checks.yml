@@ -87,8 +87,8 @@ jobs:
   # `icp-project` is meant to end up runnable inside a canister, so its core
   # must reach nothing that only a host has. Nothing else expresses this: a
   # `--workspace` build unifies the `host` feature back on, because `icp-cli`
-  # enables it. So this builds that one crate, alone, for a target where
-  # reaching the host does not compile.
+  # enables it. So this builds that one crate, alone, for the target it would
+  # run on, and then reads back what the build left behind.
   canister-target:
     name: canister-target:required
     needs: [changes, compile]
@@ -110,9 +110,15 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
           target: wasm32-unknown-unknown
+          # `llvm-nm` reads the imports back out of the objects the build
+          # leaves behind; see scripts/check-no-host-reach.sh.
+          components: llvm-tools
           cache-shared-key: ${{ runner.os }}-canister-target
           cache-bin: false
 
+      # Catches a dependency that reaches the host, which fails to compile
+      # here. Only the library: the dev-dependencies behind the tests serve a
+      # host by definition, and `httptest` does not build for wasm at all.
       - name: Check icp-project without a host
         run: |
           cargo clippy -p icp-project --no-default-features \
@@ -120,17 +126,45 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      # The check above proves the core reaches no host. This proves it reaches
+      # Catches the crate's own code reaching the host, which compiles here:
+      # `wasm32-unknown-unknown` ships a full `std` whose host backends fail at
+      # runtime rather than at build time.
+      - name: Check the core reaches no host
+        run: ./scripts/check-no-host-reach.sh
+
+      # The tests are the only thing that exercises the crate with `host` off,
+      # so they run in that configuration too — on this machine's target,
+      # since that is where a test can run at all.
+      - name: Test icp-project without a host
+        run: cargo test -p icp-project --no-default-features
+        env:
+          RUST_BACKTRACE: 1
+
+      # The checks above prove the core reaches no host. This proves it reaches
       # no *crate above it* either, which no build would catch, because a cycle
       # is what cargo would report and there is no cycle to report until
       # someone writes one.
       - name: Check the dependency direction
         run: |
           fail() { echo "::error::$1"; exit 1; }
-          grep -n 'icp-app' crates/icp-project/Cargo.toml crates/icp-sync-plugin/Cargo.toml \
-            && fail "icp-project and icp-sync-plugin must not depend on icp-app"
-          grep -rn 'pub use icp_project' crates/icp-app/src \
-            && fail "icp-app must not re-export icp-project: a command reaches for the crate that owns what it needs"
+          # grep exits 1 when it found nothing and 2 or more when it could not
+          # read a file. Only the first is a pass: a guard that quietly stops
+          # guarding once a path moves is worse than no guard at all.
+          forbid() {
+            local message=$1 pattern=$2
+            shift 2
+            local matches status
+            matches=$(grep -rn "$pattern" "$@") && status=0 || status=$?
+            case $status in
+              0) echo "$matches"; fail "$message" ;;
+              1) ;;
+              *) fail "could not search $* for '$pattern'" ;;
+            esac
+          }
+          forbid "icp-project and icp-sync-plugin must not depend on icp-app" \
+            'icp-app' crates/icp-project/Cargo.toml crates/icp-sync-plugin/Cargo.toml
+          forbid "icp-app must not re-export icp-project: a command reaches for the crate that owns what it needs" \
+            'pub use icp_project' crates/icp-app/src
           echo "the boundary holds"
 
   format:

@@ -56,6 +56,9 @@ pub struct Host {
     /// Project loader
     pub project: Arc<dyn crate::ProjectLoad>,
 
+    /// Where the project's files come from
+    pub files: Arc<dyn crate::files::FileSystem>,
+
     /// Canister ID store for lookup and storage
     pub ids: Arc<dyn crate::store_id::Access>,
 
@@ -107,6 +110,7 @@ impl Host {
     pub fn mocked() -> Self {
         Self {
             project: Arc::new(crate::MockProjectLoader::minimal()),
+            files: Arc::new(crate::files::UnimplementedMockFileSystem),
             ids: Arc::new(crate::store_id::mock::MockInMemoryIdStore::new()),
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),

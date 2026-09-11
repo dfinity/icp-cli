@@ -5,7 +5,6 @@ use crate::{
     canister::build::{Build, BuildError, Params},
     prelude::*,
 };
-use camino_tempfile::tempdir;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp_events::{StepOutcome, TaskOutcome};
 
@@ -15,7 +14,7 @@ use snafu::{ResultExt, Snafu};
 #[derive(Debug, Snafu)]
 pub enum BuildOperationError {
     #[snafu(display("failed to create temporary build directory"))]
-    TempDir { source: std::io::Error },
+    TempDir { source: crate::files::FsError },
 
     #[snafu(transparent)]
     Build { source: BuildError },
@@ -24,7 +23,7 @@ pub enum BuildOperationError {
     MissingWasmOutput,
 
     #[snafu(display("failed to read wasm output file"))]
-    ReadWasmOutput { source: crate::fs::IoError },
+    ReadWasmOutput { source: crate::files::FsError },
 
     #[snafu(display("failed to save wasm artifact"))]
     SaveWasmArtifact {
@@ -45,8 +44,12 @@ pub async fn build(
     task: &TaskReporter,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
 ) -> Result<(), BuildOperationError> {
-    let build_dir = tempdir().context(TempDirSnafu)?;
+    // From `files`, not from this machine: the step writes the module there and
+    // the read below comes back through the same seam, so both have to be
+    // looking at the same directory.
+    let build_dir = files.scratch_dir().await.context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
 
     let step_count = canister.build.steps.len();
@@ -73,11 +76,14 @@ pub async fn build(
         build_result?;
     }
 
-    if !wasm_output_path.exists() {
+    if !files.exists(&wasm_output_path).await {
         return MissingWasmOutputSnafu.fail();
     }
 
-    let wasm = crate::fs::read(&wasm_output_path).context(ReadWasmOutputSnafu)?;
+    let wasm = files
+        .read(&wasm_output_path)
+        .await
+        .context(ReadWasmOutputSnafu)?;
 
     artifacts
         .save(&canister.name, &wasm)
@@ -92,6 +98,7 @@ pub async fn build_many(
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
     reporter: &Reporter,
 ) -> Result<(), BuildManyError> {
     let mut futs = FuturesOrdered::new();
@@ -109,6 +116,7 @@ pub async fn build_many(
                 &task,
                 builder,
                 artifacts,
+                files,
             )
             .await;
 

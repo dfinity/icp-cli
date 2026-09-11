@@ -237,6 +237,7 @@ pub async fn deploy(
         environment_selection.name(),
         host.builder.clone(),
         host.artifacts.clone(),
+        host.files.as_ref(),
         &phase.reporter(),
     )
     .await;
@@ -647,7 +648,14 @@ pub async fn resolve_targets(
         // project load.)
         let project = host.project.load().await?;
         let member_dir = host.project.member_dir();
-        match crate::project::member_scoped_canisters(&project.dir, member_dir.as_deref(), &env) {
+        match crate::project::member_scoped_canisters(
+            host.files.as_ref(),
+            &project.dir,
+            member_dir.as_deref(),
+            &env,
+        )
+        .await
+        {
             Some(scoped) => {
                 member_scoped = true;
                 scoped

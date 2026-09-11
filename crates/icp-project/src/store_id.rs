@@ -1,20 +1,25 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::{io::ErrorKind, sync::Mutex};
 
 use ic_agent::export::Principal;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 
+use crate::manifest::ProjectRootLocateError;
+#[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, DATA_DIR, ICP_BASE,
     fs::{create_dir_all, json, remove_file},
-    manifest::{ProjectRootLocate, ProjectRootLocateError},
+    manifest::ProjectRootLocate,
     prelude::*,
 };
+#[cfg(feature = "host")]
+use std::sync::Arc;
+#[cfg(feature = "host")]
+use std::{io::ErrorKind, sync::Mutex};
 
 /// Mapping of canister names to their Principals within an environment.
 pub type IdMapping = BTreeMap<String, Principal>;
 
+#[cfg(feature = "host")]
 /// Loads the ID mapping from a given file path.
 ///
 /// If the file does not exist, returns an empty mapping.
@@ -72,15 +77,6 @@ pub enum RegisterError {
     #[snafu(transparent)]
     ProjectRootLocate { source: ProjectRootLocateError },
 
-    #[snafu(display("failed to create directory for canister id store at '{path}'"))]
-    CreateDirAll {
-        source: crate::fs::IoError,
-        path: PathBuf,
-    },
-
-    #[snafu(display("failed to load canister id store for environment '{env}'"))]
-    RegisterLoadStore { source: json::Error, env: String },
-
     #[snafu(display(
         "canister '{canister_name}' in environment '{env}' is already registered with id '{id}'",
     ))]
@@ -90,8 +86,11 @@ pub enum RegisterError {
         id: Principal,
     },
 
-    #[snafu(display("failed to save canister id mapping for environment '{env}'"))]
-    RegisterSaveStore { source: json::Error, env: String },
+    /// The store could not be read or written. What a store is made of is the
+    /// implementation's business, so the cause is carried whole — but which
+    /// environment's store it was is what a reader needs, so that stays.
+    #[snafu(display("failed to record a canister id for environment '{env}'"))]
+    RegisterStore { source: StoreCause, env: String },
 }
 
 #[derive(Debug, Snafu)]
@@ -99,11 +98,9 @@ pub enum UnregisterError {
     #[snafu(transparent)]
     ProjectRootLocate { source: ProjectRootLocateError },
 
-    #[snafu(display("failed to load canister id store for environment '{env}'"))]
-    UnregisterLoadStore { source: json::Error, env: String },
-
-    #[snafu(display("failed to save canister id mapping for environment '{env}'"))]
-    UnregisterSaveStore { source: json::Error, env: String },
+    /// As [`RegisterError::RegisterStore`].
+    #[snafu(display("failed to remove a canister id from environment '{env}'"))]
+    UnregisterStore { source: StoreCause, env: String },
 }
 
 #[derive(Debug, Snafu)]
@@ -111,8 +108,9 @@ pub enum LookupIdError {
     #[snafu(transparent)]
     ProjectRootLocate { source: ProjectRootLocateError },
 
-    #[snafu(display("failed to load canister id store for environment '{env}'"))]
-    LookupLoadStore { source: json::Error, env: String },
+    /// As [`RegisterError::RegisterStore`].
+    #[snafu(display("failed to read the canister id store for environment '{env}'"))]
+    LookupStore { source: StoreCause, env: String },
 
     #[snafu(display("could not find ID for canister '{canister_name}' in environment '{env}'"))]
     IdNotFound { env: String, canister_name: String },
@@ -126,18 +124,47 @@ pub enum CleanupError {
     #[snafu(transparent)]
     ProjectRootLocate { source: ProjectRootLocateError },
 
-    #[snafu(transparent)]
-    DeleteFile { source: crate::fs::IoError },
+    /// As [`RegisterError::RegisterStore`].
+    #[snafu(display("failed to clear the canister id store for environment '{env}'"))]
+    CleanupStore { source: StoreCause, env: String },
+}
+
+/// Whatever went wrong inside a store implementation.
+///
+/// Opaque on purpose: the trait says nothing about what a store is made of, so
+/// this carries the cause without naming it. It displays and chains as itself,
+/// so nothing is lost from what the user is told.
+#[derive(Debug)]
+pub struct StoreCause(Box<dyn std::error::Error + Send + Sync + 'static>);
+
+impl StoreCause {
+    pub fn new(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self(Box::new(source))
+    }
+}
+
+impl std::fmt::Display for StoreCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for StoreCause {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
 }
 
 /// Store of canister ID mappings for environments.
 ///
 /// Each environment has a separate file storing its canister IDs mapping.
+#[cfg(feature = "host")]
 pub struct AccessImpl {
     project_root_locate: Arc<dyn ProjectRootLocate>,
     lock: Mutex<()>,
 }
 
+#[cfg(feature = "host")]
 impl AccessImpl {
     pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
@@ -147,6 +174,7 @@ impl AccessImpl {
     }
 }
 
+#[cfg(feature = "host")]
 impl Access for AccessImpl {
     fn register(
         &self,
@@ -159,12 +187,14 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        create_dir_all(fpath.parent().unwrap()).context(CreateDirAllSnafu {
-            path: fpath.clone(),
+        create_dir_all(fpath.parent().unwrap()).map_err(|e| RegisterError::RegisterStore {
+            source: StoreCause::new(e),
+            env: env.to_owned(),
         })?;
 
         // Load the file
-        let mut mapping = load_mapping(&fpath).context(RegisterLoadStoreSnafu {
+        let mut mapping = load_mapping(&fpath).map_err(|e| RegisterError::RegisterStore {
+            source: StoreCause::new(e),
             env: env.to_owned(),
         })?;
 
@@ -179,7 +209,8 @@ impl Access for AccessImpl {
         }
 
         // Store JSON
-        json::save(&fpath, &mapping).context(RegisterSaveStoreSnafu {
+        json::save(&fpath, &mapping).map_err(|e| RegisterError::RegisterStore {
+            source: StoreCause::new(e),
             env: env.to_owned(),
         })?;
 
@@ -198,7 +229,8 @@ impl Access for AccessImpl {
         let fpath = self.get_fpath_for_env(is_cache, env)?;
 
         // Load the file
-        let mut mapping = load_mapping(&fpath).context(UnregisterLoadStoreSnafu {
+        let mut mapping = load_mapping(&fpath).map_err(|e| UnregisterError::UnregisterStore {
+            source: StoreCause::new(e),
             env: env.to_owned(),
         })?;
 
@@ -206,7 +238,8 @@ impl Access for AccessImpl {
         mapping.remove(canister_name);
 
         // Store JSON
-        json::save(&fpath, &mapping).context(UnregisterSaveStoreSnafu {
+        json::save(&fpath, &mapping).map_err(|e| UnregisterError::UnregisterStore {
+            source: StoreCause::new(e),
             env: env.to_owned(),
         })?;
 
@@ -222,7 +255,8 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
         load_mapping(&fpath)
-            .context(LookupLoadStoreSnafu {
+            .map_err(|e| LookupIdError::LookupStore {
+                source: StoreCause::new(e),
                 env: env.to_owned(),
             })?
             .get(canister_name)
@@ -236,7 +270,8 @@ impl Access for AccessImpl {
     fn lookup_by_environment(&self, is_cache: bool, env: &str) -> Result<IdMapping, LookupIdError> {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        load_mapping(&fpath).context(LookupLoadStoreSnafu {
+        load_mapping(&fpath).map_err(|e| LookupIdError::LookupStore {
+            source: StoreCause::new(e),
             env: env.to_owned(),
         })
     }
@@ -245,12 +280,16 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
         if fpath.exists() {
-            remove_file(&fpath)?;
+            remove_file(&fpath).map_err(|e| CleanupError::CleanupStore {
+                source: StoreCause::new(e),
+                env: env.to_owned(),
+            })?;
         }
         Ok(())
     }
 }
 
+#[cfg(feature = "host")]
 impl AccessImpl {
     /// Gets the ID mapping file path for a given environment.
     ///
@@ -275,6 +314,10 @@ impl AccessImpl {
 #[cfg(any(test, feature = "test-util"))]
 pub mod mock {
     use super::*;
+    // Not from `super`: its `Mutex` belongs to the host implementation, which a
+    // hostless build leaves out while still exposing these mocks.
+    use std::sync::Mutex;
+
     /// In-memory mock implementation of `Access`.
     ///
     /// There are two separate stores for cache and data, to allow testing both paths.

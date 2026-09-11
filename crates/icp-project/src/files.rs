@@ -71,6 +71,19 @@ pub trait FileSystem: Send + Sync {
 
     /// Resolve `..` and symlinks. `None` when the path does not resolve.
     async fn canonicalize(&self, path: &Path) -> Option<PathBuf>;
+
+    /// Somewhere to put files that only one caller needs and nothing keeps.
+    ///
+    /// A build step writes its module to a path handed to it and the operation
+    /// reads it back, so the two have to meet somewhere — and it is this
+    /// implementation, not the operation, that knows where a path it can read
+    /// is allowed to come from.
+    async fn scratch_dir(&self) -> Result<Box<dyn Scratch>, FsError>;
+}
+
+/// A directory that exists for as long as this is held, and is removed with it.
+pub trait Scratch: Send + Sync {
+    fn path(&self) -> &Path;
 }
 
 #[cfg(feature = "host")]
@@ -120,6 +133,23 @@ impl FileSystem for HostFileSystem {
     async fn canonicalize(&self, path: &Path) -> Option<PathBuf> {
         PathBuf::from_path_buf(dunce::canonicalize(path).ok()?).ok()
     }
+
+    async fn scratch_dir(&self) -> Result<Box<dyn Scratch>, FsError> {
+        let dir = camino_tempfile::tempdir().map_err(FsError::new)?;
+        Ok(Box::new(HostScratch(dir)))
+    }
+}
+
+/// A temporary directory of this machine's, which `tempfile` removes when the
+/// [`Utf8TempDir`](camino_tempfile::Utf8TempDir) drops.
+#[cfg(feature = "host")]
+struct HostScratch(camino_tempfile::Utf8TempDir);
+
+#[cfg(feature = "host")]
+impl Scratch for HostScratch {
+    fn path(&self) -> &Path {
+        self.0.path()
+    }
 }
 
 #[cfg(any(test, feature = "test-util"))]
@@ -167,6 +197,10 @@ impl FileSystem for UnimplementedMockFileSystem {
 
     async fn canonicalize(&self, _path: &Path) -> Option<PathBuf> {
         unimplemented!("UnimplementedMockFileSystem::canonicalize")
+    }
+
+    async fn scratch_dir(&self) -> Result<Box<dyn Scratch>, FsError> {
+        unimplemented!("UnimplementedMockFileSystem::scratch_dir")
     }
 }
 

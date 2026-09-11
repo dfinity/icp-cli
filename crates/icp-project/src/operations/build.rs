@@ -5,7 +5,6 @@ use crate::{
     canister::build::{Build, BuildError, Params},
     prelude::*,
 };
-use camino_tempfile::tempdir;
 use futures::{StreamExt, stream::FuturesOrdered};
 use icp_events::{StepOutcome, TaskOutcome};
 
@@ -15,7 +14,7 @@ use snafu::{ResultExt, Snafu};
 #[derive(Debug, Snafu)]
 pub enum BuildOperationError {
     #[snafu(display("failed to create temporary build directory"))]
-    TempDir { source: std::io::Error },
+    TempDir { source: crate::files::FsError },
 
     #[snafu(transparent)]
     Build { source: BuildError },
@@ -47,7 +46,10 @@ pub async fn build(
     artifacts: Arc<dyn crate::store_artifact::Access>,
     files: &dyn crate::files::FileSystem,
 ) -> Result<(), BuildOperationError> {
-    let build_dir = tempdir().context(TempDirSnafu)?;
+    // From `files`, not from this machine: the step writes the module there and
+    // the read below comes back through the same seam, so both have to be
+    // looking at the same directory.
+    let build_dir = files.scratch_dir().await.context(TempDirSnafu)?;
     let wasm_output_path = build_dir.path().join("out.wasm");
 
     let step_count = canister.build.steps.len();

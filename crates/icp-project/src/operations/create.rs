@@ -695,8 +695,17 @@ pub fn shell_quote(value: &str) -> String {
 ///
 /// A rejection specifically: a call that never reached a verdict says nothing
 /// about whether the canister is there, and must not be read as absence.
+///
+/// A replica that populated no error code leaves only the message to go on, so
+/// that is the fallback — and a call with no verdict has no message either,
+/// which is what keeps it out of this.
 fn is_canister_not_found(err: &crate::calls::CallError) -> bool {
-    err.code() == Some(CANISTER_NOT_FOUND)
+    match err.code() {
+        Some(code) => code == CANISTER_NOT_FOUND,
+        None => err
+            .message()
+            .is_some_and(|message| message.contains("Canister") && message.contains("not found")),
+    }
 }
 
 /// The replica's error code for a call addressed to a canister that does not
@@ -821,9 +830,17 @@ mod tests {
             "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
         )));
 
+        // So does the same rejection from a replica that gave no error code,
+        // which leaves nothing but the message to read it from.
+        assert!(is_canister_not_found(&rejected(
+            None,
+            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+        )));
+
         // Other rejections (e.g. a canister trap) must NOT be treated as
         // "not found" — they should propagate rather than fall back.
         assert!(!is_canister_not_found(&rejected(None, "trapped")));
+        assert!(!is_canister_not_found(&rejected(Some("IC0503"), "trapped")));
 
         // Neither may a call that reached no verdict at all: it says nothing
         // about whether the canister is there.

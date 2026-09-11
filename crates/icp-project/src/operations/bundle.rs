@@ -341,8 +341,13 @@ struct Pruned<'a> {
     /// Store keys of the canisters the environment does not hold.
     dropped: &'a HashSet<String>,
 
-    /// Each workspace instance's store-key prefix, by its canonical directory.
+    /// Each workspace instance's store-key prefix, by its canonical directory
+    /// as [`FileSystem::canonicalize`] spells one.
     prefixes_by_dir: &'a HashMap<PathBuf, String>,
+
+    /// Where the directories those keys name are canonicalized, so a lookup
+    /// spells a directory the same way the key does.
+    files: &'a dyn FileSystem,
 
     /// The environment the bundle is built for, for diagnostics.
     environment: &'a str,
@@ -354,8 +359,9 @@ impl Pruned<'_> {
     ///
     /// A name that resolves to no instance in the workspace is left alone: it is
     /// invalid, and reporting it is the manifest loader's job, not the bundler's.
-    fn drops(&self, instance: &Instance, name: &str) -> bool {
+    async fn drops(&self, instance: &Instance, name: &str) -> bool {
         self.store_key(instance, name)
+            .await
             .is_some_and(|key| self.dropped.contains(&key))
     }
 
@@ -364,11 +370,11 @@ impl Pruned<'_> {
     /// canister of a project that instance reaches through its dependencies. The
     /// path is the one the store key's own prefix is built from, so resolving it
     /// against the instance's directory gives that prefix back.
-    fn store_key(&self, instance: &Instance, name: &str) -> Option<String> {
+    async fn store_key(&self, instance: &Instance, name: &str) -> Option<String> {
         let Some((rel, local)) = name.rsplit_once(':') else {
             return Some(override_store_key(&instance.prefix, name));
         };
-        let dir = instance.dir.join(rel).canonicalize_utf8().ok()?;
+        let dir = self.files.canonicalize(&instance.dir.join(rel)).await?;
         Some(override_store_key(self.prefixes_by_dir.get(&dir)?, local))
     }
 }
@@ -417,6 +423,7 @@ pub async fn create_bundle(
     let pruned = Pruned {
         dropped: &dropped,
         prefixes_by_dir: &prefixes_by_dir,
+        files,
         environment,
     };
     let canonical_project_dir = canonicalize(files, project_dir).await?;
@@ -1138,7 +1145,7 @@ async fn inline_environments(
         // override for a left-out canister resolves its paths against that
         // canister's directory, which the bundle no longer knows.
         if let Item::Manifest(ref mut env) = inlined {
-            prune_environment(env, instance, pruned);
+            prune_environment(env, instance, pruned).await;
         }
 
         if let Item::Manifest(ref mut env) = inlined {
@@ -1216,12 +1223,26 @@ async fn inline_environments(
 /// The environment being pruned is not necessarily the one the bundle was built
 /// for — a bundle keeps every environment its manifests declare, and each of
 /// them can only ever hold canisters the bundle carries.
-fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned: &Pruned<'_>) {
-    env.canisters = prune_selection(std::mem::take(&mut env.canisters), |name| {
-        pruned.drops(instance, name)
-    });
+async fn prune_environment(
+    env: &mut EnvironmentManifest,
+    instance: &Instance,
+    pruned: &Pruned<'_>,
+) {
+    // Resolving a name written as `<path>:<canister>` reaches the filesystem, so
+    // every name this environment mentions is put to `drops` up front and the
+    // passes below are lookups. Whatever they ask about, `mentioned_canisters`
+    // has to have gathered.
+    let mut dropped = HashSet::new();
+    for name in mentioned_canisters(env) {
+        if pruned.drops(instance, &name).await {
+            dropped.insert(name);
+        }
+    }
+    let drops = |name: &str| dropped.contains(name);
+
+    env.canisters = prune_selection(std::mem::take(&mut env.canisters), drops);
     if let Some(settings) = &mut env.settings {
-        settings.retain(|name, _| !pruned.drops(instance, name));
+        settings.retain(|name, _| !drops(name));
         // An override's own controller list survives the pruning above, which
         // only reaches the canister an override configures: a kept canister can
         // still be handed a controller the bundle does not carry.
@@ -1230,7 +1251,7 @@ fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned:
                 continue;
             };
             controllers.retain(|cref| match cref {
-                ControllerRef::CanisterName(name) if pruned.drops(instance, name) => {
+                ControllerRef::CanisterName(name) if drops(name) => {
                     warn!(
                         "Environment '{}' names '{name}' as a controller of '{canister}', which \
                          environment '{}' does not contain; the bundle drops the reference.",
@@ -1243,11 +1264,43 @@ fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned:
         }
     }
     if let Some(init_args) = &mut env.init_args {
-        init_args.retain(|name, _| !pruned.drops(instance, name));
+        init_args.retain(|name, _| !drops(name));
     }
     if let Some(upgrade_args) = &mut env.upgrade_args {
-        upgrade_args.retain(|name, _| !pruned.drops(instance, name));
+        upgrade_args.retain(|name, _| !drops(name));
     }
+}
+
+/// Every canister name an environment mentions: the canisters it selects, the
+/// canisters whose settings or args it overrides, and the ones those settings
+/// name as controllers.
+///
+/// Kept beside [`prune_environment`], which asks about each of them and must not
+/// ask about one this misses.
+fn mentioned_canisters(env: &EnvironmentManifest) -> HashSet<String> {
+    let mut names = HashSet::new();
+    if let CanisterSelection::Named(selected) = &env.canisters {
+        names.extend(selected.iter().cloned());
+    }
+    if let Some(settings) = &env.settings {
+        names.extend(settings.keys().cloned());
+        for overrides in settings.values() {
+            let Some(controllers) = &overrides.controllers else {
+                continue;
+            };
+            names.extend(controllers.iter().filter_map(|cref| match cref {
+                ControllerRef::CanisterName(name) => Some(name.clone()),
+                ControllerRef::Principal(_) => None,
+            }));
+        }
+    }
+    for overrides in [env.init_args.as_ref(), env.upgrade_args.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        names.extend(overrides.keys().cloned());
+    }
+    names
 }
 
 /// Load `icp_appmanifest.yaml` if present, rewriting its top-level `images` paths to point at

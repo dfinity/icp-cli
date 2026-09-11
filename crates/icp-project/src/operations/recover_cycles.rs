@@ -101,10 +101,11 @@ enum RecoverResult {
 /// canister with a meaningful balance failed to have its cycles recovered, so
 /// the caller can abort the delete.
 ///
-/// `proxy` (the controller, when set) is used for the management hops
-/// (install/start). The `recover_cycles` invocation itself is always a direct
-/// call; the deposit destination is baked into the install argument, so routing
-/// does not affect where the cycles land.
+/// The management hops (settings, install, start) need the controller's
+/// authority and are made under whichever one `calls` has. The `recover_cycles`
+/// invocation itself is always a direct call; the deposit destination is baked
+/// into the install argument, so who asks does not affect where the cycles
+/// land.
 pub async fn recover_cycles_before_delete(
     calls: &dyn CanisterCalls,
     canister_id: Principal,

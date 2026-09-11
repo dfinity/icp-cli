@@ -321,7 +321,8 @@ where
     Ok(m)
 }
 
-#[cfg(test)]
+// Every test here drives `ProjectRootLocateImpl` over real directories.
+#[cfg(all(test, feature = "host"))]
 mod tests {
     use super::*;
     use camino_tempfile::Utf8TempDir;

@@ -139,6 +139,7 @@ mod tests {
     /// Serializes the tests here that mutate the process environment, since
     /// cargo runs tests in parallel threads. Async-aware because the variable
     /// has to stay set across the subprocess `await` that reads it.
+    #[cfg(feature = "host")]
     static ENV_MUTEX: Mutex<()> = Mutex::const_new(());
 
     fn principal(byte: u8) -> Principal {
@@ -209,6 +210,7 @@ mod tests {
     }
 
     /// The host runner passes the resolved environment through to the subprocess.
+    #[cfg(feature = "host")]
     #[tokio::test]
     async fn host_runner_applies_the_resolved_environment() {
         let out = camino_tempfile::NamedUtf8TempFile::new().unwrap();
@@ -237,6 +239,7 @@ mod tests {
     /// sets rather than `PATH`, because Git-for-Windows bash rewrites `PATH`
     /// into POSIX form, so its value there never equals the `PATH` the Rust side
     /// reads.
+    #[cfg(feature = "host")]
     #[tokio::test]
     async fn host_runner_overlays_rather_than_replaces_the_environment() {
         const AMBIENT: &str = "ICP_CLI_TEST_AMBIENT_VAR";
@@ -281,6 +284,7 @@ mod tests {
     /// A command that exits non-zero surfaces as a `ScriptRunError` whose source
     /// still names the command and its status, so the `caused by:` line the CLI
     /// prints stays specific.
+    #[cfg(feature = "host")]
     #[tokio::test]
     async fn host_runner_reports_a_failing_command() {
         let invocation = ScriptInvocation {

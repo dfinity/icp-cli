@@ -330,7 +330,7 @@ impl From<Mode> for Configuration {
 /// the user needs to be told, so the cause is carried whole and displayed as
 /// itself rather than being restated here.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct AccessError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

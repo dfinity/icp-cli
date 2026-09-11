@@ -24,6 +24,7 @@ use icp_events::TaskOutcome;
 use itertools::Itertools;
 use snafu::{OptionExt, ResultExt, Snafu};
 
+use crate::agent::{LazyAgent, LazyAgentError};
 use crate::host::{
     CanisterSelection, EnvironmentSelection, GetCanisterIdForEnvError, GetEnvCanisterError,
     GetEnvironmentError, GetIdsByEnvironmentError, Host, SetCanisterIdForEnvError,
@@ -62,6 +63,9 @@ pub enum DeployError {
 
     #[snafu(transparent)]
     Build { source: BuildManyError },
+
+    #[snafu(transparent)]
+    CreateAgent { source: LazyAgentError },
 
     #[snafu(transparent)]
     GetEnvironment { source: GetEnvironmentError },
@@ -205,12 +209,14 @@ pub struct DeployReport {
 /// Run a full deploy, reporting progress as one task tree.
 ///
 /// `agent` speaks for the identity the caller resolved: which identity that is,
-/// and how its key was unlocked, is not this layer's business.
+/// and how its key was unlocked, is not this layer's business. It is resolved
+/// once the build has succeeded and not before — a deploy that cannot build has
+/// no business unlocking a key or reaching a network.
 ///
 /// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
     host: &Host,
-    agent: &Agent,
+    agent: &LazyAgent<'_>,
     pkg_cache: &PackageCache,
     params: &DeployParams,
     reporter: &Reporter,
@@ -238,6 +244,10 @@ pub async fn deploy(
     )
     .await;
     finish(&phase, result)?;
+
+    // Everything from here on talks to the network, so this is where the agent
+    // gets made — and where the identity it speaks for gets unlocked.
+    let agent = agent.get().await?;
 
     // Create any canisters that do not exist yet
     let env = host.get_environment(environment_selection).await?;

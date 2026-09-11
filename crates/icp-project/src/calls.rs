@@ -193,6 +193,11 @@ pub trait CanisterCalls: Send + Sync {
     async fn controllers(&self, canister: Principal) -> Result<Vec<Principal>, CallError>;
 
     /// The hash of a canister's installed module, or `None` when it has none.
+    ///
+    /// A canister that does not exist is an error, as in
+    /// [`Self::metadata_section`] and for the same reason: nothing installed
+    /// and nothing there look alike, and separating them is the
+    /// implementation's job rather than the caller's.
     async fn module_hash(&self, canister: Principal) -> Result<Option<Vec<u8>>, CallError>;
 
     /// Which subnet `canister` lives on.

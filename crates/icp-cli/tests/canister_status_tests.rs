@@ -132,6 +132,62 @@ async fn canister_status_through_proxy() {
         );
 }
 
+/// A created-but-empty canister has no module, which the public status says
+/// rather than treating the missing hash as a failed read.
+#[tokio::test]
+async fn public_status_reports_an_empty_canister_as_having_no_module() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Created, never installed.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--public",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("Module hash: <none>").and(contains("controller: 2vxsx-fae")));
+}
+
 /// A caller that may not read the status falls back on the state-tree
 /// information, rather than failing.
 #[tokio::test]

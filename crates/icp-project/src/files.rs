@@ -23,7 +23,7 @@ use crate::prelude::*;
 /// displayed as itself. Implementations name the path in their own error, which
 /// is what a reader needs to see.
 #[derive(Debug, Snafu)]
-#[snafu(display("{source}"))]
+#[snafu(transparent)]
 pub struct FsError {
     pub source: Box<dyn std::error::Error + Send + Sync + 'static>,
 }

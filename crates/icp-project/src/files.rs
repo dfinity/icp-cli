@@ -373,12 +373,19 @@ mod tests {
         );
     }
 
+    /// A literal component is still matched by listing its parent, so it yields
+    /// the one path it names — and nothing when that path is not there.
     #[tokio::test]
-    async fn a_literal_component_needs_no_listing() {
+    async fn literal_components_name_one_path() {
         let d = tree(&["canisters/a/canister.yaml"]);
         assert_eq!(
             expand(d.path(), "canisters/a/canister.yaml").await,
             ["canisters/a/canister.yaml"]
+        );
+        assert!(
+            expand(d.path(), "canisters/a/nothing.yaml")
+                .await
+                .is_empty()
         );
     }
 

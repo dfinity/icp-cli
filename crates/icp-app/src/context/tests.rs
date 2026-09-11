@@ -1,8 +1,8 @@
 use super::*;
 use crate::identity::MockIdentityLoader;
 use candid::Principal;
-use icp::network::MockNetworkAccessor;
-use icp::{
+use icp_project::network::MockNetworkAccessor;
+use icp_project::{
     Environment, MockProjectLoader, Network, Project,
     host::SetCanisterIdForEnvError,
     network::{
@@ -354,7 +354,7 @@ async fn test_remove_canister_id_for_env_success() {
     let lookup_result = ids_store.lookup(true, "dev", "backend");
     assert!(matches!(
         lookup_result,
-        Err(icp::store_id::LookupIdError::IdNotFound { .. })
+        Err(icp_project::store_id::LookupIdError::IdNotFound { .. })
     ));
 }
 
@@ -393,7 +393,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                         "local",
                         NetworkAccess {
                             root_key: local_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse("http://localhost:8000").unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -403,7 +403,7 @@ async fn test_get_agent_for_env_uses_environment_network() {
                         "staging",
                         NetworkAccess {
                             root_key: staging_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse("http://staging:9000").unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -482,7 +482,7 @@ async fn test_get_agent_for_network_success() {
                 "local",
                 NetworkAccess {
                     root_key: root_key.clone(),
-                    root_key_source: icp::network::RootKeySource::Configured,
+                    root_key_source: icp_project::network::RootKeySource::Configured,
                     api_url: Url::parse("http://localhost:8000").unwrap(),
                     http_gateway_url: None,
                     use_friendly_domains: false,
@@ -639,7 +639,7 @@ async fn test_ids_by_environment() {
 async fn test_get_agent_defaults_outside_project() {
     let ctx = Context {
         host: Host {
-            project: Arc::new(icp::NoProjectLoader),
+            project: Arc::new(icp_project::NoProjectLoader),
             ..Host::mocked()
         },
         ..Context::mocked()
@@ -708,12 +708,12 @@ async fn test_get_agent_defaults_inside_project_with_default_local() {
 
     let ctx = Context {
         host: Host {
-            project: Arc::new(icp::MockProjectLoader::new(project)),
+            project: Arc::new(icp_project::MockProjectLoader::new(project)),
             network: Arc::new(MockNetworkAccessor::new().with_network(
                 LOCAL,
                 NetworkAccess {
                     root_key: local_root_key.clone(),
-                    root_key_source: icp::network::RootKeySource::Configured,
+                    root_key_source: icp_project::network::RootKeySource::Configured,
                     api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                     http_gateway_url: None,
                     use_friendly_domains: false,
@@ -786,12 +786,12 @@ async fn test_get_agent_defaults_with_overridden_local_network() {
 
     let ctx = Context {
         host: Host {
-            project: Arc::new(icp::MockProjectLoader::new(project)),
+            project: Arc::new(icp_project::MockProjectLoader::new(project)),
             network: Arc::new(MockNetworkAccessor::new().with_network(
                 LOCAL,
                 NetworkAccess {
                     root_key: custom_root_key.clone(),
-                    root_key_source: icp::network::RootKeySource::Configured,
+                    root_key_source: icp_project::network::RootKeySource::Configured,
                     api_url: Url::parse("http://localhost:9000").unwrap(), // Custom port
                     http_gateway_url: None,
                     use_friendly_domains: false,
@@ -889,14 +889,14 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
 
     let ctx = Context {
         host: Host {
-            project: Arc::new(icp::MockProjectLoader::new(project)),
+            project: Arc::new(icp_project::MockProjectLoader::new(project)),
             network: Arc::new(
                 MockNetworkAccessor::new()
                     .with_network(
                         LOCAL,
                         NetworkAccess {
                             root_key: local_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -906,7 +906,7 @@ async fn test_get_agent_defaults_with_overridden_local_environment() {
                         "custom",
                         NetworkAccess {
                             root_key: custom_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse("http://localhost:7000").unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -945,7 +945,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                         LOCAL,
                         NetworkAccess {
                             root_key: local_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -955,7 +955,7 @@ async fn test_get_agent_explicit_network_inside_project() {
                         "staging",
                         NetworkAccess {
                             root_key: staging_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse("http://localhost:8001").unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -995,7 +995,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                         LOCAL,
                         NetworkAccess {
                             root_key: local_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse(DEFAULT_LOCAL_NETWORK_URL).unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,
@@ -1005,7 +1005,7 @@ async fn test_get_agent_explicit_environment_inside_project() {
                         "staging",
                         NetworkAccess {
                             root_key: staging_root_key.clone(),
-                            root_key_source: icp::network::RootKeySource::Configured,
+                            root_key_source: icp_project::network::RootKeySource::Configured,
                             api_url: Url::parse("http://localhost:8001").unwrap(),
                             http_gateway_url: None,
                             use_friendly_domains: false,

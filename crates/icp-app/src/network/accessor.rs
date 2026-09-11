@@ -1,4 +1,4 @@
-//! The host's answer to [`icp::network::Access`]: resolving a project's
+//! The host's answer to [`icp_project::network::Access`]: resolving a project's
 //! networks against what is actually running on this machine.
 
 use std::{collections::BTreeMap, sync::Arc};
@@ -8,12 +8,12 @@ use candid::Principal;
 use snafu::{ResultExt, Snafu};
 use url::Url;
 
-use icp::manifest::{ProjectRootLocate, ProjectRootLocateError};
-use icp::network::{
+use icp_project::manifest::{ProjectRootLocate, ProjectRootLocateError};
+use icp_project::network::{
     Access, AccessError, CollectFriendlyDomains, Configuration, NetworkAccess, NetworkUrls,
 };
-use icp::prelude::*;
-use icp::{CACHE_DIR, ICP_BASE, Network};
+use icp_project::prelude::*;
+use icp_project::{CACHE_DIR, ICP_BASE, Network};
 
 use crate::network::{
     NetworkDirectory, custom_domains,

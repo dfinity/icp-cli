@@ -1,8 +1,10 @@
-use icp::manifest::{CanisterManifest, EnvironmentManifest, NetworkManifest, ProjectManifest};
+use icp_project::manifest::{
+    CanisterManifest, EnvironmentManifest, NetworkManifest, ProjectManifest,
+};
 
 macro_rules! generate_schemas {
     ($base:expr, $($t:ty => $filename:expr),+ $(,)?) => {{
-        let base : icp::prelude::PathBuf = $base.into();
+        let base : icp_project::prelude::PathBuf = $base.into();
 
         $(
             {

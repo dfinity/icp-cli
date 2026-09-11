@@ -1,7 +1,7 @@
 use anyhow::bail;
 use clap::Args;
-use icp::{fs::remove_file, network::Configuration};
 use icp_app::network::{config::ChildLocator, managed::run::stop_network};
+use icp_project::{fs::remove_file, network::Configuration};
 use tracing::info;
 
 use super::args::NetworkOrEnvironmentArgs;

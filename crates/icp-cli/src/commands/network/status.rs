@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
-use icp::network::{Configuration, RootKeySource};
 use icp_app::context::Context;
+use icp_project::network::{Configuration, RootKeySource};
 use serde::Serialize;
 
 use super::args::NetworkOrEnvironmentArgs;

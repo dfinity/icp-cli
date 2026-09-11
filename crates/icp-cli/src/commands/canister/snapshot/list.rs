@@ -9,7 +9,7 @@ use itertools::Itertools;
 use serde::Serialize;
 
 use crate::commands::args;
-use icp::operations::{misc::format_timestamp, proxy_management};
+use icp_project::operations::{misc::format_timestamp, proxy_management};
 
 /// List all snapshots for a canister
 #[derive(Debug, Args)]

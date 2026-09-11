@@ -2,8 +2,8 @@ use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::host::EnvironmentSelection;
 use icp_app::context::Context;
+use icp_project::host::EnvironmentSelection;
 use tracing::info;
 
 use crate::options::EnvironmentOpt;

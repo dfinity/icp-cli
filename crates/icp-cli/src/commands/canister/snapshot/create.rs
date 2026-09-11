@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use super::SnapshotId;
 use crate::commands::args;
-use icp::operations::{misc::format_timestamp, proxy_management};
+use icp_project::operations::{misc::format_timestamp, proxy_management};
 
 /// Create a snapshot of a canister's state
 #[derive(Debug, Args)]

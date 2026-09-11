@@ -10,8 +10,8 @@ use predicates::str::contains;
 use serde_json::Value;
 
 use crate::common::{ChildGuard, ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};
-use icp::fs::write_string;
-use icp::prelude::*;
+use icp_project::fs::write_string;
+use icp_project::prelude::*;
 
 mod common;
 
@@ -232,7 +232,7 @@ fn only_the_file_says_where_to_submit() {
     // An edited network is honoured, and the message still validates: the
     // envelope is signed and carries no URL, so this cannot change what executes.
     let mut file: Value =
-        serde_json::from_str(&icp::fs::read_to_string(&msg).expect("read")).expect("JSON");
+        serde_json::from_str(&icp_project::fs::read_to_string(&msg).expect("read")).expect("JSON");
     file["network"]["url"] = Value::String("http://127.0.0.1:1234/".into());
     write_string(
         &msg,
@@ -279,7 +279,7 @@ fn tampered_file_is_refused() {
         .success();
 
     let mut file: Value =
-        serde_json::from_str(&icp::fs::read_to_string(&msg).expect("read")).expect("JSON");
+        serde_json::from_str(&icp_project::fs::read_to_string(&msg).expect("read")).expect("JSON");
     file["summary"]["method"] = Value::String("transfer".into());
     write_string(
         &msg,
@@ -341,7 +341,7 @@ fn a_doctored_interface_cannot_hide_the_signed_argument() {
     // Swap in an interface that declares only `to`. It still decodes, and the
     // envelope and summary still validate — nothing about the file is invalid.
     let mut file: Value =
-        serde_json::from_str(&icp::fs::read_to_string(&msg).expect("read")).expect("JSON");
+        serde_json::from_str(&icp_project::fs::read_to_string(&msg).expect("read")).expect("JSON");
     file["candid"] =
         Value::String(r#"service : { "transfer" : (record { to : text }) -> () }"#.into());
     write_string(
@@ -444,7 +444,7 @@ fn expired_file_is_refused() {
         },
         network: Network {
             url: "http://127.0.0.1:1".parse().expect("url"),
-            root_key: icp::network::RootKeySpec::Mainnet,
+            root_key: icp_project::network::RootKeySpec::Mainnet,
         },
         destination: Destination::Canister(canister),
         candid: None,

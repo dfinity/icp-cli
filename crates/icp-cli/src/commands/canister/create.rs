@@ -5,17 +5,17 @@ use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
-use icp::canister::resolve_controllers;
-use icp::host::EnvironmentSelection;
-use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
-use icp::store_id::IdMapping;
-use icp::{Canister, host::CanisterSelection, prelude::*};
 use icp_app::context::{Context, NetworkSelection};
 use icp_app::identity::IdentitySelection;
+use icp_project::canister::resolve_controllers;
+use icp_project::host::EnvironmentSelection;
+use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
+use icp_project::store_id::IdMapping;
+use icp_project::{Canister, host::CanisterSelection, prelude::*};
 use serde::Serialize;
 use tracing::{info, warn};
 
-use icp::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
+use icp_project::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
 
 use crate::commands::args;
 
@@ -347,7 +347,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     if ctx
         .host
         .get_canister_id_for_env(
-            &icp::host::CanisterSelection::Named(canister.clone()),
+            &icp_project::host::CanisterSelection::Named(canister.clone()),
             &selections.environment,
         )
         .await
@@ -392,7 +392,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    icp::operations::settings::sync_controller_dependents(
+    icp_project::operations::settings::sync_controller_dependents(
         &ctx.host,
         &agent,
         args.proxy,

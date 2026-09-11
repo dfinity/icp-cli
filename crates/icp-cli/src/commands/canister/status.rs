@@ -3,19 +3,19 @@ use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
-use icp::{
-    canister::Visibility,
-    host::{CanisterSelection, EnvironmentSelection},
-};
 use icp_app::{
     context::{Context, NetworkSelection},
     identity::IdentitySelection,
+};
+use icp_project::{
+    canister::Visibility,
+    host::{CanisterSelection, EnvironmentSelection},
 };
 use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
 
-use icp::operations::{proxy::UpdateOrProxyError, proxy_management};
+use icp_project::operations::{proxy::UpdateOrProxyError, proxy_management};
 
 use crate::{
     commands::{

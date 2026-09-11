@@ -5,7 +5,7 @@ use std::{
 
 use camino::Utf8Component;
 use flate2::bufread::GzDecoder;
-use icp::{
+use icp_project::{
     fs::{create_dir_all, read_to_string, write, write_string},
     prelude::*,
 };

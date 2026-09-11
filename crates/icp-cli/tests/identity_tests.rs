@@ -4,7 +4,7 @@ use std::io::Write;
 use camino_tempfile::NamedUtf8TempFile as NamedTempFile;
 use common::TestContext;
 use ic_agent::export::Principal;
-use icp::{fs::write_string, prelude::*};
+use icp_project::{fs::write_string, prelude::*};
 use indoc::formatdoc;
 use predicates::{ord::eq, prelude::*, str::contains};
 

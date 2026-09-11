@@ -8,7 +8,7 @@ use cryptoki::{
     session::UserType,
     types::AuthPin,
 };
-use icp::prelude::*;
+use icp_project::prelude::*;
 
 /// Default SoftHSM2 library paths by platform
 #[cfg(target_os = "macos")]

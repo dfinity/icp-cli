@@ -10,7 +10,7 @@ use crate::common::{
     ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
     TestContext, clients,
 };
-use icp::{fs::write_string, prelude::*};
+use icp_project::{fs::write_string, prelude::*};
 
 mod common;
 

@@ -3,7 +3,7 @@ use k256::sha2::{Digest, Sha256};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::{TestContext, spawn_test_server};
-use icp::fs::{read, write_string};
+use icp_project::fs::{read, write_string};
 
 mod common;
 

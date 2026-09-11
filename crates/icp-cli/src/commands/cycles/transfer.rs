@@ -2,9 +2,9 @@ use std::io::stdout;
 
 use anyhow::ensure;
 use clap::Args;
-use icp::parsers::CyclesAmount;
 use icp_app::context::Context;
 use icp_canister_interfaces::cycles_ledger::{CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL};
+use icp_project::parsers::CyclesAmount;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 

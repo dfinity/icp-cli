@@ -136,7 +136,9 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
 #[derive(Debug, Snafu)]
 pub(crate) enum LoginError {
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(transparent)]
     LoadManifest {

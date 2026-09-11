@@ -9,8 +9,8 @@ use tar::Archive;
 use tracing::debug;
 
 use crate::package::{PackageCachePaths, get_tag, get_tag_with_updater, set_tag_with_updater};
-use icp::fs::lock::{LRead, LWrite};
-use icp::prelude::*;
+use icp_project::fs::lock::{LRead, LWrite};
+use icp_project::prelude::*;
 
 const LAUNCHER_NAME: &str = "icp-cli-network-launcher";
 
@@ -85,7 +85,9 @@ fn is_updater_stale(updater_version: Option<&str>) -> bool {
 #[derive(Debug, Snafu)]
 pub enum ReadCacheError {
     #[snafu(display("failed to read package tag"))]
-    LoadTag { source: icp::fs::json::Error },
+    LoadTag {
+        source: icp_project::fs::json::Error,
+    },
 }
 
 pub async fn get_latest_launcher_version(client: &Client) -> Result<String, DownloadLauncherError> {
@@ -126,7 +128,7 @@ pub async fn download_launcher_version(
         version_req.to_owned()
     };
     let version_path = paths.launcher_version(&pkg_version);
-    icp::fs::create_dir_all(&paths.launcher_dir()).context(CreateDirSnafu)?;
+    icp_project::fs::create_dir_all(&paths.launcher_dir()).context(CreateDirSnafu)?;
     let mut tmp = camino_tempfile::tempfile().context(TempFileSnafu)?;
     let tmp_write = BufWriter::new(&tmp);
     let arch = match std::env::consts::ARCH {
@@ -171,17 +173,17 @@ pub async fn download_launcher_version(
     let decompressor = GzDecoder::new(tmp_read);
     let mut archive = Archive::new(decompressor);
     let extract_dir = paths.launcher_dir().join("tmp");
-    icp::fs::create_dir_all(&extract_dir).context(TempDirSnafu)?;
+    icp_project::fs::create_dir_all(&extract_dir).context(TempDirSnafu)?;
     let tarball_name = format!("icp-cli-network-launcher-{arch}-{os}-{pkg_version}");
     let extracted_dir_path = extract_dir.join(&tarball_name);
     if extracted_dir_path.exists() {
-        icp::fs::remove_dir_all(&extracted_dir_path).context(RemoveExistingSnafu)?
+        icp_project::fs::remove_dir_all(&extracted_dir_path).context(RemoveExistingSnafu)?
     }
     archive
         .unpack(&extract_dir)
         .context(ExtractSnafu { path: &extract_dir })?;
     if version_path.exists() {
-        icp::fs::remove_dir_all(&version_path).context(RemoveExistingSnafu)?
+        icp_project::fs::remove_dir_all(&version_path).context(RemoveExistingSnafu)?
     }
     std::fs::rename(&extracted_dir_path, &version_path).context(MoveExtractedSnafu {
         from: extracted_dir_path,
@@ -201,7 +203,7 @@ pub async fn check_launcher_update_available(
     client: &Client,
 ) -> Option<String> {
     let ts_path = paths.update_nag_timestamp();
-    if let Ok(contents) = icp::fs::read_to_string(&ts_path)
+    if let Ok(contents) = icp_project::fs::read_to_string(&ts_path)
         && let Ok(ts) = contents.trim().parse::<u64>()
     {
         let then = SystemTime::UNIX_EPOCH + Duration::from_secs(ts);
@@ -216,7 +218,7 @@ pub async fn check_launcher_update_available(
         .expect("since epoch")
         .as_secs();
     // Write timestamp regardless of outcome, so we don't re-check on failure
-    let _ = icp::fs::write(&ts_path, format!("{now}\n").as_bytes());
+    let _ = icp_project::fs::write(&ts_path, format!("{now}\n").as_bytes());
 
     let latest = get_latest_launcher_version(client).await.ok()?;
     if latest != cached_version {
@@ -247,11 +249,11 @@ pub enum DownloadLauncherError {
     #[snafu(display("failed to save downloaded network launcher"))]
     SaveDownload { source: std::io::Error },
     #[snafu(display("failed to remove existing launcher"))]
-    RemoveExisting { source: icp::fs::IoError },
+    RemoveExisting { source: icp_project::fs::IoError },
     #[snafu(display("failed to create temporary file for download"))]
     TempFile { source: std::io::Error },
     #[snafu(display("failed to create temporary directory for extraction"))]
-    TempDir { source: icp::fs::IoError },
+    TempDir { source: icp_project::fs::IoError },
     #[snafu(display("buffer failure in temporary file"))]
     Buffer { source: std::io::Error },
     #[snafu(display("failed to extract downloaded network launcher to {path}"))]
@@ -266,11 +268,13 @@ pub enum DownloadLauncherError {
         to: PathBuf,
     },
     #[snafu(display("failed to create network launcher cache directory"))]
-    CreateDir { source: icp::fs::IoError },
+    CreateDir { source: icp_project::fs::IoError },
     #[snafu(display("failed to fetch latest network launcher version from GitHub"))]
     LatestVersionFetch { source: reqwest::Error },
     #[snafu(display("failed to parse latest version response from GitHub"))]
     LatestVersionParse,
     #[snafu(display("failed to create package tag"))]
-    CreateTag { source: icp::fs::json::Error },
+    CreateTag {
+        source: icp_project::fs::json::Error,
+    },
 }

@@ -54,7 +54,7 @@ use std::io::ErrorKind;
 use snafu::{ResultExt, prelude::*};
 
 use crate::network::config::NetworkDescriptorModel;
-use icp::{
+use icp_project::{
     fs::{
         create_dir_all, json,
         lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
@@ -100,7 +100,7 @@ pub enum LoadNetworkFileError {
 }
 
 impl NetworkDirectory {
-    pub fn ensure_exists(&self) -> Result<(), icp::fs::IoError> {
+    pub fn ensure_exists(&self) -> Result<(), icp_project::fs::IoError> {
         // Network root
         create_dir_all(&self.network_root)?;
 
@@ -150,7 +150,7 @@ impl NetworkDirectory {
         &self,
     ) -> Result<(), CleanupNetworkDescriptorError> {
         self.root()?
-            .with_write(async |root| icp::fs::remove_file(&root.network_descriptor_path()))
+            .with_write(async |root| icp_project::fs::remove_file(&root.network_descriptor_path()))
             .await??;
         Ok(())
     }
@@ -162,7 +162,7 @@ impl NetworkDirectory {
     ) -> Result<(), CleanupNetworkDescriptorError> {
         if let Some(port) = gateway_port {
             self.port(port)?
-                .with_write(async |paths| icp::fs::remove_file(&paths.descriptor_path()))
+                .with_write(async |paths| icp_project::fs::remove_file(&paths.descriptor_path()))
                 .await??;
         }
         Ok(())
@@ -308,7 +308,7 @@ pub enum CleanupNetworkDescriptorError {
     #[snafu(transparent)]
     LockFileError { source: LockError },
     #[snafu(transparent)]
-    DeleteFileError { source: icp::fs::IoError },
+    DeleteFileError { source: icp_project::fs::IoError },
 }
 
 #[derive(Debug, Snafu)]
@@ -317,14 +317,14 @@ pub enum SavePidError {
     LockFileError { source: LockError },
 
     #[snafu(transparent)]
-    WritePid { source: icp::fs::IoError },
+    WritePid { source: icp_project::fs::IoError },
 }
 
 #[derive(Debug, Snafu)]
 pub enum LoadPidError {
     #[snafu(display("failed to read PID from {path}"))]
     ReadPid {
-        source: icp::fs::IoError,
+        source: icp_project::fs::IoError,
         path: PathBuf,
     },
     #[snafu(transparent)]

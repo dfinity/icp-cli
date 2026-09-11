@@ -4,22 +4,22 @@ use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use clap::{Args, ValueHint};
 use ic_agent::agent::EffectiveId;
-use icp::host::EnvironmentSelection;
-use icp::manifest::ArgsFormat;
-use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
-use icp::parsers::{CyclesAmount, DurationAmount};
-use icp::prelude::*;
 use icp_app::context::{Context, NetworkSelection};
 use icp_app::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
 };
+use icp_project::host::EnvironmentSelection;
+use icp_project::manifest::ArgsFormat;
+use icp_project::network::{Configuration as NetworkConfiguration, RootKeySpec};
+use icp_project::parsers::{CyclesAmount, DurationAmount};
+use icp_project::prelude::*;
 use std::io::{self, Write};
 use std::str::FromStr;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::warn;
 use url::Url;
 
-use icp::operations::{
+use icp_project::operations::{
     create::shell_quote, proxy::update_or_proxy_raw, wasm::extract_candid_service,
 };
 
@@ -211,20 +211,20 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         "a positional argument",
     )? {
         None => None,
-        Some(icp::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp_project::CanisterArgs::Text {
             content,
             format: ArgsFormat::Candid,
         }) => Some(ResolvedArgs::Candid(
             parse_idl_args(&content).context("failed to parse Candid arguments")?,
         )),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Text {
             content,
             format: ArgsFormat::Hex,
         }) => Some(ResolvedArgs::Bytes(
             hex::decode(&content).context("failed to decode hex arguments")?,
         )),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Text {
             format: ArgsFormat::Bin,
             ..
         }) => {
@@ -551,9 +551,9 @@ fn floor_to_minute(t: OffsetDateTime) -> OffsetDateTime {
 /// by principal rather than by name, simply yields nothing.
 async fn local_candid_type(
     ctx: &Context,
-    canister: &icp::host::CanisterSelection,
+    canister: &icp_project::host::CanisterSelection,
 ) -> Option<CanisterInterface> {
-    let icp::host::CanisterSelection::Named(name) = canister else {
+    let icp_project::host::CanisterSelection::Named(name) = canister else {
         return None;
     };
     let wasm = ctx.host.artifacts.lookup(name).await.ok()?;

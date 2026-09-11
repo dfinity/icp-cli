@@ -1,4 +1,4 @@
-use icp::fs::write_string;
+use icp_project::fs::write_string;
 use predicates::str::{PredicateStrExt, contains};
 use serde_json::Value;
 

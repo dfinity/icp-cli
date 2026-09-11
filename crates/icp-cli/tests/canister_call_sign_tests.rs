@@ -11,8 +11,8 @@ use predicates::str::contains;
 use serde_json::Value;
 
 use crate::common::TestContext;
-use icp::fs::write_string;
-use icp::prelude::*;
+use icp_project::fs::write_string;
+use icp_project::prelude::*;
 
 mod common;
 
@@ -35,7 +35,7 @@ fn envelope_expiry(encoded: &str) -> u64 {
 }
 
 fn read_message(path: &Path) -> Value {
-    let text = icp::fs::read_to_string(path).expect("the message file must exist");
+    let text = icp_project::fs::read_to_string(path).expect("the message file must exist");
     serde_json::from_str(&text).expect("a signed message must be JSON a human can read")
 }
 

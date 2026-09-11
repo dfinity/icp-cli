@@ -4,7 +4,7 @@ use candid::Principal;
 use snafu::prelude::*;
 use url::Url;
 
-use icp::prelude::*;
+use icp_project::prelude::*;
 
 /// Writes a `custom-domains.txt` file to the given status directory.
 ///
@@ -40,7 +40,7 @@ pub fn write_custom_domains(
     for (full_domain, canister_id) in extra_entries {
         content.push_str(&format!("{full_domain}:{canister_id}\n"));
     }
-    icp::fs::write(&file_path, content.as_bytes())?;
+    icp_project::fs::write(&file_path, content.as_bytes())?;
     Ok(())
 }
 
@@ -143,7 +143,7 @@ pub fn canister_gateway_url(
 #[derive(Debug, Snafu)]
 pub enum WriteCustomDomainsError {
     #[snafu(transparent)]
-    WriteFile { source: icp::fs::IoError },
+    WriteFile { source: icp_project::fs::IoError },
 }
 
 #[cfg(test)]

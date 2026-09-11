@@ -42,7 +42,7 @@ pub enum CreateOperationError {
     #[snafu(display("failed to decode candid"))]
     CandidDecode { source: candid::Error },
 
-    #[snafu(display("a canister call failed: {source}"))]
+    #[snafu(display("a canister call failed"))]
     Call { source: crate::calls::CallError },
 
     #[snafu(transparent)]

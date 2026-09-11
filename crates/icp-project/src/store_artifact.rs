@@ -1,3 +1,4 @@
+#[cfg(feature = "host")]
 use std::sync::Arc;
 #[cfg(any(test, feature = "test-util"))]
 use std::{collections::HashMap, sync::Mutex};
@@ -9,8 +10,10 @@ use crate::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
     },
+    manifest::ProjectRootLocate,
+    prelude::*,
+    store_id::StoreCause,
 };
-use crate::{manifest::ProjectRootLocate, prelude::*, store_id::StoreCause};
 use async_trait::async_trait;
 use snafu::Snafu;
 
@@ -99,7 +102,6 @@ const NAME_MAX: usize = 255;
 /// The encoded filename length if it exceeds `NAME_MAX`, else `None`. A deeply
 /// nested dependency store key can stay within the total path limit yet blow the
 /// per-component limit once its separators are percent-encoded.
-#[cfg(feature = "host")]
 #[cfg(feature = "host")]
 fn artifact_name_overflow(name: &str) -> Option<usize> {
     let len = sanitize_artifact_name(name).len();

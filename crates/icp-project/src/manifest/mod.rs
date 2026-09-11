@@ -1,3 +1,4 @@
+#[cfg(feature = "host")]
 use std::collections::HashSet;
 use std::marker::PhantomData;
 

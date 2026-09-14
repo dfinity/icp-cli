@@ -1466,6 +1466,14 @@ impl<W: Write> ArchiveWriter<W> {
             })
     }
 
+    /// Appends a directory's whole contents, walking the host filesystem rather
+    /// than the [`FileSystem`] seam the rest of bundling reads through.
+    ///
+    /// `tar`'s walk is what keeps a symlink a symlink, per
+    /// [`new`](ArchiveWriter::new); the seam reports a link's target as the file
+    /// it points at and has no way to say otherwise, so reading through it would
+    /// slurp whatever the link reaches instead. Bundling from anything but a
+    /// host filesystem needs the seam to describe links first.
     fn dir(&mut self, src_path: &Path, archive_prefix: &str) -> Result<(), BundleError> {
         self.builder
             .append_dir_all(archive_prefix, src_path.as_std_path())

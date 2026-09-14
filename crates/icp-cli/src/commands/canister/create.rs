@@ -7,6 +7,7 @@ use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp_app::context::{Context, NetworkSelection};
 use icp_app::identity::IdentitySelection;
+use icp_canister_interfaces::engine_canister::engine_canister_id;
 use icp_project::canister::resolve_controllers;
 use icp_project::host::EnvironmentSelection;
 use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
@@ -313,6 +314,7 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         args.create_target(),
         args.funding(),
         vec![],
+        engine_canister_id().map_err(|message| anyhow!(message))?,
     );
 
     let canister_settings = args.canister_settings();
@@ -385,6 +387,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         args.create_target(),
         args.funding(),
         ids.values().copied().collect(),
+        engine_canister_id().map_err(|message| anyhow!(message))?,
     );
 
     let (canister_settings, unresolved) =

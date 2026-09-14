@@ -184,6 +184,9 @@ pub struct DeployParams {
     pub subnet: Option<Principal>,
     pub proxy: Option<Principal>,
     pub cycles: u128,
+    /// The engine-canister registry a created canister's subnet is looked up
+    /// in, already resolved from the environment by the caller.
+    pub engine_registry: Principal,
     pub no_create: bool,
     /// Skip the Candid interface compatibility check.
     pub yes: bool,
@@ -437,6 +440,7 @@ async fn create_canisters(
         target,
         CreateFunding::Cycles(params.cycles),
         existing_ids,
+        params.engine_registry,
     );
 
     let mut futs = FuturesOrdered::new();

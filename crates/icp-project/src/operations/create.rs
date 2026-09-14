@@ -23,7 +23,7 @@ use icp_canister_interfaces::{
     },
     engine_canister::{
         GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
-        GetEngineOperatorBySubnetResult, engine_canister_id,
+        GetEngineOperatorBySubnetResult,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
@@ -65,9 +65,6 @@ pub enum CreateOperationError {
         source: crate::calls::CallError,
         subnet: Principal,
     },
-
-    #[snafu(display("invalid engine-canister id: {message}"))]
-    EngineCanisterId { message: String },
 
     #[snafu(display("failed to query the engine-canister registry"))]
     EngineCanisterQuery { source: crate::calls::CallError },
@@ -178,6 +175,10 @@ struct CreateOperationInner {
     target: CreateTarget,
     funding: CreateFunding,
     existing_canisters: Vec<Principal>,
+    /// The engine-canister registry to ask which engine-operator serves a
+    /// subnet. Resolved by the caller, which is where an override of it — an
+    /// environment variable — is something to read at all.
+    engine_registry: Principal,
     resolved_subnet: OnceCell<Result<Principal, String>>,
 }
 
@@ -200,6 +201,7 @@ impl CreateOperation {
         target: CreateTarget,
         funding: CreateFunding,
         existing_canisters: Vec<Principal>,
+        engine_registry: Principal,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
@@ -208,6 +210,7 @@ impl CreateOperation {
                 target,
                 funding,
                 existing_canisters,
+                engine_registry,
                 resolved_subnet: OnceCell::new(),
             }),
         }
@@ -335,8 +338,7 @@ impl CreateOperation {
         &self,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let engine_registry = engine_canister_id()
-            .map_err(|message| CreateOperationError::EngineCanisterId { message })?;
+        let engine_registry = self.inner.engine_registry;
 
         let arg = GetEngineOperatorBySubnetArgs {
             subnet_id: Some(subnet),

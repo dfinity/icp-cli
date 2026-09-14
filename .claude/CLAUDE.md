@@ -73,13 +73,15 @@ it, the checks below would prove nothing about the shipped binary. CI runs
 three of them on the core with default features off:
 
 - a build for `wasm32-unknown-unknown`, which rejects a *dependency* that
-  reaches the host, because such a crate gates that code on
-  `cfg(unix)`/`cfg(windows)` and is left with nothing to compile;
+  reaches the host by gating that code on `cfg(unix)`/`cfg(windows)`, leaving
+  it with nothing to compile;
 - `scripts/check-no-host-reach.sh`, which reads the imports back out of that
   build's object files and rejects a call this crate itself makes into
-  `std::fs`, `std::process`, `std::env` and their neighbours. The build alone
-  does not catch those: `wasm32-unknown-unknown` ships a full `std` whose host
-  backends compile and fail at runtime;
+  `std::fs`, `std::process`, `std::env` and their neighbours — and, since a
+  dependency that reaches the host ungated compiles fine, the front doors onto
+  those that such a dependency offers, `camino`'s `Utf8Path::is_file` among
+  them. The build alone catches neither: `wasm32-unknown-unknown` ships a full
+  `std` whose host backends compile and fail at runtime;
 - the crate's own tests, which are the only thing that exercises it with
   `host` off, and so run in that configuration too.
 

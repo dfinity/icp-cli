@@ -56,7 +56,9 @@ impl AgentCalls {
     }
 
     /// Turns an agent error into the shape the trait speaks in: a rejection is
-    /// a verdict and keeps its code, anything else reached none.
+    /// a verdict and keeps its code, a call that ran out of time or never got
+    /// down the wire went unanswered, and anything else — a reply that would
+    /// not parse, a certificate that would not verify — failed for good.
     fn wrap(canister: Principal, method: &str, err: AgentError) -> CallError {
         match &err {
             AgentError::CertifiedReject { reject, .. }
@@ -66,6 +68,9 @@ impl AgentCalls {
                 code: reject.error_code.clone(),
                 message: reject.reject_message.clone(),
             },
+            AgentError::TimeoutWaitingForResponse() | AgentError::TransportError(_) => {
+                CallError::unanswered(canister, method, err)
+            }
             _ => CallError::failed(canister, method, err),
         }
     }
@@ -265,5 +270,48 @@ impl CanisterCalls for AgentCalls {
             .await
             .map_err(|e| Self::wrap(subnet, "subnet_type", e))?;
         Ok(matches!(info.subnet_type(), Some(SubnetType::CloudEngine)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_agent::agent::{RejectCode, RejectResponse};
+
+    fn wrapped(err: AgentError) -> CallError {
+        AgentCalls::wrap(Principal::anonymous(), "read_canister_snapshot_data", err)
+    }
+
+    /// The retry loops in the snapshot transfers branch on this: only a call
+    /// the network never answered is worth repeating, so a deterministic
+    /// failure must not be classified as one and stall the command for the
+    /// whole retry window.
+    ///
+    /// `AgentError::TransportError` is transient for the same reason, but the
+    /// error it carries is private to `ic-agent` and cannot be built here.
+    #[test]
+    fn only_an_unanswered_call_is_transient() {
+        assert!(wrapped(AgentError::TimeoutWaitingForResponse()).is_transient());
+
+        // Deterministic: the reply was received and could not be understood.
+        assert!(!wrapped(AgentError::CertificateVerificationFailed()).is_transient());
+        assert!(!wrapped(AgentError::MessageError("malformed reply".to_owned())).is_transient());
+    }
+
+    /// A rejection is the network's verdict: it keeps its code for callers to
+    /// branch on, and repeating the call would only earn it again.
+    #[test]
+    fn a_rejection_keeps_its_code_and_is_not_transient() {
+        let err = wrapped(AgentError::CertifiedReject {
+            reject: RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                reject_message: "canister is stopped".to_owned(),
+                error_code: Some("IC0508".to_owned()),
+            },
+            operation: None,
+        });
+        assert_eq!(err.code(), Some("IC0508"));
+        assert!(err.is_rejection());
+        assert!(!err.is_transient());
     }
 }

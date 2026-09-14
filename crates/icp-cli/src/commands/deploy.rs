@@ -441,7 +441,7 @@ mod tests {
 
     /// A call that reached no verdict at all.
     fn no_verdict() -> CallError {
-        CallError::failed(
+        CallError::unanswered(
             Principal::anonymous(),
             "http_request",
             std::io::Error::other("connection reset"),

@@ -590,7 +590,7 @@ mod tests {
         // A call that reached no verdict has no code to branch on, so the
         // caller must not read it as an access refusal.
         let no_verdict = TypedCallError::Call {
-            source: icp_project::calls::CallError::failed(
+            source: icp_project::calls::CallError::unanswered(
                 Principal::anonymous(),
                 "canister_status",
                 std::io::Error::other("connection reset"),

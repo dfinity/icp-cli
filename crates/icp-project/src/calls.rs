@@ -119,10 +119,12 @@ impl Call {
 
 /// A call did not produce a reply.
 ///
-/// The distinction that matters to callers is whether the network reached a
-/// verdict: a rejection is an answer, and its code is worth branching on (a
-/// canister reported as stopped, or as not found). Anything else means the
-/// caller learned nothing and may want to try again.
+/// Two distinctions matter to callers. The first is whether the network
+/// reached a verdict: a rejection is an answer, and its code is worth
+/// branching on (a canister reported as stopped, or as not found). The second
+/// separates the calls that reached none: one the network never answered may
+/// be answered on another attempt, while one whose arguments would not encode
+/// or whose reply would not verify will fail the same way every time.
 #[derive(Debug, Snafu)]
 pub enum CallError {
     #[snafu(display("call to '{method}' on {canister} was rejected: {message}"))]
@@ -134,9 +136,20 @@ pub enum CallError {
         message: String,
     },
 
-    /// The call never reached a verdict — a transport failure, a timeout, a
-    /// malformed reply. The cause is carried whole because what a call travels
-    /// over is the implementation's business.
+    /// The call was submitted and no answer came back — a timeout, a dropped
+    /// connection. Nothing was learned about the canister, and the same call
+    /// may well be answered next time.
+    #[snafu(display("call to '{method}' on {canister} went unanswered"))]
+    Unanswered {
+        canister: Principal,
+        method: String,
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
+
+    /// The call reached no verdict and would not on another attempt —
+    /// arguments that would not encode, a reply that would not parse, a
+    /// certificate that did not verify. The cause is carried whole because
+    /// what a call travels over is the implementation's business.
     #[snafu(display("call to '{method}' on {canister} failed"))]
     Failed {
         canister: Principal,
@@ -160,6 +173,20 @@ impl CallError {
         }
     }
 
+    /// Builds a [`CallError::Unanswered`] for `call` from an implementation's
+    /// own error.
+    pub fn unanswered(
+        canister: Principal,
+        method: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Unanswered {
+            canister,
+            method: method.into(),
+            source: Box::new(source),
+        }
+    }
+
     /// The replica's error code, when this was a rejection that carried one.
     ///
     /// Callers branch on this rather than on message text: `IC0508` means a
@@ -167,7 +194,7 @@ impl CallError {
     pub fn code(&self) -> Option<&str> {
         match self {
             CallError::Rejected { code, .. } => code.as_deref(),
-            CallError::Failed { .. } => None,
+            CallError::Unanswered { .. } | CallError::Failed { .. } => None,
         }
     }
 
@@ -177,12 +204,20 @@ impl CallError {
         matches!(self, CallError::Rejected { .. })
     }
 
+    /// Whether making the same call again could come out differently.
+    ///
+    /// Only a call the network never answered could: a rejection is a verdict
+    /// and will be repeated, and every other failure is deterministic.
+    pub fn is_transient(&self) -> bool {
+        matches!(self, CallError::Unanswered { .. })
+    }
+
     /// The rejection message, for a caller that has to fall back on matching
     /// text because no error code was given.
     pub fn message(&self) -> Option<&str> {
         match self {
             CallError::Rejected { message, .. } => Some(message),
-            CallError::Failed { .. } => None,
+            CallError::Unanswered { .. } | CallError::Failed { .. } => None,
         }
     }
 }

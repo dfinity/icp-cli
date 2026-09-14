@@ -128,6 +128,7 @@ impl ScriptRunner for HostScripts {
 mod tests {
     use std::collections::BTreeMap;
 
+    #[cfg(feature = "host")]
     use tokio::sync::Mutex;
 
     use candid::Principal;

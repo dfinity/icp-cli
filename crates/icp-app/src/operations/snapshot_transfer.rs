@@ -386,14 +386,14 @@ impl BlobType {
 
 /// Whether a failed call is worth trying again.
 ///
-/// A rejection is the network's verdict and will be the same next time. Every
-/// other failure means the call reached no verdict — a timeout, a dropped
-/// connection — and the transfer can pick up where it left off. Encoding and
-/// decoding failures fall on this side too; they are deterministic, so the
-/// retry budget absorbs one wasted attempt rather than hiding a real problem.
+/// Only a call the network never answered — a timeout, a dropped connection —
+/// could come out differently, and the transfer picks up where it left off. A
+/// rejection is a verdict, and everything else is deterministic: retrying
+/// either would only stall the command for the whole retry window before
+/// reporting the same thing.
 fn is_retryable(error: &TypedCallError) -> bool {
     match error {
-        TypedCallError::Call { source } => !source.is_rejection(),
+        TypedCallError::Call { source } => source.is_transient(),
         TypedCallError::Encode { .. } | TypedCallError::Decode { .. } => false,
     }
 }

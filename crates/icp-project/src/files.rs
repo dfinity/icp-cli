@@ -230,10 +230,12 @@ pub enum GlobError {
 /// `**` standing for any number of directories — the same shape `glob`
 /// supports, and the same one the manifest reference documents.
 ///
-/// A component that cannot match anything is instead resolved the way joining
-/// it onto `base` would resolve it: `..` climbs, and an absolute pattern starts
-/// from its own root with `base` dropped. So a pattern with no metacharacters
-/// at all names the same path here as `base.join(pattern)` does.
+/// A component with nothing to match against is instead resolved the way
+/// joining it onto `base` would resolve it: `..` climbs, and an absolute
+/// pattern starts from its own root with `base` dropped. A component with no
+/// metacharacter is joined too, since it names one path rather than describing
+/// a set of them, so a pattern with no metacharacters at all names the same
+/// path here as `base.join(pattern)` does.
 ///
 /// Only paths that exist are returned, and each directory's entries are listed
 /// in sorted order, so the result is the same on every run. `**` descends into
@@ -261,14 +263,16 @@ pub async fn expand_glob(
             Utf8Component::CurDir => {}
 
             // No listing ever turns up an entry named `..`, so this names a
-            // directory rather than matching one. It still has to be one, or
-            // the pattern describes no path from here.
+            // directory rather than matching one: the directory above `dir`,
+            // which is there only where `dir` itself is. Asking about `dir`
+            // rather than about the joined path is what settles that — Windows
+            // resolves a trailing `..` by spelling rather than by lookup, and
+            // answers for `nowhere/..` as readily as for a path that is there.
             Utf8Component::ParentDir => {
                 let mut next = Vec::new();
                 for dir in &frontier {
-                    let parent = dir.join("..");
-                    if files.is_dir(&parent).await {
-                        next.push(parent);
+                    if files.is_dir(dir).await {
+                        next.push(dir.join(".."));
                     }
                 }
                 frontier = next;
@@ -317,6 +321,24 @@ pub async fn expand_glob(
                 reached.sort();
                 reached.dedup();
                 frontier = reached;
+            }
+
+            // A component with no metacharacter matches the single name it
+            // spells, so it too is joined rather than looked for in a listing.
+            // Windows spells one file several ways — a case the directory
+            // entry does not use, or a short name like `RUNNER~1` — and each
+            // of them opens the file, so looking for the spelling among the
+            // entries would turn a pattern that names a path into one that
+            // matches nothing.
+            Utf8Component::Normal(component) if !component.contains(['*', '?', '[']) => {
+                let mut next = Vec::new();
+                for dir in &frontier {
+                    let entry = dir.join(component);
+                    if files.exists(&entry).await {
+                        next.push(entry);
+                    }
+                }
+                frontier = next;
             }
 
             Utf8Component::Normal(component) => {
@@ -418,6 +440,15 @@ mod tests {
                 .await
                 .is_empty()
         );
+    }
+
+    /// Windows spells one directory several ways, and a spelling the listing
+    /// does not use still names it.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_literal_component_need_not_be_spelled_as_the_listing_spells_it() {
+        let d = tree(&["canisters/a/canister.yaml"]);
+        assert_eq!(expand(d.path(), "CANISTERS/a").await, ["CANISTERS/a"]);
     }
 
     /// `**` stands for zero or more directories, so a pattern that uses it also

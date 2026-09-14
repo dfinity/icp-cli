@@ -990,7 +990,7 @@ mod tests {
     use super::*;
 
     use candid::Principal;
-    use icp_project::calls::UnimplementedMockCalls;
+    use icp_project::calls::{CallError, RouteTo, UnimplementedMockCalls};
     use icp_project::canister::sync::plugin::DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS;
     use url::Url;
 
@@ -1079,6 +1079,377 @@ mod tests {
             err.contains("not permitted") && err.contains("frontend"),
             "got: {err}"
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // The canister-call seam — what a plugin's request becomes on the way out
+    // -------------------------------------------------------------------------
+
+    type CallRequest = v2::icp::sync_plugin::types::CanisterCallRequest;
+    type MetadataRequest = v2::icp::sync_plugin::types::MetadataSectionRequest;
+
+    /// A [`CanisterCalls`] that records what it was asked for and answers with
+    /// canned bytes, so the request a plugin made can be read back as the call
+    /// it turned into.
+    #[derive(Default)]
+    struct RecordingCalls {
+        updates: StdMutex<Vec<Call>>,
+        queries: StdMutex<Vec<Call>>,
+        metadata: StdMutex<Vec<(Principal, String, Authority)>>,
+    }
+
+    #[async_trait]
+    impl CanisterCalls for RecordingCalls {
+        fn caller(&self) -> Principal {
+            Principal::from_slice(&[5; 4])
+        }
+
+        async fn update(&self, call: Call) -> Result<Vec<u8>, CallError> {
+            self.updates.lock().unwrap().push(call);
+            Ok(b"reply".to_vec())
+        }
+
+        async fn query(&self, call: Call) -> Result<Vec<u8>, CallError> {
+            self.queries.lock().unwrap().push(call);
+            Ok(b"reply".to_vec())
+        }
+
+        async fn metadata_section(
+            &self,
+            canister: Principal,
+            path: &str,
+            authority: Authority,
+        ) -> Result<Option<Vec<u8>>, CallError> {
+            self.metadata
+                .lock()
+                .unwrap()
+                .push((canister, path.to_owned(), authority));
+            Ok(Some(b"section".to_vec()))
+        }
+
+        async fn controllers(
+            &self,
+            _canister: Principal,
+        ) -> Result<Option<Vec<Principal>>, CallError> {
+            unimplemented!("RecordingCalls::controllers")
+        }
+
+        async fn module_hash(&self, _canister: Principal) -> Result<Option<Vec<u8>>, CallError> {
+            unimplemented!("RecordingCalls::module_hash")
+        }
+
+        async fn subnet_of(&self, _canister: Principal) -> Result<Principal, CallError> {
+            unimplemented!("RecordingCalls::subnet_of")
+        }
+
+        async fn subnet_uses_engine_operator(&self, _subnet: Principal) -> Result<bool, CallError> {
+            unimplemented!("RecordingCalls::subnet_uses_engine_operator")
+        }
+    }
+
+    /// What a call fails with underneath — an error the seam's own message does
+    /// not restate, so it only reaches the plugin if the chain is flattened.
+    #[derive(Debug, Snafu)]
+    #[snafu(display("the transport gave up"))]
+    struct TransportGaveUp;
+
+    /// A [`CanisterCalls`] whose every call fails.
+    struct FailingCalls;
+
+    #[async_trait]
+    impl CanisterCalls for FailingCalls {
+        fn caller(&self) -> Principal {
+            Principal::anonymous()
+        }
+
+        async fn update(&self, call: Call) -> Result<Vec<u8>, CallError> {
+            Err(CallError::failed(
+                call.canister,
+                call.method,
+                TransportGaveUp,
+            ))
+        }
+
+        async fn query(&self, _call: Call) -> Result<Vec<u8>, CallError> {
+            unimplemented!("FailingCalls::query")
+        }
+
+        async fn metadata_section(
+            &self,
+            _canister: Principal,
+            _path: &str,
+            _authority: Authority,
+        ) -> Result<Option<Vec<u8>>, CallError> {
+            unimplemented!("FailingCalls::metadata_section")
+        }
+
+        async fn controllers(
+            &self,
+            _canister: Principal,
+        ) -> Result<Option<Vec<Principal>>, CallError> {
+            unimplemented!("FailingCalls::controllers")
+        }
+
+        async fn module_hash(&self, _canister: Principal) -> Result<Option<Vec<u8>>, CallError> {
+            unimplemented!("FailingCalls::module_hash")
+        }
+
+        async fn subnet_of(&self, _canister: Principal) -> Result<Principal, CallError> {
+            unimplemented!("FailingCalls::subnet_of")
+        }
+
+        async fn subnet_uses_engine_operator(&self, _subnet: Principal) -> Result<bool, CallError> {
+            unimplemented!("FailingCalls::subnet_uses_engine_operator")
+        }
+    }
+
+    /// The host state a plugin's imports are served from, with an empty WASI
+    /// sandbox: these tests call the imports directly rather than through a
+    /// component, so nothing reads it.
+    fn host_state(
+        host_canister_id: Principal,
+        callable: CallableCanisters,
+        calls: Arc<dyn CanisterCalls>,
+    ) -> HostState {
+        HostState {
+            host_canister_id,
+            callable,
+            calls,
+            wasi_ctx: wasmtime_wasi::WasiCtxBuilder::new().build(),
+            wasi_table: wasmtime_wasi::ResourceTable::new(),
+            epoch_extension: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn call_request(
+        target: CallTarget,
+        call_type: CallType,
+        direct: bool,
+        cycles: u64,
+    ) -> CallRequest {
+        CallRequest {
+            target,
+            method: "register".to_string(),
+            arg: b"arg".to_vec(),
+            call_type,
+            direct,
+            cycles,
+        }
+    }
+
+    /// An update request becomes an update call on the seam, routed to the
+    /// target itself and made under the caller's mediated authority — whatever
+    /// intermediary that entails is behind the seam, not decided here.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_update_request_becomes_a_mediated_update_call() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls.clone());
+
+        let reply = tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(CallTarget::Host, CallType::Update, false, 0),
+            )
+        })
+        .expect("the call should reach the seam");
+
+        assert_eq!(reply, b"reply");
+        assert!(calls.queries.lock().unwrap().is_empty());
+        let updates = calls.updates.lock().unwrap();
+        let [call] = &updates[..] else {
+            panic!("expected exactly one update, got {}", updates.len());
+        };
+        assert_eq!(call.canister, host);
+        assert_eq!(call.method, "register");
+        assert_eq!(call.arg, b"arg");
+        assert_eq!(call.route, RouteTo::Callee);
+        assert_eq!(call.cycles, 0);
+        assert_eq!(call.authority, Authority::Mediated);
+    }
+
+    /// `direct` asks for the call to be made by the caller itself, and the
+    /// cycles the plugin attached ride along whichever way it asked.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_direct_request_carries_its_authority_and_cycles() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls.clone());
+
+        tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(CallTarget::Host, CallType::Update, true, 25_000_000),
+            )
+        })
+        .expect("the call should reach the seam");
+
+        let updates = calls.updates.lock().unwrap();
+        assert_eq!(updates[0].authority, Authority::Direct);
+        assert_eq!(updates[0].cycles, 25_000_000);
+    }
+
+    /// A query is made by the caller itself however the plugin asked, which is
+    /// what the interface documents: an intermediary that only accepts updates
+    /// would otherwise turn the query into one the plugin paid for.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_query_request_is_made_directly_even_when_mediated_was_asked() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls.clone());
+
+        tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(CallTarget::Host, CallType::Query, false, 0),
+            )
+        })
+        .expect("the call should reach the seam");
+
+        assert!(calls.updates.lock().unwrap().is_empty());
+        let queries = calls.queries.lock().unwrap();
+        let [call] = &queries[..] else {
+            panic!("expected exactly one query, got {}", queries.len());
+        };
+        assert_eq!(call.authority, Authority::Direct);
+    }
+
+    /// A declared target is called by the principal its name resolved to, not
+    /// by the canister being synced.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_declared_target_is_called_by_its_resolved_principal() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let dep = Principal::from_slice(&[2; 4]);
+        let callable = CallableCanisters {
+            by_name: BTreeMap::from([("backend".to_string(), dep)]),
+        };
+        let mut state = host_state(host, callable, calls.clone());
+
+        tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(
+                    CallTarget::Name("backend".into()),
+                    CallType::Update,
+                    false,
+                    0,
+                ),
+            )
+        })
+        .expect("a declared target should be callable");
+
+        assert_eq!(calls.updates.lock().unwrap()[0].canister, dep);
+    }
+
+    /// An undeclared target is refused before the seam is touched, so nothing
+    /// is submitted on the plugin's behalf.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_undeclared_target_never_reaches_the_seam() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls.clone());
+
+        let err = tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(
+                    CallTarget::Name("frontend".into()),
+                    CallType::Update,
+                    false,
+                    0,
+                ),
+            )
+        })
+        .expect_err("an undeclared target must be rejected");
+
+        assert!(err.contains("not permitted"), "got: {err}");
+        assert!(calls.updates.lock().unwrap().is_empty());
+    }
+
+    /// `direct` on a metadata read picks who does the reading — which is what a
+    /// private section is gated on — and the section's bytes come back as they
+    /// were read.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_metadata_read_passes_the_authority_it_was_asked_for() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls.clone());
+
+        for direct in [true, false] {
+            let section = tokio::task::block_in_place(|| {
+                v2::SyncPluginImports::canister_metadata_section(
+                    &mut state,
+                    MetadataRequest {
+                        target: CallTarget::Host,
+                        name: "candid:service".to_string(),
+                        direct,
+                    },
+                )
+            })
+            .expect("the read should reach the seam");
+            assert_eq!(section.as_deref(), Some(&b"section"[..]));
+        }
+
+        assert_eq!(
+            &calls.metadata.lock().unwrap()[..],
+            [
+                (host, "candid:service".to_owned(), Authority::Direct),
+                (host, "candid:service".to_owned(), Authority::Mediated),
+            ]
+        );
+    }
+
+    /// The guest gets one string, and a failed call's own message names only
+    /// the call it was — the reason lives down its source chain, so it has to
+    /// be flattened into what the plugin is told.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_failed_call_tells_the_plugin_why() {
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), Arc::new(FailingCalls));
+
+        let err = tokio::task::block_in_place(|| {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(CallTarget::Host, CallType::Update, false, 0),
+            )
+        })
+        .expect_err("the call must fail");
+
+        assert!(err.contains("call to 'register'"), "got: {err}");
+        assert!(err.contains("the transport gave up"), "got: {err}");
+    }
+
+    /// The v0.1.0 interface has no target field, so its calls always reach the
+    /// canister being synced — a declared canister is unreachable from it — and
+    /// its `direct`/`cycles` are mapped the same way the current one's are.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_v1_request_always_targets_the_canister_being_synced() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let callable = CallableCanisters {
+            by_name: BTreeMap::from([("backend".to_string(), Principal::from_slice(&[2; 4]))]),
+        };
+        let mut state = host_state(host, callable, calls.clone());
+
+        tokio::task::block_in_place(|| {
+            v1::SyncPluginImports::canister_call(
+                &mut state,
+                v1::icp::sync_plugin::types::CanisterCallRequest {
+                    method: "register".to_string(),
+                    arg: b"arg".to_vec(),
+                    call_type: v1::icp::sync_plugin::types::CallType::Update,
+                    direct: true,
+                    cycles: 7,
+                },
+            )
+        })
+        .expect("the call should reach the seam");
+
+        let updates = calls.updates.lock().unwrap();
+        assert_eq!(updates[0].canister, host);
+        assert_eq!(updates[0].authority, Authority::Direct);
+        assert_eq!(updates[0].cycles, 7);
     }
 
     // -------------------------------------------------------------------------

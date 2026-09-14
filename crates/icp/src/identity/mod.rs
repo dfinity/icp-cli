@@ -130,7 +130,15 @@ pub struct Loader {
     pem_session_duration: Option<Duration>,
     telemetry_data: Arc<TelemetryData>,
     #[allow(clippy::type_complexity)]
-    cache: Mutex<HashMap<IdentitySelection, (Arc<dyn Identity>, Option<IdentityStorageType>)>>,
+    /// Keyed by the full input to a load. The root key is part of that input: the same identity
+    /// validates differently against different networks, so an entry cached for one must never be
+    /// handed to a load that resolved another.
+    cache: Mutex<
+        HashMap<
+            (IdentitySelection, Option<Vec<u8>>),
+            (Arc<dyn Identity>, Option<IdentityStorageType>),
+        >,
+    >,
 }
 
 impl Loader {
@@ -157,7 +165,8 @@ impl Load for Loader {
         id: IdentitySelection,
         network_root_key: Option<Vec<u8>>,
     ) -> Result<Arc<dyn Identity>, LoadError> {
-        if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&id) {
+        let cache_key = (id.clone(), network_root_key.clone());
+        if let Some((cached, storage_type)) = self.cache.lock().unwrap().get(&cache_key) {
             if let Some(t) = storage_type {
                 self.telemetry_data.set_identity_type(*t);
             }
@@ -229,10 +238,11 @@ impl Load for Loader {
         if let Some(t) = storage_type {
             self.telemetry_data.set_identity_type(t);
         }
+
         self.cache
             .lock()
             .unwrap()
-            .insert(id, (Arc::clone(&identity), storage_type));
+            .insert(cache_key, (Arc::clone(&identity), storage_type));
         Ok(identity)
     }
 }
@@ -340,5 +350,28 @@ mod tests {
             .await
             .unwrap();
         assert!(Arc::ptr_eq(&i1, &i2));
+
+        // A different root key is a different question: the same chain validates against one
+        // network and not another, so the entry cached for one must not answer for the other.
+        let i3 = loader
+            .load(
+                IdentitySelection::Named("test".to_string()),
+                Some(vec![0u8; 133]),
+            )
+            .await
+            .unwrap();
+        assert!(!Arc::ptr_eq(&i1, &i3));
+
+        let i4 = loader
+            .load(
+                IdentitySelection::Named("test".to_string()),
+                Some(vec![0u8; 133]),
+            )
+            .await
+            .unwrap();
+        assert!(
+            Arc::ptr_eq(&i3, &i4),
+            "each root key still gets its own entry"
+        );
     }
 }

@@ -6,22 +6,27 @@ use std::{
 
 use ic_agent::{
     Identity,
+    export::Principal,
     identity::{
         AnonymousIdentity, BasicIdentity, DelegatedIdentity, Delegation as AgentDelegation,
         DelegationError, Prime256v1Identity, Secp256k1Identity,
+        SignedDelegation as AgentSignedDelegation,
     },
 };
+use ic_certification::LookupResult;
 use ic_ed25519::PrivateKeyFormat;
 use ic_identity_hsm::HardwareIdentity;
 use keyring::Entry;
 use pem::Pem;
 use pkcs8::{
     DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
-    pkcs5::pbes2::Parameters,
+    pkcs5::pbes2::Parameters, spki::SubjectPublicKeyInfoRef,
 };
 use rand::Rng;
 use scrypt::Params;
 use sec1::{der::Decode, pem::PemLabel};
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tracing::{debug, warn};
 use url::Url;
@@ -126,10 +131,10 @@ pub enum LoadIdentityError {
     },
 
     #[snafu(display(
-        "failed to validate delegation chain loaded from `{path}`; \
-         this identity may only be valid for a different network"
+        "the delegation chain loaded from `{path}` does not verify against the selected \
+         network's root key; this identity was most likely issued for a different network"
     ))]
-    ValidateDelegationChainNetworkHint {
+    ValidateDelegationChainNetwork {
         path: PathBuf,
         source: DelegationError,
     },
@@ -667,10 +672,6 @@ fn load_webauth_identity(
         return DelegationExpiredSnafu { name }.fail();
     }
 
-    // Convert hex-encoded wire format to ic-agent types
-    let (from_key, signed_delegations) =
-        delegation::to_agent_types(&stored_chain).context(DelegationConversionSnafu)?;
-
     let inner: Arc<dyn Identity> = match storage {
         DelegationKeyStorage::Keyring
         | DelegationKeyStorage::Pem {
@@ -681,37 +682,204 @@ fn load_webauth_identity(
         } => load_pbes2_identity(&doc, algorithm, password_func, &origin)?,
     };
 
-    match DelegatedIdentity::new(from_key, Box::new(Arc::clone(&inner)), signed_delegations) {
+    build_delegated_identity(name, &chain_path, &stored_chain, inner, network_root_key)
+}
+
+/// Assembles the delegated identity for a stored chain, verifying the chain first.
+///
+/// A resolved `network_root_key` is authoritative and the only key consulted: it is the key the
+/// network this command talks to verifies against, so a chain failing it belongs to another
+/// network.
+///
+/// `network_root_key` is `None` for callers that resolve no network at all, such as
+/// `icp identity principal`. Mainnet is then the only key on hand, and a canister signature from
+/// another provider — a local Internet Identity, say — cannot be checked: that provider's root key
+/// is not derivable from anything the identity stores. Rather than make those commands unusable,
+/// the links that are canister signatures are set aside and everything else about the chain is
+/// verified; see [`verify_past_canister_signatures`].
+fn build_delegated_identity(
+    name: &str,
+    chain_path: &Path,
+    stored_chain: &delegation::DelegationChain,
+    inner: Arc<dyn Identity>,
+    network_root_key: Option<&[u8]>,
+) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+    let (from_key, signed_delegations) =
+        delegation::to_agent_types(stored_chain).context(DelegationConversionSnafu)?;
+
+    // A resolved network root key is authoritative: it is the key the network this command talks
+    // to verifies against. With no network resolved, mainnet is the only assumption available.
+    let root_key = network_root_key.unwrap_or(IC_ROOT_KEY);
+
+    match DelegatedIdentity::new_with_root_key(
+        from_key.clone(),
+        Box::new(Arc::clone(&inner)),
+        signed_delegations.clone(),
+        root_key,
+    ) {
         Ok(delegated) => Ok(Arc::new(delegated)),
-        Err(mainnet_err) => {
-            // Only attempt the fallback when a network root key is provided and it differs from
-            // the mainnet key (identical keys would produce the same failure).
-            let different_key = network_root_key.filter(|k| *k != IC_ROOT_KEY.as_slice());
 
-            if let Some(network_key) = different_key {
-                // re-deserialize as ::new just ate the old values (better than an up-front clone since this path should be rare)
-                let (from_key, signed_delegations) = delegation::to_agent_types(&stored_chain)
-                    .expect("same conversion already succeeded");
-                match DelegatedIdentity::new_with_root_key(
-                    from_key,
-                    Box::new(Arc::clone(&inner)),
-                    signed_delegations,
-                    network_key,
-                ) {
-                    Ok(delegated) => return Ok(Arc::new(delegated)),
-                    // Both root keys failed; surface the mainnet error with a network-mismatch hint.
-                    Err(_) => {
-                        return Err(LoadIdentityError::ValidateDelegationChainNetworkHint {
-                            path: chain_path,
-                            source: mainnet_err,
-                        });
-                    }
-                }
-            }
+        // No root key to check the signature against, so verify what needs none and accept.
+        Err(DelegationError::InvalidCanisterSignature(_)) if network_root_key.is_none() => {
+            verify_past_canister_signatures(&from_key, &signed_delegations, &inner)
+                .context(ValidateDelegationChainSnafu { path: chain_path })?;
 
-            Err(mainnet_err).context(ValidateDelegationChainSnafu { path: chain_path })
+            warn!(
+                "delegation chain for identity `{name}` carries a canister signature and no root \
+                 key was resolved to check it against; the rest of the chain verified, and only \
+                 the network that issued it will accept it"
+            );
+
+            Ok(Arc::new(DelegatedIdentity::new_unchecked(
+                from_key,
+                Box::new(inner),
+                signed_delegations,
+            )))
+        }
+
+        Err(e @ DelegationError::InvalidCanisterSignature(_)) => {
+            Err(e).context(ValidateDelegationChainNetworkSnafu { path: chain_path })
+        }
+        Err(e) => Err(e).context(ValidateDelegationChainSnafu { path: chain_path }),
+    }
+}
+
+/// Verifies every link of a chain as far as it can be verified without a root key.
+///
+/// Links are classified by the type of the key that signed them, never by the error they produced:
+/// ic-agent reports corruption through the same `InvalidCanisterSignature` variant as a trust-root
+/// mismatch, so an error alone cannot say whether a link is unverifiable or damaged. Only a
+/// leading run of canister-signed links is set aside, since ic-agent verifies a chain from its
+/// root outwards and cannot resume past one further in.
+fn verify_past_canister_signatures(
+    from_key: &[u8],
+    delegations: &[AgentSignedDelegation],
+    session: &Arc<dyn Identity>,
+) -> Result<(), DelegationError> {
+    for (i, signed) in delegations.iter().enumerate() {
+        let signer = signer_of(from_key, delegations, i);
+        if is_canister_signature_key(signer) {
+            verify_canister_signature_structure(signer, signed)?;
         }
     }
+
+    let leading = (0..delegations.len())
+        .take_while(|i| is_canister_signature_key(signer_of(from_key, delegations, *i)))
+        .count();
+
+    DelegatedIdentity::new_with_root_key(
+        signer_of(from_key, delegations, leading).to_vec(),
+        Box::new(Arc::clone(session)),
+        delegations[leading..].to_vec(),
+        IC_ROOT_KEY,
+    )
+    .map(|_| ())
+}
+
+/// The key that signed `delegations[i]`, which is the chain root for the first link.
+fn signer_of<'a>(
+    from_key: &'a [u8],
+    delegations: &'a [AgentSignedDelegation],
+    i: usize,
+) -> &'a [u8] {
+    match i.checked_sub(1) {
+        None => from_key,
+        Some(previous) => delegations[previous].delegation.pubkey.as_slice(),
+    }
+}
+
+/// CBOR body of a canister signature per the IC interface spec.
+///
+/// The wire encoding is `tag(55799, {"certificate": bytes, "tree": hash-tree})`; `serde_cbor`
+/// strips the tag transparently.
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
+struct CanisterSignature {
+    #[serde(with = "serde_bytes")]
+    certificate: Vec<u8>,
+    tree: ic_certification::HashTree,
+}
+
+/// Checks everything about a canister signature that does not depend on a root key.
+///
+/// Of the verification the IC interface spec lays out for canister signatures, only step 3 — BLS
+/// verification of the certificate against the network's root key — needs a root key. This runs
+/// the others: that the signature and certificate decode, that the certified data recorded for the
+/// signing canister matches the signature tree, and that the tree carries a signature over exactly
+/// this delegation. What remains unchecked is whether the certificate is genuine, which the
+/// network settles on ingress.
+///
+/// ic-agent performs all of this together in `DelegatedIdentity::new_with_root_key` and exposes no
+/// way to run the root-key-independent part alone, so it is repeated here. Tracked upstream as
+/// dfinity/agent-rs#742; this function can go once that lands.
+fn verify_canister_signature_structure(
+    signing_key: &[u8],
+    signed: &AgentSignedDelegation,
+) -> Result<(), DelegationError> {
+    let invalid = |message: String| {
+        DelegationError::InvalidCanisterSignature(format!(
+            "{message} (the certificate's own signature is not covered by this check)"
+        ))
+    };
+
+    let (canister_id, seed) = parse_canister_signature_key(signing_key)
+        .ok_or_else(|| invalid("malformed canister signature public key".into()))?;
+
+    let signature: CanisterSignature = serde_cbor::from_slice(&signed.signature)
+        .map_err(|e| invalid(format!("invalid canister signature CBOR: {e}")))?;
+    let certificate: ic_certification::Certificate = serde_cbor::from_slice(&signature.certificate)
+        .map_err(|e| invalid(format!("invalid certificate CBOR: {e}")))?;
+
+    let certified_data_path: [&[u8]; 3] = [b"canister", canister_id.as_slice(), b"certified_data"];
+    let certified_data = match certificate.tree.lookup_path(certified_data_path) {
+        LookupResult::Found(value) => value,
+        _ => {
+            return Err(invalid(
+                "certified_data is absent from the certificate".into(),
+            ));
+        }
+    };
+    if certified_data != signature.tree.digest().as_ref() {
+        return Err(invalid(
+            "certified_data does not match the signature tree".into(),
+        ));
+    }
+
+    let seed_hash: [u8; 32] = Sha256::digest(&seed).into();
+    let payload_hash: [u8; 32] = Sha256::digest(signed.delegation.signable()).into();
+    match signature
+        .tree
+        .lookup_path([&b"sig"[..], &seed_hash, &payload_hash])
+    {
+        LookupResult::Found([]) => Ok(()),
+        _ => Err(invalid(
+            "the signature tree carries no signature over this delegation".into(),
+        )),
+    }
+}
+
+/// Splits a canister-signature public key into the signing canister and its seed.
+///
+/// The key's BIT STRING is `canister_id_length | canister_id | seed` per the IC interface spec.
+fn parse_canister_signature_key(der: &[u8]) -> Option<(Principal, Vec<u8>)> {
+    let spki = SubjectPublicKeyInfoRef::from_der(der).ok()?;
+    let raw = spki.subject_public_key.raw_bytes();
+
+    let (&length, rest) = raw.split_first()?;
+    let (canister_id, seed) = rest.split_at_checked(length as usize)?;
+
+    Some((Principal::try_from_slice(canister_id).ok()?, seed.to_vec()))
+}
+
+/// Reports whether `der` is a canister-signature public key (OID 1.3.6.1.4.1.56387.1.2).
+///
+/// Signatures under such a key are IC certificates, verifiable only against the root key of the
+/// network whose canister produced them.
+fn is_canister_signature_key(der: &[u8]) -> bool {
+    const CANISTER_SIG_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.56387.1.2");
+
+    SubjectPublicKeyInfoRef::from_der(der).is_ok_and(|spki| spki.algorithm.oid == CANISTER_SIG_OID)
 }
 
 /// Returns the DER-encoded public key for a stored web-auth session key.
@@ -973,7 +1141,7 @@ pub fn create_identity(
 
         // Validate the whole chain in memory before persisting anything, so a structurally
         // broken chain fails here rather than on every later load.
-        let from_key = validate_session_delegation_chain(name, session, chain)?;
+        let from_key = validate_session_delegation_chain(name, &session, chain)?;
 
         // Reject a chain that has already expired (or falls within the load-time grace
         // window): it would import successfully but then fail on every later load with
@@ -1655,15 +1823,23 @@ pub enum CreatePendingDelegationError {
     DlgValidateDelegationChain {
         source: ValidateDelegationChainError,
     },
+
+    #[snafu(display("malformed delegation chain"))]
+    DlgConvertChain { source: delegation::ConversionError },
+
+    #[snafu(display(
+        "delegation chain has already expired (or is about to); log in again to get a fresh one"
+    ))]
+    DlgDelegationExpired,
 }
 
 /// Constructs a temporary signing identity directly from an [`IdentityKey`], used to validate a
 /// delegation chain before storing it.
-fn session_identity_for_validation(key: &IdentityKey) -> Box<dyn Identity> {
+fn session_identity_for_validation(key: &IdentityKey) -> Arc<dyn Identity> {
     match key {
-        IdentityKey::Ed25519(k) => Box::new(BasicIdentity::from_raw_key(&k.serialize_raw())),
-        IdentityKey::Secp256k1(k) => Box::new(Secp256k1Identity::from_private_key(k.clone())),
-        IdentityKey::Prime256v1(k) => Box::new(Prime256v1Identity::from_private_key(k.clone())),
+        IdentityKey::Ed25519(k) => Arc::new(BasicIdentity::from_raw_key(&k.serialize_raw())),
+        IdentityKey::Secp256k1(k) => Arc::new(Secp256k1Identity::from_private_key(k.clone())),
+        IdentityKey::Prime256v1(k) => Arc::new(Prime256v1Identity::from_private_key(k.clone())),
     }
 }
 
@@ -1679,26 +1855,41 @@ pub enum ValidateDelegationChainError {
 /// Validates that `chain` connects its root key to `session`'s public key and returns the
 /// DER-encoded chain root (`from_key`), from which the identity's principal is derived.
 ///
-/// The chain is verified against the IC mainnet root key. A canister-signature mismatch is
-/// downgraded to a warning (the chain most likely targets a non-mainnet network); any other
-/// validation failure is an error. `session` is the temporary signing identity built from the
-/// session key (see [`session_identity_for_validation`]) and is consumed by the validation.
+/// The chain is verified against the IC mainnet root key. A canister signature it cannot verify is
+/// downgraded to a warning — the chain most likely targets a non-mainnet network, and no root key
+/// is available here to confirm that — but the chain must still hand authority to `session`. Any
+/// other validation failure is an error. `session` is the temporary signing identity built from
+/// the session key (see [`session_identity_for_validation`]).
 fn validate_session_delegation_chain(
     name: &str,
-    session: Box<dyn Identity>,
+    session: &Arc<dyn Identity>,
     chain: &delegation::DelegationChain,
 ) -> Result<Vec<u8>, ValidateDelegationChainError> {
     let (from_key, delegations) = delegation::to_agent_types(chain).context(ConvertChainSnafu)?;
-    match DelegatedIdentity::new(from_key.clone(), session, delegations) {
-        Ok(_) => {}
-        Err(DelegationError::InvalidCanisterSignature(_)) => {
-            warn!(
-                "delegation chain for identity `{name}` did not validate against the IC mainnet \
-                 root key; this identity may only be valid for a particular network"
-            );
-        }
+
+    match DelegatedIdentity::new(
+        from_key.clone(),
+        Box::new(Arc::clone(session)),
+        delegations.clone(),
+    ) {
+        Ok(_) => return Ok(from_key),
+        // Nothing here resolves a network, so a canister signature from a non-mainnet provider
+        // cannot be checked. Fall through to the checks that need no root key.
+        Err(DelegationError::InvalidCanisterSignature(_)) => {}
         Err(e) => return Err(e).context(ValidateChainSnafu),
     }
+
+    // `DelegatedIdentity::new` stopped at the canister-signed link, leaving the rest of the chain
+    // unexamined. Nothing here resolves a network, so verify everything the root key does not
+    // decide — including that the chain was issued to this session key.
+    verify_past_canister_signatures(&from_key, &delegations, session)
+        .context(ValidateChainSnafu)?;
+
+    warn!(
+        "delegation chain for identity `{name}` carries a canister signature that the IC mainnet \
+         root key does not verify; this identity is only usable on the network that issued it"
+    );
+
     Ok(from_key)
 }
 
@@ -1730,7 +1921,15 @@ pub fn link_webauth_identity(
 
     // Validate the delegation chain against the mainnet root key before storing it.
     let session = session_identity_for_validation(&key);
-    validate_session_delegation_chain(name, session, chain)?;
+    validate_session_delegation_chain(name, &session, chain)?;
+
+    // Reject a chain that has already expired (or falls within the load-time grace window): it
+    // would link successfully but then fail on every later load. Mirrors the checks in
+    // `create_identity` and `load_webauth_identity`.
+    ensure!(
+        !delegation::is_expiring_soon(chain, TWO_MINUTES_NANOS).context(DlgConvertChainSnafu)?,
+        DlgDelegationExpiredSnafu
+    );
 
     let doc = match key {
         IdentityKey::Secp256k1(key) => key.to_pkcs8_der().expect("infallible PKI encoding"),
@@ -2166,5 +2365,575 @@ pub fn export_identity(
             // Encrypt the key with the provided password
             Ok(encrypt_pki(&pki, &password).to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOUR_FROM_NOW_NANOS: u64 = 3600 * 1_000_000_000;
+
+    /// The root key of some other network — here, one that verifies nothing.
+    const OTHER_NETWORK_ROOT_KEY: &[u8] = &[0u8; 133];
+
+    fn new_session() -> (Arc<dyn Identity>, Vec<u8>) {
+        let key = ic_ed25519::PrivateKey::generate();
+        let identity = BasicIdentity::from_raw_key(&key.serialize_raw());
+        let public_key = identity
+            .public_key()
+            .expect("ed25519 always has a public key");
+        (Arc::new(identity), public_key)
+    }
+
+    fn new_signer() -> BasicIdentity {
+        BasicIdentity::from_raw_key(&ic_ed25519::PrivateKey::generate().serialize_raw())
+    }
+
+    fn now_plus(offset: u64) -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos() as u64
+            + offset
+    }
+
+    /// A link handing authority to `to`, signed by `signer`.
+    fn signed_link(signer: &dyn Identity, to: &[u8]) -> delegation::SignedDelegation {
+        signed_link_expiring_at(signer, to, now_plus(HOUR_FROM_NOW_NANOS))
+    }
+
+    fn signed_link_expiring_at(
+        signer: &dyn Identity,
+        to: &[u8],
+        expiration: u64,
+    ) -> delegation::SignedDelegation {
+        let delegation = AgentDelegation {
+            pubkey: to.to_vec(),
+            expiration,
+            targets: None,
+            permissions: None,
+        };
+        let signature = signer
+            .sign_delegation(&delegation)
+            .expect("signing a delegation should succeed")
+            .signature
+            .expect("a signed delegation carries a signature");
+
+        delegation::SignedDelegation {
+            signature: hex::encode(signature),
+            delegation: delegation::Delegation {
+                pubkey: hex::encode(to),
+                expiration: format!("{expiration:x}"),
+                targets: None,
+            },
+        }
+    }
+
+    /// A DER canister-signature public key (OID 1.3.6.1.4.1.56387.1.2).
+    ///
+    /// Nothing available to a unit test can verify a signature under such a key: doing so means
+    /// BLS-verifying an IC certificate against the root key of the network whose canister produced
+    /// it. That is exactly the position `icp identity principal` is in.
+    fn canister_sig_public_key() -> Vec<u8> {
+        const OID: [u8; 10] = [0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xb8, 0x43, 0x01, 0x02];
+        let canister_id = [0x0a, 0, 0, 0, 0, 0, 0, 0, 0x07, 0x01, 0x01];
+
+        let mut raw = vec![canister_id.len() as u8];
+        raw.extend_from_slice(&canister_id);
+        raw.extend_from_slice(b"seed");
+
+        let mut algorithm = vec![0x30, (OID.len() + 2) as u8, 0x06, OID.len() as u8];
+        algorithm.extend_from_slice(&OID);
+
+        let mut bit_string = vec![0x03, (raw.len() + 1) as u8, 0x00];
+        bit_string.extend_from_slice(&raw);
+
+        let mut spki = vec![0x30, (algorithm.len() + bit_string.len()) as u8];
+        spki.extend_from_slice(&algorithm);
+        spki.extend_from_slice(&bit_string);
+        spki
+    }
+
+    /// A link under a canister-signature key, as a local Internet Identity issues.
+    ///
+    /// The signature is structurally sound — its CBOR parses, the certificate records the
+    /// signature tree as the signing canister's certified data, and the tree carries a signature
+    /// over exactly this delegation — but its certificate is signed by nothing. Only a root key
+    /// could tell it apart from a genuine one, which is the position a caller with no network is
+    /// in.
+    fn canister_sig_link(to: &[u8]) -> delegation::SignedDelegation {
+        let expiration = now_plus(HOUR_FROM_NOW_NANOS);
+        let delegation = AgentDelegation {
+            pubkey: to.to_vec(),
+            expiration,
+            targets: None,
+            permissions: None,
+        };
+
+        let (canister_id, seed) =
+            parse_canister_signature_key(&canister_sig_public_key()).expect("well-formed key");
+        let seed_hash: [u8; 32] = Sha256::digest(&seed).into();
+        let payload_hash: [u8; 32] = Sha256::digest(delegation.signable()).into();
+
+        let sig_tree = ic_certification::labeled(
+            &b"sig"[..],
+            ic_certification::labeled(
+                &seed_hash[..],
+                ic_certification::labeled(&payload_hash[..], ic_certification::leaf(vec![])),
+            ),
+        );
+        let certificate = ic_certification::Certificate {
+            tree: ic_certification::labeled(
+                &b"canister"[..],
+                ic_certification::labeled(
+                    canister_id.as_slice(),
+                    ic_certification::labeled(
+                        &b"certified_data"[..],
+                        ic_certification::leaf(sig_tree.digest().to_vec()),
+                    ),
+                ),
+            ),
+            signature: vec![0; 48],
+            delegation: None,
+        };
+
+        let signature = encode_canister_signature(CanisterSignature {
+            certificate: serde_cbor::to_vec(&certificate).expect("certificate encodes"),
+            tree: sig_tree,
+        });
+
+        delegation::SignedDelegation {
+            signature: hex::encode(signature),
+            delegation: delegation::Delegation {
+                pubkey: hex::encode(to),
+                expiration: format!("{expiration:x}"),
+                targets: None,
+            },
+        }
+    }
+
+    /// Encodes a canister signature the way the wire carries one: wrapped in the self-describing
+    /// CBOR tag 55799, as every signature a real auth provider issues is.
+    fn encode_canister_signature(signature: CanisterSignature) -> Vec<u8> {
+        use serde::Serialize;
+
+        let mut encoded = Vec::new();
+        let mut serializer =
+            serde_cbor::Serializer::new(serde_cbor::ser::IoWrite::new(&mut encoded));
+        serializer.self_describe().expect("tag writes");
+        signature
+            .serialize(&mut serializer)
+            .expect("signature encodes");
+
+        assert_eq!(
+            &encoded[..3],
+            &[0xd9, 0xd9, 0xf7],
+            "the fixture must carry the tag a real signature does"
+        );
+        encoded
+    }
+
+    /// The same shape, but with the signature bytes replaced by rubbish.
+    fn corrupt_canister_sig_link(to: &[u8]) -> delegation::SignedDelegation {
+        let mut link = canister_sig_link(to);
+        link.signature = hex::encode([0xde, 0xad, 0xbe, 0xef]);
+        link
+    }
+
+    fn chain_of(
+        public_key: &[u8],
+        delegations: Vec<delegation::SignedDelegation>,
+    ) -> delegation::DelegationChain {
+        delegation::DelegationChain {
+            public_key: hex::encode(public_key),
+            delegations,
+        }
+    }
+
+    fn tampered(mut link: delegation::SignedDelegation) -> delegation::SignedDelegation {
+        link.signature = hex::encode([0u8; 64]);
+        link
+    }
+
+    /// The two-link shape a real Internet Identity issues: a canister signature to a browser
+    /// session key, then an ordinary signature to the key the CLI holds.
+    fn ii_shaped_chain(
+        session_key: &[u8],
+        tamper_second_link: bool,
+    ) -> delegation::DelegationChain {
+        let intermediate = new_signer();
+        let intermediate_key = intermediate.public_key().expect("public key");
+        let second = signed_link(&intermediate, session_key);
+
+        chain_of(
+            &canister_sig_public_key(),
+            vec![
+                canister_sig_link(&intermediate_key),
+                if tamper_second_link {
+                    tampered(second)
+                } else {
+                    second
+                },
+            ],
+        )
+    }
+
+    fn load(
+        chain: &delegation::DelegationChain,
+        session: Arc<dyn Identity>,
+        network_root_key: Option<&[u8]>,
+    ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
+        build_delegated_identity(
+            "test",
+            Path::new("chain.json"),
+            chain,
+            session,
+            network_root_key,
+        )
+    }
+
+    #[test]
+    fn canister_signature_keys_are_recognised_by_their_oid() {
+        let (_, ed25519_key) = new_session();
+        assert!(is_canister_signature_key(&canister_sig_public_key()));
+        assert!(!is_canister_signature_key(&ed25519_key));
+        assert!(!is_canister_signature_key(b"not a key"));
+    }
+
+    #[test]
+    fn unverifiable_canister_signature_is_accepted_when_no_root_key_is_resolved() {
+        let (session, session_key) = new_session();
+        let chain = chain_of(
+            &canister_sig_public_key(),
+            vec![canister_sig_link(&session_key)],
+        );
+
+        let identity = load(&chain, session, None).expect("accepted without a root key");
+
+        assert_eq!(
+            identity.sender().expect("sender"),
+            Principal::self_authenticating(canister_sig_public_key()),
+        );
+    }
+
+    #[test]
+    fn unverifiable_canister_signature_is_rejected_when_issued_to_another_session() {
+        let (session, _) = new_session();
+        let (_, other_key) = new_session();
+        let chain = chain_of(
+            &canister_sig_public_key(),
+            vec![canister_sig_link(&other_key)],
+        );
+
+        assert!(matches!(
+            load(&chain, session, None),
+            Err(LoadIdentityError::ValidateDelegationChain { .. })
+        ));
+    }
+
+    #[test]
+    fn links_behind_a_canister_signature_are_verified_when_no_root_key_is_resolved() {
+        let (session, session_key) = new_session();
+
+        load(
+            &ii_shaped_chain(&session_key, false),
+            Arc::clone(&session),
+            None,
+        )
+        .expect("a sound chain behind the canister signature is accepted");
+
+        assert!(
+            matches!(
+                load(&ii_shaped_chain(&session_key, true), session, None),
+                Err(LoadIdentityError::ValidateDelegationChain { .. })
+            ),
+            "a tampered link behind the canister signature must stay fatal"
+        );
+    }
+
+    #[test]
+    fn a_resolved_network_root_key_is_authoritative() {
+        let (session, session_key) = new_session();
+        let chain = chain_of(
+            &canister_sig_public_key(),
+            vec![canister_sig_link(&session_key)],
+        );
+
+        // The same chain that loads unverified with no root key is rejected once a root key it
+        // does not verify against is on the table.
+        assert!(matches!(
+            load(&chain, session, Some(OTHER_NETWORK_ROOT_KEY)),
+            Err(LoadIdentityError::ValidateDelegationChainNetwork { .. })
+        ));
+    }
+
+    /// The root key decides canister signatures and nothing else, so a broken ordinary link must
+    /// not be reported as a network mismatch.
+    #[test]
+    fn a_broken_link_is_not_reported_as_a_network_mismatch() {
+        let (session, session_key) = new_session();
+        let signer = new_signer();
+        let chain = chain_of(
+            &signer.public_key().expect("public key"),
+            vec![tampered(signed_link(&signer, &session_key))],
+        );
+
+        assert!(matches!(
+            load(&chain, session, Some(OTHER_NETWORK_ROOT_KEY)),
+            Err(LoadIdentityError::ValidateDelegationChain { .. })
+        ));
+    }
+
+    /// A resolved root key must not over-reject: a chain with no canister signature carries
+    /// nothing that depends on a trust root, and verifies under any root key.
+    #[test]
+    fn a_chain_without_a_canister_signature_verifies_under_any_root_key() {
+        let (session, session_key) = new_session();
+        let signer = new_signer();
+        let chain = chain_of(
+            &signer.public_key().expect("public key"),
+            vec![signed_link(&signer, &session_key)],
+        );
+
+        load(&chain, session, Some(OTHER_NETWORK_ROOT_KEY))
+            .expect("a chain with no canister signature needs no particular root key");
+    }
+
+    #[test]
+    fn validate_session_delegation_chain_accepts_a_mainnet_chain() {
+        let key = IdentityKey::Ed25519(ic_ed25519::PrivateKey::generate());
+        let session = session_identity_for_validation(&key);
+        let session_key = session.public_key().expect("public key");
+        let root = new_signer();
+        let root_key = root.public_key().expect("public key");
+
+        let from_key = validate_session_delegation_chain(
+            "test",
+            &session,
+            &chain_of(&root_key, vec![signed_link(&root, &session_key)]),
+        )
+        .expect("a chain signed by its own root validates");
+
+        assert_eq!(from_key, root_key);
+    }
+
+    #[test]
+    fn validate_session_delegation_chain_accepts_an_unverifiable_canister_signature() {
+        let key = IdentityKey::Ed25519(ic_ed25519::PrivateKey::generate());
+        let session = session_identity_for_validation(&key);
+        let session_key = session.public_key().expect("public key");
+
+        validate_session_delegation_chain("test", &session, &ii_shaped_chain(&session_key, false))
+            .expect("a local-provider chain links successfully");
+    }
+
+    #[test]
+    fn validate_session_delegation_chain_rejects_a_broken_link_behind_a_canister_signature() {
+        let key = IdentityKey::Ed25519(ic_ed25519::PrivateKey::generate());
+        let session = session_identity_for_validation(&key);
+        let session_key = session.public_key().expect("public key");
+
+        assert!(
+            validate_session_delegation_chain(
+                "test",
+                &session,
+                &ii_shaped_chain(&session_key, true)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn validate_session_delegation_chain_rejects_a_chain_issued_to_another_key() {
+        let key = IdentityKey::Ed25519(ic_ed25519::PrivateKey::generate());
+        let session = session_identity_for_validation(&key);
+        let (_, other_key) = new_session();
+        let root = new_signer();
+
+        assert!(
+            validate_session_delegation_chain(
+                "test",
+                &session,
+                &chain_of(
+                    &root.public_key().expect("public key"),
+                    vec![signed_link(&root, &other_key)]
+                )
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn link_webauth_identity_rejects_an_expired_chain() {
+        let key = ic_ed25519::PrivateKey::generate();
+        let identity_key = IdentityKey::Ed25519(key);
+        let session = session_identity_for_validation(&identity_key);
+        let session_key = session.public_key().expect("public key");
+
+        let root = new_signer();
+        let chain = chain_of(
+            &root.public_key().expect("public key"),
+            vec![signed_link_expiring_at(&root, &session_key, 1)],
+        );
+
+        let tmp = camino_tempfile::tempdir().expect("tempdir");
+        let dirs = IdentityPaths::new(tmp.path().to_path_buf()).expect("identity paths");
+        let (result, chain_path) = dirs
+            .with_write(async |dirs| {
+                let chain_path = dirs.read().delegation_chain_path("expired");
+                let result = link_webauth_identity(
+                    dirs,
+                    "expired",
+                    identity_key,
+                    &chain,
+                    Principal::self_authenticating(root.public_key().expect("public key")),
+                    CreateFormat::Plaintext,
+                    Url::parse("https://id.ai").expect("url"),
+                    None,
+                );
+                (result, chain_path)
+            })
+            .await
+            .expect("lock");
+
+        assert!(matches!(
+            result,
+            Err(CreatePendingDelegationError::DlgDelegationExpired)
+        ));
+        assert!(
+            !chain_path.exists(),
+            "an expired chain must not be persisted"
+        );
+    }
+
+    /// A canister signature cannot be trusted without a root key, but it can still be checked for
+    /// self-consistency, and that check must not be skipped along with the trust check.
+    #[test]
+    fn a_corrupt_canister_signature_is_rejected_even_with_no_root_key() {
+        let (session, session_key) = new_session();
+        let chain = chain_of(
+            &canister_sig_public_key(),
+            vec![corrupt_canister_sig_link(&session_key)],
+        );
+
+        assert!(matches!(
+            load(&chain, session, None),
+            Err(LoadIdentityError::ValidateDelegationChain { .. })
+        ));
+    }
+
+    #[test]
+    fn a_canister_signature_over_another_delegation_is_rejected() {
+        let (session, session_key) = new_session();
+        let (_, other_key) = new_session();
+
+        // A signature genuinely issued, but for a different delegation than the one it is attached
+        // to: the signature tree carries no entry for this payload.
+        let mut link = canister_sig_link(&other_key);
+        link.delegation.pubkey = hex::encode(&session_key);
+        let chain = chain_of(&canister_sig_public_key(), vec![link]);
+
+        assert!(matches!(
+            load(&chain, session, None),
+            Err(LoadIdentityError::ValidateDelegationChain { .. })
+        ));
+    }
+
+    /// Real canister signatures arrive wrapped in the self-describing CBOR tag 55799. Decoding
+    /// must see through it, and every other fixture here relies on that.
+    #[test]
+    fn a_tagged_canister_signature_decodes() {
+        let (_, session_key) = new_session();
+        let link = canister_sig_link(&session_key);
+        let tagged = hex::decode(&link.signature).expect("hex");
+        assert_eq!(&tagged[..3], &[0xd9, 0xd9, 0xf7], "fixture carries the tag");
+
+        let check = |link: delegation::SignedDelegation| {
+            let chain = chain_of(&canister_sig_public_key(), vec![link]);
+            let (from_key, delegations) =
+                delegation::to_agent_types(&chain).expect("chain converts");
+            verify_canister_signature_structure(&from_key, &delegations[0])
+        };
+
+        check(link).expect("a tagged signature decodes");
+    }
+
+    /// A key is only a canister-signature key if the whole slice is that key. A valid prefix with
+    /// bytes after it is malformed, and must not be set aside as unverifiable on a partial read.
+    #[test]
+    fn a_key_with_trailing_bytes_is_not_a_canister_signature_key() {
+        let mut trailing = canister_sig_public_key();
+        trailing.push(0);
+
+        assert!(is_canister_signature_key(&canister_sig_public_key()));
+        assert!(!is_canister_signature_key(&trailing));
+        assert!(parse_canister_signature_key(&trailing).is_none());
+
+        // And such a chain is rejected rather than accepted with a warning.
+        let (session, session_key) = new_session();
+        let chain = chain_of(&trailing, vec![canister_sig_link(&session_key)]);
+        assert!(matches!(
+            load(&chain, session, None),
+            Err(LoadIdentityError::ValidateDelegationChain { .. })
+        ));
+    }
+
+    /// Stands in for the session key a chain was issued to. Verification only asks the session
+    /// identity for its principal, so a real chain can be checked without committing its key.
+    struct SessionStub(Principal);
+
+    impl Identity for SessionStub {
+        fn sender(&self) -> Result<Principal, String> {
+            Ok(self.0)
+        }
+
+        fn public_key(&self) -> Option<Vec<u8>> {
+            None
+        }
+
+        fn sign(
+            &self,
+            _: &ic_agent::agent::EnvelopeContent,
+        ) -> Result<ic_agent::Signature, String> {
+            unreachable!("verification never signs")
+        }
+    }
+
+    /// A chain a local Internet Identity actually issued, with the root key of the replica that
+    /// issued it.
+    ///
+    /// Every other canister-signature fixture here is encoded by the same types the production
+    /// code decodes with, so it is self-consistent by construction: a change that shifts encoding
+    /// and decoding together — a new `ic-certification` hash-tree layout, say — would keep those
+    /// tests green while rejecting every real signature. Only captured bytes catch that.
+    #[test]
+    fn a_real_local_ii_chain_verifies_against_the_network_that_issued_it() {
+        let chain: delegation::DelegationChain =
+            serde_json::from_str(include_str!("testdata/local_ii_chain.json"))
+                .expect("fixture parses");
+        let local_root_key = hex::decode(include_str!("testdata/local_ii_root_key.hex").trim())
+            .expect("fixture root key is hex");
+
+        let (_, delegations) = delegation::to_agent_types(&chain).expect("chain converts");
+        let session_key = &delegations.last().expect("a link").delegation.pubkey;
+        let session: Arc<dyn Identity> =
+            Arc::new(SessionStub(Principal::self_authenticating(session_key)));
+
+        load(&chain, Arc::clone(&session), Some(&local_root_key))
+            .expect("verifies against the root key of the network that issued it");
+
+        // With no network resolved, the canister signature cannot be trusted, but everything else
+        // about the chain still checks out.
+        load(&chain, Arc::clone(&session), None)
+            .expect("accepted unverified when no root key is available");
+
+        assert!(
+            matches!(
+                load(&chain, session, Some(IC_ROOT_KEY)),
+                Err(LoadIdentityError::ValidateDelegationChainNetwork { .. })
+            ),
+            "mainnet's root key must reject a chain issued by a local replica"
+        );
     }
 }

@@ -433,7 +433,7 @@ async fn create_canisters(
 ) -> Result<(), DeployError> {
     let target = match (params.subnet, params.proxy) {
         (Some(subnet), _) => CreateTarget::Subnet(subnet),
-        (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+        (_, Some(_)) => CreateTarget::Proxy,
         _ => CreateTarget::None,
     };
     let create_operation = CreateOperation::new(
@@ -854,7 +854,7 @@ mod tests {
     #[test]
     fn a_call_that_reached_no_verdict_is_inconclusive() {
         // Not evidence of anything; the caller must retry.
-        assert!(!is_serving_reject(&CallError::failed(
+        assert!(!is_serving_reject(&CallError::unanswered(
             Principal::anonymous(),
             READINESS_PROBE_METHOD,
             std::io::Error::other("connection reset"),

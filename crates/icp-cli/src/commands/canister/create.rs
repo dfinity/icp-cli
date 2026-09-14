@@ -241,7 +241,7 @@ impl CreateArgs {
     fn create_target(&self) -> CreateTarget {
         match (self.subnet, self.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),
-            (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+            (_, Some(_)) => CreateTarget::Proxy,
             _ => CreateTarget::None,
         }
     }

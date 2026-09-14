@@ -163,10 +163,11 @@ pub enum CreateFunding {
 pub enum CreateTarget {
     /// Create the canister on a specific subnet, chosen by the caller.
     Subnet(Principal),
-    /// Create the canister via a proxy canister. The `create_canister` call is
-    /// forwarded through the proxy's `proxy` method to the management canister,
-    /// so the new canister will be placed on the same subnet as the proxy.
-    Proxy(Principal),
+    /// Create the canister through the caller's proxy canister, which pays for
+    /// it and whose subnet the new canister lands on. Which proxy that is is a
+    /// property of the caller — every call it makes is forwarded through the
+    /// same one — so the target only says that the cycles come from there.
+    Proxy,
     /// No explicit target. The subnet is resolved automatically: either from an
     /// existing canister in the project or by picking a random available subnet.
     None,
@@ -228,8 +229,8 @@ impl CreateOperation {
             return self.create_cmc(settings, amount, recovery_flags).await;
         }
 
-        if let CreateTarget::Proxy(proxy) = self.inner.target {
-            return self.create_proxy(settings, proxy).await;
+        if let CreateTarget::Proxy = self.inner.target {
+            return self.create_proxy(settings).await;
         }
 
         let selected_subnet = self
@@ -446,20 +447,18 @@ impl CreateOperation {
         Ok(record.canister_id)
     }
 
+    /// Creation paid for by the proxy the caller already routes through: an
+    /// ordinary `create_canister` with cycles attached, which only a call made
+    /// from inside a canister can carry.
     async fn create_proxy(
         &self,
         settings: &CanisterSettings,
-        proxy: Principal,
     ) -> Result<Principal, CreateOperationError> {
         let args = MgmtCreateCanisterArgs {
             settings: Some(settings.clone()),
             sender_canister_version: None,
         };
 
-        // Routing through the proxy is ambient — the caller's `--proxy` is part
-        // of how every call in the command is made. What the target decides is
-        // where the cycles come from.
-        let _ = proxy;
         let result =
             proxy_management::create_canister(self.inner.calls.as_ref(), self.cycles(), args)
                 .await?;
@@ -851,10 +850,12 @@ mod tests {
 
         // Neither may a call that reached no verdict at all: it says nothing
         // about whether the canister is there.
-        assert!(!is_canister_not_found(&crate::calls::CallError::failed(
-            Principal::anonymous(),
-            "get_engine_operator_by_subnet",
-            std::io::Error::other("connection reset"),
-        )));
+        assert!(!is_canister_not_found(
+            &crate::calls::CallError::unanswered(
+                Principal::anonymous(),
+                "get_engine_operator_by_subnet",
+                std::io::Error::other("connection reset"),
+            )
+        ));
     }
 }

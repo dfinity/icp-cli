@@ -11,10 +11,12 @@
 # imports back and fail on any that names a corner of `std` only a host serves.
 #
 # This sees what `icp-project` itself calls, including whatever a dependency's
-# generics monomorphise into it. A dependency reaching the host from its own
-# objects is the build's job to reject, which it does whenever that crate gates
-# the code on `cfg(unix)`/`cfg(windows)` — as `tokio`'s `process` and `signal`
-# do, and as `rand`'s entropy source does.
+# generics monomorphise into it. What it cannot see is a dependency's own
+# non-generic code, compiled once into that dependency's objects: a call that
+# only arrives at the host a frame or two inside one of those is named here
+# after the dependency rather than after `std`, and matches nothing in `std`.
+# `camino`'s `Utf8Path::is_file` is such a front door, and the one this crate
+# would reach for by accident, so those are denied by name too.
 
 set -euo pipefail
 
@@ -26,6 +28,25 @@ cd "$(dirname "$0")/.."
 denied='std::(fs|net|os|env|process|time)::'
 denied+='|std::io::stdio::'
 denied+='|std::sys::(args|env|fd|fs|net|os|pal|process|stdio|thread|time)'
+
+# A dependency's own front door onto one of those. Found by reading these same
+# imports out of every rlib in the `--no-default-features` closure and keeping
+# the crates whose own objects reach a host corner of `std`: `camino`, `glob`,
+# `handlebars`, `candid_parser`, `icp-canister-interfaces` and `snafu`. Every
+# other crate there reaches the host only where the build already rejects it,
+# gating the code on `cfg(unix)`/`cfg(windows)` — as `tokio`'s `process` and
+# `signal` do, and as `rand`'s entropy source does. `snafu` earns no entry: its
+# one reach is the `RUST_LIB_BACKTRACE` a captured `Backtrace` reads, and no
+# error in this repo carries one.
+denied+='|<(std::path::Path|camino::Utf8Path|camino::Utf8DirEntry)>::'
+denied+='(try_exists|exists|is_file|is_dir|is_symlink|metadata|symlink_metadata'
+denied+='|canonicalize|read_dir|read_link|file_type)'
+denied+='|<camino::ReadDirUtf8'
+denied+='|glob::glob'
+denied+='|handlebars::.*register_template'
+denied+='|candid_parser::.*check_file'
+denied+='|icp_canister_interfaces::engine_canister::engine_canister_id'
+
 # Not a host reach: `abort` is how a panic while unwinding gives up, and wasm
 # has the instruction for it.
 allowed='std::process::abort'

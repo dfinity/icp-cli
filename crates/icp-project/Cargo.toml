@@ -8,8 +8,15 @@ publish.workspace = true
 [features]
 default = ["host"]
 # Implementations of this crate's seams that use the machine it is running on:
-# the filesystem, the project-local `.icp` stores, subprocesses. Turned off for
-# a build that has to run somewhere without them, such as inside a canister.
+# the filesystem and the project-local `.icp` stores. Turned off for a build
+# that has to run somewhere without them, such as inside a canister.
+#
+# It does not yet cover everything host-shaped here — the step runners still
+# spawn subprocesses and drive a wasmtime sandbox unconditionally, `create`
+# draws entropy from `rand`, and a bundle's plugin directories go through
+# `tar`'s own directory walk. Each is a seam of its own to draw, and every
+# dependency is still non-optional besides, so this is the boundary the feature
+# claims rather than a canister target.
 host = []
 # Exposes this crate's mocks and fixtures so downstream crates can test against
 # the same seams. Off in a normal build, so none of it ships.

@@ -11,6 +11,8 @@
 //! wrappers over `std::fs` whose errors carry the path. Project code should
 //! not reach for it.
 
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 use camino::Utf8Component;
 use snafu::{ResultExt, Snafu};
@@ -234,7 +236,9 @@ pub enum GlobError {
 /// at all names the same path here as `base.join(pattern)` does.
 ///
 /// Only paths that exist are returned, and each directory's entries are listed
-/// in sorted order, so the result is the same on every run.
+/// in sorted order, so the result is the same on every run. `**` descends into
+/// each directory once, identified rather than spelled, so a symlink cycle
+/// terminates.
 pub async fn expand_glob(
     files: &dyn FileSystem,
     base: &Path,
@@ -272,12 +276,39 @@ pub async fn expand_glob(
 
             // `**` matches zero or more directories, so every reachable
             // directory — including the ones already in hand — carries forward.
+            //
+            // Descending is keyed on a directory's identity rather than its
+            // path, because `is_dir` answers through symlinks: a link back to
+            // an ancestor is one directory reachable under endlessly many
+            // paths, and descending each of them yields the same files again
+            // under an ever longer name, until the implementation refuses to
+            // resolve any more — or, where nothing refuses, never. So the
+            // first spelling of a directory is the one that matches and is
+            // descended, and a later one matches nothing at all: the files
+            // under it are the same files, and reporting them twice would make
+            // one canister look like two.
+            //
+            // An implementation that cannot establish identity is descended
+            // anyway: it has no links to come back around, or it would be able
+            // to resolve them.
             Utf8Component::Normal("**") => {
+                let mut seen = HashSet::new();
                 let mut reached = frontier.clone();
+                for dir in &reached {
+                    if let Some(id) = files.canonicalize(dir).await {
+                        seen.insert(id);
+                    }
+                }
+
                 let mut stack = frontier;
                 while let Some(dir) = stack.pop() {
                     for entry in list(files, &dir, pattern).await? {
-                        if files.is_dir(&entry).await {
+                        if files.is_dir(&entry).await
+                            && files
+                                .canonicalize(&entry)
+                                .await
+                                .is_none_or(|id| seen.insert(id))
+                        {
                             reached.push(entry.clone());
                             stack.push(entry);
                         }
@@ -406,6 +437,20 @@ mod tests {
                 "services/a/two.yaml",
                 "services/one.yaml",
             ]
+        );
+    }
+
+    /// A directory that links back to an ancestor is reachable under endlessly
+    /// many paths. `**` still finishes, and reports each file once.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_double_star_does_not_follow_a_symlink_cycle() {
+        let d = tree(&["services/a/one.yaml"]);
+        std::os::unix::fs::symlink(d.path().join("services"), d.path().join("services/a/loop"))
+            .expect("symlink");
+        assert_eq!(
+            expand(d.path(), "services/**/*.yaml").await,
+            ["services/a/one.yaml"]
         );
     }
 

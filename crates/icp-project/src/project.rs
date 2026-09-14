@@ -377,7 +377,7 @@ async fn build_manifest_canisters(
                     // For explicit paths, validate that they exist and contain canister.yaml
                     let mut validated_paths = vec![];
                     for p in paths {
-                        if !p.join(CANISTER_MANIFEST).is_file() {
+                        if !files.is_file(&p.join(CANISTER_MANIFEST)).await {
                             return NotFoundSnafu {
                                 kind: "canister".to_string(),
                                 path: pattern.to_string(),
@@ -707,7 +707,7 @@ async fn resolve_edges(
     let mut out = Vec::with_capacity(manifest.dependencies.len());
     for dep in &manifest.dependencies {
         let dep_root = dir.join(&dep.path);
-        if !dep_root.join(PROJECT_MANIFEST).is_file() {
+        if !files.is_file(&dep_root.join(PROJECT_MANIFEST)).await {
             return InstanceNotFoundSnafu {
                 alias: dep.name.clone(),
                 path: dep_root,
@@ -942,7 +942,7 @@ async fn import_dependency(
 ) -> Result<ImportedInstance, ConsolidateManifestError> {
     let dep_root = parent_dir.join(&dep.path);
     let manifest_path = dep_root.join(PROJECT_MANIFEST);
-    if !manifest_path.is_file() {
+    if !files.is_file(&manifest_path).await {
         return DependencyNotFoundSnafu {
             alias: dep.name.clone(),
             path: dep_root.to_string(),
@@ -1042,7 +1042,7 @@ async fn import_dependency(
             Item::Manifest(m) => m.clone(),
             Item::Path(path) => {
                 let p = dep_root.join(path);
-                if !p.is_file() {
+                if !files.is_file(&p).await {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: p.to_string(),
@@ -1438,7 +1438,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.exists() || !path.is_file() {
+                if !files.is_file(&path).await {
                     return NotFoundSnafu {
                         kind: "network".to_string(),
                         path: path.to_string(),
@@ -1518,7 +1518,7 @@ pub async fn consolidate_manifest(
         let m = match i {
             Item::Path(path) => {
                 let path = pdir.join(path);
-                if !path.exists() || !path.is_file() {
+                if !files.is_file(&path).await {
                     return NotFoundSnafu {
                         kind: "environment".to_string(),
                         path: path.to_string(),

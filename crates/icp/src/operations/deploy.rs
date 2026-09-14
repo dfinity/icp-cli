@@ -210,8 +210,9 @@ pub struct DeployReport {
 ///
 /// `agent` speaks for the identity the caller resolved: which identity that is,
 /// and how its key was unlocked, is not this layer's business. It is resolved
-/// once the build has succeeded and not before — a deploy that cannot build has
-/// no business unlocking a key or reaching a network.
+/// at the first phase that needs the network and not before — a deploy that
+/// cannot build, or that `--no-create` refuses, has no business unlocking a key
+/// or reaching a network.
 ///
 /// `report` is written as the run goes; see [`DeployReport`].
 pub async fn deploy(
@@ -245,11 +246,9 @@ pub async fn deploy(
     .await;
     finish(&phase, result)?;
 
-    // Everything from here on talks to the network, so this is where the agent
-    // gets made — and where the identity it speaks for gets unlocked.
-    let agent = agent.get().await?;
-
-    // Create any canisters that do not exist yet
+    // Create any canisters that do not exist yet. Which ones exist comes out of
+    // the local id store, so `--no-create` refuses before anything reaches the
+    // network: the refusal is the same whether or not the network is up.
     let env = host.get_environment(environment_selection).await?;
     let existing_canisters = host.ids_by_environment(environment_selection).await?;
     let canisters_to_create = cnames
@@ -257,13 +256,19 @@ pub async fn deploy(
         .filter(|name| !existing_canisters.contains_key(*name))
         .collect::<Vec<_>>();
 
-    if canisters_to_create.is_empty() {
-        notice(reporter, "All canisters already exist");
-    } else if params.no_create {
+    if params.no_create && !canisters_to_create.is_empty() {
         return NoCreateSnafu {
             canisters: canisters_to_create.into_iter().cloned().collect::<Vec<_>>(),
         }
         .fail();
+    }
+
+    // Everything from here on talks to the network, so this is where the agent
+    // gets made — and where the identity it speaks for gets unlocked.
+    let agent = agent.get().await?;
+
+    if canisters_to_create.is_empty() {
+        notice(reporter, "All canisters already exist");
     } else {
         let phase = reporter.task(Task::phase("Creating canisters:"));
         let result = create_canisters(

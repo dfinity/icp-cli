@@ -36,7 +36,7 @@ pub struct Cmd {
 
 pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     // Load project
-    let _ = ctx.project.load().await?;
+    let _ = ctx.host.project.load().await?;
 
     // Convert args to selection and get network
     let selection: Result<_, _> = cmd.network_selection.clone().into();
@@ -47,7 +47,7 @@ pub async fn exec(ctx: &Context, cmd: &Cmd) -> Result<(), anyhow::Error> {
     };
 
     // Network directory
-    let nd = ctx.network.get_network_directory(&network)?;
+    let nd = ctx.host.network.get_network_directory(&network)?;
 
     let descriptor = nd
         .load_network_descriptor()

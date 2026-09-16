@@ -5,9 +5,9 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::context::{CanisterSelection, Context};
 use icp::fs;
 use icp::prelude::*;
+use icp::{context::Context, host::CanisterSelection};
 use tracing::{info, warn};
 
 use icp::operations::{
@@ -76,7 +76,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 ))?;
             }
         };
-        ctx.artifacts
+        ctx.host
+            .artifacts
             .lookup(canister)
             .await
             .map_err(|e| anyhow!(e))?

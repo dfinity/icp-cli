@@ -133,13 +133,13 @@ pub enum CleanupError {
 /// Store of canister ID mappings for environments.
 ///
 /// Each environment has a separate file storing its canister IDs mapping.
-pub(crate) struct AccessImpl {
+pub struct AccessImpl {
     project_root_locate: Arc<dyn ProjectRootLocate>,
     lock: Mutex<()>,
 }
 
 impl AccessImpl {
-    pub(crate) fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
+    pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
             project_root_locate,
             lock: Mutex::new(()),
@@ -272,22 +272,22 @@ impl AccessImpl {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod mock {
+#[cfg(any(test, feature = "test-util"))]
+pub mod mock {
     use super::*;
     /// In-memory mock implementation of `Access`.
     ///
     /// There are two separate stores for cache and data, to allow testing both paths.
     /// Each store keys on the environment name.
     /// The value is a mapping from canister names to their principals.
-    pub(crate) struct MockInMemoryIdStore {
+    pub struct MockInMemoryIdStore {
         cache: Mutex<BTreeMap<String, IdMapping>>,
         data: Mutex<BTreeMap<String, IdMapping>>,
     }
 
     impl MockInMemoryIdStore {
         /// Creates a new empty in-memory ID store.
-        pub(crate) fn new() -> Self {
+        pub fn new() -> Self {
             Self {
                 cache: Mutex::new(BTreeMap::new()),
                 data: Mutex::new(BTreeMap::new()),

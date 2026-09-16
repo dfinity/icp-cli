@@ -404,7 +404,7 @@ fn not_yet_valid_file_is_refused() {
 #[test]
 fn expired_file_is_refused() {
     use ic_agent::{Agent, identity::AnonymousIdentity};
-    use icp::signed_message::{
+    use icp_app::signed_message::{
         CallType, Destination, Network, Request, SUBMISSION_WINDOW, SignedMessage, Summary,
         format_timestamp,
     };
@@ -434,8 +434,8 @@ fn expired_file_is_refused() {
         .expect("signing makes no request");
 
     let message = SignedMessage {
-        format: icp::signed_message::FORMAT.to_string(),
-        version: icp::signed_message::VERSION,
+        format: icp_app::signed_message::FORMAT.to_string(),
+        version: icp_app::signed_message::VERSION,
         request: Request {
             call_type: CallType::Query,
             envelope: signed.signed_query,

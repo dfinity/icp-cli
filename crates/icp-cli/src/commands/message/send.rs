@@ -2,11 +2,12 @@ use anyhow::{Context as _, bail};
 use candid::{IDLArgs, TypeEnv, types::Function};
 use clap::{Args, ValueHint};
 use ic_agent::agent::CallResponse;
-use icp::context::{Context, IC_ROOT_KEY};
-use icp::identity::IdentitySelection;
 use icp::network::RootKeySpec;
+use icp::prelude::IC_ROOT_KEY;
 use icp::prelude::*;
-use icp::signed_message::{
+use icp_app::context::Context;
+use icp_app::identity::IdentitySelection;
+use icp_app::signed_message::{
     CallType, Destination, SUBMISSION_WINDOW, SignedMessage, Validated, WindowState,
     format_timestamp,
 };

@@ -21,7 +21,6 @@ use crate::{
     network::{Configuration as NetworkConfiguration, FriendlyDomains},
     prelude::*,
     store_id::{IdMapping, LookupIdError},
-    telemetry_data::NetworkType,
 };
 
 /// Selection type for environments
@@ -69,18 +68,40 @@ pub struct Host {
     /// Canister synchronizer
     pub syncer: Arc<dyn Synchronize>,
 
+    /// Source of wasm modules a manifest names but the project does not contain
+    pub wasm: Arc<dyn crate::canister::wasm::Fetch>,
+
     /// Network resolution: endpoints, root keys, friendly domains
     pub network: Arc<dyn crate::network::Access>,
 
-    /// Telemetry data collected during command execution.
-    // TODO: telemetry is app-global, not project-scoped. Once the app layer is
-    // its own crate, it should derive these facts from the loaded project
-    // itself rather than having project loading write into a bag it owns.
-    pub telemetry_data: Arc<crate::telemetry_data::TelemetryData>,
+    /// Where to report what resolution turned up. See [`Observe`].
+    pub observer: Arc<dyn Observe>,
 }
 
+/// Somewhere for the surrounding application to notice what resolution turned
+/// up.
+///
+/// Which project is loaded, and which environment was picked out of it, are
+/// facts an application wants — for telemetry, for a status line — and they are
+/// established in here, part-way through resolving something else, not at the
+/// call site. Rather than let an app-scoped collector be written to from this
+/// layer, the facts are handed over and what becomes of them is not this
+/// layer's concern.
+pub trait Observe: Send + Sync {
+    /// An environment was resolved out of a loaded project.
+    ///
+    /// Called on every resolution, not just the first, so implementations must
+    /// tolerate being told the same thing repeatedly.
+    fn environment_resolved(&self, _project: &crate::Project, _environment: &crate::Environment) {}
+}
+
+/// The [`Observe`] for a caller that does not care.
+pub struct Ignore;
+
+impl Observe for Ignore {}
+
 impl Host {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-util"))]
     /// A host whose every seam is a mock, for tests that only exercise the
     /// resolution methods below.
     pub fn mocked() -> Self {
@@ -90,8 +111,9 @@ impl Host {
             artifacts: Arc::new(crate::store_artifact::MockInMemoryArtifactStore::new()),
             builder: Arc::new(crate::canister::build::UnimplementedMockBuilder),
             syncer: Arc::new(crate::canister::sync::UnimplementedMockSyncer),
+            wasm: Arc::new(crate::canister::wasm::UnimplementedMockFetch),
             network: Arc::new(crate::network::MockNetworkAccessor::new()),
-            telemetry_data: Arc::new(crate::telemetry_data::TelemetryData::default()),
+            observer: Arc::new(Ignore),
         }
     }
 
@@ -128,12 +150,7 @@ impl Host {
             .fail();
         }
 
-        let network_type = match &env.network.configuration {
-            NetworkConfiguration::Managed { .. } => NetworkType::Managed,
-            NetworkConfiguration::Connected { .. } => NetworkType::Connected,
-        };
-        self.telemetry_data.set_network_type(network_type);
-        self.telemetry_data.set_project(&p);
+        self.observer.environment_resolved(&p, env);
 
         Ok(env.clone())
     }

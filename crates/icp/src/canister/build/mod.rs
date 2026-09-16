@@ -3,8 +3,10 @@ use async_trait::async_trait;
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
+use std::sync::Arc;
+
+use crate::canister::wasm;
 use crate::manifest::canister::BuildStep;
-use crate::package::PackageCache;
 use crate::prelude::*;
 
 mod prebuilt;
@@ -31,11 +33,20 @@ pub trait Build: Sync + Send {
         step: &BuildStep,
         params: &Params,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
     ) -> Result<(), BuildError>;
 }
 
-pub struct Builder;
+/// Runs each build step where it has to be run: a script step in a subprocess,
+/// a pre-built step by asking [`wasm::Fetch`] for the module.
+pub struct Builder {
+    wasm: Arc<dyn wasm::Fetch>,
+}
+
+impl Builder {
+    pub fn new(wasm: Arc<dyn wasm::Fetch>) -> Self {
+        Self { wasm }
+    }
+}
 
 #[async_trait]
 impl Build for Builder {
@@ -44,23 +55,22 @@ impl Build for Builder {
         step: &BuildStep,
         params: &Params,
         reporter: &StepReporter,
-        pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         match step {
             BuildStep::Prebuilt(adapter) => {
-                Ok(prebuilt::build(adapter, params, reporter, pkg_cache).await?)
+                Ok(prebuilt::build(adapter, params, reporter, self.wasm.as_ref()).await?)
             }
             BuildStep::Script(adapter) => Ok(script::build(adapter, params, reporter).await?),
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 /// Unimplemented mock implementation of `Build`.
 /// All methods panic with `unimplemented!()` when called.
 pub struct UnimplementedMockBuilder;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 #[async_trait]
 impl Build for UnimplementedMockBuilder {
     async fn build(
@@ -68,7 +78,6 @@ impl Build for UnimplementedMockBuilder {
         _step: &BuildStep,
         _params: &Params,
         _reporter: &StepReporter,
-        _pkg_cache: &PackageCache,
     ) -> Result<(), BuildError> {
         unimplemented!("UnimplementedMockBuilder::build")
     }

@@ -2,12 +2,12 @@ use std::io::stdout;
 
 use candid::Principal;
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use icp::operations::token::balance::get_balance;
+use icp_app::operations::token::balance::get_balance;
 
 /// Display the token balance on the ledger (default token: icp)
 #[derive(Args, Clone, Debug)]

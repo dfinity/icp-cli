@@ -1,5 +1,5 @@
 use std::sync::Arc;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
@@ -57,11 +57,11 @@ pub enum LookupArtifactError {
     LockError { source: crate::fs::lock::LockError },
 }
 
-pub(crate) struct ArtifactStore {
+pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
 }
 
-struct ArtifactPaths {
+pub struct ArtifactPaths {
     dir: PathBuf,
 }
 
@@ -110,7 +110,7 @@ impl PathsAccess for ArtifactPaths {
 }
 
 impl ArtifactStore {
-    pub(crate) fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
+    pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
             project_root_locate,
         }
@@ -177,30 +177,30 @@ impl Access for ArtifactStore {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 /// In-memory mock implementation of `Access`.
 pub(crate) struct MockInMemoryArtifactStore {
     store: Mutex<HashMap<String, Vec<u8>>>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 impl MockInMemoryArtifactStore {
     /// Creates a new empty in-memory artifact store.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             store: Mutex::new(HashMap::new()),
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 impl Default for MockInMemoryArtifactStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 #[async_trait]
 impl Access for MockInMemoryArtifactStore {
     async fn save(&self, name: &str, wasm: &[u8]) -> Result<(), SaveError> {

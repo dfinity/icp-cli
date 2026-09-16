@@ -6,8 +6,9 @@ use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
 use icp::fs;
+use icp::host::CanisterSelection;
 use icp::prelude::*;
-use icp::{context::Context, host::CanisterSelection};
+use icp_app::context::Context;
 use tracing::{info, warn};
 
 use icp::operations::{

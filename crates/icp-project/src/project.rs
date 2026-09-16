@@ -1672,7 +1672,7 @@ pub async fn consolidate_manifest(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod recipe_sync_tests {
     use super::*;
     use crate::canister::recipe::{Fetched, Resolve, ResolveError};
@@ -1780,7 +1780,7 @@ mod recipe_sync_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod dependency_tests {
     use super::*;
     use crate::canister::recipe::{Fetched, Resolve, ResolveError};

@@ -1,9 +1,10 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use icp_app::{context::Context, identity::IdentitySelection};
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
+use icp_canister_interfaces::engine_canister::engine_canister_id;
 use icp_project::calls::{Call, CallError, CanisterCalls};
 use icp_project::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp_project::parsers::CyclesAmount;
@@ -135,6 +136,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         subnet: args.subnet,
         proxy: args.proxy,
         cycles: args.cycles.get(),
+        engine_registry: engine_canister_id().map_err(|message| anyhow!(message))?,
         no_create: args.no_create,
         yes: args.yes,
         args: args.args_opt.resolve_bytes()?,

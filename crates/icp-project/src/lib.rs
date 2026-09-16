@@ -39,6 +39,7 @@ pub mod operations;
 pub mod parsers;
 pub mod prelude;
 pub mod project;
+pub mod random;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
@@ -249,12 +250,12 @@ static WORKSPACE_ROOT_ANNOUNCED: std::sync::atomic::AtomicBool =
 /// Warn once when the resolved workspace root differs from the sub-project the
 /// command is run in, so the upward resolution (§workspace model) is visible for
 /// every command, not just deploy.
-fn announce_workspace_root_once(member: &Path, root: &Path) {
+async fn announce_workspace_root_once(files: &dyn FileSystem, member: &Path, root: &Path) {
     let differs = match (
-        dunce::canonicalize(member.as_std_path()),
-        dunce::canonicalize(root.as_std_path()),
+        files.canonicalize(member).await,
+        files.canonicalize(root).await,
     ) {
-        (Ok(m), Ok(r)) => m != r,
+        (Some(m), Some(r)) => m != r,
         _ => member != root,
     };
     if differs && !WORKSPACE_ROOT_ANNOUNCED.swap(true, std::sync::atomic::Ordering::Relaxed) {
@@ -277,7 +278,7 @@ impl ProjectLoad for ProjectLoadImpl {
         // Announce (once) when we resolved up to a workspace root above the
         // sub-project the command is run in, so this is visible for every command.
         if let Ok(member) = self.project_root_locate.locate_member() {
-            announce_workspace_root_once(&member, &pdir);
+            announce_workspace_root_once(self.files.as_ref(), &member, &pdir).await;
         }
 
         // Load project manifest
@@ -706,7 +707,8 @@ impl ProjectLoad for NoProjectLoader {
     }
 }
 
-#[cfg(test)]
+// Every test here loads a project off a real directory through `HostFileSystem`.
+#[cfg(all(test, feature = "host"))]
 mod tests {
     use super::*;
     use crate::canister::recipe::{Fetched, Resolve, ResolveError};

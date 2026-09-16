@@ -16,7 +16,9 @@ pub mod declared;
 pub mod plugin;
 pub mod script;
 
-use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
+#[cfg(feature = "host")]
+use script::HostScripts;
+use script::{ScriptInvocation, ScriptRunError, ScriptRunner};
 
 pub struct Params {
     pub path: PathBuf,
@@ -75,6 +77,7 @@ pub struct Syncer {
 
 impl Syncer {
     /// A syncer that runs script steps as host subprocesses.
+    #[cfg(feature = "host")]
     pub fn host(wasm: Arc<dyn wasm::Fetch>, plugins: Arc<dyn plugin::Run>) -> Self {
         Self::new(Arc::new(HostScripts), wasm, plugins)
     }

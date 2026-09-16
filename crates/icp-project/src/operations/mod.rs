@@ -5,7 +5,6 @@ pub mod candid_compat;
 pub mod create;
 pub mod deploy;
 pub mod install;
-pub mod proxy;
 pub mod proxy_management;
 pub mod recover_cycles;
 pub mod settings;

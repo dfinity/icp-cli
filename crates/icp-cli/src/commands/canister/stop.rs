@@ -26,6 +26,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -34,8 +35,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StopArgs) -> Result<(), anyhow::E
         )
         .await?;
 
-    proxy_management::stop_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
-        .await?;
+    proxy_management::stop_canister(calls.as_ref(), CanisterIdRecord { canister_id: cid }).await?;
 
     Ok(())
 }

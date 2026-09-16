@@ -10,7 +10,6 @@ use candid::{IDLArgs, Principal, TypeEnv, types::Function};
 use candid_parser::utils::CandidSource;
 use clap::ValueEnum;
 use dialoguer::console::Term;
-use ic_agent::Agent;
 use icp_project::prelude::*;
 use serde::Serialize;
 use std::io::{self, Write};
@@ -173,10 +172,10 @@ pub(crate) fn print_candid_for_term(term: &mut Term, args: &IDLArgs) -> io::Resu
 /// - the IDL file can be parsed and type checked in Rust parser;
 /// - has an actor in the IDL file. If anything fails, it returns None.
 pub(crate) async fn get_candid_type(
-    agent: &Agent,
+    calls: &dyn icp_project::calls::CanisterCalls,
     canister_id: Principal,
 ) -> Option<CanisterInterface> {
-    let candid_interface = fetch_canister_metadata(agent, canister_id, "candid:service").await?;
+    let candid_interface = fetch_canister_metadata(calls, canister_id, "candid:service").await?;
     CanisterInterface::from_text(candid_interface).ok()
 }
 

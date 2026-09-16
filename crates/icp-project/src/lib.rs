@@ -25,8 +25,9 @@ use crate::{
     prelude::*,
 };
 
-pub mod agent;
+pub mod calls;
 pub mod canister;
+pub mod defer;
 pub mod files;
 #[cfg(feature = "host")]
 pub mod fs;

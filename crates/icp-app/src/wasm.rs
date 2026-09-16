@@ -5,11 +5,11 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use icp::canister::wasm::{Fetch, FetchError};
-use icp::fs::read;
-use icp::manifest::prebuilt::SourceField;
-use icp::prelude::*;
 use icp_events::StepReporter;
+use icp_project::canister::wasm::{Fetch, FetchError};
+use icp_project::fs::read;
+use icp_project::manifest::prebuilt::SourceField;
+use icp_project::prelude::*;
 use reqwest::{Client, Method, Request};
 use sha2::{Digest, Sha256};
 use snafu::prelude::*;
@@ -21,7 +21,7 @@ use crate::package::{PackageCache, cache_wasm};
 pub enum WasmError {
     #[snafu(display("failed to read wasm file at '{path}'"))]
     ReadLocal {
-        source: icp::fs::IoError,
+        source: icp_project::fs::IoError,
         path: Utf8PathBuf,
     },
 
@@ -41,10 +41,12 @@ pub enum WasmError {
     ChecksumMismatch { expected: String, actual: String },
 
     #[snafu(display("failed to cache wasm file"))]
-    CacheFile { source: icp::fs::IoError },
+    CacheFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to acquire lock on package cache"))]
-    LockCache { source: icp::fs::lock::LockError },
+    LockCache {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 /// The [`Fetch`] that downloads over HTTP and caches in the package cache.
@@ -117,7 +119,7 @@ impl Fetcher {
                             let wasm_cache = r.wasm_sha(expected);
                             let path = wasm_cache.wasm();
                             if path.exists() {
-                                _ = icp::fs::write(&wasm_cache.atime(), b"");
+                                _ = icp_project::fs::write(&wasm_cache.atime(), b"");
                                 Some(path)
                             } else {
                                 None

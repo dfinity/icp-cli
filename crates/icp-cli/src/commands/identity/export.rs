@@ -3,10 +3,10 @@ use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::fs::read_to_string;
-use icp::prelude::*;
 use icp_app::context::Context;
 use icp_app::identity::key::{ExportFormat, export_identity};
+use icp_project::fs::read_to_string;
+use icp_project::prelude::*;
 
 /// Print the PEM file for the identity
 #[derive(Debug, Args)]

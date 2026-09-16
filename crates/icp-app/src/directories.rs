@@ -10,7 +10,7 @@ use crate::{
     settings::{SettingsDirectories, SettingsPaths},
 };
 use directories::ProjectDirs;
-use icp::{fs::lock::LockError, prelude::*};
+use icp_project::{fs::lock::LockError, prelude::*};
 use snafu::prelude::*;
 
 /// Trait for accessing global ICP CLI directories.

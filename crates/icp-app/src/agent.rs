@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use ic_agent::{Agent, AgentError, Identity};
 use snafu::prelude::*;
 
-use icp::prelude::*;
+use icp_project::prelude::*;
 
 #[derive(Debug, Snafu)]
 pub enum CreateAgentError {

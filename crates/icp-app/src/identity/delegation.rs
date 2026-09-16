@@ -5,7 +5,7 @@ use ic_agent::export::Principal;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
-use icp::{fs, prelude::*};
+use icp_project::{fs, prelude::*};
 
 /// Matches the Candid `DelegationChain` record from the cli-backend canister.
 /// All byte fields are hex-encoded strings on the wire.

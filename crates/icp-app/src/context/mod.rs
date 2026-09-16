@@ -6,7 +6,7 @@ use crate::{
 };
 use candid::Principal;
 use ic_agent::{Agent, Identity};
-use icp::{
+use icp_project::{
     host::{
         CanisterSelection, EnvironmentSelection, GetCanisterIdForEnvError, GetEnvironmentError,
         Host,
@@ -50,7 +50,7 @@ pub struct Context {
     pub dirs: Arc<dyn directories::Access>,
 
     /// Where a network keeps its on-disk state. Not part of
-    /// [`icp::network::Access`] because the layout is this crate's invention.
+    /// [`icp_project::network::Access`] because the layout is this crate's invention.
     pub network_dirs: Arc<dyn crate::network::Directories>,
 
     /// Identity loader
@@ -93,7 +93,7 @@ impl Context {
     pub async fn get_network(
         &self,
         network_selection: &NetworkSelection,
-    ) -> Result<icp::Network, GetNetworkError> {
+    ) -> Result<icp_project::Network, GetNetworkError> {
         let network = match network_selection {
             NetworkSelection::Named(network_name) => {
                 if self.host.project.exists().await? {
@@ -103,10 +103,10 @@ impl Context {
                     })?;
                     net.clone()
                 } else if network_name == IC {
-                    icp::Network {
+                    icp_project::Network {
                         name: IC.to_string(),
-                        configuration: icp::network::Configuration::Connected {
-                            connected: icp::network::Connected {
+                        configuration: icp_project::network::Configuration::Connected {
+                            connected: icp_project::network::Connected {
                                 api_url: IC_MAINNET_NETWORK_API_URL.parse().unwrap(),
                                 http_gateway_url: Some(
                                     IC_MAINNET_NETWORK_GATEWAY_URL.parse().unwrap(),
@@ -122,10 +122,10 @@ impl Context {
                 }
             }
             NetworkSelection::Default => return Err(GetNetworkError::DefaultNetwork),
-            NetworkSelection::Url(url, root_key) => icp::Network {
+            NetworkSelection::Url(url, root_key) => icp_project::Network {
                 name: url.to_string(),
-                configuration: icp::network::Configuration::Connected {
-                    connected: icp::network::Connected {
+                configuration: icp_project::network::Configuration::Connected {
+                    connected: icp_project::network::Connected {
                         api_url: url.clone(),
                         http_gateway_url: Some(url.clone()),
                         root_key: root_key.clone(),
@@ -151,7 +151,7 @@ impl Context {
     pub async fn get_network_or_environment(
         &self,
         selection: &NetworkOrEnvironmentSelection,
-    ) -> Result<icp::Network, GetNetworkOrEnvironmentError> {
+    ) -> Result<icp_project::Network, GetNetworkOrEnvironmentError> {
         match selection {
             NetworkOrEnvironmentSelection::Network(network_name) => {
                 let network_selection = NetworkSelection::Named(network_name.clone());
@@ -265,7 +265,7 @@ impl Context {
                     Err(GetAgentForEnvError::GetEnvironment {
                         source:
                             GetEnvironmentError::ProjectLoad {
-                                source: icp::ProjectLoadError::Locate { .. },
+                                source: icp_project::ProjectLoadError::Locate { .. },
                             },
                     }) => Err(GetAgentError::NoProjectOrNetwork),
                     Err(e) => Err(e.into()),
@@ -345,7 +345,9 @@ pub enum GetIdentityError {
 #[derive(Debug, Snafu)]
 pub enum GetNetworkError {
     #[snafu(transparent)]
-    ProjectLoad { source: icp::ProjectLoadError },
+    ProjectLoad {
+        source: icp_project::ProjectLoadError,
+    },
 
     #[snafu(display("project does not contain a network named '{}'", name))]
     NetworkNotFound { name: String },
@@ -375,7 +377,9 @@ pub enum GetAgentForEnvError {
     GetEnvironment { source: GetEnvironmentError },
 
     #[snafu(transparent)]
-    NetworkAccess { source: icp::network::AccessError },
+    NetworkAccess {
+        source: icp_project::network::AccessError,
+    },
 
     #[snafu(transparent)]
     AgentCreate {
@@ -392,7 +396,9 @@ pub enum GetAgentForNetworkError {
     GetNetwork { source: GetNetworkError },
 
     #[snafu(transparent)]
-    NetworkAccess { source: icp::network::AccessError },
+    NetworkAccess {
+        source: icp_project::network::AccessError,
+    },
 
     #[snafu(transparent)]
     AgentCreate {
@@ -430,7 +436,9 @@ pub enum GetAgentForSigningError {
 #[derive(Debug, Snafu)]
 pub enum GetAgentError {
     #[snafu(transparent)]
-    ProjectExists { source: icp::ProjectLoadError },
+    ProjectExists {
+        source: icp_project::ProjectLoadError,
+    },
 
     #[snafu(display("You can't specify both an environment and a network"))]
     EnvironmentAndNetworkSpecified,

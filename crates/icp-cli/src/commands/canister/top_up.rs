@@ -2,11 +2,11 @@ use anyhow::{Context as _, bail};
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat};
 use clap::Args;
-use icp::parsers::CyclesAmount;
 use icp_app::context::Context;
 use icp_canister_interfaces::cycles_ledger::{
     CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
 };
+use icp_project::parsers::CyclesAmount;
 use tracing::info;
 
 use crate::commands::args;

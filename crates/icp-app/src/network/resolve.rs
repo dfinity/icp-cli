@@ -11,8 +11,8 @@ use ic_agent::{AgentError, identity::AnonymousIdentity};
 use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
 
-use icp::network::{Connected, NetworkAccess, NetworkUrls, RootKeySource, RootKeySpec};
-use icp::prelude::*;
+use icp_project::network::{Connected, NetworkAccess, NetworkUrls, RootKeySource, RootKeySpec};
+use icp_project::prelude::*;
 
 use crate::{
     agent::{Create, CreateAgentError},

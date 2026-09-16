@@ -14,7 +14,7 @@ use tracing::{debug, info};
 use super::style::{
     COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
 };
-use icp::operations::task::{Event, Widget};
+use icp_project::operations::task::{Event, Widget};
 
 use super::{INDENT, RollingLines, TaskLog, dump_failures};
 

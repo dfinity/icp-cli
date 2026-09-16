@@ -36,7 +36,7 @@ use crate::network::{
         launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
     },
 };
-use icp::{
+use icp_project::{
     fs::{create_dir_all, lock::LockError, remove_dir_all},
     network::{Managed, ManagedLauncherConfig, ManagedMode, Port},
     prelude::*,
@@ -94,7 +94,7 @@ pub async fn stop_network(locator: &ChildLocator) -> Result<(), StopNetworkError
 #[derive(Debug, Snafu)]
 pub enum RunNetworkError {
     #[snafu(transparent)]
-    CreateDirFailed { source: icp::fs::IoError },
+    CreateDirFailed { source: icp_project::fs::IoError },
 
     #[snafu(transparent)]
     LockFileError { source: LockError },
@@ -412,13 +412,13 @@ pub enum RunNetworkLauncherError {
     CreateStatusDir { source: std::io::Error },
 
     #[snafu(display("failed to create dir"))]
-    CreateDirAll { source: icp::fs::IoError },
+    CreateDirAll { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to remove dir"))]
-    RemoveDirAll { source: icp::fs::IoError },
+    RemoveDirAll { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to remove file"))]
-    RemoveFile { source: icp::fs::IoError },
+    RemoveFile { source: icp_project::fs::IoError },
 
     #[snafu(transparent)]
     SaveNetworkDescriptor { source: SaveNetworkDescriptorError },
@@ -820,7 +820,7 @@ async fn install_proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use icp::network::{Gateway, ManagedLauncherConfig, Port};
+    use icp_project::network::{Gateway, ManagedLauncherConfig, Port};
 
     #[test]
     fn transform_native_launcher_default_config() {

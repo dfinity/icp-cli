@@ -18,7 +18,7 @@ use snafu::prelude::*;
 use url::Url;
 use uuid::Uuid;
 
-use icp::prelude::*;
+use icp_project::prelude::*;
 
 /// How long to wait for the gateway to answer before concluding the network is defunct.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);

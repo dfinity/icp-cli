@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
-use icp::{
+use icp_project::{
     fs::lock::{DirectoryStructureLock, LRead, LWrite, LockError, PathsAccess},
     prelude::*,
 };
@@ -82,13 +82,13 @@ pub fn cache_wasm(
     cache: LWrite<&PackageCachePaths>,
     sha: &str,
     wasm: &[u8],
-) -> Result<(), icp::fs::IoError> {
+) -> Result<(), icp_project::fs::IoError> {
     let cache_path = cache.wasm_sha(sha);
     let cache_wasm_path = cache_path.wasm();
     if !cache_wasm_path.exists() {
-        icp::fs::create_dir_all(cache_path.dir())?;
-        icp::fs::write(&cache_wasm_path, wasm)?;
-        _ = icp::fs::write(&cache_path.atime(), b"");
+        icp_project::fs::create_dir_all(cache_path.dir())?;
+        icp_project::fs::write(&cache_wasm_path, wasm)?;
+        _ = icp_project::fs::write(&cache_path.atime(), b"");
     }
     Ok(())
 }
@@ -138,8 +138,8 @@ pub fn read_cached_recipe(
     let cache_path = cache.recipe_sha(cache_key);
     let template_path = cache_path.template();
     if template_path.exists() {
-        let template = icp::fs::read(&template_path).context(RecipeCacheIoSnafu)?;
-        _ = icp::fs::write(&cache_path.atime(), b"");
+        let template = icp_project::fs::read(&template_path).context(RecipeCacheIoSnafu)?;
+        _ = icp_project::fs::write(&cache_path.atime(), b"");
         Ok(Some(template))
     } else {
         Ok(None)
@@ -183,9 +183,9 @@ pub fn cache_recipe(
     let cache_path = cache.recipe_sha(cache_key);
     let template_path = cache_path.template();
     if !template_path.exists() {
-        icp::fs::create_dir_all(cache_path.dir()).context(RecipeCacheIoSnafu)?;
-        icp::fs::write(&template_path, template).context(RecipeCacheIoSnafu)?;
-        _ = icp::fs::write(&cache_path.atime(), b"");
+        icp_project::fs::create_dir_all(cache_path.dir()).context(RecipeCacheIoSnafu)?;
+        icp_project::fs::write(&template_path, template).context(RecipeCacheIoSnafu)?;
+        _ = icp_project::fs::write(&cache_path.atime(), b"");
     }
     Ok(())
 }
@@ -193,13 +193,17 @@ pub fn cache_recipe(
 #[derive(Debug, Snafu)]
 pub enum RecipeCacheError {
     #[snafu(display("failed to load recipe cache tag"))]
-    LoadRecipeTag { source: icp::fs::json::Error },
+    LoadRecipeTag {
+        source: icp_project::fs::json::Error,
+    },
 
     #[snafu(display("failed to save recipe cache tag"))]
-    SaveRecipeTag { source: icp::fs::json::Error },
+    SaveRecipeTag {
+        source: icp_project::fs::json::Error,
+    },
 
     #[snafu(display("failed to read or write recipe cache file"))]
-    RecipeCacheIo { source: icp::fs::IoError },
+    RecipeCacheIo { source: icp_project::fs::IoError },
 }
 
 pub type PackageCache = DirectoryStructureLock<PackageCachePaths>;
@@ -222,8 +226,8 @@ pub fn get_tag(
     paths: LRead<&PackageCachePaths>,
     tool: &str,
     tag: &str,
-) -> Result<Option<String>, icp::fs::json::Error> {
-    let manifest: Manifest = icp::fs::json::load_or_default(&paths.manifest())?;
+) -> Result<Option<String>, icp_project::fs::json::Error> {
+    let manifest: Manifest = icp_project::fs::json::load_or_default(&paths.manifest())?;
     Ok(manifest.tags.get(&format!("{tool}:{tag}")).cloned())
 }
 
@@ -232,12 +236,12 @@ pub fn set_tag(
     tool: &str,
     version: &str,
     tag: &str,
-) -> Result<(), icp::fs::json::Error> {
-    let mut manifest: Manifest = icp::fs::json::load_or_default(&paths.manifest())?;
+) -> Result<(), icp_project::fs::json::Error> {
+    let mut manifest: Manifest = icp_project::fs::json::load_or_default(&paths.manifest())?;
     manifest
         .tags
         .insert(format!("{tool}:{tag}"), version.to_string());
-    icp::fs::json::save(&paths.manifest(), &manifest)?;
+    icp_project::fs::json::save(&paths.manifest(), &manifest)?;
     Ok(())
 }
 
@@ -248,15 +252,15 @@ pub fn set_tag_with_updater(
     version: &str,
     tag: &str,
     updater_version: &str,
-) -> Result<(), icp::fs::json::Error> {
-    let mut manifest: Manifest = icp::fs::json::load_or_default(&paths.manifest())?;
+) -> Result<(), icp_project::fs::json::Error> {
+    let mut manifest: Manifest = icp_project::fs::json::load_or_default(&paths.manifest())?;
     manifest
         .tags
         .insert(format!("{tool}:{tag}"), version.to_string());
     manifest
         .updater_versions
         .insert(tool.to_string(), updater_version.to_string());
-    icp::fs::json::save(&paths.manifest(), &manifest)?;
+    icp_project::fs::json::save(&paths.manifest(), &manifest)?;
     Ok(())
 }
 
@@ -266,8 +270,8 @@ pub fn get_tag_with_updater(
     paths: LRead<&PackageCachePaths>,
     tool: &str,
     tag: &str,
-) -> Result<(Option<String>, Option<String>), icp::fs::json::Error> {
-    let manifest: Manifest = icp::fs::json::load_or_default(&paths.manifest())?;
+) -> Result<(Option<String>, Option<String>), icp_project::fs::json::Error> {
+    let manifest: Manifest = icp_project::fs::json::load_or_default(&paths.manifest())?;
     let tag_value = manifest.tags.get(&format!("{tool}:{tag}")).cloned();
     let updater = manifest.updater_versions.get(tool).cloned();
     Ok((tag_value, updater))

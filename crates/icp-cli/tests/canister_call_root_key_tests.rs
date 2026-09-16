@@ -3,7 +3,7 @@ use predicates::ord::eq;
 use predicates::str::{PredicateStrExt, contains};
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext};
-use icp::fs::write_string;
+use icp_project::fs::write_string;
 
 mod common;
 

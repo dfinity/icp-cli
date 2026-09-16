@@ -1,7 +1,7 @@
 use icp_events::StepReporter;
 use snafu::prelude::*;
 
-use crate::{canister::wasm, fs, manifest::adapter::prebuilt::Adapter};
+use crate::{canister::wasm, manifest::adapter::prebuilt::Adapter};
 
 use super::Params;
 
@@ -11,7 +11,7 @@ pub enum PrebuiltError {
     Wasm { source: wasm::FetchError },
 
     #[snafu(display("failed to copy wasm to output file"))]
-    CopyFile { source: crate::fs::CopyError },
+    CopyFile { source: crate::files::FsError },
 }
 
 pub(super) async fn build(
@@ -19,6 +19,7 @@ pub(super) async fn build(
     params: &Params,
     reporter: &StepReporter,
     wasm: &dyn wasm::Fetch,
+    files: &dyn crate::files::FileSystem,
 ) -> Result<(), PrebuiltError> {
     let src = wasm
         .wasm(
@@ -30,7 +31,10 @@ pub(super) async fn build(
         .await?;
 
     reporter.info(format!("Writing WASM file: {}", params.output));
-    fs::copy(&src, &params.output).context(CopyFileSnafu)?;
+    files
+        .copy(&src, &params.output)
+        .await
+        .context(CopyFileSnafu)?;
 
     Ok(())
 }

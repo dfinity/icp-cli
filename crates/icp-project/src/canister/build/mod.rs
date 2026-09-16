@@ -40,11 +40,12 @@ pub trait Build: Sync + Send {
 /// a pre-built step by asking [`wasm::Fetch`] for the module.
 pub struct Builder {
     wasm: Arc<dyn wasm::Fetch>,
+    files: Arc<dyn crate::files::FileSystem>,
 }
 
 impl Builder {
-    pub fn new(wasm: Arc<dyn wasm::Fetch>) -> Self {
-        Self { wasm }
+    pub fn new(wasm: Arc<dyn wasm::Fetch>, files: Arc<dyn crate::files::FileSystem>) -> Self {
+        Self { wasm, files }
     }
 }
 
@@ -57,9 +58,14 @@ impl Build for Builder {
         reporter: &StepReporter,
     ) -> Result<(), BuildError> {
         match step {
-            BuildStep::Prebuilt(adapter) => {
-                Ok(prebuilt::build(adapter, params, reporter, self.wasm.as_ref()).await?)
-            }
+            BuildStep::Prebuilt(adapter) => Ok(prebuilt::build(
+                adapter,
+                params,
+                reporter,
+                self.wasm.as_ref(),
+                self.files.as_ref(),
+            )
+            .await?),
             BuildStep::Script(adapter) => Ok(script::build(adapter, params, reporter).await?),
         }
     }

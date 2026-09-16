@@ -73,29 +73,37 @@ Host-side Component Model runtime for sync plugins.
 ```
 crates/icp-sync-plugin/
   src/
-    lib.rs             — public API: run_plugin(), RunPluginError
+    lib.rs             — public API: Wasmtime
     runtime.rs         — wasmtime component setup, HostState, bindgen!, exec() call
     path.rs            — declared-path resolution and safety checks (project bound, symlinks)
   sync-plugin.wit      — current WIT interface, v0.2.0
   sync-plugin-v1.wit   — frozen WIT interface, v0.1.0
-  Cargo.toml           — wasmtime, wasmtime-wasi, ic-agent, ic-management-canister-types,
-                         candid, camino, snafu, tokio, semver
+  Cargo.toml           — wasmtime, wasmtime-wasi, icp-project, candid, camino,
+                         snafu, tokio, semver
 ```
 
-Public function:
+Public type:
 
 ```rust
-pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError>
+pub struct Wasmtime;  // impl icp_project::canister::sync::plugin::Run
 ```
 
-`PluginInvocation` bundles the inputs: `wasm_path`, `base_dir`, `project_dir`,
+This crate is one implementation of `icp-project`'s plugin-runner seam. The
+trait, its `Invocation`, and the `KeyedPath`/`CallableCanisters` types the
+invocation is made of all live in `icp-project`, because deciding what a step
+declared and what a canister name resolves to is manifest work. What is left
+here is everything that needs a machine: a component runtime, a WASI sandbox,
+a compute deadline, and a filesystem to open the declared paths on.
+
+`Invocation` bundles the inputs: `wasm_path`, `base_dir`, `project_dir`,
 `dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
-`agent`, `proxy`, `identity_principal`, `environment`, `api_url` and
-`gateway_url` (where the network is reached — informational, since the guest has
-no sockets), `compute_limit_secs`, the exposed `canister_ids` table, the
-`callable: CallableCanisters` enforcement set, and `reporter`. The CLI resolves
-the manifest's declared `canisters:` into `CallableCanisters` before calling;
-this crate stays free of any manifest knowledge.
+`calls` (how canister calls and metadata reads are made — see below), `proxy`,
+`environment`, `api_url` and `gateway_url` (where the network is reached —
+informational, since the guest has no sockets), `compute_limit_secs`, the
+exposed `canister_ids` table, the `callable: CallableCanisters` enforcement
+set, and `reporter`. The identity surfaced to the plugin is `calls.caller()`,
+and `proxy` is informational too: which canister a call is routed through is
+`calls`'s business, not this crate's.
 
 `dirs` and `files` are the manifest's own `dirs:`/`files:` settings as
 manifest-relative paths (`KeyedPath`s carrying the map key each was declared
@@ -162,14 +170,14 @@ all, so a plugin opens `dir.path` verbatim regardless of where it points.
 
 For a v0.2.0 plugin the manifest's `files:` is the only setting, and
 `resolve_entries` records what it found at each entry — a file's contents, or
-`None` for a directory — so `run_plugin` can partition them into the interface's
+`None` for a directory — so the runtime can partition them into the interface's
 `dirs` and `files` lists while keeping each list in written order. A v0.1.0
 plugin keeps the manifest's own split instead: its `dirs:` entries must each be
 a directory (`MissingDir` otherwise), and its `files:` entries are all read.
 
 Preopens are derived from every entry that turned out to be a directory,
-whichever setting declared it, reduced by `covering_dirs` (below) so that one
-tree is opened once.
+whichever setting declared it, reduced by `icp-project`'s `covering_dirs`
+(below) so that one tree is opened once.
 
 ### `HostState` and bindgen
 
@@ -183,8 +191,7 @@ mod v1 { wasmtime::component::bindgen!({ world: "sync-plugin", path: "sync-plugi
 struct HostState {
     host_canister_id: Principal,
     callable: CallableCanisters,          // name → principal, from the manifest
-    agent: Arc<Agent>,
-    proxy: Option<Principal>,
+    calls: Arc<dyn CanisterCalls>,        // icp-project's canister-call seam
     wasi_ctx: wasmtime_wasi::WasiCtx,
     wasi_table: wasmtime_wasi::ResourceTable,
     epoch_extension: Arc<AtomicU64>,
@@ -195,43 +202,45 @@ struct HostState {
 ```
 
 `HostState` implements `WasiView` so wasmtime_wasi can access the WASI context.
-Both imports use `tokio::runtime::Handle::current().block_on(...)` because the
-caller already wraps the synchronous `run_plugin` in
-`tokio::task::block_in_place`. For a v0.2.0 plugin the target is resolved from
-the request's `call-target` by `resolve_call_target`, which enforces the
-`callable` set; for a v0.1.0 plugin the target is always `host_canister_id`.
-When a proxy is configured and the call is a non-`direct` update, it is encoded
-as `ProxyArgs` and routed through the proxy's `proxy` method; otherwise it goes
-straight to the resolved target via `ic-agent`.
+Both imports use `tokio::runtime::Handle::current().block_on(...)`, which is
+safe because `Wasmtime::run` wraps the synchronous runtime in
+`tokio::task::block_in_place`: a wasm import cannot suspend, so it needs a
+thread it may occupy, and only this crate knows that. For a v0.2.0 plugin the
+target is resolved from the request's `call-target` by `resolve_call_target`,
+which enforces the `callable` set; for a v0.1.0 plugin the target is always
+`host_canister_id`.
 
-### Metadata reads (two routes, one answer)
+### Reaching canisters
 
-`canister-metadata-section` cannot reuse the call path: `read_state` is not a canister
-method, so a proxy canister has nothing to forward. The two routes are therefore
-different protocols reaching the same data, chosen by the request's `direct` flag
-exactly as `canister-call` chooses one:
+Both host functions go through the invocation's `CanisterCalls`. That is what
+makes this crate agnostic about *how* a canister is reached — over HTTP with an
+`ic-agent`, or from inside another canister — which the WIT interface has
+always implied and the runtime now actually reflects.
 
-- **Direct** — a `read_state` signed by the sync identity, so absence is
-  *proven* by the certificate rather than asserted. It requests `controllers`
-  alongside the metadata path, since only that distinguishes a canister with no
-  such section from one that was never created.
-- **Proxied** — `ProxyArgs` aimed at the management canister's
-  `canister_metadata`, so the controller check runs against the proxy. This is
-  the same shape the CLI's own management calls take through
-  `update_or_proxy_raw`; the runtime inlines it rather than depending on the CLI.
+The two flags a request may carry map onto the seam:
 
-Only a certificate can make a read `none`. The management canister answers a
-section that isn't there and one private to someone else with the same
-rejection, so the proxied route treats that rejection as a claim to check rather
-than an answer, and confirms it with a certified read before reporting absence.
-A plugin then sees one answer either way: no section by that name and no module
-installed at all are `none`; a private section it may not have, a canister that
-does not exist, and any other failure are errors.
+- `direct` picks the `Authority` a request is made under: `Direct` for the
+  caller itself, `Mediated` for whatever is acting on its behalf (`--proxy`).
+  Encoding a proxy call, funding it with the request's `cycles`, and unwrapping
+  its reply is the implementation's business.
+- `call-type` picks `update` or `query`. A query is always issued as `Direct`,
+  whatever the request asked, because the interface documents queries as going
+  straight to the target: an intermediary accepting only updates would
+  otherwise silently turn one into an update the plugin would have paid for.
+
+The same is true of `canister-metadata-section`, which is the seam's
+`metadata_section` with the request's `direct` flag as its `Authority`. What
+that read takes — a `read_state` certificate to verify, or a
+`canister_metadata` call the proxy makes so the controller check runs against
+*it* — is behind the seam, along with the rule that only a certificate can
+make an answer `none`. A plugin sees one answer either way: no section by that
+name and no module installed at all are `none`; a private section it may not
+have, a canister that does not exist, and any other failure are errors.
 
 ### Interface versioning (parallel v0.1.0 / v0.2.0 support)
 
 A component built with wit-bindgen imports the interface it `use`s as a
-versioned instance — `icp:sync-plugin/types@0.1.0` or `@0.2.0`. `run_plugin`
+versioned instance — `icp:sync-plugin/types@0.1.0` or `@0.2.0`. The runtime
 reads that name off `Component::component_type().imports(...)` and matches the
 version with semver caret requirements (`^0.1`, `^0.2`) to pick the ABI, then
 instantiates the matching `bindgen!` world and builds the matching
@@ -260,22 +269,23 @@ call blocks the guest while the host awaits the network, both imports record the
 elapsed time (`refund_host_call_time`) and the `epoch_deadline_callback` grants
 it back via `epoch_extension` — so network latency is *not* charged against the
 limit. The
-ticker thread stops when its RAII guard drops at the end of `run_plugin`.
+ticker thread stops when its RAII guard drops at the end of the run.
 
-The deadline in seconds is the `compute_limit_secs` parameter. The CLI resolves
-it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable, defaulting
-to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset.
+The deadline in seconds is the invocation's `compute_limit_secs`. `icp-project`
+resolves it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable,
+defaulting to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset — before the
+wasm is fetched, so a malformed value fails fast.
 
 ### stdio capture
 
 `LineCapture` implements `StdoutStream`/`OutputStream`, splits guest output on
 newlines, strips ANSI codes, and emits each complete line to the `reporter` as
 an output event for the rolling step view. stderr lines are additionally
-accumulated and returned from `run_plugin` so the CLI can reprint them
+accumulated and returned from the run so the CLI can reprint them
 persistently. Each stream is capped at 1 MiB; overflow is dropped and a single
 truncation note is emitted on `finalize`.
 
-### `crates/icp/src/manifest/adapter/plugin.rs`
+### `crates/icp-project/src/manifest/adapter/plugin.rs`
 
 Deserializes the `canister.yaml` fields into:
 
@@ -297,7 +307,7 @@ back out unchanged in shape. `entries()` flattens either form to ordered
 `(key, path)` pairs: `key` is `None` for a list entry and `Some(name)` for a map
 entry, and is *non-unique* — a map key holding a list of paths yields one entry
 per path, all sharing the key. The CLI passes those to the runtime as
-`KeyedPath`s (this crate stays free of manifest types), which surface in
+`KeyedPath`s (the runtime stays free of manifest types), which surface in
 `sync-exec-input.dirs`/`files` as each entry's `key`.
 
 Both shapes stay parseable here because both remain legal *somewhere* — which
@@ -319,16 +329,18 @@ section reaches the adapter as an already-parsed `serde_yaml::Value` (see
 `Value` keeps a number a number — hence the explicit visitor. Lists, mappings,
 and empty values are rejected: there is no string to hand the plugin.
 
-### `crates/icp/src/canister/sync/plugin.rs`
+### `crates/icp-project/src/canister/sync/plugin.rs`
 
-Resolves the wasm (local read or remote HTTP fetch into the package cache),
-verifies sha256, builds the exposed canister ID table and the `CallableCanisters`
-enforcement set (resolving `canisters:` against the project's IDs), then calls
-`icp_sync_plugin::run_plugin(...)` with a `PluginInvocation`. The runtime — not
-the CLI — opens the declared paths and enforces the path-safety checks, so the
-CLI no longer touches the plugin's input files itself; it supplies the canister
-directory and the project directory (`sync::Params::path` and `project_dir`)
-that bound them. `exposed_canister_ids`
+Declares the runner seam (`Run`, `Invocation`, `RunError`) and the two types an
+invocation is made of (`KeyedPath`, `CallableCanisters`), then does the
+manifest half of a plugin step: resolves the wasm (local read or remote HTTP
+fetch into the package cache), verifies sha256, builds the exposed canister ID
+table and the `CallableCanisters` enforcement set (resolving `canisters:`
+against the project's IDs), and hands an `Invocation` to the injected runner.
+The runner — not this layer — opens the declared paths and enforces the
+path-safety checks, so nothing here touches the plugin's input files; it
+supplies the canister directory and the project directory
+(`sync::Params::path` and `project_dir`) that bound them. `exposed_canister_ids`
 adds a bare-local-name duplicate for every canister in the same subproject as
 the one being synced; `resolve_callable` fails the step if a name in
 `canisters:` does not resolve.

@@ -193,6 +193,46 @@ async fn deploy_no_create_fails_when_canister_missing() {
         );
 }
 
+/// The `--no-create` refusal is decided from the local id store, so it reads
+/// the same whether or not the network is reachable: with the network never
+/// started, the deploy still names the missing canisters rather than failing to
+/// reach the replica.
+#[test]
+fn deploy_no_create_fails_when_canister_missing_without_network() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--no-create",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "`--no-create` was specified but the following canisters do not exist: my-canister",
+        ));
+}
+
 /// `deploy --no-create` succeeds when the canister already exists: it skips
 /// creation and proceeds to install as normal.
 #[tokio::test]

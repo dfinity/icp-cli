@@ -24,7 +24,7 @@ pub enum CanisterMigrationError {
     #[snafu(display("Failed to query migration status"))]
     QueryMigrationStatus { source: AgentError },
 
-    #[snafu(display("Validation failed: {source}"))]
+    #[snafu(display("Validation failed"))]
     ValidationFailed { source: ValidationError },
 
     #[snafu(display("Validation failed with unknown error"))]

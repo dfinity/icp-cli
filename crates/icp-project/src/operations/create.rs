@@ -23,11 +23,10 @@ use icp_canister_interfaces::{
     },
     engine_canister::{
         GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
-        GetEngineOperatorBySubnetResult, engine_canister_id,
+        GetEngineOperatorBySubnetResult,
     },
     icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
 };
-use rand::seq::IndexedRandom;
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
 use tracing::{info, warn};
@@ -66,9 +65,6 @@ pub enum CreateOperationError {
         source: crate::calls::CallError,
         subnet: Principal,
     },
-
-    #[snafu(display("invalid engine-canister id: {message}"))]
-    EngineCanisterId { message: String },
 
     #[snafu(display("failed to query the engine-canister registry"))]
     EngineCanisterQuery { source: crate::calls::CallError },
@@ -175,9 +171,14 @@ pub enum CreateTarget {
 
 struct CreateOperationInner {
     calls: Arc<dyn CanisterCalls>,
+    random: Arc<dyn crate::random::Random>,
     target: CreateTarget,
     funding: CreateFunding,
     existing_canisters: Vec<Principal>,
+    /// The engine-canister registry to ask which engine-operator serves a
+    /// subnet. Resolved by the caller, which is where an override of it — an
+    /// environment variable — is something to read at all.
+    engine_registry: Principal,
     resolved_subnet: OnceCell<Result<Principal, String>>,
 }
 
@@ -196,16 +197,20 @@ impl Clone for CreateOperation {
 impl CreateOperation {
     pub fn new(
         calls: Arc<dyn CanisterCalls>,
+        random: Arc<dyn crate::random::Random>,
         target: CreateTarget,
         funding: CreateFunding,
         existing_canisters: Vec<Principal>,
+        engine_registry: Principal,
     ) -> Self {
         Self {
             inner: Arc::new(CreateOperationInner {
                 calls,
+                random,
                 target,
                 funding,
                 existing_canisters,
+                engine_registry,
                 resolved_subnet: OnceCell::new(),
             }),
         }
@@ -333,8 +338,7 @@ impl CreateOperation {
         &self,
         subnet: Principal,
     ) -> Result<Principal, CreateOperationError> {
-        let engine_registry = engine_canister_id()
-            .map_err(|message| CreateOperationError::EngineCanisterId { message })?;
+        let engine_registry = self.inner.engine_registry;
 
         let arg = GetEngineOperatorBySubnetArgs {
             subnet_id: Some(subnet),
@@ -646,11 +650,26 @@ impl CreateOperation {
                     let subnets = get_available_subnets(self.inner.calls.as_ref())
                         .await
                         .map_err(|e| e.to_string())?;
+                    if subnets.is_empty() {
+                        return Err("no available subnets found".to_string());
+                    }
 
-                    subnets
-                        .choose(&mut rand::rng())
-                        .copied()
-                        .ok_or_else(|| "no available subnets found".to_string())
+                    let chosen = self
+                        .inner
+                        .random
+                        .index_below(subnets.len())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    // `index_below` promises an index below the count, and the
+                    // count is not zero, so a miss is the seam's bug and says so
+                    // rather than posing as an empty list.
+                    chosen.and_then(|i| subnets.get(i).copied()).ok_or_else(|| {
+                        format!(
+                            "randomness chose {chosen:?}, which is not one of the {} \
+                             available subnets",
+                            subnets.len()
+                        )
+                    })
                 }
             })
             .await;

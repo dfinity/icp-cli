@@ -109,7 +109,9 @@ tempfile = "3"
 test-tag = "0.1"
 time = { version = "0.3.47", features = ["formatting", "macros", "parsing"] }
 tiny-bip39 = "2.0.0"
-tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread"] }
+# The most any crate here can have in common: `rt-multi-thread` is not
+# available on wasm, so the crates that need it ask for it themselves.
+tokio = { version = "1.45.0", features = ["macros"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }

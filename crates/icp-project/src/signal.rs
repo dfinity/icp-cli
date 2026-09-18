@@ -1,4 +1,5 @@
 /// Utilities for handling process termination signals across platforms.
+#[cfg(feature = "host")]
 use tokio::select;
 
 /// Waits for a stop signal (Ctrl+C, SIGTERM on Unix, or window close on Windows).
@@ -26,7 +27,7 @@ use tokio::select;
 /// # }
 /// # async fn do_work() {}
 /// ```
-#[cfg(unix)]
+#[cfg(all(unix, feature = "host"))]
 pub async fn stop_signal() {
     use tokio::signal::unix::{SignalKind, signal};
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
@@ -61,7 +62,7 @@ pub async fn stop_signal() {
 /// # }
 /// # async fn do_work() {}
 /// ```
-#[cfg(windows)]
+#[cfg(all(windows, feature = "host"))]
 pub async fn stop_signal() {
     use tokio::signal::windows::{ctrl_break, ctrl_close};
     let mut ctrl_break = ctrl_break().unwrap();
@@ -71,4 +72,14 @@ pub async fn stop_signal() {
         _ = ctrl_break.recv() => {},
         _ = ctrl_close.recv() => {},
     }
+}
+
+/// Waits for a stop signal — forever, where there is no process to signal.
+///
+/// A caller that races this against its own work is asking to be interrupted
+/// if anything interrupts the program. Nothing can, off a host, so the arm
+/// simply never fires.
+#[cfg(not(feature = "host"))]
+pub async fn stop_signal() {
+    std::future::pending().await
 }

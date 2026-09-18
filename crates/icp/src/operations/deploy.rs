@@ -36,6 +36,7 @@ use crate::operations::{
     build::{BuildManyError, build_many},
     candid_compat::{CandidCheckManyError, check_candid_compatibility_many},
     create::{CreateFunding, CreateOperation, CreateOperationError, CreateTarget},
+    customize::Customizations,
     install::{
         InstallManyError, ResolveInstallModeError, install_many, resolve_install_mode_and_status,
     },
@@ -124,6 +125,12 @@ pub enum DeployError {
         source: CanisterArgsToBytesError,
     },
 
+    #[snafu(display("Failed to encode the customized init args of canister '{canister}'"))]
+    CustomizedInstallArgs {
+        canister: String,
+        source: candid::Error,
+    },
+
     #[snafu(transparent)]
     CandidCheck { source: CandidCheckManyError },
 
@@ -194,6 +201,9 @@ pub struct DeployParams {
     /// mode turns out to be. Only ever set when a single canister is being
     /// deployed.
     pub args: Option<Vec<u8>>,
+    /// The answers `--customize` collected, empty when it was not passed.
+    /// Prompting for them is the command's job; applying them is this layer's.
+    pub customizations: Customizations,
 }
 
 /// What the deploy did, for the command to report.
@@ -291,7 +301,14 @@ pub async fn deploy(
         let (_, info) = env_canisters
             .get(name)
             .context(MissingCanisterInfoSnafu { canister: name })?;
-        Ok::<_, DeployError>((cid, info.clone()))
+        let mut info = info.clone();
+        // Ahead of both `set_binding_env_vars_many` and `sync_settings_many`,
+        // which each write these settings out: the answers travel with the
+        // canister rather than being applied twice.
+        params
+            .customizations
+            .overlay_env_vars(name, &mut info.settings);
+        Ok::<_, DeployError>((cid, info))
     }))
     .await?;
 
@@ -360,14 +377,28 @@ pub async fn deploy(
                 CanisterInstallMode::Install | CanisterInstallMode::Reinstall => init_args(),
             };
 
-            // Command-line arguments take priority over the manifest's.
-            let args_bytes = match (&params.args, manifest_args) {
-                (Some(bytes), _) => Some(bytes.clone()),
-                (None, Some((field, a))) => Some(a.to_bytes().context(InstallArgsSnafu {
+            // A customized value stands in wherever the manifest's `init_args`
+            // would be used — including where there are none at all, since an
+            // option can fill a whole argument — but not for the `upgrade_args`
+            // of an upgrade, which are a different value than the one the
+            // options describe.
+            let customized = match manifest_args {
+                Some((ArgsField::Upgrade, _)) => None,
+                _ => params.customizations.init_args.get(name),
+            };
+
+            // Command-line arguments take priority over both.
+            let args_bytes = match (&params.args, customized, manifest_args) {
+                (Some(bytes), _, _) => Some(bytes.clone()),
+                (None, Some(args), _) => Some(
+                    args.to_bytes()
+                        .context(CustomizedInstallArgsSnafu { canister: name })?,
+                ),
+                (None, None, Some((field, a))) => Some(a.to_bytes().context(InstallArgsSnafu {
                     canister: name,
                     field,
                 })?),
-                (None, None) => None,
+                (None, None, None) => None,
             };
 
             Ok::<_, DeployError>((name.clone(), cid, mode, status, args_bytes))

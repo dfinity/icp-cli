@@ -281,6 +281,323 @@ async fn deploy_no_create_conflicts_with_creation_flags() {
         .stderr(contains("--no-create").and(contains("--subnet")));
 }
 
+/// A workspace declares its customizations once, at its root, and addresses a
+/// member's canister by its project path. Under `--customize`, a path that names
+/// no member is a typo, so it fails outright — before the build, and with
+/// `--yes` too, which suppresses confirmations rather than these answers.
+/// Without the flag the file is inert, so the same typo is no obstacle.
+#[tokio::test]
+async fn deploy_rejects_unknown_customize_canister() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    let dep_dir = project_dir.join("services/open-crm");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+            dependencies:
+              - name: open-crm
+                path: ./services/open-crm
+                canisters: [backend]
+
+            {NETWORK_RANDOM_PORT}
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: services/open_crm:backend
+                field_path: ".admin"
+                candid_type: "principal"
+                description: "Administrator"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    for invocation in [
+        vec!["deploy", "--customize"],
+        vec!["deploy", "--customize", "--yes"],
+    ] {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(&invocation)
+            .assert()
+            .failure()
+            .stderr(
+                contains("services/open_crm:backend")
+                    .and(contains("not part of this workspace"))
+                    .and(contains("services/open-crm:backend")),
+            );
+    }
+
+    // Without `--customize` the file is never read, so the bad reference in it
+    // cannot be what stops the deploy. (It still fails, for want of a network.)
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy"])
+        .assert()
+        .failure()
+        .stderr(contains("not part of this workspace").not());
+}
+
+/// `--customize` asks for prompts a project without an `icp_customize.yaml`
+/// cannot offer. Deploying anyway would quietly ignore the flag.
+#[tokio::test]
+async fn deploy_customize_without_a_customize_file_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--customize"])
+        .assert()
+        .failure()
+        .stderr(contains("--customize").and(contains("icp_customize.yaml")));
+}
+
+/// Customization is opt-in: a plain `icp deploy` installs with the manifest's
+/// `init_args` as written and never reaches a prompt — which it could not answer
+/// here anyway, so a successful deploy is itself the evidence none fired.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_without_customize_flag_uses_manifest_init_args() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            init_args: "(opt (7 : nat8))"
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: my-canister
+                field_path: "0"
+                candid_type: "opt nat8"
+                description: "Initial value"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    // The manifest's 7 survived: nothing was substituted into it.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"7\")").trim());
+}
+
+/// `--args` replaces a canister's init args outright, so an init-arg option has
+/// nothing left to customize and must not be asked about — its answer would be
+/// thrown away. The deploy succeeding is the evidence: no prompt could be
+/// answered here, so reaching one would fail it.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_customize_skips_init_arg_options_when_args_are_given() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            init_args: "(opt (7 : nat8))"
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: my-canister
+                field_path: "0"
+                candid_type: "opt nat8"
+                description: "Initial value"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--customize",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "--args",
+            "(opt (9 : nat8))",
+        ])
+        .assert()
+        .success();
+
+    // The command line's 9, neither the manifest's 7 nor an answer.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"9\")").trim());
+}
+
+/// An `env` option is planned like any other and reaches the prompt, which names
+/// the variable it is asking about. There being no terminal to ask on is a
+/// failure, not a licence to fall back on the manifest's value — the point of the
+/// flag is that the deployed value is the answered one.
+///
+/// The variable is deliberately absent from the canister's settings: an
+/// environment variable needs no placeholder in the manifest to be customizable,
+/// unlike an init argument field, which has to exist to be substituted into.
+#[tokio::test]
+async fn deploy_customize_prompts_for_an_undeclared_environment_variable() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            settings:
+              environment_variables:
+                LOG_LEVEL: "debug"
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: my-canister
+                env: API_ENDPOINT
+                description: "Upstream API base URL"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--customize",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            // The description is printed before the prompt, and the failure
+            // names what was being asked for.
+            contains("Upstream API base URL")
+                .and(contains("environment variable \"API_ENDPOINT\""))
+                .and(contains("my-canister")),
+        );
+}
+
 #[tokio::test]
 async fn deploy_twice_should_succeed() {
     let ctx = TestContext::new();

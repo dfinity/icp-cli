@@ -1,17 +1,21 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use candid::Principal;
+use candid_parser::assist;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use ic_agent::{Agent, AgentError};
+use icp::operations::customize::{self, Customizations, InitArgsSource};
 use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
 use icp::parsers::CyclesAmount;
 use icp::{
+    CanisterArgs,
     context::{CanisterSelection, Context, EnvironmentSelection},
     identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
+use std::collections::HashMap;
 use tracing::info;
 
 use crate::options::EnvironmentOpt;
@@ -70,6 +74,15 @@ pub(crate) struct DeployArgs {
     #[arg(long, short)]
     pub(crate) yes: bool,
 
+    /// Prompt for the init argument fields and environment variables the
+    /// project's `icp_customize.yaml` declares, instead of deploying with the
+    /// manifest's values as written.
+    ///
+    /// Hidden until customization files are finished: the file format is still
+    /// moving, so nothing outside this repo should be written against it yet.
+    #[arg(long, hide = true)]
+    pub(crate) customize: bool,
+
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
 
@@ -114,6 +127,26 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         bail!("--args and --args-file can only be used when deploying a single canister");
     }
 
+    // Customization is opt-in: without `--customize`, the project's
+    // `icp_customize.yaml` is inert and every canister deploys with the
+    // manifest's `init_args` and `environment_variables` as written. `--yes` is
+    // unrelated — it suppresses confirmations, not the answers this collects.
+    //
+    // Asked before the deploy starts so the user fills them in upfront,
+    // uninterrupted by build output.
+    let customizations = match args.customize {
+        false => Customizations::default(),
+        true => {
+            resolve_customizations(
+                ctx,
+                &environment_selection,
+                &canisters,
+                args.args_opt.is_some(),
+            )
+            .await?
+        }
+    };
+
     let params = DeployParams {
         environment: environment_selection.clone(),
         identity: identity_selection.clone(),
@@ -125,6 +158,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         no_create: args.no_create,
         yes: args.yes,
         args: args.args_opt.resolve_bytes()?,
+        customizations,
     };
 
     // One reporter for the whole deploy: every phase and every canister lands
@@ -153,6 +187,81 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     print_canister_urls(ctx, &environment_selection, agent, &canisters, args.json).await?;
 
     Ok(())
+}
+
+/// Ask for every option the project's `icp_customize.yaml` declares, and return
+/// the answers for the deploy to apply.
+///
+/// A workspace declares its customizations once, in the root project's file:
+/// options address a member's canister through its store key, so the file is
+/// read from the workspace root even for a member-scoped deploy, and options
+/// outside this deploy's scope are dropped as the questions are settled on.
+async fn resolve_customizations(
+    ctx: &Context,
+    environment: &EnvironmentSelection,
+    cnames: &[String],
+    args_from_command_line: bool,
+) -> Result<Customizations, anyhow::Error> {
+    let project = ctx.project.load().await.map_err(|e| anyhow!(e))?;
+    let customize_path = project.dir.join(customize::CUSTOMIZE_FILE);
+    let workspace_canisters: Vec<&str> = project.canisters.keys().map(String::as_str).collect();
+    // Independent of whether the root declares customizations of its own: a
+    // vendored member's file goes unread either way, and a root with no file is
+    // exactly the case where its options would vanish unnoticed.
+    customize::warn_unread_member_customize_files(&project.dir, &workspace_canisters);
+
+    let manifest = customize::load_customize_manifest(&project.dir)
+        .map_err(|e| anyhow!(e))?
+        // `--customize` asked for prompts this project does not declare.
+        // Deploying with the manifest's args regardless would ignore the flag.
+        .ok_or_else(|| {
+            anyhow!(
+                "`--customize` was passed, but there is no `{}` at '{}'",
+                customize::CUSTOMIZE_FILE,
+                project.dir
+            )
+        })?;
+
+    // Validate against the whole workspace, not just this deploy's canisters: a
+    // mistyped project path must not pass as an option for something else's
+    // canister.
+    customize::validate_canister_refs(&manifest, &workspace_canisters, &customize_path)
+        .map_err(|e| anyhow!(e))?;
+
+    let env = ctx.get_environment(environment).await?;
+    let manifest_init_args: HashMap<String, Option<CanisterArgs>> = cnames
+        .iter()
+        .map(|name| {
+            let init_args = env
+                .get_canister_info(name)
+                .ok()
+                .and_then(|(_, info)| info.init_args.clone());
+            (name.clone(), init_args)
+        })
+        .collect();
+    let init_args = match args_from_command_line {
+        true => InitArgsSource::CommandLine,
+        false => InitArgsSource::Manifest(&manifest_init_args),
+    };
+
+    let plan = customize::plan_customizations(&manifest, cnames, init_args, &customize_path)
+        .map_err(|e| anyhow!(e))?;
+
+    // One question per option, in the order the file lists them. An option
+    // naming several canisters is asked once and its answer applied to each, so
+    // the questions cannot be grouped by canister — the file's order is the
+    // author's to arrange.
+    plan.resolve(|prompt| {
+        eprintln!("[{}] {}", prompt.canisters, prompt.description);
+        let context = assist::Context::new(prompt.type_env.clone());
+        let answered = assist::input_args(&context, std::slice::from_ref(&prompt.ty))?;
+        Ok(answered
+            .args
+            .into_iter()
+            .next()
+            .expect("input_args returns one value per type element"))
+    })
+    .map_err(|e| anyhow!(e))
 }
 
 /// Checks whether a canister speaks the HTTP gateway protocol — i.e. exposes an

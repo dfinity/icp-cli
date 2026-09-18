@@ -34,7 +34,13 @@ use icp_events::StepReporter;
 
 use crate::operations::task::Reporter;
 
-use crate::operations::build::{BuildManyError, build_many};
+use crate::operations::{
+    build::{BuildManyError, build_many},
+    customize::{
+        CUSTOMIZE_FILE, CustomizeManifest, UnknownCanisterError, validate_canister_refs,
+        warn_unread_member_customize_files,
+    },
+};
 
 #[derive(Debug, Snafu)]
 pub enum BundleError {
@@ -130,6 +136,18 @@ pub enum BundleError {
         variable: String,
         source: fs::IoError,
     },
+
+    #[snafu(display("failed to read '{path}'"))]
+    ReadCustomize { path: PathBuf, source: fs::IoError },
+
+    #[snafu(display("failed to parse '{path}'"))]
+    ParseCustomize {
+        path: PathBuf,
+        source: serde_yaml::Error,
+    },
+
+    #[snafu(transparent)]
+    CustomizeCanister { source: UnknownCanisterError },
 
     #[snafu(display("failed to serialize bundle manifest"))]
     SerializeManifest { source: serde_yaml::Error },
@@ -488,9 +506,42 @@ pub async fn create_bundle(
 
     let app_manifest = prepare_app_manifest(project_dir, &canonical_project_dir)?;
 
+    // A workspace declares its customizations once, in the root project's file,
+    // whose options address a member's canister by store key. Both the file and
+    // the store keys land in the archive unchanged — an instance sits at its
+    // workspace-relative directory — so the bundle's prompts resolve after
+    // extraction exactly as they do here. Check them now rather than leaving a
+    // typo to surface on whoever deploys the bundle.
+    let customize_path = project_dir.join(CUSTOMIZE_FILE);
+    let customize_bytes = match fs::read(&customize_path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(source) => {
+            return Err(BundleError::ReadCustomize {
+                path: customize_path,
+                source,
+            });
+        }
+    };
+    let canister_names: Vec<&str> = canisters
+        .iter()
+        .map(|(_, canister)| canister.name.as_str())
+        .collect();
+    // Independent of whether the root declares customizations of its own: a
+    // vendored member's file is left out of the archive either way.
+    warn_unread_member_customize_files(project_dir, &canister_names);
+    if let Some(bytes) = &customize_bytes {
+        let manifest: CustomizeManifest =
+            serde_yaml::from_slice(bytes).context(ParseCustomizeSnafu {
+                path: &customize_path,
+            })?;
+        validate_canister_refs(&manifest, &canister_names, &customize_path)?;
+    }
+
     write_archive(
         output,
         &manifests,
+        customize_bytes.as_deref(),
         &bundle_artifacts,
         &args_files,
         app_manifest.as_ref(),
@@ -1396,6 +1447,7 @@ impl<W: Write> ArchiveWriter<W> {
 fn write_archive(
     output: &Path,
     manifests: &[InstanceManifest],
+    customize_bytes: Option<&[u8]>,
     artifacts: &BundleArtifacts,
     args_files: &[ArgsFile],
     app_manifest: Option<&AppManifest>,
@@ -1406,6 +1458,7 @@ fn write_archive(
         .chain(app_manifest.iter().flat_map(|app| {
             std::iter::once(APP_MANIFEST).chain(app.images.iter().map(|i| i.archive_path.as_str()))
         }))
+        .chain(customize_bytes.map(|_| CUSTOMIZE_FILE))
         .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
         .chain(args_files.iter().map(|f| f.archive_path.as_str()))
         .chain(
@@ -1447,6 +1500,10 @@ fn write_archive(
             })?;
             archive.bytes(&shot.archive_path, &data)?;
         }
+    }
+
+    if let Some(customize_bytes) = customize_bytes {
+        archive.bytes(CUSTOMIZE_FILE, customize_bytes)?;
     }
 
     for nb in &artifacts.wasms {

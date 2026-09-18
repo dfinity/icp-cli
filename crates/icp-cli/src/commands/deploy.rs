@@ -89,7 +89,10 @@ pub(crate) struct DeployArgs {
     /// Prompt for the init argument fields and environment variables the
     /// project's `icp_customize.yaml` declares, instead of deploying with the
     /// manifest's values as written.
-    #[arg(long)]
+    ///
+    /// Hidden until customization files are finished: the file format is still
+    /// moving, so nothing outside this repo should be written against it yet.
+    #[arg(long, hide = true)]
     pub(crate) customize: bool,
 
     #[command(flatten)]

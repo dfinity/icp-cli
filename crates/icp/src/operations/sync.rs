@@ -2,7 +2,6 @@ use crate::{
     Canister,
     canister::sync::{Params, Synchronize, SynchronizeError},
     network::NetworkUrls,
-    package::PackageCache,
     prelude::{Path, PathBuf},
 };
 use candid::Principal;
@@ -37,7 +36,6 @@ async fn sync_canister(
     canister_ids: &BTreeMap<String, Principal>,
     proxy: Option<Principal>,
     task: &TaskReporter,
-    pkg_cache: &PackageCache,
 ) -> Result<Vec<String>, SynchronizeError> {
     let step_count = canister_info.sync.steps.len();
     let mut stderr_lines = Vec::new();
@@ -61,7 +59,6 @@ async fn sync_canister(
                 },
                 agent,
                 &reporter,
-                pkg_cache,
             )
             .await;
 
@@ -98,7 +95,6 @@ pub async fn sync_many(
     urls: NetworkUrls,
     canister_ids: BTreeMap<String, Principal>,
     proxy: Option<Principal>,
-    pkg_cache: &PackageCache,
     reporter: &Reporter,
 ) -> Result<(), SyncOperationError> {
     let mut futs = FuturesOrdered::new();
@@ -129,7 +125,6 @@ pub async fn sync_many(
                     &canister_ids,
                     proxy,
                     &task,
-                    pkg_cache,
                 )
                 .await;
 

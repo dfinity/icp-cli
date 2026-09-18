@@ -2,11 +2,11 @@ use std::io::stdout;
 
 use candid::Principal;
 use clap::Args;
-use icp::identity::manifest::{IdentityDefaults, IdentityList};
+use icp_app::identity::manifest::{IdentityDefaults, IdentityList};
 use itertools::Itertools;
 use serde::Serialize;
 
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// List the identities
 #[derive(Debug, Args)]

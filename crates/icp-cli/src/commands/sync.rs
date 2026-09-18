@@ -4,11 +4,9 @@ use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
 use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
-use icp::identity::IdentitySelection;
-use icp::{
-    context::Context,
-    host::{CanisterSelection, EnvironmentSelection},
-};
+use icp::host::{CanisterSelection, EnvironmentSelection};
+use icp_app::context::Context;
+use icp_app::identity::IdentitySelection;
 use std::collections::BTreeMap;
 use tracing::info;
 
@@ -132,7 +130,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .into_iter()
         .collect();
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     let project_dir = ctx.host.project.load().await?.dir;
     let urls = ctx.host.network.urls(&env.network).await?;
 
@@ -147,7 +144,6 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             urls,
             canister_ids,
             args.proxy,
-            &pkg_cache,
             reporter,
         )
         .await

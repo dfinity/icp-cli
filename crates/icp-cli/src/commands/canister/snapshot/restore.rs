@@ -4,7 +4,7 @@ use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, LoadCanisterSnapshotArgs,
 };
-use icp::context::Context;
+use icp_app::context::Context;
 use tracing::info;
 
 use super::SnapshotId;

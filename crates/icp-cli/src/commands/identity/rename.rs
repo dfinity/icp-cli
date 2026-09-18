@@ -1,7 +1,7 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::Context;
-use icp::identity::key::rename_identity;
+use icp_app::context::Context;
+use icp_app::identity::key::rename_identity;
 use tracing::info;
 
 /// Rename an identity

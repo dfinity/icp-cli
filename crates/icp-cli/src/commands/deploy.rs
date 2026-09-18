@@ -7,11 +7,10 @@ use icp::operations::deploy::{DeployParams, DeployReport, deploy, resolve_target
 use icp::parsers::CyclesAmount;
 use icp::{
     agent::LazyAgent,
-    context::Context,
     host::{CanisterSelection, EnvironmentSelection},
-    identity::IdentitySelection,
     network::Configuration as NetworkConfiguration,
 };
+use icp_app::{context::Context, identity::IdentitySelection};
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use serde::Serialize;
 use tracing::info;
@@ -124,7 +123,6 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // creates it.
     let (identity, environment) = (&identity_selection, &environment_selection);
     let agent = LazyAgent::new(move || ctx.get_agent_for_env(identity, environment));
-    let pkg_cache = ctx.dirs.package_cache()?;
 
     let params = DeployParams {
         environment: environment_selection.clone(),
@@ -143,15 +141,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
     // command having to await it phase by phase.
     let mut report = DeployReport::default();
     let result = rendered(ctx.debug, async |reporter| {
-        deploy(
-            &ctx.host,
-            &agent,
-            &pkg_cache,
-            &params,
-            reporter,
-            &mut report,
-        )
-        .await
+        deploy(&ctx.host, &agent, &params, reporter, &mut report).await
     })
     .await;
 
@@ -249,7 +239,7 @@ async fn print_canister_urls(
     canister_names: &[String],
     json: bool,
 ) -> Result<(), anyhow::Error> {
-    use icp::network::custom_domains::{canister_gateway_url, gateway_domain};
+    use icp_app::network::custom_domains::{canister_gateway_url, gateway_domain};
 
     let env = ctx.host.get_environment(environment_selection).await?;
 
@@ -415,7 +405,7 @@ async fn get_candid_ui_id(
     match &env.network.configuration {
         NetworkConfiguration::Managed { managed: _ } => {
             // Try to get the candid UI ID from the network descriptor
-            let nd = ctx.host.network.get_network_directory(&env.network).ok()?;
+            let nd = ctx.network_dirs.get_network_directory(&env.network).ok()?;
             if let Ok(Some(desc)) = nd.load_network_descriptor().await
                 && let Some(candid_ui) = desc.candid_ui_canister_id
             {

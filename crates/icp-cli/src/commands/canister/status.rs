@@ -5,8 +5,10 @@ use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
     canister::Visibility,
-    context::{Context, NetworkSelection},
     host::{CanisterSelection, EnvironmentSelection},
+};
+use icp_app::{
+    context::{Context, NetworkSelection},
     identity::IdentitySelection,
 };
 use serde::Serialize;

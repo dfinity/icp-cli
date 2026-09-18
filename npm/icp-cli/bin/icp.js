@@ -36,8 +36,6 @@ function findBinary() {
     path.join(__dirname, '..', '..', '..', packageName, 'bin', binaryName),
     // When installed locally
     path.join(__dirname, '..', 'node_modules', packageName, 'bin', binaryName),
-    // Alternative local path
-    path.join(process.cwd(), 'node_modules', packageName, 'bin', binaryName)
   ];
 
   for (const binaryPath of possiblePaths) {

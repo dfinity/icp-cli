@@ -1,6 +1,8 @@
 use indoc::formatdoc;
 #[cfg(unix)]
 use indoc::indoc;
+#[cfg(unix)]
+use predicates::prelude::PredicateBooleanExt;
 use predicates::{
     ord::eq,
     str::{PredicateStrExt, contains},
@@ -404,6 +406,249 @@ async fn canister_install_with_environment_init_args_override() {
         .stdout(eq("(\"200\")").trim());
 }
 
+/// A canister that declares `upgrade_args` is installed with its `init_args` and
+/// upgraded with its `upgrade_args`.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_upgrade_uses_upgrade_args() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    ctx.copy_asset_dir("echo_install_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 1 : opt nat8)"
+            upgrade_args: "(opt 77 : opt nat8)"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // First deploy installs, so the init args are used.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"1\")").trim());
+
+    // Second deploy upgrades, so the upgrade args are used.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"77\")").trim());
+
+    // A malformed value is reported against `upgrade_args`, the field it was
+    // written under, rather than against the `init_args` this canister also has.
+    let broken = pm.replace(
+        r#"upgrade_args: "(opt 77 : opt nat8)""#,
+        r#"upgrade_args: "(oops""#,
+    );
+    assert_ne!(
+        broken, pm,
+        "the upgrade_args line should have been replaced"
+    );
+    write_string(&project_dir.join("icp.yaml"), &broken).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "my-canister",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Failed to encode the upgrade_args of canister 'my-canister'",
+        ));
+}
+
+/// A canister that declares no `upgrade_args` is upgraded with its `init_args`,
+/// the behavior that predates the field.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_upgrade_without_upgrade_args_reuses_init_args() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    ctx.copy_asset_dir("echo_install_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 1 : opt nat8)"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    for _ in 0..2 {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "deploy",
+                "my-canister",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success();
+    }
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"1\")").trim());
+}
+
+/// An environment's `upgrade_args` override is what an upgrade in that
+/// environment passes.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_upgrade_with_environment_upgrade_args_override() {
+    let ctx = TestContext::new();
+
+    let project_dir = ctx.create_project_dir("icp");
+    ctx.copy_asset_dir("echo_install_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+            init_args: "(opt 1 : opt nat8)"
+            upgrade_args: "(opt 77 : opt nat8)"
+
+        {NETWORK_RANDOM_PORT}
+
+        environments:
+          - name: random-environment
+            network: random-network
+            upgrade_args:
+              my-canister: "(opt 200 : opt nat8)"
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    for _ in 0..2 {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "deploy",
+                "my-canister",
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success();
+    }
+
+    // The environment override, not the canister's own `upgrade_args`.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"200\")").trim());
+}
+
 #[cfg(unix)] // moc
 #[tokio::test]
 async fn canister_install_with_invalid_init_args() {
@@ -457,7 +702,12 @@ async fn canister_install_with_invalid_init_args() {
         ])
         .assert()
         .failure()
-        .stderr(contains("failed to parse Candid init args"));
+        // The failing field is named, so a canister that also declares
+        // `upgrade_args` does not send the user to the wrong one.
+        .stderr(
+            contains("Failed to encode the init_args of canister 'my-canister'")
+                .and(contains("failed to parse Candid args")),
+        );
 }
 
 #[tokio::test]

@@ -5,7 +5,8 @@ use clap::Args;
 use icp::context::Context;
 use serde::Serialize;
 
-use crate::{commands::args, operations::misc::fetch_canister_metadata};
+use crate::commands::args;
+use icp::operations::misc::fetch_canister_metadata;
 
 /// Read a metadata section from a canister
 #[derive(Debug, Args)]

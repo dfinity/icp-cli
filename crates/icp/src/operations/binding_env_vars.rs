@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, HashSet};
 
+use crate::Canister;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::{Agent, export::Principal};
 use ic_management_canister_types::{CanisterSettings, EnvironmentVariable, UpdateSettingsArgs};
-use icp::Canister;
+use icp_events::TaskOutcome;
+
+use crate::operations::task::{Reporter, Task};
 use snafu::Snafu;
 use tracing::error;
-
-use crate::progress::{ProgressManager, ProgressManagerSettings};
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
@@ -30,14 +31,7 @@ pub struct SetBindingEnvVarsManyError {
     names: Vec<String>,
 }
 
-/// Holds error information from a failed environment variable update operation
-struct BindingEnvVarsFailure {
-    canister_name: String,
-    canister_id: Principal,
-    error: BindingEnvVarsOperationError,
-}
-
-pub(crate) async fn set_env_vars_for_canister(
+pub async fn set_env_vars_for_canister(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: &Principal,
@@ -77,14 +71,14 @@ pub(crate) async fn set_env_vars_for_canister(
     Ok(())
 }
 
-/// Orchestrates setting environment variables for multiple canisters with progress tracking
-pub(crate) async fn set_binding_env_vars_many(
+/// Orchestrates setting environment variables for multiple canisters concurrently.
+pub async fn set_binding_env_vars_many(
     agent: Agent,
     proxy: Option<Principal>,
     environment_name: &str,
     target_canisters: Vec<(Principal, Canister)>,
     canister_list: BTreeMap<String, Principal>,
-    debug: bool,
+    reporter: &Reporter,
 ) -> Result<(), SetBindingEnvVarsManyError> {
     // Check that all the canisters in this environment have an id
     // We need to have all the ids to generate environment variables
@@ -117,11 +111,9 @@ pub(crate) async fn set_binding_env_vars_many(
     }
 
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (cid, info) in target_canisters {
-        let pb = progress_manager.create_progress_bar(&info.name);
-        let canister_name = info.name.clone();
+        let task = reporter.task(Task::update_environment_variables(info.name.clone(), cid));
 
         // Each canister receives only the ids it is wired to (its own project's
         // canisters by their local names, plus any declared dependencies under
@@ -141,59 +133,30 @@ pub(crate) async fn set_binding_env_vars_many(
             })
             .collect();
 
-        let settings_fn = {
-            let agent = agent.clone();
-            let pb = pb.clone();
-
-            async move {
-                pb.set_message("Updating environment variables...");
-                set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await
-            }
-        };
-
+        let agent = agent.clone();
         futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                settings_fn,
-                || "Environment variables updated successfully".to_string(),
-                |err| format!("Failed to update environment variables: {err}"),
-            )
-            .await;
+            let result = set_env_vars_for_canister(&agent, proxy, &cid, &info, &binding_vars).await;
 
-            // Map error to include canister context for deferred printing
-            result.map_err(|error| BindingEnvVarsFailure {
-                canister_name,
-                canister_id: cid,
-                error,
-            })
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| info.name.clone())
         });
     }
 
-    // Consume the set of futures and collect errors
-    let mut errors: Vec<BindingEnvVarsFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        // Print all errors in batch
-        for failure in &errors {
-            error!(
-                "----- Failed to update environment variables for canister '{}': {} -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!("'{}'", failure.error);
-        }
-
-        return SetBindingEnvVarsManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return SetBindingEnvVarsManySnafu { names: failed }.fail();
     }
 
     Ok(())

@@ -21,7 +21,8 @@ pub enum ArgsFormat {
     Bin,
 }
 
-/// Init args as specified in a manifest file (canister.yaml or icp.yaml).
+/// Install args as specified in a manifest file (canister.yaml or icp.yaml) —
+/// the value of `init_args` or of `upgrade_args`.
 ///
 /// A plain string is shorthand for inline Candid:
 /// ```yaml
@@ -41,7 +42,7 @@ pub enum ArgsFormat {
 /// ```
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
-pub enum ManifestInitArgs {
+pub enum ManifestArgs {
     /// Plain string shorthand — treated as Candid.
     String(String),
     /// File reference with explicit format.
@@ -72,7 +73,12 @@ pub struct CanisterManifest {
 
     /// Initialization arguments passed to the canister during installation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub init_args: Option<ManifestInitArgs>,
+    pub init_args: Option<ManifestArgs>,
+
+    /// Arguments passed to the canister when it is upgraded. When absent, an
+    /// upgrade passes `init_args` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_args: Option<ManifestArgs>,
 
     #[serde(flatten)]
     pub instructions: Instructions,
@@ -109,6 +115,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 let name_key = serde_yaml::Value::String("name".to_string());
                 let settings_key = serde_yaml::Value::String("settings".to_string());
                 let init_args_key = serde_yaml::Value::String("init_args".to_string());
+                let upgrade_args_key = serde_yaml::Value::String("upgrade_args".to_string());
                 let recipe_key = serde_yaml::Value::String("recipe".to_string());
                 let build_key = serde_yaml::Value::String("build".to_string());
                 let sync_key = serde_yaml::Value::String("sync".to_string());
@@ -135,11 +142,23 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                     };
 
                 // Extract init_args (optional)
-                let init_args: Option<ManifestInitArgs> =
+                let init_args: Option<ManifestArgs> =
                     if let Some(init_args_value) = temp_map.remove(&init_args_key) {
                         Some(serde_yaml::from_value(init_args_value).map_err(|e| {
                             Error::custom(format!(
                                 "Failed to parse init_args for canister `{name}`: {e}"
+                            ))
+                        })?)
+                    } else {
+                        None
+                    };
+
+                // Extract upgrade_args (optional)
+                let upgrade_args: Option<ManifestArgs> =
+                    if let Some(upgrade_args_value) = temp_map.remove(&upgrade_args_key) {
+                        Some(serde_yaml::from_value(upgrade_args_value).map_err(|e| {
+                            Error::custom(format!(
+                                "Failed to parse upgrade_args for canister `{name}`: {e}"
                             ))
                         })?)
                     } else {
@@ -151,29 +170,23 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                 //
                 let has_recipe = temp_map.contains_key(&recipe_key);
                 let has_build = temp_map.contains_key(&build_key);
-                let has_sync = temp_map.contains_key(&sync_key);
 
-                match (has_recipe, has_build, has_sync) {
-                    (true, true, _) => {
+                match (has_recipe, has_build) {
+                    (true, true) => {
                         // Can't have a recipe and a build
                         Err(Error::custom(format!(
                             "Canister {name} cannot have both a `recipe` and a `build` section"
                         )))
                     }
-                    (true, false, true) => {
-                        // Can't have a recipe and a sync sections
-                        Err(Error::custom(format!(
-                            "Canister {name} cannot have both a `recipe` and a `sync` section"
-                        )))
-                    }
-                    (false, false, _) => {
+                    (false, false) => {
                         // We must have recipe or build
                         Err(Error::custom(format!(
                             "Canister {name} must have a `recipe` or a `build` section"
                         )))
                     }
-                    (true, false, false) => {
-                        // We have a a recipe
+                    (true, false) => {
+                        // We have a recipe, optionally with sync steps of its
+                        // own to run after the recipe's
                         let recipe: Recipe = serde_yaml::from_value(
                             temp_map
                                 .remove(&recipe_key)
@@ -183,6 +196,19 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                         .map_err(|e| {
                             Error::custom(format!("Canister {name} failed to parse recipe: {}", e))
                         })?;
+
+                        // An explicit `sync: null` deserializes to `None`, as
+                        // it does in the build/sync variant
+                        let sync: Option<SyncSteps> =
+                            if let Some(sync_value) = temp_map.remove(&sync_key) {
+                                serde_yaml::from_value(sync_value).map_err(|e| {
+                                    Error::custom(format!(
+                                        "Canister {name} failed to parse sync instructions: {e}"
+                                    ))
+                                })?
+                            } else {
+                                None
+                            };
 
                         if !temp_map.is_empty() {
                             return Err(Error::custom(format!(
@@ -194,10 +220,11 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             name,
                             settings,
                             init_args,
-                            instructions: Instructions::Recipe { recipe },
+                            upgrade_args,
+                            instructions: Instructions::Recipe { recipe, sync },
                         })
                     }
-                    (false, true, _) => {
+                    (false, true) => {
                         // We have a build section
 
                         // Try to deserialize as BuildSync variant
@@ -222,6 +249,7 @@ impl<'de> Deserialize<'de> for CanisterManifest {
                             name,
                             settings,
                             init_args,
+                            upgrade_args,
                             instructions: Instructions::BuildSync {
                                 build: helper.build,
                                 sync: helper.sync,
@@ -241,6 +269,10 @@ impl<'de> Deserialize<'de> for CanisterManifest {
 pub enum Instructions {
     Recipe {
         recipe: Recipe,
+
+        /// Additional sync steps, run after the ones the recipe renders.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sync: Option<SyncSteps>,
     },
 
     BuildSync {
@@ -317,8 +349,9 @@ pub enum SyncStep {
 
     /// Represents a sync step executed by a WebAssembly plugin running inside
     /// a wasmtime WASI sandbox.  The plugin can call canister methods on exactly
-    /// the canister being synced and read files from the declared `dirs`.
-    Plugin(adapter::plugin::Adapter),
+    /// the canister being synced and read the paths declared in `files`.
+    // Boxed: a plugin step carries far more configuration than a script one.
+    Plugin(Box<adapter::plugin::Adapter>),
 }
 
 impl<'de> Deserialize<'de> for SyncStep {
@@ -332,7 +365,7 @@ impl<'de> Deserialize<'de> for SyncStep {
         #[serde(tag = "type", rename_all = "lowercase")]
         enum Helper {
             Script(adapter::script::Adapter),
-            Plugin(adapter::plugin::Adapter),
+            Plugin(Box<adapter::plugin::Adapter>),
             Assets(serde::de::IgnoredAny),
         }
 
@@ -383,6 +416,7 @@ mod tests {
     use crate::{
         manifest::{
             adapter::{
+                plugin,
                 prebuilt::{self, RemoteSource, SourceField},
                 script,
             },
@@ -600,12 +634,14 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -626,6 +662,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Url("http://my-recipe".to_string()),
@@ -634,7 +671,8 @@ mod tests {
                             ("key-2".to_string(), "value-2".into())
                         ]),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -653,6 +691,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::Registry {
@@ -665,7 +704,8 @@ mod tests {
                             "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                                 .to_string()
                         ),
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
@@ -690,15 +730,99 @@ mod tests {
                     ..Default::default()
                 },
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::Recipe {
                     recipe: Recipe {
                         recipe_type: RecipeType::File("my-recipe".to_string()),
                         configuration: HashMap::new(),
                         sha256: None,
-                    }
+                    },
+                    sync: None,
                 },
             },
         );
+    }
+
+    #[test]
+    fn recipe_with_sync() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                    name: my-canister
+                    recipe:
+                      type: file://my-recipe
+                    sync:
+                      steps:
+                        - type: script
+                          command: echo hi
+                "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: ManifestSettings::default(),
+                init_args: None,
+                upgrade_args: None,
+                instructions: Instructions::Recipe {
+                    recipe: Recipe {
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
+                        configuration: HashMap::new(),
+                        sha256: None,
+                    },
+                    sync: Some(SyncSteps {
+                        steps: vec![SyncStep::Script(script::Adapter {
+                            command: script::CommandField::Command("echo hi".to_string()),
+                        })]
+                    }),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn recipe_with_null_sync() {
+        assert_eq!(
+            validate_canister_yaml(indoc! {r#"
+                    name: my-canister
+                    recipe:
+                      type: file://my-recipe
+                    sync:
+                "#}),
+            CanisterManifest {
+                name: "my-canister".to_string(),
+                settings: ManifestSettings::default(),
+                init_args: None,
+                upgrade_args: None,
+                instructions: Instructions::Recipe {
+                    recipe: Recipe {
+                        recipe_type: RecipeType::File("my-recipe".to_string()),
+                        configuration: HashMap::new(),
+                        sha256: None,
+                    },
+                    sync: None,
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn recipe_with_invalid_sync() {
+        match serde_yaml::from_str::<CanisterManifest>(indoc! {r#"
+                name: my-canister
+                recipe:
+                  type: file://my-recipe
+                sync:
+                  steps:
+                    - type: nonsense
+        "#})
+        {
+            Ok(_) => panic!("an unknown sync step type should not deserialize"),
+            Err(err) => {
+                let err_msg = format!("{err}");
+                if !err_msg.contains("Canister my-canister failed to parse sync instructions") {
+                    panic!(
+                        "expected 'Canister my-canister failed to parse sync instructions' error but got: {err}"
+                    );
+                }
+            }
+        };
     }
 
     #[test]
@@ -716,6 +840,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
@@ -778,6 +903,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Script(script::Adapter {
@@ -785,16 +911,18 @@ mod tests {
                         })]
                     },
                     sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Plugin(
-                            crate::manifest::adapter::plugin::Adapter {
-                                source: prebuilt::SourceField::Local(prebuilt::LocalSource {
-                                    path: "./plugins/my-sync.wasm".into(),
-                                }),
-                                sha256: None,
-                                dirs: Some(vec!["assets/seed-data/".to_string()]),
-                                files: None,
-                            }
-                        )]
+                        steps: vec![SyncStep::Plugin(Box::new(plugin::Adapter {
+                            source: prebuilt::SourceField::Local(prebuilt::LocalSource {
+                                path: "./plugins/my-sync.wasm".into(),
+                            }),
+                            sha256: None,
+                            dirs: Some(plugin::NamedPaths::List(vec![
+                                "assets/seed-data/".to_string()
+                            ])),
+                            files: None,
+                            fields: None,
+                            canisters: None,
+                        }))]
                     }),
                 },
             },
@@ -820,6 +948,7 @@ mod tests {
                 name: "my-canister".to_string(),
                 settings: ManifestSettings::default(),
                 init_args: None,
+                upgrade_args: None,
                 instructions: Instructions::BuildSync {
                     build: BuildSteps {
                         steps: vec![BuildStep::Script(script::Adapter {
@@ -827,7 +956,7 @@ mod tests {
                         })]
                     },
                     sync: Some(SyncSteps {
-                        steps: vec![SyncStep::Plugin(crate::manifest::adapter::plugin::Adapter {
+                        steps: vec![SyncStep::Plugin(Box::new(plugin::Adapter {
                             source: prebuilt::SourceField::Remote(prebuilt::RemoteSource {
                                 url: "https://example.com/plugins/migrate-v2.wasm".to_string(),
                             }),
@@ -837,7 +966,9 @@ mod tests {
                             ),
                             dirs: None,
                             files: None,
-                        })]
+                            fields: None,
+                            canisters: None,
+                        }))]
                     }),
                 },
             },
@@ -917,14 +1048,14 @@ mod tests {
 
     #[test]
     fn manifest_init_args_path() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             path: ./args.bin
             format: bin
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Path {
+            ManifestArgs::Path {
                 path: "./args.bin".to_string(),
                 format: ArgsFormat::Bin,
             }
@@ -933,14 +1064,14 @@ mod tests {
 
     #[test]
     fn manifest_init_args_value() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             value: "(42)"
             format: candid
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Value {
+            ManifestArgs::Value {
                 value: "(42)".to_string(),
                 format: ArgsFormat::Candid,
             }
@@ -949,13 +1080,13 @@ mod tests {
 
     #[test]
     fn manifest_init_args_value_default_format() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(indoc! {r#"
+        let ia: ManifestArgs = serde_yaml::from_str(indoc! {r#"
             value: "(42)"
         "#})
         .unwrap();
         assert_eq!(
             ia,
-            ManifestInitArgs::Value {
+            ManifestArgs::Value {
                 value: "(42)".to_string(),
                 format: ArgsFormat::Candid,
             }
@@ -964,7 +1095,7 @@ mod tests {
 
     #[test]
     fn manifest_init_args_inline_string() {
-        let ia: ManifestInitArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
-        assert_eq!(ia, ManifestInitArgs::String("(42)".to_string()));
+        let ia: ManifestArgs = serde_yaml::from_str(r#""(42)""#).unwrap();
+        assert_eq!(ia, ManifestArgs::String("(42)".to_string()));
     }
 }

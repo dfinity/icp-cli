@@ -332,3 +332,67 @@ fn recipe_local_file_valid_checksum() {
         .assert()
         .success();
 }
+
+/// A canister may declare sync steps alongside a recipe; they land after the
+/// steps the recipe renders.
+#[test]
+fn recipe_with_manifest_sync_steps() {
+    let ctx = TestContext::new();
+
+    // Setup project
+    let project_dir = ctx.create_project_dir("icp");
+
+    // Recipe rendering a sync step of its own
+    write_string(
+        &project_dir.join("recipe.hbs"), // path
+        indoc! {r#"
+            build:
+              steps:
+                - type: script
+                  command: echo "test" > "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo from-recipe
+        "#}, // contents
+    )
+    .expect("failed to write recipe template");
+
+    let pm = indoc! {"
+        canisters:
+          - name: my-canister
+            recipe:
+              type: file://./recipe.hbs
+            sync:
+              steps:
+                - type: script
+                  command: echo from-manifest
+    "};
+
+    write_string(
+        &project_dir.join("icp.yaml"), // path
+        pm,                            // contents
+    )
+    .expect("failed to write project manifest");
+
+    // The effective configuration holds both steps, the recipe's first
+    let assert = ctx
+        .icp()
+        .current_dir(project_dir)
+        .args(["project", "show"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone())
+        .expect("`icp project show` output is not UTF-8");
+
+    let recipe_at = stdout
+        .find("echo from-recipe")
+        .unwrap_or_else(|| panic!("recipe's sync step missing from:\n{stdout}"));
+    let manifest_at = stdout
+        .find("echo from-manifest")
+        .unwrap_or_else(|| panic!("manifest's sync step missing from:\n{stdout}"));
+    assert!(
+        recipe_at < manifest_at,
+        "the manifest's sync step should follow the recipe's, got:\n{stdout}"
+    );
+}

@@ -19,7 +19,7 @@ pub async fn fetch_canister_metadata(
 }
 
 /// Format a nanosecond timestamp as a human-readable UTC datetime string.
-pub(crate) fn format_timestamp(nanos: u64) -> String {
+pub fn format_timestamp(nanos: u64) -> String {
     let Ok(datetime) = OffsetDateTime::from_unix_timestamp_nanos(nanos as i128) else {
         return nanos.to_string();
     };

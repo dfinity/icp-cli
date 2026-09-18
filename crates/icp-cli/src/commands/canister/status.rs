@@ -1,11 +1,10 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use ic_agent::{Agent, AgentError, export::Principal};
-use ic_management_canister_types::{
-    CanisterIdRecord, CanisterStatusResult, EnvironmentVariable, LogVisibility,
-};
+use ic_agent::{Agent, AgentError, agent::RejectResponse, export::Principal};
+use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult, EnvironmentVariable};
 use icp::{
+    canister::Visibility,
     context::{CanisterSelection, Context, EnvironmentSelection, NetworkSelection},
     identity::IdentitySelection,
 };
@@ -13,21 +12,45 @@ use serde::Serialize;
 use std::fmt::Write;
 use tracing::debug;
 
+use icp::operations::{proxy::UpdateOrProxyError, proxy_management};
+
 use crate::{
-    commands::args,
-    operations::{proxy::UpdateOrProxyError, proxy_management},
+    commands::{
+        args,
+        canister::{format_controllers, format_visibility},
+    },
     options,
 };
 
 /// Error code returned by the replica if the target canister is not found
 const E_CANISTER_NOT_FOUND: &str = "IC0301";
-/// Error code returned by the replica if the caller is not a controller
-const E_NOT_A_CONTROLLER: &str = "IC0512";
+/// Error codes the replica returns when the caller may not read the status.
+///
+/// Which one comes back depends on the replica version and on whether the
+/// subnet has administrators: `IC0542` since status visibility was introduced,
+/// `IC0541` on subnets with administrators before that, and `IC0512` otherwise.
+const E_STATUS_ACCESS_DENIED: [&str; 3] = ["IC0512", "IC0541", "IC0542"];
+
+/// The reject carried by a direct update call, however it was delivered.
+///
+/// The replica checks who may read the status both when accepting the ingress
+/// message and again during execution, so the same denial arrives uncertified
+/// from the first and certified from the second.
+fn direct_call_reject(err: &UpdateOrProxyError) -> Option<&RejectResponse> {
+    match err {
+        UpdateOrProxyError::DirectUpdateCall {
+            source:
+                AgentError::CertifiedReject { reject, .. }
+                | AgentError::UncertifiedReject { reject, .. },
+        } => Some(reject),
+        _ => None,
+    }
+}
 
 /// Show the status of canister(s).
 ///
 /// By default this queries the status endpoint of the management canister.
-/// If the caller is not a controller, falls back on fetching public
+/// If the caller may not read the status, falls back on fetching public
 /// information from the state tree.
 #[derive(Debug, Args)]
 #[command(after_long_help = "\
@@ -268,18 +291,20 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                                 .expect("Failed to build canister status output"),
                         }
                     }
-                    Err(UpdateOrProxyError::DirectUpdateCall {
-                        source:
-                            AgentError::UncertifiedReject {
-                                reject,
-                                operation: _,
-                            },
-                    }) => {
+                    Err(e) => {
+                        let Some(reject) = direct_call_reject(&e) else {
+                            bail!("Unknown error fetching canister {cid} status: {e}");
+                        };
+
                         if reject.error_code.as_deref() == Some(E_CANISTER_NOT_FOUND) {
                             bail!("Canister {cid} was not found.");
                         }
 
-                        if reject.error_code.as_deref() != Some(E_NOT_A_CONTROLLER) {
+                        if !reject
+                            .error_code
+                            .as_deref()
+                            .is_some_and(|code| E_STATUS_ACCESS_DENIED.contains(&code))
+                        {
                             bail!(
                                 "Error looking up canister {cid}: {:?} - {}",
                                 reject.error_code,
@@ -287,7 +312,7 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             );
                         }
 
-                        // We got E_NOT_A_CONTROLLER so we fallback on fetching the public status
+                        // Access was denied, so fall back on fetching the public status
                         let status =
                             build_public_status(&agent, cid.to_owned(), maybe_name.clone()).await?;
 
@@ -297,9 +322,6 @@ pub(crate) async fn exec(ctx: &Context, args: &StatusArgs) -> Result<(), anyhow:
                             false => build_public_output(&status)
                                 .expect("Failed to build canister status output"),
                         }
-                    }
-                    Err(e) => {
-                        bail!("Unknown error fetching canister {cid} status: {e}");
                     }
                 }
             }
@@ -354,13 +376,20 @@ struct SerializableCanisterSettings {
     wasm_memory_limit: String,
     wasm_memory_threshold: String,
     log_memory_limit: String,
-    log_visibility: SerializableLogVisibility,
+    log_visibility: SerializableVisibility,
+    snapshot_visibility: SerializableVisibility,
+    status_visibility: SerializableVisibility,
     environment_variables: Vec<EnvironmentVariable>,
 }
 
-#[derive(Serialize, Clone)]
+/// `--json` renders a visibility setting as `{"type": ..., "value": ...}`,
+/// which differs from the manifest form [`Visibility`] serializes to.
+#[derive(Clone)]
+struct SerializableVisibility(Visibility);
+
+#[derive(Serialize)]
 #[serde(tag = "type", content = "value")]
-enum SerializableLogVisibility {
+enum VisibilityRepr {
     Controllers,
     Public,
     AllowedViewers(Vec<String>),
@@ -407,21 +436,26 @@ impl SerializableCanisterSettings {
             wasm_memory_limit: settings.wasm_memory_limit.to_string(),
             wasm_memory_threshold: settings.wasm_memory_threshold.to_string(),
             log_memory_limit: settings.log_memory_limit.to_string(),
-            log_visibility: SerializableLogVisibility::from(&settings.log_visibility),
+            log_visibility: SerializableVisibility(settings.log_visibility.clone().into()),
+            snapshot_visibility: SerializableVisibility(
+                settings.snapshot_visibility.clone().into(),
+            ),
+            status_visibility: SerializableVisibility(settings.status_visibility.clone().into()),
             environment_variables: settings.environment_variables.clone(),
         }
     }
 }
 
-impl SerializableLogVisibility {
-    fn from(visibility: &LogVisibility) -> Self {
-        match visibility {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
-            LogVisibility::AllowedViewers(viewers) => {
-                Self::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
+impl Serialize for SerializableVisibility {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let repr = match &self.0 {
+            Visibility::Controllers => VisibilityRepr::Controllers,
+            Visibility::Public => VisibilityRepr::Public,
+            Visibility::AllowedViewers(viewers) => {
+                VisibilityRepr::AllowedViewers(viewers.iter().map(|p| p.to_string()).collect())
             }
-        }
+        };
+        repr.serialize(serializer)
     }
 }
 
@@ -444,7 +478,11 @@ fn build_public_output(result: &PublicCanisterStatusResult) -> Result<String, an
     }
     writeln!(&mut buf, "Canister Status Report:")?;
 
-    writeln!(&mut buf, "  Controllers: {}", result.controllers.join(", "))?;
+    writeln!(
+        &mut buf,
+        "{}",
+        format_controllers(result.controllers.iter().cloned(), "  ")
+    )?;
     writeln!(
         &mut buf,
         "  Module hash: {}",
@@ -467,8 +505,8 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     let settings = &result.settings;
     writeln!(
         &mut buf,
-        "  Controllers: {}",
-        settings.controllers.join(", ")
+        "{}",
+        format_controllers(settings.controllers.iter().cloned(), "  ")
     )?;
     writeln!(
         &mut buf,
@@ -507,19 +545,21 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
         settings.log_memory_limit
     )?;
 
-    let log_visibility = match settings.log_visibility.clone() {
-        SerializableLogVisibility::Controllers => "Controllers".to_string(),
-        SerializableLogVisibility::Public => "Public".to_string(),
-        SerializableLogVisibility::AllowedViewers(mut viewers) => {
-            if viewers.is_empty() {
-                "Allowed viewers list is empty".to_string()
-            } else {
-                viewers.sort();
-                format!("Allowed viewers: {}", viewers.join(", "))
-            }
-        }
-    };
-    writeln!(&mut buf, "  Log visibility: {log_visibility}")?;
+    writeln!(
+        &mut buf,
+        "  Log visibility: {}",
+        format_visibility(&settings.log_visibility.0, "log viewer", "  ")
+    )?;
+    writeln!(
+        &mut buf,
+        "  Snapshot visibility: {}",
+        format_visibility(&settings.snapshot_visibility.0, "snapshot viewer", "  ")
+    )?;
+    writeln!(
+        &mut buf,
+        "  Status visibility: {}",
+        format_visibility(&settings.status_visibility.0, "status viewer", "  ")
+    )?;
 
     // Display environment variables configured for this canister
     // Environment variables are key-value pairs that can be accessed within the canister
@@ -567,4 +607,62 @@ fn build_output(result: &SerializableCanisterStatusResult) -> Result<String, any
     )?;
 
     Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_agent::agent::{RejectCode, RejectResponse};
+
+    use super::*;
+
+    /// A denial arrives uncertified when ingress inspection catches it and
+    /// certified when execution does, so the fallback has to see both. Anything
+    /// that is not a reject must keep surfacing as an error.
+    #[test]
+    fn both_reject_forms_are_recognised() {
+        let reject = || RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            reject_message: "denied".to_string(),
+            error_code: Some("IC0542".to_string()),
+        };
+
+        for source in [
+            AgentError::CertifiedReject {
+                reject: reject(),
+                operation: None,
+            },
+            AgentError::UncertifiedReject {
+                reject: reject(),
+                operation: None,
+            },
+        ] {
+            let err = UpdateOrProxyError::DirectUpdateCall { source };
+            let found = direct_call_reject(&err).expect("reject should be extracted");
+            assert!(E_STATUS_ACCESS_DENIED.contains(&found.error_code.as_deref().unwrap()));
+        }
+
+        assert!(
+            direct_call_reject(&UpdateOrProxyError::ProxyCall {
+                message: "boom".to_string(),
+            })
+            .is_none()
+        );
+    }
+
+    /// `--json` renders visibility as a tagged `{"type", "value"}` object, which
+    /// is a different shape from the manifest form `Visibility` serializes to,
+    /// so it is pinned here rather than left to a derive.
+    #[test]
+    fn json_visibility_shape() {
+        let json = |v: Visibility| serde_json::to_string(&SerializableVisibility(v)).unwrap();
+
+        assert_eq!(json(Visibility::Controllers), r#"{"type":"Controllers"}"#);
+        assert_eq!(json(Visibility::Public), r#"{"type":"Public"}"#);
+        assert_eq!(
+            json(Visibility::AllowedViewers(vec![
+                Principal::from_text("aaaaa-aa").unwrap()
+            ])),
+            r#"{"type":"AllowedViewers","value":["aaaaa-aa"]}"#
+        );
+    }
 }

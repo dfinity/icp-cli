@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use crate::operations::token::mint::mint_cycles;
+use icp::operations::token::mint::mint_cycles;
 
 /// Convert ICP to cycles.
 ///

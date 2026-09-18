@@ -3,7 +3,8 @@ use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
 use icp::context::Context;
 
-use crate::{commands::args, operations::proxy_management};
+use crate::commands::args;
+use icp::operations::proxy_management;
 
 /// Start a canister on a network
 #[derive(Debug, Args)]

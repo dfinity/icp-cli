@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
 use crate::commands::token::format_expiry;
-use crate::operations::token::allowance::get_allowance;
+use icp::operations::token::allowance::get_allowance;
 
 /// Display the allowance granted to a spender (ICRC-2) (default token: icp)
 ///

@@ -1,7 +1,7 @@
+use crate::parsers::to_token_unit_amount;
 use bigdecimal::BigDecimal;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{Agent, AgentError};
-use icp::parsers::to_token_unit_amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError as Icrc2ApproveError};
 use snafu::{ResultExt, Snafu};

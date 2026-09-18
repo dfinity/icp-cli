@@ -205,7 +205,7 @@ async fn sync_aborts_when_canister_not_running() {
     // sync aborts early with an actionable message; the `echo "syncing"` step
     // never runs, so its runtime progress output must not appear. (The `--debug`
     // config dump echoes the step's command text, so we check for the runtime
-    // `DEBUG icp::progress: syncing` marker rather than the bare word "syncing".)
+    // `DEBUG icp::render::plain: [my-canister] syncing` marker rather than the bare word "syncing".)
     ctx.icp()
         .current_dir(&project_dir)
         .env("NO_COLOR", "1")
@@ -221,7 +221,7 @@ async fn sync_aborts_when_canister_not_running() {
         .stderr(
             contains("asset sync requires it to be Running")
                 .and(contains("icp canister start"))
-                .and(contains("DEBUG icp::progress: syncing").not()),
+                .and(contains("DEBUG icp::render::plain: [my-canister] syncing").not()),
         );
 }
 
@@ -387,9 +387,13 @@ async fn sync_multiple_canisters() {
         .success()
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: ["canister-a", "canister-b"]"#))
-        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-c").not());
+        .stderr(contains(
+            "DEBUG icp::render::plain: [canister-a] syncing canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::render::plain: [canister-b] syncing canister-b",
+        ))
+        .stderr(contains("DEBUG icp::render::plain: [canister-c] syncing canister-c").not());
 }
 
 #[tokio::test]
@@ -407,7 +411,8 @@ async fn sync_plugin_registers_seed_data() {
     write_string(&seed_data.join("fruit-03.txt"), "cherry").expect("failed to write fruit-03.txt");
 
     // Manifest: pre-built canister wasm + plugin sync step pointing at the pre-built plugin wasm.
-    // dirs is relative to the project directory and preopened read-only inside the plugin's WASI sandbox.
+    // The `files:` entry is relative to the project directory and, naming a directory, is
+    // preopened read-only inside the plugin's WASI sandbox.
     let pm = formatdoc! {r#"
         canisters:
           - name: my-canister
@@ -419,8 +424,8 @@ async fn sync_plugin_registers_seed_data() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -437,11 +442,25 @@ async fn sync_plugin_registers_seed_data() {
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
+    // The plugin also reads the canister's candid:service metadata section and
+    // reports it. No proxy is configured here, so the read is a direct
+    // read_state; this manifest builds the wasm with a plain `cp`, skipping the
+    // example's ic-wasm step, so the section genuinely isn't there — proving the
+    // host performed the round-trip and mapped a proven-absent section to `none`
+    // rather than to an error.
+    //
+    // It reports the network's URLs too, which for a managed network are the
+    // gateway the launcher happened to bind — so the port in the plugin's
+    // output is proof the running network's address reached it.
+    let gateway_url = ctx.gateway_url().clone();
     ctx.icp()
         .current_dir(&project_dir)
         .args(["deploy", "--environment", "random-environment"])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("candid:service: absent").and(contains(format!(
+            "gateway: {gateway_url} (api: {gateway_url})"
+        ))));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()
@@ -462,6 +481,255 @@ async fn sync_plugin_registers_seed_data() {
             contains("apple")
                 .and(contains("banana"))
                 .and(contains("cherry")),
+        );
+}
+
+/// A `files:` name may hold a list of paths rather than a single one; every
+/// path under it is preopened and traversed the same way, so registration works
+/// end-to-end. This proves the list-valued map form deserializes and reaches
+/// the runtime.
+#[tokio::test]
+async fn sync_plugin_accepts_a_name_holding_several_dirs() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // Two directories, declared under one map key as a list.
+    let fruit = project_dir.join("fruit");
+    let veg = project_dir.join("veg");
+    create_dir_all(&fruit).expect("failed to create fruit dir");
+    create_dir_all(&veg).expect("failed to create veg dir");
+    write_string(&fruit.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&veg.join("veg-01.txt"), "carrot").expect("failed to write veg-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  files:
+                    produce:
+                      - fruit
+                      - veg
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("apple").and(contains("carrot")));
+}
+
+/// A `files:` entry may rise out of the canister directory and name a directory
+/// elsewhere in the project — here a `shared-seed` tree next to the canister's
+/// own directory — and the plugin reads it end-to-end.
+#[tokio::test]
+async fn sync_plugin_reads_a_dir_elsewhere_in_the_project() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // The seed data is a sibling of the canister's directory, not below it.
+    let seed_data = project_dir.join("shared-seed");
+    create_dir_all(&seed_data).expect("failed to create shared-seed");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    write_string(&seed_data.join("fruit-02.txt"), "banana").expect("failed to write fruit-02.txt");
+
+    let canister_dir = project_dir.join("canisters/my-canister");
+    create_dir_all(&canister_dir).expect("failed to create canister dir");
+    let cm = formatdoc! {r#"
+        name: my-canister
+        build:
+          steps:
+            - type: script
+              command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+        sync:
+          steps:
+            - type: plugin
+              path: {plugin_wasm}
+              files:
+                shared: ../../shared-seed
+    "#};
+    write_string(&canister_dir.join("canister.yaml"), &cm)
+        .expect("failed to write canister manifest");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - canisters/my-canister
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "my-canister",
+            "show",
+            "()",
+            "--query",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("apple").and(contains("banana")));
+}
+
+/// The project directory is the boundary: a `files:` entry that resolves above
+/// it is rejected before the plugin runs, however many `..` it takes to get
+/// there.
+#[tokio::test]
+async fn sync_plugin_rejects_dir_outside_the_project() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    // A real directory next to the project, named by a relative path that walks
+    // out of it — no symlink involved, so only the project bound rejects it.
+    let outside = ctx.home_path().join("outside-seed-data");
+    create_dir_all(&outside).expect("failed to create outside dir");
+    write_string(&outside.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+    let escape = "../outside-seed-data";
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  files:
+                    outside: {escape}
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("resolves outside")
+                .and(contains("outside-seed-data"))
+                .and(contains("inside the project directory")),
+        );
+}
+
+/// A plugin implementing `icp:sync-plugin@0.2` — as the example one does — has
+/// no `dirs:` of its own: directories go under `files:` alongside the files.
+/// Declaring `dirs:` alongside one is rejected rather than silently ignored,
+/// and the error says where the entry belongs instead.
+#[tokio::test]
+async fn sync_plugin_rejects_dirs_for_a_v2_plugin() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
+
+    let seed_data = project_dir.join("seed-data");
+    create_dir_all(&seed_data).expect("failed to create seed-data");
+    write_string(&seed_data.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{canister_wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: {plugin_wasm}
+                  dirs:
+                    - seed-data
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("no separate `dirs:`")
+                .and(contains("seed-data"))
+                .and(contains("under `files:`")),
         );
 }
 
@@ -492,8 +760,8 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -522,9 +790,9 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
         );
 }
 
-/// A `dirs:` entry that is a symlink (here pointing outside the project) is
-/// rejected before the plugin runs, so a preopen cannot escape the canister
-/// directory. Symlinks are forbidden outright for now — see
+/// A `files:` entry naming a symlinked directory (here pointing outside the
+/// project) is rejected before the plugin runs, so a preopen cannot escape the
+/// canister directory. Symlinks are forbidden outright for now — see
 /// `crates/icp-sync-plugin/DESIGN.md`.
 #[cfg(unix)]
 #[tokio::test]
@@ -535,7 +803,7 @@ async fn sync_plugin_rejects_symlinked_dir() {
     let (canister_wasm, plugin_wasm) = build_sync_plugin_example();
 
     // A real directory *outside* the project, and a symlink to it inside the
-    // project that the manifest declares as a `dirs:` entry.
+    // project that the manifest declares as a `files:` entry.
     let outside = ctx.home_path().join("outside-seed-data");
     create_dir_all(&outside).expect("failed to create outside dir");
     write_string(&outside.join("fruit-01.txt"), "apple").expect("failed to write fruit-01.txt");
@@ -553,8 +821,8 @@ async fn sync_plugin_rejects_symlinked_dir() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -605,7 +873,7 @@ async fn sync_plugin_rejects_symlinked_file() {
                 - type: plugin
                   path: {plugin_wasm}
                   files:
-                    - config.txt
+                    config: config.txt
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -728,8 +996,8 @@ async fn sync_plugin_routes_through_proxy() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -745,6 +1013,12 @@ async fn sync_plugin_routes_through_proxy() {
     // Deploy through proxy so the proxy canister becomes a controller of my-canister.
     // deploy also runs the sync step: the plugin routes set_uploader through the proxy
     // (direct: false, proxy is controller), then calls register directly with the user identity.
+    //
+    // Its metadata read is proxied too, so it reaches the canister as the
+    // management canister's `canister_metadata` rather than as a read_state.
+    // This manifest skips the example's ic-wasm step, so the section really is
+    // missing — and the host must report the resulting rejection as an absent
+    // section, the same answer a direct read proves from the certificate.
     ctx.icp()
         .current_dir(&project_dir)
         .args([
@@ -755,7 +1029,8 @@ async fn sync_plugin_routes_through_proxy() {
             "random-environment",
         ])
         .assert()
-        .success();
+        .success()
+        .stderr(contains("candid:service: absent"));
 
     // Query the canister to verify all three fruits were registered
     ctx.icp()
@@ -861,7 +1136,11 @@ async fn sync_all_canisters_in_environment() {
         .stderr(contains("Syncing canisters"))
         .stderr(contains(r#"canisters: []"#))
         .stderr(contains(r#"environment: Some("test-env")"#))
-        .stderr(contains("DEBUG icp::progress: syncing canister-a"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-b"))
-        .stderr(contains("DEBUG icp::progress: syncing canister-c").not()); // not in test-env
+        .stderr(contains(
+            "DEBUG icp::render::plain: [canister-a] syncing canister-a",
+        ))
+        .stderr(contains(
+            "DEBUG icp::render::plain: [canister-b] syncing canister-b",
+        ))
+        .stderr(contains("DEBUG icp::render::plain: [canister-c] syncing canister-c").not()); // not in test-env
 }

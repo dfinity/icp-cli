@@ -18,14 +18,15 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::warn;
 use url::Url;
 
+use icp::operations::{
+    create::shell_quote, proxy::update_or_proxy_raw, wasm::extract_candid_service,
+};
+
 use crate::{
-    commands::args::{self, load_args},
-    operations::call_output::{
+    call_output::{
         CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
     },
-    operations::create::shell_quote,
-    operations::proxy::update_or_proxy_raw,
-    operations::wasm::extract_candid_service,
+    commands::args::{self, load_args},
 };
 
 /// Make a canister call
@@ -209,20 +210,20 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         "a positional argument",
     )? {
         None => None,
-        Some(icp::InitArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp::CanisterArgs::Text {
             content,
             format: ArgsFormat::Candid,
         }) => Some(ResolvedArgs::Candid(
             parse_idl_args(&content).context("failed to parse Candid arguments")?,
         )),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Text {
             content,
             format: ArgsFormat::Hex,
         }) => Some(ResolvedArgs::Bytes(
             hex::decode(&content).context("failed to decode hex arguments")?,
         )),
-        Some(icp::InitArgs::Text {
+        Some(icp::CanisterArgs::Text {
             format: ArgsFormat::Bin,
             ..
         }) => {

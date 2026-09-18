@@ -63,8 +63,8 @@ async fn bundle_and_deploy() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -118,7 +118,7 @@ async fn bundle_and_deploy() {
             "plugins/registry/0.wasm" => {
                 found_plugin_wasm = true;
             }
-            p if p.starts_with("plugins/registry/0/dirs/seed-data/") => {
+            p if p.starts_with("plugins/registry/0/files/seed-data/") => {
                 found_seed_data = true;
             }
             _ => {}
@@ -140,7 +140,7 @@ async fn bundle_and_deploy() {
     );
     assert!(
         found_seed_data,
-        "seed-data files not found under plugins/registry/0/dirs/seed-data/ in bundle"
+        "seed-data files not found under plugins/registry/0/files/seed-data/ in bundle"
     );
 
     // Manifest must convert build steps to pre-built and must not contain script or recipe steps.
@@ -254,8 +254,8 @@ async fn bundle_with_dependency_deploys() {
                   steps:
                     - type: plugin
                       path: {plugin_wasm}
-                      dirs:
-                        - seed-data
+                      files:
+                        seed: seed-data
 
             {ENVIRONMENT_RANDOM_PORT}
         "#},
@@ -598,6 +598,93 @@ fn bundle_inlines_external_init_args_file() {
     );
 }
 
+/// The files behind an environment's `init_args` and `upgrade_args` overrides are
+/// archived under directories of their own, so a canister that overrides both
+/// keeps two distinct references in the bundled manifest.
+#[test]
+fn bundle_inlines_external_upgrade_args_file() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write_string(&project_dir.join("init.idl"), "(\"world\")").expect("failed to write args file");
+    write_string(&project_dir.join("upgrade.idl"), "(\"again\")")
+        .expect("failed to write args file");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+
+        environments:
+          - name: random-environment
+            network: random-network
+            init_args:
+              my-canister:
+                path: ./init.idl
+                format: candid
+            upgrade_args:
+              my-canister:
+                path: ./upgrade.idl
+                format: candid
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut entries: Vec<String> = Vec::new();
+    let mut manifest_yaml = String::new();
+
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+        entries.push(path);
+    }
+
+    for expected in [
+        "init-args/my-canister/init.idl",
+        "upgrade-args/my-canister/upgrade.idl",
+    ] {
+        assert!(
+            entries.iter().any(|e| e == expected),
+            "{expected} not found in bundle; entries: {entries:?}"
+        );
+        assert!(
+            manifest_yaml.contains(expected),
+            "bundle manifest should reference {expected}"
+        );
+    }
+}
+
 /// A canister name that is a reserved Windows device name (e.g. `CON`) must be
 /// sanitized for archive entry names (prefixed with `_`) while the manifest
 /// preserves the original name. (Other characters can no longer need sanitizing
@@ -768,6 +855,71 @@ fn bundle_normalizes_dotdot_within_project() {
     );
 }
 
+/// Unlike `dirs`/`files`, a plugin step's `fields` reference nothing on disk, so bundling must
+/// carry them into the rewritten manifest verbatim — a deploy from the bundle sees the same
+/// configuration the original project declared.
+#[test]
+fn bundle_preserves_plugin_fields() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  fields:
+                    api_url: https://example.com
+                    port: 8080
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut manifest_yaml = String::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+    }
+
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
+    let fields = &parsed["canisters"][0]["sync"]["steps"][0]["fields"];
+    assert_eq!(fields["api_url"].as_str(), Some("https://example.com"));
+    // `port` was written unquoted; loading stringifies it, so the rewritten
+    // manifest carries a string too.
+    assert_eq!(fields["port"].as_str(), Some("8080"));
+}
+
 /// A plugin sync step whose `dirs` entry resolves *outside* the project directory must be
 /// rejected. Bundles can only reference files inside the project so the produced archive is portable.
 #[test]
@@ -830,6 +982,9 @@ fn bundle_builds_for_ic_by_default() {
                   commands:
                     - echo "$ICP_CLI_ENVIRONMENT" > '{recorded}'
                     - cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+
+        environments:
+          - name: staging
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -1386,6 +1541,334 @@ fn bundle_warns_about_member_customize_file() {
     );
 }
 
+/// A plugin's declared call targets must survive bundling — dropping them would turn a
+/// working project into a bundle whose cross-canister calls are all rejected. Names of
+/// the writing instance's own canisters come back out as local names; principals and
+/// names that already resolved against the workspace are left alone.
+#[test]
+fn bundle_preserves_plugin_call_targets() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    // Bundling only repackages the plugin wasm bytes, so any non-empty content works.
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write(&dep_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write dependency plugin wasm");
+
+    // The dependency's plugin names its own sibling, both bare and by store key.
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: backend
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: plugin.wasm
+                      canisters:
+                        - helper
+                        - vendor/openemail:helper
+              - name: helper
+                {build_step}
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    // The root's plugin names a root sibling and a dependency canister by store key.
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: plugin.wasm
+                      canisters:
+                        - api
+                        - vendor/openemail:backend
+              - name: api
+                {build_step}
+
+            dependencies:
+              - name: openemail
+                path: ./vendor/openemail
+                canisters: [backend]
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut manifests: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path.ends_with("icp.yaml") {
+            let mut yaml = String::new();
+            entry
+                .read_to_string(&mut yaml)
+                .expect("failed to read manifest");
+            manifests.insert(path, yaml);
+        }
+    }
+
+    let plugin_targets = |yaml: &str, canister: &str| -> Vec<String> {
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(yaml).expect("manifest yaml is invalid");
+        let canisters = parsed["canisters"]
+            .as_sequence()
+            .expect("manifest has no canisters");
+        let entry = canisters
+            .iter()
+            .find(|c| c["name"].as_str() == Some(canister))
+            .unwrap_or_else(|| panic!("{canister} not found in bundled manifest: {yaml}"));
+        entry["sync"]["steps"][0]["canisters"]
+            .as_sequence()
+            .unwrap_or_else(|| panic!("{canister} plugin step lost its canisters: {yaml}"))
+            .iter()
+            .map(|t| t.as_str().expect("call target is not a string").to_owned())
+            .collect()
+    };
+
+    assert_eq!(
+        plugin_targets(&manifests["icp.yaml"], "frontend"),
+        ["api", "vendor/openemail:backend"],
+    );
+    // Both spellings of the dependency's own sibling come out as its local name.
+    assert_eq!(
+        plugin_targets(&manifests["vendor/openemail/icp.yaml"], "backend"),
+        ["helper", "helper"],
+    );
+}
+
+/// The map form of `files:` must survive bundling: the paths are rewritten to their archive
+/// locations, but each stays under the key it was declared with, so a plugin sees the same
+/// keys whether it runs from the project or from the bundle. Directories and files share
+/// the one setting, and bundling tells them apart the way the plugin host does — by what is
+/// on disk — copying a tree for the one and a single file for the other.
+#[test]
+fn bundle_preserves_plugin_path_keys() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let plugin_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00plugin";
+    write(&project_dir.join("plugin.wasm"), plugin_bytes).expect("failed to write plugin");
+
+    for (dir, file) in [("seed", "s.txt"), ("m2025", "a.txt"), ("m2026", "b.txt")] {
+        let path = project_dir.join(dir);
+        create_dir_all(&path).expect("failed to create dir");
+        write_string(&path.join(file), "data").expect("failed to write file");
+    }
+    write_string(&project_dir.join("config.toml"), "key=value").expect("failed to write config");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  files:
+                    seed: seed
+                    migrations:
+                      - m2025
+                      - m2026
+                    main: config.toml
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut archived: Vec<String> = Vec::new();
+    let mut manifest_yaml = String::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+        archived.push(path);
+    }
+
+    for expected in [
+        "plugins/my-canister/0/files/seed/s.txt",
+        "plugins/my-canister/0/files/m2025/a.txt",
+        "plugins/my-canister/0/files/m2026/b.txt",
+        "plugins/my-canister/0/files/config.toml",
+    ] {
+        assert!(
+            archived.iter().any(|path| path == expected),
+            "{expected} not found in bundle; archive holds {archived:?}"
+        );
+    }
+
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
+    let step = &parsed["canisters"][0]["sync"]["steps"][0];
+    assert_eq!(
+        step["files"]["seed"].as_str(),
+        Some("plugins/my-canister/0/files/seed")
+    );
+    assert_eq!(
+        step["files"]["migrations"][0].as_str(),
+        Some("plugins/my-canister/0/files/m2025")
+    );
+    assert_eq!(
+        step["files"]["migrations"][1].as_str(),
+        Some("plugins/my-canister/0/files/m2026")
+    );
+    assert_eq!(
+        step["files"]["main"].as_str(),
+        Some("plugins/my-canister/0/files/config.toml")
+    );
+}
+
+/// `files:` is configuration as well as a sandbox grant, so the same path may be named under
+/// several keys, and one key's directory may sit inside another's. The bundled manifest keeps
+/// every entry as declared; the archive holds one copy of each tree, since two copies of one
+/// directory (or a copy of a directory already inside another) cannot be written to the
+/// archive at all.
+#[test]
+fn bundle_archives_aliased_plugin_paths_once() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let plugin_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00plugin";
+    write(&project_dir.join("plugin.wasm"), plugin_bytes).expect("failed to write plugin");
+
+    let inner = project_dir.join("data/inner");
+    create_dir_all(&inner).expect("failed to create dir");
+    write_string(&project_dir.join("data/top.txt"), "top").expect("failed to write file");
+    write_string(&inner.join("deep.txt"), "deep").expect("failed to write file");
+    write_string(&project_dir.join("config.toml"), "key=value").expect("failed to write config");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  files:
+                    seed: data
+                    backup: data
+                    sub: data/inner
+                    main: config.toml
+                    fallback: ./config.toml
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut archived: Vec<String> = Vec::new();
+    let mut manifest_yaml = String::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path == "icp.yaml" {
+            entry
+                .read_to_string(&mut manifest_yaml)
+                .expect("failed to read icp.yaml");
+        }
+        archived.push(path);
+    }
+
+    // One copy of the tree, holding what the nested entry points at.
+    for expected in [
+        "plugins/my-canister/0/files/data/top.txt",
+        "plugins/my-canister/0/files/data/inner/deep.txt",
+        "plugins/my-canister/0/files/config.toml",
+    ] {
+        assert_eq!(
+            archived.iter().filter(|path| *path == expected).count(),
+            1,
+            "{expected} should appear exactly once; archive holds {archived:?}"
+        );
+    }
+
+    // Every declared entry survives, keys and all.
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
+    let step = &parsed["canisters"][0]["sync"]["steps"][0];
+    for (key, expected) in [
+        ("seed", "plugins/my-canister/0/files/data"),
+        ("backup", "plugins/my-canister/0/files/data"),
+        ("sub", "plugins/my-canister/0/files/data/inner"),
+        ("main", "plugins/my-canister/0/files/config.toml"),
+        ("fallback", "plugins/my-canister/0/files/config.toml"),
+    ] {
+        assert_eq!(step["files"][key].as_str(), Some(expected));
+    }
+}
+
 /// An `icp_appmanifest.yaml` next to the project manifest must be included in the bundle, with its
 /// top-level `images` paths relocated under a top-level `images/` folder and the
 /// referenced image files copied alongside. Unrelated metadata is preserved.
@@ -1817,6 +2300,214 @@ fn bundle_preserves_dependency_structure() {
             "extracted bundle should keep '{expected}': {extracted}"
         );
     }
+}
+
+/// `-e` decides what the bundle carries, not merely what the build steps are
+/// told: the archive holds the canisters that environment contains, and the
+/// bundled manifests declare only those. Every reference the pruning would leave
+/// dangling — another environment's canister list, a dependency's exposure list,
+/// a controller — goes with them, so the extracted bundle still loads.
+#[test]
+fn bundle_carries_only_the_environments_canisters() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    let dep_dir = project_dir.join("vendor/openemail");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: registry
+                {build_step}
+              - name: archive
+                {build_step}
+
+            environments:
+              - name: staging
+                canisters: [registry]
+              - name: prod
+                canisters: [archive]
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    // Each project names its own: staging is the root's `frontend` and
+    // openemail's `registry`, prod the root's `backend` and openemail's
+    // `archive`. `frontend` names `backend` as a controller, which staging does
+    // not contain — in its base settings and again in staging's own override of
+    // them.
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: frontend
+                settings:
+                  controllers: [backend]
+                {build_step}
+              - name: backend
+                {build_step}
+
+            dependencies:
+              - name: openemail
+                path: ./vendor/openemail
+                canisters: [registry, archive]
+
+            environments:
+              - name: staging
+                canisters: [frontend]
+                settings:
+                  frontend:
+                    controllers: [backend, "vendor/openemail:registry"]
+              - name: prod
+                canisters: [backend]
+                settings:
+                  backend:
+                    compute_allocation: 1
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "project",
+            "bundle",
+            "--environment",
+            "staging",
+            "--output",
+            bundle_path.as_str(),
+        ])
+        .assert()
+        .success()
+        .stderr(contains("names 'backend' as a controller"));
+
+    let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+
+    let mut entries: Vec<String> = Vec::new();
+    let mut manifests: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        if path.ends_with("icp.yaml") {
+            let mut yaml = String::new();
+            entry
+                .read_to_string(&mut yaml)
+                .expect("failed to read manifest");
+            manifests.insert(path.clone(), yaml);
+        }
+        entries.push(path);
+    }
+
+    assert_eq!(
+        entries,
+        [
+            "icp.yaml",
+            "vendor/openemail/icp.yaml",
+            "canisters/frontend.wasm",
+            "vendor/openemail/canisters/registry.wasm",
+        ],
+        "bundle should carry only the staging canisters"
+    );
+
+    let root: serde_yaml::Value =
+        serde_yaml::from_str(&manifests["icp.yaml"]).expect("root manifest yaml is invalid");
+    assert_eq!(
+        root["canisters"][0]["name"],
+        serde_yaml::Value::from("frontend")
+    );
+    assert!(
+        root["canisters"][1].is_null(),
+        "root manifest should declare frontend alone: {:?}",
+        root["canisters"]
+    );
+    // The controller reference outlived the canister it named, so the bundle
+    // drops it rather than carry a name nothing declares.
+    assert_eq!(
+        root["canisters"][0]["settings"]["controllers"],
+        serde_yaml::Value::Sequence(vec![]),
+    );
+    assert_eq!(
+        root["dependencies"][0]["canisters"],
+        serde_yaml::Value::Sequence(vec!["registry".into()]),
+    );
+    assert_eq!(
+        root["environments"][0]["canisters"],
+        serde_yaml::Value::Sequence(vec!["frontend".into()]),
+    );
+    assert_eq!(
+        root["environments"][1]["canisters"],
+        serde_yaml::Value::Sequence(vec![]),
+        "prod named only canisters the bundle left out",
+    );
+    // An override the bundle keeps still has to lose the controllers it names
+    // that the bundle does not carry.
+    assert_eq!(
+        root["environments"][0]["settings"]["frontend"]["controllers"],
+        serde_yaml::Value::Sequence(vec!["vendor/openemail:registry".into()]),
+    );
+    // An override *of* a left-out canister goes entirely.
+    assert!(
+        root["environments"][1]["settings"]["backend"].is_null(),
+        "prod's override of a left-out canister should be dropped: {:?}",
+        root["environments"][1]["settings"]
+    );
+
+    let dep: serde_yaml::Value = serde_yaml::from_str(&manifests["vendor/openemail/icp.yaml"])
+        .expect("dependency manifest yaml is invalid");
+    assert_eq!(
+        dep["canisters"][0]["name"],
+        serde_yaml::Value::from("registry")
+    );
+    assert!(
+        dep["canisters"][1].is_null(),
+        "dependency manifest should declare registry alone: {:?}",
+        dep["canisters"]
+    );
+    assert_eq!(
+        dep["environments"][0]["canisters"],
+        serde_yaml::Value::Sequence(vec!["registry".into()]),
+    );
+    assert_eq!(
+        dep["environments"][1]["canisters"],
+        serde_yaml::Value::Sequence(vec![]),
+        "openemail's prod named only canisters the bundle left out",
+    );
+
+    // Nothing dangles: the extracted workspace consolidates, and its remaining
+    // canisters keep the store keys the source workspace gave them.
+    let bundle_dir = project_dir.join("bundle-extracted");
+    create_dir_all(&bundle_dir).expect("failed to create bundle-extracted dir");
+    let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
+    Archive::new(gz)
+        .unpack(bundle_dir.as_std_path())
+        .expect("failed to extract bundle");
+
+    ctx.icp()
+        .current_dir(&bundle_dir)
+        .args(["project", "show"])
+        .assert()
+        .success()
+        .stdout(
+            contains("vendor/openemail:registry")
+                .and(contains("backend").not())
+                .and(contains("vendor/openemail:archive").not()),
+        );
 }
 
 /// A dependency path that does not describe where the instance sits relative to

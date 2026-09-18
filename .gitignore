@@ -22,3 +22,6 @@ docs-site/.astro/
 docs-site/dist/
 docs-site/dist-test/
 docs-site/node_modules/
+
+# Python bytecode from the test assets
+__pycache__/

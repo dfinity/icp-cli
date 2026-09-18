@@ -462,6 +462,82 @@ async fn deploy_without_customize_flag_uses_manifest_init_args() {
         .stdout(eq("(\"7\")").trim());
 }
 
+/// `--args` replaces a canister's init args outright, so an init-arg option has
+/// nothing left to customize and must not be asked about — its answer would be
+/// thrown away. The deploy succeeding is the evidence: no prompt could be
+/// answered here, so reaching one would fail it.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn deploy_customize_skips_init_arg_options_when_args_are_given() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    ctx.copy_asset_dir("echo_init_arg_canister", &project_dir);
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            init_args: "(opt (7 : nat8))"
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    write_string(
+        &project_dir.join("icp_customize.yaml"),
+        indoc! {r#"
+            options:
+              - canister: my-canister
+                field_path: "0"
+                candid_type: "opt nat8"
+                description: "Initial value"
+        "#},
+    )
+    .expect("failed to write customize manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--customize",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "--args",
+            "(opt (9 : nat8))",
+        ])
+        .assert()
+        .success();
+
+    // The command line's 9, neither the manifest's 7 nor an answer.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            "--environment",
+            "random-environment",
+            "my-canister",
+            "get",
+            "()",
+        ])
+        .assert()
+        .success()
+        .stdout(eq("(\"9\")").trim());
+}
+
 /// An `env` option is planned like any other and reaches the prompt, which names
 /// the variable it is asking about. There being no terminal to ask on is a
 /// failure, not a licence to fall back on the manifest's value — the point of the
@@ -1732,8 +1808,8 @@ async fn deploy_starts_stopped_canister_before_sync() {
               steps:
                 - type: plugin
                   path: {plugin_wasm}
-                  dirs:
-                    - seed-data
+                  files:
+                    seed: seed-data
 
         {NETWORK_RANDOM_PORT}
         {ENVIRONMENT_RANDOM_PORT}
@@ -1818,4 +1894,45 @@ async fn deploy_starts_stopped_canister_before_sync() {
         .assert()
         .success()
         .stdout(contains("apple"));
+}
+
+/// A canister created before a later phase fails still exists, so its id must
+/// still reach the user — it is the only place the run reports it, and without
+/// it a follow-up deploy is the only way to find out what was made.
+#[tokio::test]
+async fn deploy_prints_created_ids_when_a_later_phase_fails() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    // Build, create and install all succeed; the sync step then fails.
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: exit 1
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .failure()
+        .stdout(contains("Created canister my-canister with ID"));
 }

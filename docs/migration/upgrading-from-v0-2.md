@@ -100,11 +100,13 @@ sync:
 The plugin is published in the
 [certified-assets migration-v2.2.1 release](https://github.com/dfinity/certified-assets/releases/tag/migration-v2.2.1-6b48585).
 It uploads the contents of a single directory to the asset canister being synced —
-the same job the old `assets` step did. `dirs` is the general
-[sync-plugin](../concepts/sync-plugins.md) field (a list, since a plugin may
-declare several directories), but this particular plugin reads **exactly one** —
-list a single entry. The `url`/`sha256` pin the exact wasm: icp-cli downloads it
-once, verifies the checksum, and caches it.
+the same job the old `assets` step did. `dirs` is how a
+[sync plugin](../concepts/sync-plugins.md) built against the `icp:sync-plugin@0.1`
+interface — as this one is — declares the directories it may read (a list, since
+such a plugin may declare several), but this particular plugin reads **exactly
+one**, so list a single entry. A plugin built against the current interface
+takes a named `files:` map instead. The `url`/`sha256` pin the exact wasm:
+icp-cli downloads it once, verifies the checksum, and caches it.
 
 Your **build step is unchanged** — keep building or providing the asset-canister
 wasm exactly as before. Only the sync step changes.

@@ -8,7 +8,8 @@ use icp::context::Context;
 use itertools::Itertools;
 use serde::Serialize;
 
-use crate::{commands::args, operations::misc::format_timestamp, operations::proxy_management};
+use crate::commands::args;
+use icp::operations::{misc::format_timestamp, proxy_management};
 
 /// List all snapshots for a canister
 #[derive(Debug, Args)]

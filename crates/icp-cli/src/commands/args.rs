@@ -1,17 +1,14 @@
 use std::fmt::Display;
-use std::str::FromStr;
 
 use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use ic_ledger_types::AccountIdentifier;
 use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
-use icp::{InitArgs, fs};
-use icrc_ledger_types::icrc1::account::Account;
+use icp::{CanisterArgs, fs};
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
@@ -171,45 +168,7 @@ impl Display for Canister {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum FlexibleAccountId {
-    Icrc1(Account),
-    IcpLedger(AccountIdentifier),
-}
-
-impl FromStr for FlexibleAccountId {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try parsing as ICP ledger account (hex string)
-        if let Ok(bytes) = hex::decode(s) {
-            if bytes.len() == 32 {
-                let mut array = [0u8; 32];
-                array.copy_from_slice(&bytes);
-                return Ok(FlexibleAccountId::IcpLedger(
-                    AccountIdentifier::from_slice(&array).unwrap(),
-                ));
-            } else {
-                return Err(format!("Invalid ICP ledger account hex string: {s}"));
-            }
-        }
-        // Try parsing as ICRC1 account
-        if let Ok(account) = s.parse::<Account>() {
-            return Ok(FlexibleAccountId::Icrc1(account));
-        }
-
-        Err(format!("Invalid principal / account identifier: {s}"))
-    }
-}
-
-impl Display for FlexibleAccountId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FlexibleAccountId::Icrc1(account) => account.fmt(f),
-            FlexibleAccountId::IcpLedger(bytes) => hex::encode(bytes).fmt(f),
-        }
-    }
-}
+pub(crate) use icp::parsers::FlexibleAccountId;
 
 /// Grouped flags for specifying canister install arguments, shared by `canister install`, and `deploy`.
 #[derive(Args, Clone, Debug, Default)]
@@ -248,7 +207,7 @@ impl ArgsOpt {
     }
 }
 
-/// Load args from an inline value or a file, returning the intermediate [`InitArgs`]
+/// Load args from an inline value or a file, returning the intermediate [`CanisterArgs`]
 /// representation. Returns `None` if neither was provided.
 ///
 /// `inline_arg_name` is used in the error message when `--args-format bin` is given
@@ -258,13 +217,13 @@ pub(crate) fn load_args(
     args_file: Option<&PathBuf>,
     args_format: &ArgsFormat,
     inline_arg_name: &str,
-) -> Result<Option<InitArgs>, anyhow::Error> {
+) -> Result<Option<CanisterArgs>, anyhow::Error> {
     match (inline_value, args_file) {
         (Some(value), None) => {
             if *args_format == ArgsFormat::Bin {
                 bail!("--args-format bin requires --args-file, not {inline_arg_name}");
             }
-            Ok(Some(InitArgs::Text {
+            Ok(Some(CanisterArgs::Text {
                 content: value.to_owned(),
                 format: args_format.clone(),
             }))
@@ -272,11 +231,11 @@ pub(crate) fn load_args(
         (None, Some(file_path)) => Ok(Some(match args_format {
             ArgsFormat::Bin => {
                 let bytes = fs::read(file_path).context("failed to read args file")?;
-                InitArgs::Binary(bytes)
+                CanisterArgs::Binary(bytes)
             }
             fmt => {
                 let content = fs::read_to_string(file_path).context("failed to read args file")?;
-                InitArgs::Text {
+                CanisterArgs::Text {
                     content: content.trim().to_owned(),
                     format: fmt.clone(),
                 }

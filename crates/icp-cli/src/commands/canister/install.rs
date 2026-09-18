@@ -10,16 +10,15 @@ use icp::fs;
 use icp::prelude::*;
 use tracing::{info, warn};
 
-use crate::{
-    commands::args::{self, ArgsOpt},
-    operations::{
-        candid_compat::{CandidCompatibility, check_candid_compatibility},
-        install::{
-            WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
-            resolve_install_mode_and_status,
-        },
+use icp::operations::{
+    candid_compat::{CandidCompatibility, check_candid_compatibility},
+    install::{
+        WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
+        resolve_install_mode_and_status,
     },
 };
+
+use crate::commands::args::{self, ArgsOpt};
 
 /// Install a built WASM to a canister on a network
 #[derive(Debug, Args)]

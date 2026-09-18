@@ -50,34 +50,28 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
 
     /// Converts the lock structure into an owned read-lock.
     pub async fn into_read(self) -> Result<DirectoryStructureGuardOwned<LRead<T>>, LockError> {
-        spawn_blocking(move || {
-            let lock_file = self.lock_file.into_inner();
-            lock_file.lock_shared().context(LockFailedSnafu {
+        let lock_file = acquire(self.lock_file.into_inner(), Mode::Shared)
+            .await
+            .context(LockFailedSnafu {
                 lock_path: self.lock_path,
             })?;
-            Ok(DirectoryStructureGuardOwned {
-                paths_access: LRead(self.paths_access),
-                guard: lock_file,
-            })
+        Ok(DirectoryStructureGuardOwned {
+            paths_access: LRead(self.paths_access),
+            guard: lock_file,
         })
-        .await
-        .unwrap()
     }
 
     /// Converts the lock structure into an owned write-lock.
     pub async fn into_write(self) -> Result<DirectoryStructureGuardOwned<LWrite<T>>, LockError> {
-        spawn_blocking(move || {
-            let lock_file = self.lock_file.into_inner();
-            lock_file.lock().context(LockFailedSnafu {
+        let lock_file = acquire(self.lock_file.into_inner(), Mode::Exclusive)
+            .await
+            .context(LockFailedSnafu {
                 lock_path: self.lock_path,
             })?;
-            Ok(DirectoryStructureGuardOwned {
-                paths_access: LWrite(self.paths_access),
-                guard: lock_file,
-            })
+        Ok(DirectoryStructureGuardOwned {
+            paths_access: LWrite(self.paths_access),
+            guard: lock_file,
         })
-        .await
-        .unwrap()
     }
 
     /// Accesses the directory structure under a read lock.
@@ -86,9 +80,8 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
         })?;
-        spawn_blocking(move || lock_file.lock_shared())
+        acquire(lock_file, Mode::Shared)
             .await
-            .unwrap()
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
@@ -108,9 +101,8 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         let lock_file = guard.try_clone().context(HandleCloneFailedSnafu {
             path: &self.lock_path,
         })?;
-        spawn_blocking(move || lock_file.lock())
+        acquire(lock_file, Mode::Exclusive)
             .await
-            .unwrap()
             .context(LockFailedSnafu {
                 lock_path: &self.lock_path,
             })?;
@@ -120,6 +112,29 @@ impl<T: PathsAccess> DirectoryStructureLock<T> {
         })?;
         Ok(ret)
     }
+}
+
+#[derive(Debug)]
+enum Mode {
+    Shared,
+    Exclusive,
+}
+
+/// Takes the advisory lock on `file`, returning it once held.
+///
+/// Deliberately free of type parameters: every caller is a generic method, so a `spawn_blocking`
+/// written inline there would carry those parameters into the closure type and monomorphize the
+/// whole of tokio's blocking-task machinery once per call site. Keep it that way.
+async fn acquire(file: File, mode: Mode) -> io::Result<File> {
+    spawn_blocking(move || {
+        let locked = match mode {
+            Mode::Shared => file.lock_shared(),
+            Mode::Exclusive => file.lock(),
+        };
+        locked.map(|()| file)
+    })
+    .await
+    .unwrap()
 }
 
 #[derive(Debug, Snafu)]

@@ -11,7 +11,8 @@ use icp::context::Context;
 use serde::Serialize;
 
 use super::SnapshotId;
-use crate::{commands::args, operations::misc::format_timestamp, operations::proxy_management};
+use crate::commands::args;
+use icp::operations::{misc::format_timestamp, proxy_management};
 
 /// Create a snapshot of a canister's state
 #[derive(Debug, Args)]

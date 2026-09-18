@@ -83,7 +83,7 @@ icp deploy --environment production
 icp deploy -e ic
 ```
 
-## Environment-Specific Init Args
+## Environment-Specific Install Args
 
 Provide different initialization arguments per environment:
 
@@ -101,6 +101,28 @@ environments:
     init_args:
       backend: "(record { mode = \"staging\" })"
 ```
+
+`upgrade_args` works the same way, and is used in place of `init_args` when the
+canister is upgraded rather than installed:
+
+```yaml
+canisters:
+  - name: backend
+    build:
+      # ... build steps
+    init_args: "(variant { init = record { mode = \"production\" } })"
+    upgrade_args: "(variant { upgrade })"
+
+environments:
+  - name: staging
+    network: ic
+    canisters: [backend]
+    upgrade_args:
+      backend: "(variant { upgrade_staging })"
+```
+
+A canister with no `upgrade_args` — in its own manifest or in the environment —
+is upgraded with its `init_args`.
 
 ## Viewing Environment Configuration
 
@@ -151,8 +173,8 @@ canisters:
       steps:
         - type: plugin
           path: ./plugins/upload-assets.wasm
-          dirs:
-            - dist
+          files:
+            assets: dist
 
   - name: backend
     build:
@@ -160,7 +182,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
 
 environments:
   - name: staging

@@ -44,10 +44,56 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
+      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access is\nlimited to what `files` lists: a directory is preopened read-only, and a\nfile's contents are read by the host and passed inline to the plugin.\nEntries are written relative to the canister directory and may name anything\ninside the project, but nothing outside it.\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  files:                              # each entry is named\n    seed: assets/seed-data            # a directory, preopened read-only\n    config: config.txt                # a file, read and passed inline\n    migrations:                       # a name may hold a list of paths\n      - migrations/2025\n      - migrations/2026\n  fields:                             # key-value fields passed inline\n    api_url: https://example.com\n    retries: 3\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```\n\nA plugin built against the older `icp:sync-plugin@0.1` interface takes the\nshape that interface has instead: a separate `dirs` for the directories, and\nplain lists of paths rather than named entries. The two shapes cannot be\nmixed, and which applies is settled by the plugin, so it is enforced when\nthe plugin is loaded (see [`NamedPaths`]).",
       "properties": {
+        "canisters": {
+          "description": "Canisters this plugin may call, or read metadata from, in addition to\nthe canister being synced. Each entry is a canister name resolved against\nthe project's canister ID table for the environment being synced, written\nas this project spells it: a bare local name for one of its own canisters\n(e.g. `backend`), or a `<subproject>:<canister>` key for a canister of\nsomething it depends on (e.g. `vendor/ledger:ledger`). The same spellings\nhold when the project is a workspace member, so vendoring it does not\nchange them. The plugin picks a target per request via the `call-target`\nin its `canister-call` or `canister-metadata-section` request; a target\nnot listed here is rejected by the host.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "dirs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NamedPaths"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Directories the plugin may read from — accepted only by a plugin\nimplementing `icp:sync-plugin@0.1`, which keeps them in a list of their\nown; a `@0.2` plugin takes them under [`Self::files`] instead. Written\nas a plain list of paths, on the same terms as [`Self::files`], and each\nentry must be a directory."
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "description": "Key-value fields passed to the plugin as part of `sync-exec-input.fields`.\nA plugin receives every value as a string; a number or boolean written\nunquoted arrives as its text form. The plugin decides how to interpret them.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "files": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NamedPaths"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the plugin may read, written relative to the canister directory and\nconfined to the project (an entry may reach elsewhere in the project\nwith `..`, but not out of it).\n\nAn entry naming a directory is made readable via WASI so the plugin can\ntraverse it using standard filesystem APIs; an entry naming a file is\nread by the host and passed inline. Which it is comes from what is on\ndisk. Entries may repeat a path or name a directory inside another's —\nthe plugin is told about each entry as written, and reads them all.\n\nWritten as a map of name → path (or list of paths), the name surfacing\nto the plugin as each entry's `key`. A plugin implementing the older\n`icp:sync-plugin@0.1` takes a plain list of paths here instead, and only\nfiles: its directories go in [`Self::dirs`]."
+        },
         "sha256": {
-          "description": "Optional sha256 checksum of the WASM",
+          "description": "Optional sha256 checksum of the wasm file.\nOptional for `path`; required for `url`.",
           "type": [
             "string",
             "null"
@@ -67,30 +113,10 @@
           "description": "Remote url to fetch a WASM file from"
         }
       ],
-      "description": "Configuration for a sync plugin step.\n\nA sync plugin is a WebAssembly module invoked during `icp sync` for a\nspecific canister. It runs inside a WASI sandbox whose filesystem access\nis limited to the directories listed in `dirs` (preopened read-only) plus\nthe contents of any files listed in `files` (read by the host and passed\ninline to the plugin).\n\nExample (local path):\n```yaml\n- type: plugin\n  path: ./plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # optional for path\n  dirs:                               # directories preopened read-only\n    - assets/seed-data\n  files:                              # files read by the host and passed inline\n    - config.txt\n```\n\nExample (remote URL — `sha256` is required):\n```yaml\n- type: plugin\n  url: https://example.com/plugins/populate-data.wasm\n  sha256: e3b0c44298fc1c149afb...   # required for url\n```",
+      "description": "Configuration for a wasm source — used by adapters that load a `.wasm` file\neither from a local path or from a remote URL.",
       "properties": {
-        "dirs": {
-          "description": "Directories (relative to canister directory) the plugin may read from.\nEach entry must be a directory; it is preopened via WASI so the plugin\ncan traverse it using standard filesystem APIs.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "files": {
-          "description": "Files (relative to canister directory) the host reads and passes to\nthe plugin as part of `sync-exec-input.files`.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
         "sha256": {
-          "description": "Optional sha256 checksum of the wasm file.\nOptional for `path`; required for `url`.",
+          "description": "Optional sha256 checksum of the WASM",
           "type": [
             "string",
             "null"
@@ -137,7 +163,7 @@
           "type": "object"
         },
         {
-          "$ref": "#/$defs/Adapter2",
+          "$ref": "#/$defs/Adapter3",
           "description": "Represents a pre-built canister.\nThis variant allows for retrieving a canister WASM from various sources.",
           "properties": {
             "type": {
@@ -213,7 +239,7 @@
       "description": "Controls who can read canister logs.",
       "oneOf": [
         {
-          "description": "Simple log visibility: 'controllers' (only controllers can view) or 'public' (anyone can view)",
+          "description": "'controllers' (only the canister's controllers can read the logs) or 'public' (anyone can read the logs)",
           "enum": [
             "controllers",
             "public"
@@ -222,12 +248,12 @@
         },
         {
           "additionalProperties": false,
-          "description": "Specific principals that can view logs",
+          "description": "Specific principals that can read the logs",
           "properties": {
             "allowed_viewers": {
-              "description": "List of principal IDs that can view canister logs",
+              "description": "Principal IDs that can read the logs, in addition to the controllers",
               "items": {
-                "description": "A principal ID that can view logs",
+                "description": "A principal ID",
                 "type": "string"
               },
               "type": "array"
@@ -240,28 +266,7 @@
         }
       ]
     },
-    "ManifestEnvVar": {
-      "anyOf": [
-        {
-          "description": "The value, written inline.",
-          "type": "string"
-        },
-        {
-          "description": "A file holding the value. Surrounding whitespace is trimmed off the\nfile's contents, so a trailing newline does not become part of the value.",
-          "properties": {
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "path"
-          ],
-          "type": "object"
-        }
-      ],
-      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
-    },
-    "ManifestInitArgs": {
+    "ManifestArgs": {
       "anyOf": [
         {
           "description": "Plain string shorthand — treated as Candid.",
@@ -300,7 +305,28 @@
           "type": "object"
         }
       ],
-      "description": "Init args as specified in a manifest file (canister.yaml or icp.yaml).\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+      "description": "Install args as specified in a manifest file (canister.yaml or icp.yaml) —\nthe value of `init_args` or of `upgrade_args`.\n\nA plain string is shorthand for inline Candid:\n```yaml\ninit_args: \"(42)\"\n```\n\nObject forms with explicit source and format:\n```yaml\ninit_args:\n  path: ./args.bin\n  format: bin\n```\n```yaml\ninit_args:\n  value: \"(42)\"\n  format: candid\n```"
+    },
+    "ManifestEnvVar": {
+      "anyOf": [
+        {
+          "description": "The value, written inline.",
+          "type": "string"
+        },
+        {
+          "description": "A file holding the value. Surrounding whitespace is trimmed off the\nfile's contents, so a trailing newline does not become part of the value.",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "An environment variable value as written in a manifest.\n\nA plain scalar is the value itself:\n```yaml\nenvironment_variables:\n  API_ENDPOINT: https://api.example.com\n```\n\nThe object form reads the value from a file, relative to the canister's own\ndirectory — including when an environment overrides the variable, matching how\nan `init_args` override resolves its path:\n```yaml\nenvironment_variables:\n  API_KEY:\n    path: ./secrets/api-key\n```"
     },
     "MemoryAmount": {
       "anyOf": [
@@ -314,6 +340,41 @@
         }
       ],
       "description": "An amount of memory in bytes.\n\nDeserializes from a number or a string with suffixes (kb, kib, mb, mib, gb, gib),\noptional decimals, and optional underscore separators."
+    },
+    "NamedPaths": {
+      "anyOf": [
+        {
+          "description": "A plain list of paths, carrying no keys.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/PathOrList"
+          },
+          "description": "A map of name → path(s), tagging each path with the key it sits under.",
+          "type": "object"
+        }
+      ],
+      "description": "The paths declared for a plugin step's `dirs` or `files`: either a plain list\nof paths, or a map of name → path(s) whose keys are surfaced to the plugin.\n\n```yaml\n# a plain list — entries carry no key\nfiles:\n  - config.txt\n  - data.json\n# a map whose keys each name a single path...\nfiles:\n  main: config.txt\n# ...or a list of paths, which then all share that key\nfiles:\n  seeds:\n    - a.json\n    - b.json\n```\n\nOrder is preserved in both forms: list entries in written order; map entries\nin written key order, each key's paths in written order.\n\nWhich form a step may use depends on the interface its plugin implements,\nand is enforced when the plugin is loaded rather than while parsing: a\n`icp:sync-plugin@0.2` plugin names every entry and so requires the map,\nwhile a `@0.1` one has nowhere to put a name and so requires the list."
+    },
+    "PathOrList": {
+      "anyOf": [
+        {
+          "description": "A single path under the key.",
+          "type": "string"
+        },
+        {
+          "description": "Several paths, all sharing the key.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "One value of a [`NamedPaths::Map`]: a single path, or a list of paths that\nall share the key."
     },
     "Recipe": {
       "properties": {
@@ -438,6 +499,28 @@
           ],
           "description": "Upper limit on cycles reserved for future resource payments.\nMemory allocations that would push the reserved balance above this limit will fail.\nSupports suffixes in YAML: k, m, b, t (e.g. \"4t\" or \"4.3t\")."
         },
+        "snapshot_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapshotVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read the canister's snapshots."
+        },
+        "status_visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusVisibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls who can read the canister's status."
+        },
         "wasm_memory_limit": {
           "anyOf": [
             {
@@ -463,6 +546,68 @@
       },
       "type": "object"
     },
+    "SnapshotVisibility": {
+      "description": "Controls who can read the canister's snapshots.",
+      "oneOf": [
+        {
+          "description": "'controllers' (only the canister's controllers can read the snapshots) or 'public' (anyone can read the snapshots)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Specific principals that can read the snapshots",
+          "properties": {
+            "allowed_viewers": {
+              "description": "Principal IDs that can read the snapshots, in addition to the controllers",
+              "items": {
+                "description": "A principal ID",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "StatusVisibility": {
+      "description": "Controls who can read the canister's status.",
+      "oneOf": [
+        {
+          "description": "'controllers' (the canister's controllers, plus any subnet administrators and the canister itself, can read the status) or 'public' (anyone can read the status)",
+          "enum": [
+            "controllers",
+            "public"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Specific principals that can read the status",
+          "properties": {
+            "allowed_viewers": {
+              "description": "Principal IDs that can read the status, in addition to the controllers",
+              "items": {
+                "description": "A principal ID",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "allowed_viewers"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "SyncStep": {
       "description": "Identifies the type of adapter used to sync the canister,\nalong with its configuration.\n\nThe adapter type is specified via the `type` field in the YAML file.\nFor example:\n\n```yaml\ntype: script\ncommand: echo \"synchronizing canister\"\n```",
       "oneOf": [
@@ -481,8 +626,8 @@
           "type": "object"
         },
         {
-          "$ref": "#/$defs/Adapter3",
-          "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read files from the declared `dirs`.",
+          "$ref": "#/$defs/Adapter2",
+          "description": "Represents a sync step executed by a WebAssembly plugin running inside\na wasmtime WASI sandbox.  The plugin can call canister methods on exactly\nthe canister being synced and read the paths declared in `files`.",
           "properties": {
             "type": {
               "const": "plugin",
@@ -519,6 +664,17 @@
       "properties": {
         "recipe": {
           "$ref": "#/$defs/Recipe"
+        },
+        "sync": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SyncSteps"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional sync steps, run after the ones the recipe renders."
         }
       },
       "required": [
@@ -555,7 +711,7 @@
     "init_args": {
       "anyOf": [
         {
-          "$ref": "#/$defs/ManifestInitArgs"
+          "$ref": "#/$defs/ManifestArgs"
         },
         {
           "type": "null"
@@ -573,6 +729,17 @@
         "controllers": null
       },
       "description": "The configuration specifying the various settings when creating the canister."
+    },
+    "upgrade_args": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManifestArgs"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arguments passed to the canister when it is upgraded. When absent, an\nupgrade passes `init_args` instead."
     }
   },
   "required": [

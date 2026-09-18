@@ -16,7 +16,7 @@ use serde::Serialize;
 use std::io::{self, Write};
 use tracing::error;
 
-use crate::operations::misc::fetch_canister_metadata;
+use icp::operations::misc::fetch_canister_metadata;
 
 /// How to interpret and display the call response blob.
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

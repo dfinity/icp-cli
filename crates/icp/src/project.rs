@@ -5,12 +5,12 @@ use indexmap::{IndexMap, map::Entry as IndexEntry};
 use snafu::prelude::*;
 
 use crate::{
-    Canister, Environment, InitArgs, Network, Project,
+    Canister, CanisterArgs, Environment, Network, Project,
     canister::{ControllerRef, ManifestEnvVar, ManifestSettings, Settings, recipe},
     fs,
     manifest::{
         ArgsFormat, CANISTER_MANIFEST, CanisterManifest, DependencyManifest, EnvironmentManifest,
-        Item, LoadManifestFromPathError, ManifestInitArgs, NetworkManifest, PROJECT_MANIFEST,
+        Item, LoadManifestFromPathError, ManifestArgs, NetworkManifest, PROJECT_MANIFEST,
         ProjectManifest, ProjectRootLocateError,
         canister::{Instructions, SyncSteps},
         environment::CanisterSelection,
@@ -35,7 +35,10 @@ pub enum EnvironmentError {
         network: String,
     },
 
-    #[snafu(display("environment '{environment}' points to invalid canister '{canister}'"))]
+    #[snafu(display(
+        "environment '{environment}' points to invalid canister '{canister}': an environment may \
+         only name canisters the project itself declares"
+    ))]
     InvalidCanister {
         environment: String,
         canister: String,
@@ -98,10 +101,11 @@ pub enum ConsolidateManifestError {
     #[snafu(display("could not locate a {kind} manifest at: '{path}'"))]
     NotFound { kind: String, path: String },
 
-    #[snafu(display("failed to read init_args file for canister '{canister}'"))]
-    ReadInitArgs {
+    #[snafu(display("failed to read {field} file for canister '{canister}'"))]
+    ReadArgs {
         source: fs::IoError,
         canister: String,
+        field: ArgsField,
     },
 
     #[snafu(display(
@@ -114,10 +118,10 @@ pub enum ConsolidateManifestError {
     },
 
     #[snafu(display(
-        "init_args for canister '{canister}' uses format 'bin' with inline content; \
+        "{field} for canister '{canister}' uses format 'bin' with inline content; \
          binary format requires a file path"
     ))]
-    BinFormatInlineContent { canister: String },
+    BinFormatInlineContent { canister: String, field: ArgsField },
 
     #[snafu(display(
         "canister '{canister}' lists controller '{controller}', but no canister with that \
@@ -165,6 +169,19 @@ pub enum ConsolidateManifestError {
     ))]
     UnknownDependencyCanister { alias: String, canister: String },
 
+    #[snafu(display(
+        "dependency '{alias}' environment '{environment}' points to invalid canister \
+         '{canister}': an environment may only name canisters the project itself declares"
+    ))]
+    InvalidDependencyEnvironmentCanister {
+        alias: String,
+        environment: String,
+        canister: String,
+    },
+
+    #[snafu(display("dependency '{alias}' declares two environments named '{environment}'"))]
+    DuplicateDependencyEnvironment { alias: String, environment: String },
+
     #[snafu(display("dependency cycle detected: {chain}"))]
     CircularDependency { chain: String },
 
@@ -172,38 +189,56 @@ pub enum ConsolidateManifestError {
     Environment { source: EnvironmentError },
 }
 
-/// Resolve a [`ManifestInitArgs`] into a canonical [`InitArgs`] by reading
+/// Which manifest field a [`ManifestArgs`] value was written under. Both fields
+/// resolve the same way, so the errors carry this to name the one at fault.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgsField {
+    Init,
+    Upgrade,
+}
+
+impl std::fmt::Display for ArgsField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ArgsField::Init => "init_args",
+            ArgsField::Upgrade => "upgrade_args",
+        })
+    }
+}
+
+/// Resolve a [`ManifestArgs`] into a canonical [`CanisterArgs`] by reading
 /// any file references relative to `base_path`.
-fn resolve_manifest_init_args(
-    manifest_init_args: &ManifestInitArgs,
+fn resolve_manifest_args(
+    manifest_args: &ManifestArgs,
     base_path: &Path,
     canister: &str,
-) -> Result<InitArgs, ConsolidateManifestError> {
-    match manifest_init_args {
-        ManifestInitArgs::String(content) => Ok(InitArgs::Text {
+    field: ArgsField,
+) -> Result<CanisterArgs, ConsolidateManifestError> {
+    match manifest_args {
+        ManifestArgs::String(content) => Ok(CanisterArgs::Text {
             content: content.trim().to_owned(),
             format: ArgsFormat::Candid,
         }),
-        ManifestInitArgs::Path { path, format } => {
+        ManifestArgs::Path { path, format } => {
             let file_path = base_path.join(path);
             match format {
                 ArgsFormat::Bin => {
-                    let bytes = fs::read(&file_path).context(ReadInitArgsSnafu { canister })?;
-                    Ok(InitArgs::Binary(bytes))
+                    let bytes = fs::read(&file_path).context(ReadArgsSnafu { canister, field })?;
+                    Ok(CanisterArgs::Binary(bytes))
                 }
                 fmt => {
-                    let content =
-                        fs::read_to_string(&file_path).context(ReadInitArgsSnafu { canister })?;
-                    Ok(InitArgs::Text {
+                    let content = fs::read_to_string(&file_path)
+                        .context(ReadArgsSnafu { canister, field })?;
+                    Ok(CanisterArgs::Text {
                         content: content.trim().to_owned(),
                         format: fmt.clone(),
                     })
                 }
             }
         }
-        ManifestInitArgs::Value { value, format } => match format {
-            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister }.fail(),
-            fmt => Ok(InitArgs::Text {
+        ManifestArgs::Value { value, format } => match format {
+            ArgsFormat::Bin => BinFormatInlineContentSnafu { canister, field }.fail(),
+            fmt => Ok(CanisterArgs::Text {
                 content: value.trim().to_owned(),
                 format: fmt.clone(),
             }),
@@ -222,6 +257,8 @@ fn resolve_manifest_settings(
 ) -> Result<(Settings, BTreeMap<String, PathBuf>), ConsolidateManifestError> {
     let ManifestSettings {
         log_visibility,
+        snapshot_visibility,
+        status_visibility,
         compute_allocation,
         memory_allocation,
         freezing_threshold,
@@ -261,6 +298,8 @@ fn resolve_manifest_settings(
 
     let settings = Settings {
         log_visibility: log_visibility.clone(),
+        snapshot_visibility: snapshot_visibility.clone(),
+        status_visibility: status_visibility.clone(),
         compute_allocation: *compute_allocation,
         memory_allocation: memory_allocation.clone(),
         freezing_threshold: freezing_threshold.clone(),
@@ -376,7 +415,7 @@ async fn build_manifest_canisters(
 
             let registry_recipe = match &m.instructions {
                 Instructions::BuildSync { .. } => None,
-                Instructions::Recipe { recipe } => match &recipe.recipe_type {
+                Instructions::Recipe { recipe, .. } => match &recipe.recipe_type {
                     RecipeType::Registry { .. } => Some(recipe.recipe_type.to_string()),
                     _ => None,
                 },
@@ -393,7 +432,10 @@ async fn build_manifest_canisters(
                 ),
 
                 // Recipe
-                Instructions::Recipe { recipe } => {
+                Instructions::Recipe {
+                    recipe,
+                    sync: extra_sync,
+                } => {
                     let fetched =
                         recipe_resolver
                             .resolve(recipe)
@@ -422,7 +464,12 @@ async fn build_manifest_canisters(
                             })?;
                     }
 
-                    steps
+                    // The manifest's own sync steps run after the recipe's.
+                    let (build, mut sync) = steps;
+                    if let Some(extra_sync) = extra_sync {
+                        sync.steps.extend(extra_sync.steps.iter().cloned());
+                    }
+                    (build, sync)
                 }
             };
 
@@ -432,7 +479,13 @@ async fn build_manifest_canisters(
             let init_args = m
                 .init_args
                 .as_ref()
-                .map(|mia| resolve_manifest_init_args(mia, &cdir, &m.name))
+                .map(|ma| resolve_manifest_args(ma, &cdir, &m.name, ArgsField::Init))
+                .transpose()?;
+
+            let upgrade_args = m
+                .upgrade_args
+                .as_ref()
+                .map(|ma| resolve_manifest_args(ma, &cdir, &m.name, ArgsField::Upgrade))
                 .transpose()?;
 
             result.push((
@@ -444,6 +497,7 @@ async fn build_manifest_canisters(
                     build,
                     sync,
                     init_args,
+                    upgrade_args,
                     registry_recipe,
                     bindings: BTreeMap::new(),
                     // Default to the bare local name; overwritten with the
@@ -480,11 +534,26 @@ struct ImportedInstance {
 #[derive(Default, Clone)]
 struct MemberCanisterOverride {
     settings: Option<ManifestSettings>,
-    init_args: Option<ManifestInitArgs>,
+    init_args: Option<ManifestArgs>,
+    upgrade_args: Option<ManifestArgs>,
 }
 
-/// Per-environment member overrides: env name → store key → override.
-type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride>>;
+/// What the members contribute to one of the root's environments.
+#[derive(Default, Clone)]
+struct MemberEnvContribution {
+    /// Per-canister config to fold in beneath the root's own overrides, keyed by
+    /// store key.
+    overrides: HashMap<String, MemberCanisterOverride>,
+
+    /// The store keys of the canisters the members keep out of this environment.
+    /// Each member decides only its own, so these never overlap.
+    left_out: HashSet<String>,
+}
+
+/// Per-environment member contributions, keyed by environment name. Every member
+/// writes under its own store-key prefix, so the contributions of all members
+/// targeting one environment merge into a single entry.
+type MemberEnvContributions = HashMap<String, MemberEnvContribution>;
 
 /// A member's identity (store-key prefix) and the environment names it defines,
 /// used to enforce that a member declares every environment the root targets
@@ -492,6 +561,46 @@ type MemberEnvOverrides = HashMap<String, HashMap<String, MemberCanisterOverride
 struct MemberEnvInfo {
     prefix: String,
     defined: HashSet<String>,
+}
+
+/// A name in an environment block that is not one of the writing project's own
+/// canisters. Each caller turns it into the error variant that names the project
+/// the way that project is addressed.
+struct UnknownEnvCanister(String);
+
+/// Which of a project's own canisters an environment block keeps *out* of the
+/// environment, as store keys.
+///
+/// `canisters:` names the ones to keep, and may only name canisters of the
+/// project that writes it: an environment block decides its own project's
+/// membership and nothing else, so a project's canisters read the same vendored
+/// as they do standalone.
+fn own_canisters_left_out(
+    own: &[(String, String)],
+    env: &EnvironmentManifest,
+) -> Result<HashSet<String>, UnknownEnvCanister> {
+    let selected: HashSet<String> = match &env.canisters {
+        CanisterSelection::Everything => return Ok(HashSet::new()),
+        CanisterSelection::None => HashSet::new(),
+        CanisterSelection::Named(names) => {
+            let mut selected = HashSet::with_capacity(names.len());
+            for name in names {
+                let key = own
+                    .iter()
+                    .find(|(local, _)| local == name)
+                    .map(|(_, key)| key.clone())
+                    .ok_or_else(|| UnknownEnvCanister(name.to_owned()))?;
+                selected.insert(key);
+            }
+            selected
+        }
+    };
+    Ok(own
+        .iter()
+        .map(|(_, key)| key)
+        .filter(|key| !selected.contains(*key))
+        .cloned()
+        .collect())
 }
 
 /// Canonicalize a dependency root (resolving symlinks and `..`) for use as a
@@ -812,7 +921,7 @@ async fn import_dependency(
     canisters: &mut IndexMap<String, (PathBuf, Canister)>,
     registry: &mut HashMap<PathBuf, ImportedInstance>,
     stack: &mut Vec<PathBuf>,
-    member_env_overrides: &mut MemberEnvOverrides,
+    member_envs: &mut MemberEnvContributions,
     members: &mut Vec<MemberEnvInfo>,
     // Alias chain from the workspace root to and including this dependency,
     // used to build friendly-URL subdomains (§17.2).
@@ -909,11 +1018,11 @@ async fn import_dependency(
         }
     }
 
-    // Capture the member's own environments so the parent can honor its
-    // per-canister settings/init_args for the same-named environment
-    // (standalone-equivalence). The network binding and canister selection are
-    // ignored; only overrides on the member's *own* canisters are
-    // folded in — keys naming its dependencies are left to those dependencies.
+    // Capture the member's own environments so the parent can honor its canister
+    // selection and per-canister settings/init_args/upgrade_args for the same-named
+    // environment (standalone-equivalence). The network binding is ignored (the
+    // root owns it). Only the member's *own* canisters are affected — its
+    // dependencies decide theirs, in their own turn through here.
     let mut defined_envs: HashSet<String> = HashSet::new();
     for env_item in &dep_manifest.environments {
         let em: EnvironmentManifest = match env_item {
@@ -932,7 +1041,32 @@ async fn import_dependency(
                     .context(LoadEnvironmentSnafu)?
             }
         };
-        defined_envs.insert(em.name.clone());
+        // Rejected for the same reason the root's own duplicates are: two blocks
+        // for one environment have no defined meaning.
+        if !defined_envs.insert(em.name.clone()) {
+            return DuplicateDependencyEnvironmentSnafu {
+                alias: dep.name.clone(),
+                environment: em.name.clone(),
+            }
+            .fail();
+        }
+
+        // What the member keeps out of this environment it keeps out of the
+        // workspace's, exactly as it would deploying on its own.
+        let left_out = own_canisters_left_out(&own, &em).map_err(|unknown| {
+            InvalidDependencyEnvironmentCanisterSnafu {
+                alias: dep.name.clone(),
+                environment: em.name.clone(),
+                canister: unknown.0,
+            }
+            .build()
+        })?;
+        member_envs
+            .entry(em.name.clone())
+            .or_default()
+            .left_out
+            .extend(left_out);
+
         if let Some(settings) = &em.settings {
             for (local, s) in settings {
                 if let Some(key) = local_to_key.get(local) {
@@ -941,9 +1075,10 @@ async fn import_dependency(
                     // resolve against the workspace id map just like base settings.
                     let mut s = s.clone();
                     translate_settings_controllers(&mut s, &local_to_key);
-                    member_env_overrides
+                    member_envs
                         .entry(em.name.clone())
                         .or_default()
+                        .overrides
                         .entry(key.clone())
                         .or_default()
                         .settings = Some(s);
@@ -953,12 +1088,26 @@ async fn import_dependency(
         if let Some(init_args) = &em.init_args {
             for (local, ia) in init_args {
                 if let Some(key) = local_to_key.get(local) {
-                    member_env_overrides
+                    member_envs
                         .entry(em.name.clone())
                         .or_default()
+                        .overrides
                         .entry(key.clone())
                         .or_default()
                         .init_args = Some(ia.clone());
+                }
+            }
+        }
+        if let Some(upgrade_args) = &em.upgrade_args {
+            for (local, ua) in upgrade_args {
+                if let Some(key) = local_to_key.get(local) {
+                    member_envs
+                        .entry(em.name.clone())
+                        .or_default()
+                        .overrides
+                        .entry(key.clone())
+                        .or_default()
+                        .upgrade_args = Some(ua.clone());
                 }
             }
         }
@@ -992,7 +1141,7 @@ async fn import_dependency(
             canisters,
             registry,
             stack,
-            member_env_overrides,
+            member_envs,
             members,
             &nested_chain,
         ))
@@ -1063,39 +1212,34 @@ pub fn member_scoped_canisters(
     Some(names)
 }
 
-/// Build one environment's canister map: select from `canisters`, then apply the
-/// member overrides for this environment (standalone-equivalence), then
-/// the root's own overrides (highest precedence). Precedence is therefore
-/// root-explicit > member-env > canister-base.
+/// Build one environment's canister map: drop what the root and each member keep
+/// out of it, then apply the member overrides for this environment
+/// (standalone-equivalence), then the root's own overrides (highest precedence).
+/// Override precedence is therefore root-explicit > member-env > canister-base.
+///
+/// Membership, unlike those overrides, has no precedence to resolve: each project
+/// decides its own canisters and only its own, so `root_left_out` and every
+/// member's contribution address disjoint sets of keys.
 fn build_environment_canisters(
     canisters: &IndexMap<String, (PathBuf, Canister)>,
-    env_name: &str,
-    selection: &CanisterSelection,
-    member_overrides: Option<&HashMap<String, MemberCanisterOverride>>,
+    root_left_out: &HashSet<String>,
+    member: Option<&MemberEnvContribution>,
     root_settings: Option<&HashMap<String, ManifestSettings>>,
-    root_init_args: Option<&HashMap<String, ManifestInitArgs>>,
+    root_init_args: Option<&HashMap<String, ManifestArgs>>,
+    root_upgrade_args: Option<&HashMap<String, ManifestArgs>>,
 ) -> Result<IndexMap<String, (PathBuf, Canister)>, ConsolidateManifestError> {
-    let mut cs = match selection {
-        CanisterSelection::None => IndexMap::new(),
-        CanisterSelection::Everything => canisters.clone(),
-        CanisterSelection::Named(names) => {
-            let mut cs: IndexMap<String, (PathBuf, Canister)> = IndexMap::new();
-            for name in names {
-                let v = canisters.get(name).ok_or(
-                    InvalidCanisterSnafu {
-                        environment: env_name.to_owned(),
-                        canister: name.to_owned(),
-                    }
-                    .build(),
-                )?;
-                cs.insert(name.to_owned(), v.to_owned());
-            }
-            cs
-        }
-    };
+    let member_left_out = member.map(|m| &m.left_out);
+    let mut cs: IndexMap<String, (PathBuf, Canister)> = canisters
+        .iter()
+        .filter(|(key, _)| {
+            !root_left_out.contains(*key)
+                && !member_left_out.is_some_and(|left_out| left_out.contains(*key))
+        })
+        .map(|(key, v)| (key.clone(), v.clone()))
+        .collect();
 
     // Member overrides first (lower precedence than the root's own overrides).
-    if let Some(overrides) = member_overrides {
+    if let Some(overrides) = member.map(|m| &m.overrides) {
         for (key, ov) in overrides {
             if let Some((cpath, canister)) = cs.get_mut(key) {
                 if let Some(s) = &ov.settings {
@@ -1103,7 +1247,12 @@ fn build_environment_canisters(
                         resolve_manifest_settings(s, cpath, key)?;
                 }
                 if let Some(ia) = &ov.init_args {
-                    canister.init_args = Some(resolve_manifest_init_args(ia, cpath, key)?);
+                    canister.init_args =
+                        Some(resolve_manifest_args(ia, cpath, key, ArgsField::Init)?);
+                }
+                if let Some(ua) = &ov.upgrade_args {
+                    canister.upgrade_args =
+                        Some(resolve_manifest_args(ua, cpath, key, ArgsField::Upgrade)?);
                 }
             }
         }
@@ -1121,7 +1270,15 @@ fn build_environment_canisters(
     if let Some(init_args) = root_init_args {
         for (name, ia) in init_args {
             if let Some((cpath, canister)) = cs.get_mut(name) {
-                canister.init_args = Some(resolve_manifest_init_args(ia, cpath, name)?);
+                canister.init_args = Some(resolve_manifest_args(ia, cpath, name, ArgsField::Init)?);
+            }
+        }
+    }
+    if let Some(upgrade_args) = root_upgrade_args {
+        for (name, ua) in upgrade_args {
+            if let Some((cpath, canister)) = cs.get_mut(name) {
+                canister.upgrade_args =
+                    Some(resolve_manifest_args(ua, cpath, name, ArgsField::Upgrade)?);
             }
         }
     }
@@ -1178,7 +1335,7 @@ pub async fn consolidate_manifest(
     let mut stack: Vec<PathBuf> = Vec::new();
     // Member environment config folded into the root's same-named environments,
     // and the per-member set of declared environment names for the strict rule.
-    let mut member_env_overrides: MemberEnvOverrides = HashMap::new();
+    let mut member_envs: MemberEnvContributions = HashMap::new();
     let mut members: Vec<MemberEnvInfo> = Vec::new();
     let app_own_names: HashSet<String> = app_own.iter().map(|(l, _)| l.clone()).collect();
     validate_dependency_aliases(&m.dependencies, &app_own_names)?;
@@ -1193,7 +1350,7 @@ pub async fn consolidate_manifest(
             &mut canisters,
             &mut registry,
             &mut stack,
-            &mut member_env_overrides,
+            &mut member_envs,
             &mut members,
             std::slice::from_ref(&dep.name),
         )
@@ -1366,32 +1523,41 @@ pub async fn consolidate_manifest(
 
             // Ok
             Entry::Vacant(e) => {
+                let network = networks
+                    .get(&m.network)
+                    .ok_or(
+                        InvalidNetworkSnafu {
+                            environment: m.name.to_owned(),
+                            network: m.network.to_owned(),
+                        }
+                        .build(),
+                    )?
+                    .to_owned();
+
+                // The root's block decides the root's own canisters, the same way
+                // each member's decides that member's.
+                let left_out = own_canisters_left_out(&app_own, &m).map_err(|unknown| {
+                    InvalidCanisterSnafu {
+                        environment: &m.name,
+                        canister: unknown.0,
+                    }
+                    .build()
+                })?;
+
+                // Embed canisters in environment, folding each member's own
+                // membership and overrides in beneath the root's.
+                let built = build_environment_canisters(
+                    &canisters,
+                    &left_out,
+                    member_envs.get(&m.name),
+                    m.settings.as_ref(),
+                    m.init_args.as_ref(),
+                    m.upgrade_args.as_ref(),
+                )?;
                 e.insert(Environment {
                     name: m.name.to_owned(),
-
-                    // Embed network in environment
-                    network: {
-                        let v = networks.get(&m.network).ok_or(
-                            InvalidNetworkSnafu {
-                                environment: m.name.to_owned(),
-                                network: m.network.to_owned(),
-                            }
-                            .build(),
-                        )?;
-
-                        v.to_owned()
-                    },
-
-                    // Embed canisters in environment, folding member overrides
-                    // beneath the root's own settings/init_args overrides.
-                    canisters: build_environment_canisters(
-                        &canisters,
-                        &m.name,
-                        &m.canisters,
-                        member_env_overrides.get(&m.name),
-                        m.settings.as_ref(),
-                        m.init_args.as_ref(),
-                    )?,
+                    network,
+                    canisters: built,
                 });
             }
         }
@@ -1410,17 +1576,18 @@ pub async fn consolidate_manifest(
                 .build(),
             )?
             .to_owned();
+        let built = build_environment_canisters(
+            &canisters,
+            &HashSet::new(),
+            member_envs.get(LOCAL),
+            None,
+            None,
+            None,
+        )?;
         vacant_entry.insert(Environment {
             name: LOCAL.to_string(),
             network,
-            canisters: build_environment_canisters(
-                &canisters,
-                LOCAL,
-                &CanisterSelection::Everything,
-                member_env_overrides.get(LOCAL),
-                None,
-                None,
-            )?,
+            canisters: built,
         });
     }
     if let Entry::Vacant(vacant_entry) = environments.entry(IC.to_string()) {
@@ -1434,17 +1601,18 @@ pub async fn consolidate_manifest(
                 .build(),
             )?
             .to_owned();
+        let built = build_environment_canisters(
+            &canisters,
+            &HashSet::new(),
+            member_envs.get(IC),
+            None,
+            None,
+            None,
+        )?;
         vacant_entry.insert(Environment {
             name: IC.to_string(),
             network,
-            canisters: build_environment_canisters(
-                &canisters,
-                IC,
-                &CanisterSelection::Everything,
-                member_env_overrides.get(IC),
-                None,
-                None,
-            )?,
+            canisters: built,
         });
     }
 
@@ -1475,6 +1643,112 @@ pub async fn consolidate_manifest(
         environments,
         member_missing_envs,
     })
+}
+
+#[cfg(test)]
+mod recipe_sync_tests {
+    use super::*;
+    use crate::canister::recipe::{Fetched, Resolve, ResolveError};
+    use crate::manifest::canister::SyncStep;
+    use crate::manifest::recipe::Recipe;
+    use camino_tempfile::Utf8TempDir;
+
+    /// Hands back one fixed template for every recipe, without touching the
+    /// network or the cache.
+    struct FixedResolver(&'static str);
+
+    #[async_trait::async_trait]
+    impl Resolve for FixedResolver {
+        async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
+            Ok(Fetched {
+                template: self.0.to_owned(),
+                pending_cache: None,
+            })
+        }
+    }
+
+    const TEMPLATE: &str = indoc::indoc! {r#"
+        build:
+          steps:
+            - type: script
+              command: build.sh
+        sync:
+          steps:
+            - type: script
+              command: echo recipe
+    "#};
+
+    async fn consolidate(pdir: &Path) -> Result<Project, ConsolidateManifestError> {
+        let m: ProjectManifest = load_manifest_from_path(&pdir.join(PROJECT_MANIFEST))
+            .await
+            .expect("failed to parse project manifest");
+        consolidate_manifest(pdir, &FixedResolver(TEMPLATE), &m).await
+    }
+
+    /// The commands of a canister's sync steps, which are all script steps here.
+    fn sync_commands(p: &Project, key: &str) -> Vec<String> {
+        p.canisters
+            .get(key)
+            .expect("canister not found")
+            .1
+            .sync
+            .steps
+            .iter()
+            .map(|s| match s {
+                SyncStep::Script(adapter) => adapter.command.as_vec().join(" "),
+                other => panic!("expected a script sync step, got {other:?}"),
+            })
+            .collect()
+    }
+
+    /// A canister may add sync steps of its own on top of a recipe's; they run
+    /// after the ones the recipe renders.
+    #[tokio::test]
+    async fn manifest_sync_steps_follow_the_recipes() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+                    sync:
+                      steps:
+                        - type: script
+                          command: echo manifest
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            sync_commands(&p, "backend"),
+            ["echo recipe", "echo manifest"]
+        );
+    }
+
+    /// Without a `sync` section, a recipe canister still gets exactly the
+    /// recipe's own sync steps.
+    #[tokio::test]
+    async fn recipe_sync_steps_alone_when_manifest_has_none() {
+        let tmp = Utf8TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(PROJECT_MANIFEST),
+            indoc::indoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: file://recipe.hbs
+            "#},
+        )
+        .unwrap();
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(sync_commands(&p, "backend"), ["echo recipe"]);
+    }
 }
 
 #[cfg(test)]
@@ -1741,6 +2015,332 @@ environments:
     }
 
     #[tokio::test]
+    async fn member_env_canister_selection_prunes_the_environment() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // openemail deploys only `backend` to staging, and nothing at all to
+        // `nothing` — the same as it would on its own.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+environments:
+  - name: staging
+    canisters: [backend]
+  - name: nothing
+    canisters: []
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: app
+    build:
+      steps:
+        - type: pre-built
+          path: app.wasm
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+  - name: nothing
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let names = |env: &str| {
+            p.environments
+                .get(env)
+                .unwrap_or_else(|| panic!("environment '{env}' not found"))
+                .canisters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+
+        // The root targets everything; openemail's own selection still prunes its
+        // `frontend` out of staging.
+        assert_eq!(
+            names("staging"),
+            vec!["app".to_string(), "openemail:backend".to_string()],
+        );
+
+        // An empty member selection removes all of that member's canisters.
+        assert_eq!(names("nothing"), vec!["app".to_string()]);
+
+        // The member's selection does not touch environments it does not declare.
+        assert_eq!(
+            names("local"),
+            vec![
+                "app".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn root_env_list_leaves_a_silent_members_canisters_alone() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "environments:\n  - name: staging\n",
+            ),
+        );
+        // The root's list names only its own canisters, so it says nothing about
+        // openemail — which writes no list of its own and keeps everything.
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app", "worker"],
+                r#"dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    canisters: [app]
+"#,
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        assert_eq!(
+            p.environments
+                .get("staging")
+                .expect("staging environment")
+                .canisters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![
+                "app".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn each_projects_list_decides_only_its_own_canisters() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // Both write a list for staging, and neither reaches into the other.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "environments:\n  - name: staging\n    canisters: [backend]\n",
+            ),
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app", "worker"],
+                r#"dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    canisters: [app]
+"#,
+            ),
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        assert_eq!(
+            p.environments
+                .get("staging")
+                .expect("staging environment")
+                .canisters
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec!["app".to_string(), "openemail:backend".to_string()],
+        );
+    }
+
+    #[tokio::test]
+    async fn root_env_naming_a_dependency_canister_is_rejected() {
+        // A dependency's canisters are the dependency's to decide, so the store
+        // key that addresses one elsewhere in the manifest is not a name the
+        // root's environment may select — nor a path leading to one.
+        for name in ["openemail:frontend", "./openemail:frontend"] {
+            let tmp = Utf8TempDir::new().unwrap();
+            write(
+                tmp.path(),
+                "openemail/icp.yaml",
+                &manifest(&["backend", "frontend"], ""),
+            );
+            write(
+                tmp.path(),
+                "icp.yaml",
+                &manifest(
+                    &["app"],
+                    &format!(
+                        "dependencies:\n  - name: openemail\n    path: ./openemail\n\
+                         environments:\n  - name: staging\n    canisters: [app, \"{name}\"]\n"
+                    ),
+                ),
+            );
+
+            let err = consolidate(tmp.path())
+                .await
+                .expect_err("a name outside the root's own canisters should be rejected");
+            assert!(
+                matches!(
+                    err,
+                    ConsolidateManifestError::Environment {
+                        source: EnvironmentError::InvalidCanister { ref canister, .. }
+                    } if canister == name
+                ),
+                "unexpected error for '{name}': {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn member_env_naming_an_unknown_canister_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // `backedn` is a typo for openemail's own `backend`; standalone this is a
+        // hard error, so it must not silently prune openemail out of staging.
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+environments:
+  - name: staging
+    canisters: [backedn]
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+        assert!(
+            err.contains("openemail")
+                && err.contains("staging")
+                && err.contains("invalid canister 'backedn'"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn member_env_naming_another_projects_canister_is_rejected() {
+        // A member is as local as the root: its own dependency's canister
+        // (`libfoo:util`), a sibling's reached by path (`../b:x`), and anything
+        // else with a namespace in it are all names it may not select.
+        for name in ["libfoo:util", "../b:x", "libfo:util"] {
+            let tmp = Utf8TempDir::new().unwrap();
+            write(tmp.path(), "b/icp.yaml", &manifest(&["x"], ""));
+            write(
+                tmp.path(),
+                "openemail/libfoo/icp.yaml",
+                &manifest(&["util"], ""),
+            );
+            write(
+                tmp.path(),
+                "openemail/icp.yaml",
+                &manifest(
+                    &["backend"],
+                    &format!(
+                        "dependencies:\n  - name: libfoo\n    path: ./libfoo\n\
+                         environments:\n  - name: staging\n    canisters: [\"{name}\"]\n"
+                    ),
+                ),
+            );
+            write(
+                tmp.path(),
+                "icp.yaml",
+                &manifest(
+                    &["app"],
+                    "dependencies:\n  - name: openemail\n    path: ./openemail\n  - name: b\n    \
+                     path: ./b\n",
+                ),
+            );
+
+            let err = consolidate(tmp.path())
+                .await
+                .expect_err("a name outside the member's own canisters should be rejected");
+            assert!(
+                matches!(
+                    err,
+                    ConsolidateManifestError::InvalidDependencyEnvironmentCanister {
+                        ref alias,
+                        ref environment,
+                        ref canister,
+                    } if alias == "openemail" && environment == "staging" && canister == name
+                ),
+                "unexpected error for '{name}': {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn duplicate_member_environment_is_rejected() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+environments:
+  - name: staging
+  - name: staging
+    canisters: []
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            &manifest(
+                &["app"],
+                "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+            ),
+        );
+
+        let err = consolidate(tmp.path()).await.unwrap_err().to_string();
+        assert!(
+            err.contains("openemail") && err.contains("two environments named 'staging'"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn missing_member_environment_is_recorded() {
         let tmp = Utf8TempDir::new().unwrap();
         write(
@@ -1775,6 +2375,66 @@ environments:
         // Implicit environments are never recorded as missing.
         assert!(!p.member_missing_envs.contains_key("local"));
         assert!(!p.member_missing_envs.contains_key("ic"));
+    }
+
+    /// Sorted store keys of an environment's canisters, for comparing selections.
+    fn env_canisters(p: &Project, env: &str) -> Vec<String> {
+        let mut keys: Vec<String> = p
+            .environments
+            .get(env)
+            .unwrap_or_else(|| panic!("environment '{env}' not found"))
+            .canisters
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort();
+        keys
+    }
+
+    /// A workspace whose root declares `app` and `extra`, depends on
+    /// `openemail` (`backend`, `frontend`), which in turn vendors `ledger`.
+    fn nested_workspace(tmp: &Path, root_environments: &str) {
+        write(
+            tmp,
+            "openemail/vendor/ledger/icp.yaml",
+            &manifest(&["ledger"], ""),
+        );
+        write(
+            tmp,
+            "openemail/icp.yaml",
+            &manifest(
+                &["backend", "frontend"],
+                "dependencies:\n  - name: ledger\n    path: ./vendor/ledger\n",
+            ),
+        );
+        let mut root = manifest(
+            &["app", "extra"],
+            "dependencies:\n  - name: openemail\n    path: ./openemail\n",
+        );
+        root.push_str(root_environments);
+        write(tmp, "icp.yaml", &root);
+    }
+
+    #[tokio::test]
+    async fn empty_root_list_empties_only_the_root() {
+        let tmp = Utf8TempDir::new().unwrap();
+        // A subproject's canisters are its own to decide, so the root's
+        // `canisters: []` reaches none of them.
+        nested_workspace(
+            tmp.path(),
+            "environments:\n  - name: staging\n    canisters: []\n",
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        assert_eq!(
+            env_canisters(&p, "staging"),
+            vec![
+                "openemail/vendor/ledger:ledger".to_string(),
+                "openemail:backend".to_string(),
+                "openemail:frontend".to_string(),
+            ],
+        );
     }
 
     #[tokio::test]
@@ -2430,5 +3090,237 @@ canisters:
         let local = p.environments.get("local").unwrap();
         assert!(local.canisters.contains_key("backend"));
         assert!(local.canisters.contains_key("openemail:backend"));
+    }
+
+    fn candid(content: &str) -> CanisterArgs {
+        CanisterArgs::Text {
+            content: content.to_owned(),
+            format: ArgsFormat::Candid,
+        }
+    }
+
+    /// The two fields are carried separately, and a canister that names only
+    /// `init_args` leaves `upgrade_args` unset — the fallback is deploy's, not
+    /// consolidation's.
+    #[tokio::test]
+    async fn init_and_upgrade_args_resolve_independently() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    init_args: "(42)"
+    upgrade_args:
+      value: "4449444c0000"
+      format: hex
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    init_args: "(7)"
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+
+        let backend = &p.canisters.get("backend").unwrap().1;
+        assert_eq!(backend.init_args, Some(candid("(42)")));
+        assert_eq!(
+            backend.upgrade_args,
+            Some(CanisterArgs::Text {
+                content: "4449444c0000".to_string(),
+                format: ArgsFormat::Hex,
+            })
+        );
+
+        let frontend = &p.canisters.get("frontend").unwrap().1;
+        assert_eq!(frontend.init_args, Some(candid("(7)")));
+        assert_eq!(frontend.upgrade_args, None);
+    }
+
+    /// An environment overrides each field on its own: overriding `upgrade_args`
+    /// leaves the canister's `init_args` in place, and vice versa.
+    #[tokio::test]
+    async fn environment_overrides_upgrade_args_independently() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    init_args: "(42)"
+    upgrade_args: "(43)"
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+environments:
+  - name: staging
+    upgrade_args:
+      backend: "(99)"
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+        let backend = &staging.canisters.get("backend").unwrap().1;
+
+        assert_eq!(backend.upgrade_args, Some(candid("(99)")));
+        assert_eq!(backend.init_args, Some(candid("(42)")));
+
+        // The override applies to the environment only.
+        let base = &p.canisters.get("backend").unwrap().1;
+        assert_eq!(base.upgrade_args, Some(candid("(43)")));
+    }
+
+    /// A member's `upgrade_args` override folds in beneath the root's, exactly
+    /// as `settings` and `init_args` do.
+    #[tokio::test]
+    async fn member_upgrade_args_fold_in_with_root_override_winning() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "openemail/icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+  - name: frontend
+    build:
+      steps:
+        - type: pre-built
+          path: frontend.wasm
+environments:
+  - name: staging
+    upgrade_args:
+      backend: "(1)"
+      frontend: "(2)"
+"#,
+        );
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters: []
+dependencies:
+  - name: openemail
+    path: ./openemail
+environments:
+  - name: staging
+    upgrade_args:
+      "openemail:backend": "(99)"
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:backend")
+                .unwrap()
+                .1
+                .upgrade_args,
+            Some(candid("(99)")),
+        );
+        assert_eq!(
+            staging
+                .canisters
+                .get("openemail:frontend")
+                .unwrap()
+                .1
+                .upgrade_args,
+            Some(candid("(2)")),
+        );
+    }
+
+    /// A file reference in an `upgrade_args` override resolves against the
+    /// canister's own directory, the base `init_args` uses.
+    #[tokio::test]
+    async fn upgrade_args_file_resolves_against_canister_dir() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "canisters/backend/canister.yaml",
+            r#"
+name: backend
+build:
+  steps:
+    - type: pre-built
+      path: backend.wasm
+"#,
+        );
+        write(tmp.path(), "canisters/backend/args/upgrade.did", "(99)\n");
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - ./canisters/backend
+environments:
+  - name: staging
+    upgrade_args:
+      backend:
+        path: args/upgrade.did
+"#,
+        );
+
+        let p = consolidate(tmp.path()).await.unwrap();
+        let staging = p.environments.get("staging").expect("staging environment");
+
+        assert_eq!(
+            staging.canisters.get("backend").unwrap().1.upgrade_args,
+            Some(candid("(99)")),
+        );
+    }
+
+    /// Errors resolving the args name the field they came from, so a message
+    /// points at what the user wrote.
+    #[tokio::test]
+    async fn upgrade_args_errors_name_the_field() {
+        let tmp = Utf8TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "icp.yaml",
+            r#"
+canisters:
+  - name: backend
+    upgrade_args:
+      path: does-not-exist.bin
+      format: bin
+    build:
+      steps:
+        - type: pre-built
+          path: backend.wasm
+"#,
+        );
+
+        let err = consolidate(tmp.path())
+            .await
+            .expect_err("the upgrade_args file does not exist");
+        assert!(
+            matches!(
+                &err,
+                ConsolidateManifestError::ReadArgs { canister, field, .. }
+                    if canister == "backend" && *field == ArgsField::Upgrade
+            ),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "failed to read upgrade_args file for canister 'backend'"
+        );
     }
 }

@@ -15,11 +15,11 @@ use ic_management_canister_types::{
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
-use icp::{
+use crate::operations::task::TaskReporter;
+use crate::{
     fs::lock::{DirectoryStructureLock, LWrite, LockError, PathsAccess},
     prelude::*,
 };
-use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::{
@@ -79,9 +79,9 @@ impl SnapshotPaths {
     }
 
     /// Ensure the directory and wasm chunk store subdirectory exist.
-    pub fn ensure_dirs(&self) -> Result<(), icp::fs::IoError> {
-        icp::fs::create_dir_all(&self.dir)?;
-        icp::fs::create_dir_all(&self.wasm_chunk_store_dir())?;
+    pub fn ensure_dirs(&self) -> Result<(), crate::fs::IoError> {
+        crate::fs::create_dir_all(&self.dir)?;
+        crate::fs::create_dir_all(&self.wasm_chunk_store_dir())?;
         Ok(())
     }
 
@@ -147,13 +147,13 @@ pub enum SnapshotTransferError {
     },
 
     #[snafu(transparent)]
-    FsIo { source: icp::fs::IoError },
+    FsIo { source: crate::fs::IoError },
 
     #[snafu(transparent)]
-    FsRename { source: icp::fs::RenameError },
+    FsRename { source: crate::fs::RenameError },
 
     #[snafu(transparent)]
-    Json { source: icp::fs::json::Error },
+    Json { source: crate::fs::json::Error },
 
     #[snafu(transparent)]
     Lock { source: LockError },
@@ -424,19 +424,6 @@ where
     }
 }
 
-/// Create a progress bar for byte transfers.
-pub fn create_transfer_progress_bar(total_bytes: u64, label: &str) -> ProgressBar {
-    let pb = ProgressBar::new(total_bytes);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .expect("invalid progress bar template")
-            .progress_chars("#>-"),
-    );
-    pb.set_prefix(label.to_string());
-    pb
-}
-
 /// Read snapshot metadata from a canister.
 pub async fn read_snapshot_metadata(
     agent: &Agent,
@@ -513,12 +500,12 @@ pub async fn download_blob_to_file(
     total_size: u64,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut DownloadProgress,
-    progress_bar: &ProgressBar,
+    task: &TaskReporter,
 ) -> Result<(), SnapshotTransferError> {
     let output_path = paths.blob_path(blob_type);
 
     if total_size == 0 {
-        icp::fs::write(&output_path, &[])?;
+        crate::fs::write(&output_path, &[])?;
         return Ok(());
     }
 
@@ -547,7 +534,7 @@ pub async fn download_blob_to_file(
 
     // Set initial progress based on frontier
     let initial_bytes = progress.blob_progress(blob_type).frontier;
-    progress_bar.set_position(initial_bytes);
+    task.progress(initial_bytes);
 
     // Determine which chunks need downloading
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -612,7 +599,7 @@ pub async fn download_blob_to_file(
         save_download_progress(progress, paths)?;
 
         // Update progress bar to show frontier position
-        progress_bar.set_position(progress.blob_progress(blob_type).frontier);
+        task.progress(progress.blob_progress(blob_type).frontier);
     }
 
     Ok(())
@@ -645,7 +632,7 @@ pub async fn download_wasm_chunk(
     .await
     .context(ReadWasmChunkSnafu { hash: &hash_hex })?;
 
-    icp::fs::write(&output_path, &result.chunk)?;
+    crate::fs::write(&output_path, &result.chunk)?;
 
     Ok(())
 }
@@ -663,7 +650,7 @@ pub async fn upload_blob_from_file(
     blob_type: BlobType,
     paths: LWrite<&SnapshotPaths>,
     progress: &mut UploadProgress,
-    progress_bar: &ProgressBar,
+    task: &TaskReporter,
 ) -> Result<u64, SnapshotTransferError> {
     let input_path = paths.blob_path(blob_type);
     let file_size = std::fs::metadata(&input_path)
@@ -690,7 +677,7 @@ pub async fn upload_blob_from_file(
             .context(SeekBlobFileSnafu { path: &input_path })?;
     }
 
-    progress_bar.set_position(start_offset);
+    task.progress(start_offset);
 
     // Read all chunks and launch uploads concurrently
     let snapshot_id_vec = snapshot_id.to_vec();
@@ -742,7 +729,7 @@ pub async fn upload_blob_from_file(
                 while let Some(&size) = completed.get(&next_report_offset) {
                     completed.remove(&next_report_offset);
                     next_report_offset += size;
-                    progress_bar.set_position(next_report_offset);
+                    task.progress(next_report_offset);
 
                     // Update and save progress
                     match blob_type {
@@ -782,7 +769,7 @@ pub async fn upload_wasm_chunk(
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
     let chunk_path = paths.wasm_chunk_path(chunk_hash);
-    let chunk = icp::fs::read(&chunk_path)?;
+    let chunk = crate::fs::read(&chunk_path)?;
 
     let args = UploadCanisterSnapshotDataArgs {
         canister_id,
@@ -808,7 +795,7 @@ pub fn save_upload_progress(
     progress: &UploadProgress,
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    icp::fs::json::save(&paths.upload_progress_path(), progress)?;
+    crate::fs::json::save(&paths.upload_progress_path(), progress)?;
     Ok(())
 }
 
@@ -822,14 +809,14 @@ pub fn load_upload_progress(
             path: paths.dir().to_path_buf(),
         });
     }
-    Ok(icp::fs::json::load(&progress_path)?)
+    Ok(crate::fs::json::load(&progress_path)?)
 }
 
 /// Delete upload progress file.
 pub fn delete_upload_progress(paths: LWrite<&SnapshotPaths>) -> Result<(), SnapshotTransferError> {
     let progress_path = paths.upload_progress_path();
     if progress_path.exists() {
-        icp::fs::remove_file(&progress_path)?;
+        crate::fs::remove_file(&progress_path)?;
     }
     Ok(())
 }
@@ -856,7 +843,7 @@ pub fn save_download_progress(
     drop(file);
 
     // Atomic rename
-    icp::fs::rename(&tmp_path, &target_path)?;
+    crate::fs::rename(&tmp_path, &target_path)?;
 
     Ok(())
 }
@@ -865,7 +852,7 @@ pub fn save_download_progress(
 pub fn load_download_progress(
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<DownloadProgress, SnapshotTransferError> {
-    Ok(icp::fs::json::load_or_default(
+    Ok(crate::fs::json::load_or_default(
         &paths.download_progress_path(),
     )?)
 }
@@ -876,7 +863,7 @@ pub fn delete_download_progress(
 ) -> Result<(), SnapshotTransferError> {
     let progress_path = paths.download_progress_path();
     if progress_path.exists() {
-        icp::fs::remove_file(&progress_path)?;
+        crate::fs::remove_file(&progress_path)?;
     }
     Ok(())
 }
@@ -886,7 +873,7 @@ pub fn save_metadata(
     metadata: &ReadCanisterSnapshotMetadataResult,
     paths: LWrite<&SnapshotPaths>,
 ) -> Result<(), SnapshotTransferError> {
-    icp::fs::json::save(&paths.metadata_path(), metadata)?;
+    crate::fs::json::save(&paths.metadata_path(), metadata)?;
     Ok(())
 }
 
@@ -900,5 +887,5 @@ pub fn load_metadata(
             path: metadata_path,
         });
     }
-    Ok(icp::fs::json::load(&metadata_path)?)
+    Ok(crate::fs::json::load(&metadata_path)?)
 }

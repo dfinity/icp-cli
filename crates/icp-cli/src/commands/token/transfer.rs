@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::commands::args::{FlexibleAccountId, TokenCommandArgs};
 use crate::commands::parsers::parse_subaccount;
-use crate::operations::token::transfer::transfer;
+use icp::operations::token::transfer::transfer;
 
 /// Transfer ICP or ICRC1 tokens through their ledger (default token: icp)
 #[derive(Debug, Args)]

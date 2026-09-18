@@ -3,31 +3,32 @@ use std::{
     sync::Arc,
 };
 
+use crate::{
+    Canister, Environment,
+    canister::{Settings, Visibility, resolve_controllers},
+    context::{Context, EnvironmentSelection},
+    store_id::IdMapping,
+};
 use candid::{Nat, Principal};
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettings, EnvironmentVariable, LogVisibility, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterSettings, EnvironmentVariable, UpdateSettingsArgs,
 };
-use icp::{
-    Canister,
-    canister::{Settings, resolve_controllers},
-    context::{Context, EnvironmentSelection},
-    store_id::IdMapping,
-};
+use icp_events::TaskOutcome;
+
+use crate::operations::task::{Reporter, Task};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
-use tracing::{error, warn};
-
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use tracing::warn;
 
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
-pub(crate) enum SyncSettingsOperationError {
+pub enum SyncSettingsOperationError {
     #[snafu(display("failed to fetch current canister settings for canister {canister}"))]
     FetchCurrentSettings {
         source: UpdateOrProxyError,
@@ -46,20 +47,13 @@ pub struct SyncSettingsManyError {
     names: Vec<String>,
 }
 
-/// Holds error information from a failed canister settings update operation
-struct SettingsFailure {
-    canister_name: String,
-    canister_id: Principal,
-    error: SyncSettingsOperationError,
-}
-
-/// Compare two LogVisibility values in an order-insensitive manner.
-/// For AllowedViewers, the principal lists are compared as sets.
-fn log_visibility_eq(a: &LogVisibility, b: &LogVisibility) -> bool {
+/// Compare two visibility settings, treating the allowed-viewers list as a set
+/// so a reordering from the replica does not look like a pending change.
+fn visibility_eq(a: &Visibility, b: &Visibility) -> bool {
     match (a, b) {
-        (LogVisibility::Controllers, LogVisibility::Controllers) => true,
-        (LogVisibility::Public, LogVisibility::Public) => true,
-        (LogVisibility::AllowedViewers(va), LogVisibility::AllowedViewers(vb)) => {
+        (Visibility::Controllers, Visibility::Controllers) => true,
+        (Visibility::Public, Visibility::Public) => true,
+        (Visibility::AllowedViewers(va), Visibility::AllowedViewers(vb)) => {
             let set_a: HashSet<_> = va.iter().collect();
             let set_b: HashSet<_> = vb.iter().collect();
             set_a == set_b
@@ -79,7 +73,7 @@ fn environment_variables_eq(a: &[EnvironmentVariable], b: &[EnvironmentVariable]
 /// Syncs the manifest settings to the canister. Returns names of any controller canister
 /// references that could not be resolved because the referenced canister has not been created
 /// yet. Resolved controllers are always applied immediately.
-pub(crate) async fn sync_settings(
+pub async fn sync_settings(
     agent: &Agent,
     proxy: Option<Principal>,
     cid: &Principal,
@@ -92,6 +86,8 @@ pub(crate) async fn sync_settings(
             .context(FetchCurrentSettingsSnafu { canister: *cid })?;
     let &Settings {
         ref log_visibility,
+        ref snapshot_visibility,
+        ref status_visibility,
         compute_allocation,
         ref memory_allocation,
         ref freezing_threshold,
@@ -104,9 +100,13 @@ pub(crate) async fn sync_settings(
     } = &canister.settings;
     let current_settings = status.settings;
 
-    // Convert our log_visibility to IC type for comparison and update
-    let log_visibility_setting: Option<LogVisibility> =
-        log_visibility.clone().map(LogVisibility::from);
+    let desired_log_visibility = log_visibility.clone().map(Visibility::from);
+    let desired_snapshot_visibility = snapshot_visibility.clone().map(Visibility::from);
+    let desired_status_visibility = status_visibility.clone().map(Visibility::from);
+    let current_log_visibility = Visibility::from(current_settings.log_visibility.clone());
+    let current_snapshot_visibility =
+        Visibility::from(current_settings.snapshot_visibility.clone());
+    let current_status_visibility = Visibility::from(current_settings.status_visibility.clone());
 
     let environment_variable_setting =
         if let Some(configured_environment_variables) = &environment_variables {
@@ -153,9 +153,15 @@ pub(crate) async fn sync_settings(
         desired_sorted != current_sorted
     });
 
-    if log_visibility_setting
+    if desired_log_visibility
         .as_ref()
-        .is_none_or(|s| log_visibility_eq(s, &current_settings.log_visibility))
+        .is_none_or(|s| visibility_eq(s, &current_log_visibility))
+        && desired_snapshot_visibility
+            .as_ref()
+            .is_none_or(|s| visibility_eq(s, &current_snapshot_visibility))
+        && desired_status_visibility
+            .as_ref()
+            .is_none_or(|s| visibility_eq(s, &current_status_visibility))
         && compute_allocation.is_none_or(|s| s == current_settings.compute_allocation)
         && memory_allocation
             .as_ref()
@@ -190,7 +196,9 @@ pub(crate) async fn sync_settings(
     }
 
     let settings = CanisterSettings {
-        log_visibility: log_visibility_setting,
+        log_visibility: desired_log_visibility.map(Into::into),
+        snapshot_visibility: desired_snapshot_visibility.map(Into::into),
+        status_visibility: desired_status_visibility.map(Into::into),
         compute_allocation: compute_allocation.map(Nat::from),
         memory_allocation: memory_allocation.as_ref().map(|m| Nat::from(m.get())),
         freezing_threshold: freezing_threshold.as_ref().map(|d| Nat::from(d.get())),
@@ -200,10 +208,8 @@ pub(crate) async fn sync_settings(
         log_memory_limit: log_memory_limit.as_ref().map(|m| Nat::from(m.get())),
         environment_variables: environment_variable_setting,
         controllers: controllers_setting,
-        // TODO: make snapshot_visibility configurable from the manifest and synced
-        // here, mirroring log_visibility (Controllers/Public/AllowedViewers).
-        // Tracked for a follow-up PR; until then, leave it unchanged.
-        snapshot_visibility: None,
+        // Not configurable from the manifest yet; `None` leaves it unchanged.
+        minimum_incoming_canister_call_cycles: None,
     };
 
     proxy_management::update_settings(
@@ -221,105 +227,93 @@ pub(crate) async fn sync_settings(
     Ok(unresolved_names)
 }
 
-pub(crate) async fn sync_settings_many(
+/// Report a controller reference that stayed unresolved. A controller the
+/// environment holds is merely not created yet, so the reference will take effect
+/// on its own; one the environment does not hold never will, because no deploy
+/// gives it an id here.
+fn warn_unresolved_controller(controller: &str, canister: &str, environment: &Environment) {
+    if environment.canisters.contains_key(controller) {
+        warn!(
+            "Controller canister '{controller}' for '{canister}' has not been created yet; \
+             it will be set as a controller once created."
+        );
+    } else {
+        warn!(
+            "Controller canister '{controller}' for '{canister}' is not part of environment \
+             '{}', so it cannot be set as a controller there.",
+            environment.name
+        );
+    }
+}
+
+pub async fn sync_settings_many(
     agent: Agent,
     proxy: Option<Principal>,
     target_canisters: Vec<(Principal, Canister)>,
     ids: IdMapping,
-    debug: bool,
+    environment: &Environment,
+    reporter: &Reporter,
 ) -> Result<(), SyncSettingsManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
     let ids = Arc::new(ids);
 
     for (cid, info) in target_canisters {
-        let pb = progress_manager.create_progress_bar(&info.name);
-        let canister_name = info.name.clone();
+        let task = reporter.task(Task::update_settings(info.name.clone(), cid));
+        let agent = agent.clone();
         let ids = ids.clone();
 
-        let settings_fn = {
-            let agent = agent.clone();
-            let pb = pb.clone();
-
-            async move {
-                pb.set_message("Updating canister settings...");
+        futs.push_back(async move {
+            let result = async {
                 let unresolved = sync_settings(&agent, proxy, &cid, &info, &ids).await?;
                 for name in &unresolved {
-                    warn!(
-                        "Controller canister '{name}' for '{}' has not been created yet; \
-                         it will be set as a controller once created.",
-                        info.name
-                    );
+                    warn_unresolved_controller(name, &info.name, environment);
                 }
                 Ok::<_, SyncSettingsOperationError>(())
             }
-        };
-
-        futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                settings_fn,
-                || "Canister settings updated successfully".to_string(),
-                |err| format!("Failed to update canister settings: {err}"),
-            )
             .await;
 
-            // Map error to include canister context for deferred printing
-            result.map_err(|error| SettingsFailure {
-                canister_name,
-                canister_id: cid,
-                error,
-            })
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| info.name.clone())
         });
     }
 
-    // Consume the set of futures and collect errors
-    let mut errors: Vec<SettingsFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        // Print all errors in batch
-        for failure in &errors {
-            error!(
-                "----- Failed to update settings for canister '{}': {} -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!("'{}'", failure.error);
-        }
-
-        return SyncSettingsManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return SyncSettingsManySnafu { names: failed }.fail();
     }
 
     Ok(())
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum SyncControllerDependentsError {
+pub enum SyncControllerDependentsError {
     #[snafu(display("failed to load environment for controller dependent sync"))]
     GetEnvironment {
-        source: icp::context::GetEnvironmentError,
+        source: crate::context::GetEnvironmentError,
     },
 
     #[snafu(display("failed to load canister IDs for controller dependent sync"))]
     GetIds {
-        source: icp::context::GetIdsByEnvironmentError,
+        source: crate::context::GetIdsByEnvironmentError,
     },
 }
 
 /// After `newly_created_name` is registered, scan the project manifest for all other canisters
 /// that list `newly_created_name` as a controller and already have a stored ID. Calls
 /// `sync_settings` for each so the controller is applied now that it can be resolved.
-pub(crate) async fn sync_controller_dependents(
+pub async fn sync_controller_dependents(
     ctx: &Context,
     agent: &Agent,
     proxy: Option<Principal>,
@@ -347,10 +341,7 @@ pub(crate) async fn sync_controller_dependents(
         match sync_settings(agent, proxy, &cid, canister, &ids).await {
             Ok(unresolved) => {
                 for still_unresolved in &unresolved {
-                    warn!(
-                        "Controller canister '{still_unresolved}' for '{name}' has not been \
-                         created yet; it will be set as a controller once created."
-                    );
+                    warn_unresolved_controller(still_unresolved, name, &env_data);
                 }
             }
             Err(e) => {
@@ -367,90 +358,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn log_visibility_eq_controllers() {
-        assert!(log_visibility_eq(
-            &LogVisibility::Controllers,
-            &LogVisibility::Controllers
+    fn visibility_eq_controllers() {
+        assert!(visibility_eq(
+            &Visibility::Controllers,
+            &Visibility::Controllers
         ));
     }
 
     #[test]
-    fn log_visibility_eq_public() {
-        assert!(log_visibility_eq(
-            &LogVisibility::Public,
-            &LogVisibility::Public
+    fn visibility_eq_public() {
+        assert!(visibility_eq(&Visibility::Public, &Visibility::Public));
+    }
+
+    #[test]
+    fn visibility_eq_different_variants() {
+        assert!(!visibility_eq(
+            &Visibility::Controllers,
+            &Visibility::Public
+        ));
+        assert!(!visibility_eq(
+            &Visibility::Public,
+            &Visibility::Controllers
         ));
     }
 
     #[test]
-    fn log_visibility_eq_different_variants() {
-        assert!(!log_visibility_eq(
-            &LogVisibility::Controllers,
-            &LogVisibility::Public
-        ));
-        assert!(!log_visibility_eq(
-            &LogVisibility::Public,
-            &LogVisibility::Controllers
-        ));
-    }
-
-    #[test]
-    fn log_visibility_eq_allowed_viewers_same_order() {
+    fn visibility_eq_allowed_viewers_same_order() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
-        assert!(log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p1, p2])
+        assert!(visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_order() {
+    fn visibility_eq_allowed_viewers_different_order() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
         // Order should not matter
-        assert!(log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p2, p1])
+        assert!(visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p2, p1])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_principals() {
+    fn visibility_eq_allowed_viewers_different_principals() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
         let p3 = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1, p2]),
-            &LogVisibility::AllowedViewers(vec![p1, p3])
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1, p2]),
+            &Visibility::AllowedViewers(vec![p1, p3])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_different_length() {
+    fn visibility_eq_allowed_viewers_different_length() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
         let p2 = Principal::from_text("2vxsx-fae").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::AllowedViewers(vec![p1, p2])
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::AllowedViewers(vec![p1, p2])
         ));
     }
 
     #[test]
-    fn log_visibility_eq_allowed_viewers_vs_other() {
+    fn visibility_eq_allowed_viewers_vs_other() {
         let p1 = Principal::from_text("aaaaa-aa").unwrap();
 
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::Controllers
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::Controllers
         ));
-        assert!(!log_visibility_eq(
-            &LogVisibility::AllowedViewers(vec![p1]),
-            &LogVisibility::Public
+        assert!(!visibility_eq(
+            &Visibility::AllowedViewers(vec![p1]),
+            &Visibility::Public
         ));
     }
 

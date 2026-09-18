@@ -6,21 +6,23 @@ use std::ops::Deref;
 use camino::Utf8Component;
 use candid::types::Label;
 use candid::types::value::VariantValue;
-use candid::types::{TypeEnv, TypeInner};
+use candid::types::{Type, TypeEnv, TypeInner};
 use candid::{IDLArgs, IDLValue};
-use candid_parser::{assist, parse_idl_args, utils::CandidSource};
-use icp::canister::Settings;
-use icp::fs::yaml;
-use icp::manifest::ArgsFormat;
-use icp::prelude::*;
+use candid_parser::{parse_idl_args, utils::CandidSource};
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use snafu::{ResultExt, Snafu};
 
-pub(crate) const CUSTOMIZE_FILE: &str = "icp_customize.yaml";
+use crate::CanisterArgs;
+use crate::canister::Settings;
+use crate::fs::yaml;
+use crate::manifest::ArgsFormat;
+use crate::prelude::*;
+
+pub const CUSTOMIZE_FILE: &str = "icp_customize.yaml";
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CustomizeManifest {
+pub struct CustomizeManifest {
     pub(crate) options: Vec<CustomizeOption>,
 }
 
@@ -47,16 +49,6 @@ pub(crate) enum CustomizeTarget {
     /// so there is no type to declare, and the variable need not be among the
     /// canister's manifest settings — the answer is laid over them either way.
     EnvVar { name: String },
-}
-
-impl CustomizeTarget {
-    /// How the destination is named in messages about the option.
-    fn describe(&self) -> String {
-        match self {
-            Self::InitArgField { field_path, .. } => format!("field path {field_path:?}"),
-            Self::EnvVar { name } => format!("environment variable {name:?}"),
-        }
-    }
 }
 
 /// A [`CustomizeOption`] as the file spells it, with both targets' fields flat
@@ -265,7 +257,7 @@ pub(crate) struct FieldPath {
     pub(crate) text: String,
 }
 
-pub(crate) type LoadCustomizeManifestError = yaml::Error;
+pub type LoadCustomizeManifestError = yaml::Error;
 
 #[derive(Debug, Snafu)]
 pub(crate) enum ParseCustomizeOptionError {
@@ -320,14 +312,14 @@ pub(crate) enum ParseCanisterRefError {
     "canister {reference:?} in {path} is not part of this workspace. \
      Its canisters are: {known}"
 ))]
-pub(crate) struct UnknownCanisterError {
+pub struct UnknownCanisterError {
     reference: String,
     known: String,
     path: PathBuf,
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum ParseFieldPathError {
+pub enum ParseFieldPathError {
     #[snafu(display("field path is empty"))]
     Empty,
     #[snafu(display(
@@ -339,14 +331,14 @@ pub(crate) enum ParseFieldPathError {
 
 #[derive(Debug, Snafu)]
 #[snafu(display("failed to parse Candid type {type_str:?}"))]
-pub(crate) struct ParseCandidTypeError {
+pub struct ParseCandidTypeError {
     #[snafu(source(from(candid_parser::Error, Box::new)))]
     source: Box<candid_parser::Error>,
     type_str: String,
 }
 
 #[derive(Debug, Snafu)]
-pub(crate) enum SubstituteError {
+pub enum SubstituteError {
     #[snafu(display("arg index {index} out of bounds (init args has {len} args) in {path}"))]
     ArgIndexOutOfBounds {
         index: usize,
@@ -363,8 +355,10 @@ pub(crate) enum SubstituteError {
     },
 }
 
+/// Everything that can stop the questions from being settled on, before any of
+/// them is asked.
 #[derive(Debug, Snafu)]
-pub(crate) enum PromptCustomizationsError {
+pub enum PlanCustomizationsError {
     #[snafu(display("invalid field_path for canister(s) {canisters:?} in {path}"))]
     FieldPath {
         source: ParseFieldPathError,
@@ -392,11 +386,18 @@ pub(crate) enum PromptCustomizationsError {
          and cannot be field-customized (referenced from {path})"
     ))]
     UnsupportedInitArgsFormat { canister: String, path: PathBuf },
+}
+
+/// Everything that can stop the answers from being collected once the questions
+/// are settled.
+#[derive(Debug, Snafu)]
+pub enum ResolveCustomizationsError {
     #[snafu(display(
         "interactive prompt failed for canister(s) {canisters:?} at {target} (from {path})"
     ))]
     Prompt {
-        source: anyhow::Error,
+        #[snafu(source(from(candid_parser::Error, Box::new)))]
+        source: Box<candid_parser::Error>,
         canisters: String,
         target: String,
         path: PathBuf,
@@ -411,7 +412,7 @@ pub(crate) enum PromptCustomizationsError {
     },
 }
 
-pub(crate) fn load_customize_manifest(
+pub fn load_customize_manifest(
     project_dir: &Path,
 ) -> Result<Option<CustomizeManifest>, LoadCustomizeManifestError> {
     let path = project_dir.join(CUSTOMIZE_FILE);
@@ -426,9 +427,9 @@ pub(crate) fn load_customize_manifest(
 ///
 /// Without this, a misspelled project path is indistinguishable from a canister
 /// that simply isn't part of the current deploy, and
-/// [`prompt_customizations`] would skip it with a warning — leaving the canister
+/// [`plan_customizations`] would skip it with a warning — leaving the canister
 /// to be installed with unintended init args.
-pub(crate) fn validate_canister_refs(
+pub fn validate_canister_refs(
     manifest: &CustomizeManifest,
     workspace_canisters: &[&str],
     customize_path: &Path,
@@ -461,7 +462,7 @@ pub(crate) fn validate_canister_refs(
 ///
 /// Members are read off the store keys of `workspace_canisters`, whose prefix is
 /// the owning project's workspace-relative directory.
-pub(crate) fn warn_unread_member_customize_files(root_dir: &Path, workspace_canisters: &[&str]) {
+pub fn warn_unread_member_customize_files(root_dir: &Path, workspace_canisters: &[&str]) {
     let members: BTreeSet<&str> = workspace_canisters
         .iter()
         .filter_map(|name| name.rsplit_once(':'))
@@ -598,7 +599,7 @@ fn substitute_value(
     }
 }
 
-pub(crate) fn substitute_field(
+fn substitute_field(
     args: &mut IDLArgs,
     path: &FieldPath,
     replacement: IDLValue,
@@ -623,20 +624,20 @@ pub(crate) fn substitute_field(
 /// answers are substituted into. A canister with none starts from no args, which
 /// only a whole-argument field path (`0`) can then fill.
 fn manifest_init_args(
-    init_args: &HashMap<String, Option<icp::InitArgs>>,
+    init_args: &HashMap<String, Option<CanisterArgs>>,
     canister: &str,
     customize_path: &Path,
-) -> Result<IDLArgs, PromptCustomizationsError> {
+) -> Result<IDLArgs, PlanCustomizationsError> {
     match init_args.get(canister).and_then(Option::as_ref).cloned() {
         None => Ok(IDLArgs { args: vec![] }),
-        Some(icp::InitArgs::Text {
+        Some(CanisterArgs::Text {
             content,
             format: ArgsFormat::Candid,
         }) => parse_idl_args(content.trim()).context(ParseInitArgsSnafu {
             canister,
             path: customize_path,
         }),
-        Some(icp::InitArgs::Text { .. } | icp::InitArgs::Binary(_)) => {
+        Some(CanisterArgs::Text { .. } | CanisterArgs::Binary(_)) => {
             UnsupportedInitArgsFormatSnafu {
                 canister,
                 path: customize_path,
@@ -648,25 +649,116 @@ fn manifest_init_args(
 
 /// One option resolved against the deploy: what to ask, and which canisters
 /// receive the answer. Everything here is parsed before any prompt runs.
-struct PlannedPrompt<'a> {
-    option: &'a CustomizeOption,
-    /// The option's canisters as written, for messages naming the option.
-    canisters: String,
-    /// The subset of them this deploy targets — never empty.
+#[derive(Debug)]
+pub struct CustomizePrompt {
+    /// The option's canisters as written, for naming the option when it is
+    /// asked about and in messages about it.
+    pub canisters: String,
+    /// What the file says to ask for.
+    pub description: String,
+    /// The Candid type the answer is a value of, and the environment to read
+    /// it in. An environment variable's value is text, so its prompt asks for
+    /// `text` — the same question an init arg field of that type gets.
+    pub type_env: TypeEnv,
+    /// See [`type_env`](Self::type_env).
+    pub ty: Type,
+    /// The subset of the option's canisters this deploy targets — never empty.
     targets: Vec<String>,
-    plan: PlannedTarget,
+    target: PlannedTarget,
 }
 
-/// A [`CustomizeTarget`] with everything the file spells as text already parsed.
+/// A [`CustomizeTarget`] with everything the file spells as text already
+/// parsed, less the Candid type, which every prompt carries.
+#[derive(Debug)]
 enum PlannedTarget {
-    InitArgField {
-        field_path: FieldPath,
-        type_env: TypeEnv,
-        ty: candid::types::Type,
-    },
-    EnvVar {
-        name: String,
-    },
+    InitArgField { field_path: FieldPath },
+    EnvVar { name: String },
+}
+
+impl PlannedTarget {
+    /// How the destination is named in messages about the option.
+    fn describe(&self) -> String {
+        match self {
+            Self::InitArgField { field_path } => format!("field path {:?}", field_path.text),
+            Self::EnvVar { name } => format!("environment variable {name:?}"),
+        }
+    }
+}
+
+/// Where the init args an init-arg option customizes come from.
+pub enum InitArgsSource<'a> {
+    /// Each canister's `init_args` as the manifest wrote them, keyed by store
+    /// key. Answers are substituted into these.
+    Manifest(&'a HashMap<String, Option<CanisterArgs>>),
+    /// `--args`/`--args-file`, which replace a canister's init args outright
+    /// and outrank the file's options. No init-arg option is asked about —
+    /// its answer would go into args the deploy then discards — while
+    /// environment variable options are unaffected and still asked.
+    CommandLine,
+}
+
+/// The questions one `--customize` run is to ask, and the args their answers
+/// are substituted into.
+///
+/// Nothing here asks anything: [`resolve`](Self::resolve) takes the terminal —
+/// or whatever else is answering — as a closure.
+#[derive(Debug)]
+pub struct CustomizePlan {
+    prompts: Vec<CustomizePrompt>,
+    /// Each canister's args, accumulated across every option that names it.
+    /// Seeded from the manifest before the first question, so an init_args
+    /// format that cannot be customized is caught before the prompts rather
+    /// than between them.
+    working: Customizations,
+    customize_path: PathBuf,
+}
+
+impl CustomizePlan {
+    /// The questions, in the order the file lists them.
+    pub fn prompts(&self) -> &[CustomizePrompt] {
+        &self.prompts
+    }
+
+    /// Ask every question and substitute the answers, yielding what each
+    /// canister is to be customized with.
+    ///
+    /// `ask` must return a value of the prompt's [`ty`](CustomizePrompt::ty).
+    pub fn resolve(
+        mut self,
+        mut ask: impl FnMut(&CustomizePrompt) -> Result<IDLValue, candid_parser::Error>,
+    ) -> Result<Customizations, ResolveCustomizationsError> {
+        for prompt in &self.prompts {
+            let value = ask(prompt).context(PromptSnafu {
+                canisters: &prompt.canisters,
+                target: prompt.target.describe(),
+                path: &self.customize_path,
+            })?;
+
+            match &prompt.target {
+                PlannedTarget::InitArgField { field_path } => apply_answer(
+                    &mut self.working.init_args,
+                    &prompt.targets,
+                    field_path,
+                    value,
+                    &self.customize_path,
+                )?,
+                PlannedTarget::EnvVar { name } => {
+                    let IDLValue::Text(value) = value else {
+                        unreachable!("a prompt for `text` is answered with text");
+                    };
+                    for target in &prompt.targets {
+                        self.working
+                            .env_vars
+                            .entry(target.clone())
+                            .or_default()
+                            .insert(name.clone(), value.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(self.working)
+    }
 }
 
 /// The answers one `--customize` run collected, keyed by canister store key. A
@@ -675,16 +767,16 @@ enum PlannedTarget {
 /// of its own — the two are set through different calls and neither implies the
 /// other.
 #[derive(Debug, Default)]
-pub(crate) struct Customizations {
-    pub(crate) init_args: HashMap<String, IDLArgs>,
-    pub(crate) env_vars: HashMap<String, BTreeMap<String, String>>,
+pub struct Customizations {
+    pub init_args: HashMap<String, IDLArgs>,
+    pub env_vars: HashMap<String, BTreeMap<String, String>>,
 }
 
 impl Customizations {
     /// Lay a canister's answers over the environment variables it would
     /// otherwise deploy with, leaving every variable no option asked about as the
     /// manifest wrote it.
-    pub(crate) fn overlay_env_vars(&self, canister: &str, settings: &mut Settings) {
+    pub fn overlay_env_vars(&self, canister: &str, settings: &mut Settings) {
         let Some(answers) = self.env_vars.get(canister) else {
             return;
         };
@@ -706,7 +798,7 @@ fn apply_answer(
     field_path: &FieldPath,
     value: IDLValue,
     customize_path: &Path,
-) -> Result<(), PromptCustomizationsError> {
+) -> Result<(), ResolveCustomizationsError> {
     for target in targets {
         let working_args = result
             .get_mut(target)
@@ -721,27 +813,31 @@ fn apply_answer(
     Ok(())
 }
 
-/// Ask for every option that applies to this deploy, returning what each canister
-/// is to be customized with. Only called once the user has opted in with
-/// `--customize`, so it always prompts.
-pub(crate) fn prompt_customizations(
+/// Settle on every question this deploy is to be asked, without asking any of
+/// them. Only called once the user has opted in with `--customize`.
+///
+/// Everything that can be rejected is parsed here, before the first question —
+/// an unparseable candid_type or an uncustomizable init_args format three
+/// options down must not surface after the user has already typed answers that
+/// would then be thrown away.
+pub fn plan_customizations(
     manifest: &CustomizeManifest,
     cnames: &[String],
-    init_args: &HashMap<String, Option<icp::InitArgs>>,
+    init_args: InitArgsSource<'_>,
     customize_path: &Path,
-) -> Result<Customizations, PromptCustomizationsError> {
+) -> Result<CustomizePlan, PlanCustomizationsError> {
     let cname_set: HashSet<&str> = cnames.iter().map(String::as_str).collect();
 
-    // Resolve every option against this deploy, and parse everything that can be
-    // rejected, before asking the first question — an unparseable candid_type or
-    // an uncustomizable init_args format three options down must not surface
-    // after the user has already typed answers that would then be thrown away.
-    let mut planned: Vec<PlannedPrompt<'_>> = Vec::new();
+    let mut prompts: Vec<CustomizePrompt> = Vec::new();
     // A reference that resolves to no canister at all is rejected by
     // `validate_canister_refs`, so what is skipped here is only ever a canister
     // outside the current scope — worth reporting, since a member-scoped deploy
     // drops the rest of the workspace's options.
     let mut skipped: BTreeSet<String> = BTreeSet::new();
+    // Init-arg options dropped because the command line already fixed the args
+    // they would be substituted into. Reported for the same reason: an option
+    // the user wrote is going unasked.
+    let mut skipped_for_args: BTreeSet<String> = BTreeSet::new();
 
     for option in &manifest.options {
         let mut targets: Vec<String> = Vec::new();
@@ -761,11 +857,17 @@ pub(crate) fn prompt_customizations(
 
         let canisters = option.canister.joined();
 
-        let plan = match &option.target {
+        let (target, type_env, ty) = match &option.target {
             CustomizeTarget::InitArgField {
                 field_path,
                 candid_type,
             } => {
+                // Nothing this option could ask for would survive `--args`.
+                if matches!(init_args, InitArgsSource::CommandLine) {
+                    skipped_for_args.insert(canisters);
+                    continue;
+                }
+
                 let field_path = parse_field_path(field_path).context(FieldPathSnafu {
                     canisters: &canisters,
                     path: customize_path,
@@ -778,22 +880,24 @@ pub(crate) fn prompt_customizations(
                         path: customize_path,
                     })?;
 
-                PlannedTarget::InitArgField {
-                    field_path,
-                    type_env,
-                    ty,
-                }
+                (PlannedTarget::InitArgField { field_path }, type_env, ty)
             }
             // Nothing left to parse: the name is validated as the file is read,
             // and the value is always text.
-            CustomizeTarget::EnvVar { name } => PlannedTarget::EnvVar { name: name.clone() },
+            CustomizeTarget::EnvVar { name } => (
+                PlannedTarget::EnvVar { name: name.clone() },
+                TypeEnv::new(),
+                TypeInner::Text.into(),
+            ),
         };
 
-        planned.push(PlannedPrompt {
-            option,
+        prompts.push(CustomizePrompt {
             canisters,
+            description: option.description.clone(),
+            type_env,
+            ty,
             targets,
-            plan,
+            target,
         });
     }
 
@@ -808,94 +912,44 @@ pub(crate) fn prompt_customizations(
         );
     }
 
-    let mut result = Customizations::default();
-
-    // Each canister's args, accumulated across every option that names it. Built
-    // here rather than on first substitution so an init_args format that cannot
-    // be customized is caught before the prompts, not between them. Only the
-    // canisters an init-arg option names are entered: an env-var option has no
-    // use for its canister's init args, and must not be blocked by a format they
-    // cannot be customized in.
-    for prompt in &planned {
-        if !matches!(prompt.plan, PlannedTarget::InitArgField { .. }) {
-            continue;
-        }
-        for target in &prompt.targets {
-            if !result.init_args.contains_key(target) {
-                result.init_args.insert(
-                    target.clone(),
-                    manifest_init_args(init_args, target, customize_path)?,
-                );
-            }
-        }
+    if !skipped_for_args.is_empty() {
+        let names = skipped_for_args
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        tracing::warn!(
+            "Customize options for init argument fields skipped because --args or --args-file \
+             replaces the init args outright: {names}"
+        );
     }
 
-    // One prompt per option, in the order the file lists them. An option naming
-    // several canisters is asked once and its answer applied to each, so the
-    // prompts cannot be grouped by canister — the file's order is the author's to
-    // arrange.
-    for prompt in &planned {
-        eprintln!("[{}] {}", prompt.canisters, prompt.option.description);
+    let mut working = Customizations::default();
 
-        let prompt_snafu = PromptSnafu {
-            canisters: &prompt.canisters,
-            target: prompt.option.target.describe(),
-            path: customize_path,
-        };
-
-        match &prompt.plan {
-            PlannedTarget::InitArgField {
-                field_path,
-                type_env,
-                ty,
-            } => {
-                let context = assist::Context::new(type_env.clone());
-                let prompted =
-                    assist::input_args(&context, std::slice::from_ref(ty)).context(prompt_snafu)?;
-
-                let value = prompted
-                    .args
-                    .into_iter()
-                    .next()
-                    .expect("input_args returns one value per type element");
-
-                apply_answer(
-                    &mut result.init_args,
-                    &prompt.targets,
-                    field_path,
-                    value,
-                    customize_path,
-                )?;
+    // Only the canisters an init-arg option names are entered: an env-var option
+    // has no use for its canister's init args, and must not be blocked by a
+    // format they cannot be customized in.
+    if let InitArgsSource::Manifest(init_args) = init_args {
+        for prompt in &prompts {
+            if !matches!(prompt.target, PlannedTarget::InitArgField { .. }) {
+                continue;
             }
-            PlannedTarget::EnvVar { name } => {
-                // A variable's value is a string, so the prompt is candid's plain
-                // text input — the same one an init arg field of type `text` gets,
-                // editor shortcut and all.
-                let context = assist::Context::new(TypeEnv::new());
-                let prompted = assist::input_args(&context, &[TypeInner::Text.into()])
-                    .context(prompt_snafu)?;
-
-                let IDLValue::Text(value) = prompted
-                    .args
-                    .into_iter()
-                    .next()
-                    .expect("input_args returns one value per type element")
-                else {
-                    unreachable!("a prompt for `text` yields text");
-                };
-
-                for target in &prompt.targets {
-                    result
-                        .env_vars
-                        .entry(target.clone())
-                        .or_default()
-                        .insert(name.clone(), value.clone());
+            for target in &prompt.targets {
+                if !working.init_args.contains_key(target) {
+                    working.init_args.insert(
+                        target.clone(),
+                        manifest_init_args(init_args, target, customize_path)?,
+                    );
                 }
             }
         }
     }
 
-    Ok(result)
+    Ok(CustomizePlan {
+        prompts,
+        working,
+        customize_path: customize_path.to_path_buf(),
+    })
 }
 
 #[cfg(test)]
@@ -937,7 +991,7 @@ mod tests {
         }
     }
 
-    /// The working-args map `prompt_customizations` builds before prompting.
+    /// The working-args map `plan_customizations` builds before the prompts.
     fn working(entries: &[(&str, &str)]) -> HashMap<String, IDLArgs> {
         entries
             .iter()
@@ -1247,23 +1301,23 @@ options:
     }
 
     #[test]
-    fn prompt_rejects_binary_init_args() {
+    fn plan_rejects_binary_init_args() {
         // Surfaces the format check before any interactive prompt by giving the canister
         // non-Candid init args.
         let manifest = CustomizeManifest {
             options: vec![option_for("c")],
         };
-        let init_args = HashMap::from([("c".to_string(), Some(icp::InitArgs::Binary(vec![0u8])))]);
-        let err = prompt_customizations(
+        let init_args = HashMap::from([("c".to_string(), Some(CanisterArgs::Binary(vec![0u8])))]);
+        let err = plan_customizations(
             &manifest,
             &["c".to_string()],
-            &init_args,
+            InitArgsSource::Manifest(&init_args),
             Path::new("icp_customize.yaml"),
         )
         .unwrap_err();
         assert!(matches!(
             err,
-            PromptCustomizationsError::UnsupportedInitArgsFormat { .. }
+            PlanCustomizationsError::UnsupportedInitArgsFormat { .. }
         ));
         let msg = err.to_string();
         assert!(msg.contains("non-Candid format"), "got: {msg}");
@@ -1271,20 +1325,57 @@ options:
     }
 
     #[test]
-    fn prompt_returns_empty_when_no_options_match_deployment() {
-        // Manifest targets canister "a", deployment is for "b" — every option is filtered
-        // out, no prompts fire, the result is empty.
+    fn plan_asks_nothing_when_no_options_match_deployment() {
+        // Manifest targets canister "a", deployment is for "b" — every option is
+        // filtered out, leaving nothing to ask.
         let manifest = CustomizeManifest {
             options: vec![option_for("a")],
         };
-        let result = prompt_customizations(
+        let plan = plan_customizations(
             &manifest,
             &["b".to_string()],
-            &HashMap::new(),
+            InitArgsSource::Manifest(&HashMap::new()),
             Path::new("icp_customize.yaml"),
         )
         .unwrap();
-        assert!(result.init_args.is_empty() && result.env_vars.is_empty());
+        assert!(plan.prompts().is_empty());
+    }
+
+    #[test]
+    fn plan_skips_init_arg_options_when_the_command_line_supplies_args() {
+        // `--args` replaces the init args outright, so asking for a field of
+        // them would collect an answer the deploy discards. The canister's
+        // environment is not part of that, so its option is still asked.
+        let manifest = CustomizeManifest {
+            options: vec![option_for("c"), env_option_for("c", "API_ENDPOINT")],
+        };
+        let plan = plan_customizations(
+            &manifest,
+            &["c".to_string()],
+            InitArgsSource::CommandLine,
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .unwrap();
+        let [prompt] = plan.prompts() else {
+            panic!("expected only the environment variable option to be asked");
+        };
+        assert!(matches!(prompt.target, PlannedTarget::EnvVar { .. }));
+    }
+
+    #[test]
+    fn plan_does_not_read_init_args_the_command_line_replaces() {
+        // The format check is moot for the same reason the prompt is: nothing
+        // is substituted into args that are about to be thrown away.
+        let manifest = CustomizeManifest {
+            options: vec![option_for("c")],
+        };
+        plan_customizations(
+            &manifest,
+            &["c".to_string()],
+            InitArgsSource::CommandLine,
+            Path::new(CUSTOMIZE_FILE),
+        )
+        .expect("the uncustomizable init args are never looked at");
     }
 
     #[test]
@@ -1416,7 +1507,7 @@ options:
     #[test]
     fn validate_rejects_misspelled_project() {
         // The canister exists, but under a different member — the kind of mistake
-        // the scope filter in `prompt_customizations` would otherwise swallow.
+        // the scope filter in `plan_customizations` would otherwise swallow.
         let manifest = CustomizeManifest {
             options: vec![option_for("services/open_crm:backend")],
         };
@@ -1594,27 +1685,27 @@ options:
         )
         .unwrap_err();
 
-        assert!(matches!(err, PromptCustomizationsError::Substitute { .. }));
+        assert!(matches!(err, ResolveCustomizationsError::Substitute { .. }));
         let msg = err.to_string();
         assert!(msg.contains("services/open-crm:backend"), "got: {msg}");
         assert!(msg.contains(".supply"), "got: {msg}");
     }
 
     #[test]
-    fn prompt_skips_option_whose_canisters_are_all_out_of_scope() {
+    fn plan_skips_option_whose_canisters_are_all_out_of_scope() {
         // Neither canister is being deployed, so there is nothing to apply an
-        // answer to and no prompt fires — reaching one would hang the test.
+        // answer to and nothing to ask.
         let manifest = CustomizeManifest {
             options: vec![options_for(&["a", "services/dep:b"])],
         };
-        let result = prompt_customizations(
+        let plan = plan_customizations(
             &manifest,
             &["c".to_string()],
-            &HashMap::new(),
+            InitArgsSource::Manifest(&HashMap::new()),
             Path::new(CUSTOMIZE_FILE),
         )
         .unwrap();
-        assert!(result.init_args.is_empty() && result.env_vars.is_empty());
+        assert!(plan.prompts().is_empty());
     }
 
     #[test]
@@ -1711,7 +1802,7 @@ options:
     }
 
     #[test]
-    fn prompt_does_not_read_init_args_for_an_env_option() {
+    fn plan_does_not_read_init_args_for_an_env_option() {
         // Init args are parsed up front for the canisters an init-arg option
         // names — an env-var option has no use for them, and a canister whose
         // init args cannot be customized is still free to have its environment
@@ -1721,13 +1812,13 @@ options:
             options: vec![env_option_for("c", "API_ENDPOINT"), option_for("d")],
         };
         let init_args = HashMap::from([
-            ("c".to_string(), Some(icp::InitArgs::Binary(vec![0u8]))),
-            ("d".to_string(), Some(icp::InitArgs::Binary(vec![0u8]))),
+            ("c".to_string(), Some(CanisterArgs::Binary(vec![0u8]))),
+            ("d".to_string(), Some(CanisterArgs::Binary(vec![0u8]))),
         ]);
-        let err = prompt_customizations(
+        let err = plan_customizations(
             &manifest,
             &["c".to_string(), "d".to_string()],
-            &init_args,
+            InitArgsSource::Manifest(&init_args),
             Path::new(CUSTOMIZE_FILE),
         )
         .unwrap_err();

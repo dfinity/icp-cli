@@ -4,10 +4,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
+use icp_events::StepReporter;
 use snafu::prelude::*;
-use tokio::sync::mpsc::Sender;
 
 use crate::manifest::canister::SyncStep;
+use crate::network::NetworkUrls;
 use crate::package::PackageCache;
 use crate::prelude::*;
 
@@ -18,12 +19,24 @@ use script::{HostScripts, ScriptInvocation, ScriptRunError, ScriptRunner};
 
 pub struct Params {
     pub path: PathBuf,
+    /// The project (workspace root) directory. It bounds what a sync plugin may
+    /// read: a declared `dirs`/`files` entry may rise out of the canister
+    /// directory into the rest of the project, but not out of the project.
+    pub project_dir: PathBuf,
     pub cid: Principal,
+    /// Fully-qualified store key of the canister being synced (e.g. `backend`,
+    /// or `services/open-crm:backend` for a canister in a subproject). Its namespace
+    /// prefix identifies which other canisters are in the same subproject.
+    pub name: String,
     /// Name of the environment being synced (e.g. "local", "production").
     /// Passed to sync plugin steps via `SyncExecInput`.
     pub environment: String,
     /// Name of the network (e.g. "local", "ic").
     pub network: String,
+    /// The network's API endpoint, where canister calls are submitted, and its
+    /// HTTP gateway if it exposes one. Passed to sync plugin steps via
+    /// `SyncExecInput`.
+    pub urls: NetworkUrls,
     /// IDs of all named canisters in the project for this environment.
     pub canister_ids: BTreeMap<String, Principal>,
     /// Proxy canister to route calls through, if `--proxy` was passed.
@@ -46,7 +59,7 @@ pub trait Synchronize: Sync + Send {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError>;
 }
@@ -77,13 +90,13 @@ impl Synchronize for Syncer {
         step: &SyncStep,
         params: &Params,
         agent: &Agent,
-        stdio: Option<Sender<String>>,
+        reporter: &StepReporter,
         pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         match step {
             SyncStep::Script(adapter) => Ok(self
                 .scripts
-                .run_script(ScriptInvocation::new(adapter, params), stdio)
+                .run_script(ScriptInvocation::new(adapter, params), reporter)
                 .await?),
             SyncStep::Plugin(adapter) => Ok(plugin::sync(
                 adapter,
@@ -91,7 +104,7 @@ impl Synchronize for Syncer {
                 agent,
                 &params.environment,
                 params.proxy,
-                stdio,
+                reporter,
                 pkg_cache,
             )
             .await?),
@@ -112,7 +125,7 @@ impl Synchronize for UnimplementedMockSyncer {
         _step: &SyncStep,
         _params: &Params,
         _agent: &Agent,
-        _stdio: Option<Sender<String>>,
+        _reporter: &StepReporter,
         _pkg_cache: &PackageCache,
     ) -> Result<Vec<String>, SynchronizeError> {
         unimplemented!("UnimplementedMockSyncer::sync")
@@ -139,7 +152,7 @@ mod tests {
         async fn run_script(
             &self,
             invocation: ScriptInvocation,
-            _stdio: Option<Sender<String>>,
+            _reporter: &StepReporter,
         ) -> Result<Vec<String>, ScriptRunError> {
             self.seen.lock().unwrap().push(invocation);
             Ok(vec![])
@@ -164,9 +177,15 @@ mod tests {
         let cid = Principal::from_slice(&[7; 4]);
         let params = Params {
             path: "/work/backend".into(),
+            project_dir: "/work".into(),
             cid,
+            name: "backend".to_owned(),
             environment: "production".to_owned(),
             network: "ic".to_owned(),
+            urls: NetworkUrls {
+                api_url: "https://icp-api.io".parse().expect("valid api url"),
+                http_gateway_url: Some("https://icp0.io".parse().expect("valid gateway url")),
+            },
             canister_ids: BTreeMap::from([(
                 "my-frontend".to_owned(),
                 Principal::from_slice(&[8; 4]),
@@ -181,7 +200,13 @@ mod tests {
         let pkg_cache = PackageCache::new(tmp.path().to_owned()).unwrap();
 
         let retained = syncer
-            .sync(&step, &params, &dummy_agent(), None, &pkg_cache)
+            .sync(
+                &step,
+                &params,
+                &dummy_agent(),
+                &StepReporter::null(),
+                &pkg_cache,
+            )
             .await
             .expect("script step should dispatch");
         assert!(retained.is_empty());

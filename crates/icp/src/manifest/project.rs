@@ -35,7 +35,7 @@ mod tests {
     use crate::{
         canister::Settings,
         manifest::{
-            ArgsFormat, ManifestInitArgs,
+            ArgsFormat, ManifestArgs,
             adapter::script,
             canister::{BuildStep, BuildSteps, Instructions},
             environment::CanisterSelection,
@@ -144,6 +144,7 @@ mod tests {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     init_args: None,
+                    upgrade_args: None,
                     instructions: Instructions::BuildSync {
                         build: BuildSteps {
                             steps: vec![BuildStep::Script(script::Adapter {
@@ -226,6 +227,7 @@ mod tests {
                     name: "my-canister".to_string(),
                     settings: Settings::default(),
                     init_args: None,
+                    upgrade_args: None,
                     instructions: Instructions::BuildSync {
                         build: BuildSteps {
                             steps: vec![BuildStep::Script(script::Adapter {
@@ -262,6 +264,7 @@ mod tests {
                         name: "my-canister".to_string(),
                         settings: Settings::default(),
                         init_args: None,
+                        upgrade_args: None,
                         instructions: crate::manifest::canister::Instructions::BuildSync {
                             build: BuildSteps {
                                 steps: vec![BuildStep::Script(script::Adapter {
@@ -331,6 +334,7 @@ mod tests {
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
                     init_args: None,
+                    upgrade_args: None,
                 })],
             },
         );
@@ -355,6 +359,7 @@ mod tests {
                     canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                     settings: None,
                     init_args: None,
+                    upgrade_args: None,
                 })],
             },
         );
@@ -382,6 +387,7 @@ mod tests {
                         canisters: CanisterSelection::None,
                         settings: None,
                         init_args: None,
+                        upgrade_args: None,
                     }),
                     Item::Manifest(EnvironmentManifest {
                         name: "environment-2".to_string(),
@@ -389,6 +395,7 @@ mod tests {
                         canisters: CanisterSelection::Named(vec!["my-canister".to_string()]),
                         settings: None,
                         init_args: None,
+                        upgrade_args: None,
                     }),
                     Item::Manifest(EnvironmentManifest {
                         name: "environment-3".to_string(),
@@ -396,6 +403,7 @@ mod tests {
                         canisters: CanisterSelection::Everything,
                         settings: None,
                         init_args: None,
+                        upgrade_args: None,
                     }),
                 ],
             },
@@ -439,6 +447,7 @@ mod tests {
                         )
                     ])),
                     init_args: None,
+                    upgrade_args: None,
                 })],
             },
         );
@@ -455,6 +464,8 @@ mod tests {
                           canister-2:
                             value: "4449444c0000"
                             format: hex
+                        upgrade_args:
+                          canister-1: "(43)"
                 "#}),
             ProjectManifest {
                 dependencies: vec![],
@@ -468,16 +479,20 @@ mod tests {
                     init_args: Some(HashMap::from([
                         (
                             "canister-1".to_string(),
-                            ManifestInitArgs::String("(42)".to_string()),
+                            ManifestArgs::String("(42)".to_string()),
                         ),
                         (
                             "canister-2".to_string(),
-                            ManifestInitArgs::Value {
+                            ManifestArgs::Value {
                                 value: "4449444c0000".to_string(),
                                 format: ArgsFormat::Hex,
                             },
                         ),
                     ])),
+                    upgrade_args: Some(HashMap::from([(
+                        "canister-1".to_string(),
+                        ManifestArgs::String("(43)".to_string()),
+                    )])),
                 })],
             },
         );

@@ -22,7 +22,7 @@ use icp::{
 };
 use tracing::{debug, info, warn};
 
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use crate::render::{ProgressManager, ProgressManagerSettings};
 
 use super::args::NetworkOrEnvironmentArgs;
 use icp::context::Context;

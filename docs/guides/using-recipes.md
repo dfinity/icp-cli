@@ -17,8 +17,8 @@ Recipes are reusable build templates that simplify canister configuration. Inste
 DFINITY maintains recipes for common use cases at [github.com/dfinity/icp-cli-recipes](https://github.com/dfinity/icp-cli-recipes).
 
 You can reference recipes by pointing to a URL. For the official recipes, you can use a shorthand for example these recipe types are equivalent:
-* `@dfinity/rust@v3.0.0`
-* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
+* `@dfinity/rust@v3.4.0`
+* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.4.0/recipe.hbs`
 
 ### Rust Canister
 
@@ -28,9 +28,19 @@ For building a rust canister:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
+```
+
+`package` defaults to the canister name, so it only needs setting when the Cargo package is named
+something else:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v3.4.0"
       configuration:
-        package: backend
+        package: my-backend-crate
 ```
 
 ### Motoko Canister
@@ -77,16 +87,14 @@ canisters:
 
 A version is always required for registry recipes. These two types are equivalent:
 
-* `@dfinity/rust@v3.0.0`
-* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.0.0/recipe.hbs`
+* `@dfinity/rust@v3.4.0`
+* `https://github.com/dfinity/icp-cli-recipes/releases/download/rust-v3.4.0/recipe.hbs`
 
 ```yaml
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
 ```
 
 ## Local Recipes
@@ -101,7 +109,9 @@ build:
     - type: script
       commands:
         - cargo build --package {{package}} --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/{{package}}.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/{{package}}.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 Reference it in your `icp.yaml`:
@@ -154,14 +164,33 @@ in the configuration file. eg:
 canisters:
   - name: backend
     recipe:
-      type: "@dfinity/rust@v3.0.0"
-      configuration:
-        package: backend
+      type: "@dfinity/rust@v3.4.0"
     settings:
       compute_allocation: 10
       environment_variables:
         API_KEY: "secret"
 ```
+
+## Adding Your Own Sync Steps
+
+A recipe canister can also declare a `sync` section of its own, for
+post-deployment work the recipe does not cover. Those steps run after the
+recipe's own sync steps:
+
+```yaml
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/rust@v3.0.0"
+      configuration:
+        package: backend
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/seed-data.sh
+```
+
+`build` remains exclusive with `recipe`: the recipe is what defines the build.
 
 ## Next Steps
 

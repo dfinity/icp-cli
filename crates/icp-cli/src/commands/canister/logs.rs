@@ -12,7 +12,8 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::select;
 
-use crate::{commands::args, operations::proxy_management};
+use crate::commands::args;
+use icp::operations::proxy_management;
 
 /// Fetch and display canister logs
 #[derive(Debug, Args)]

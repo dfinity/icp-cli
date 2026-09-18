@@ -159,6 +159,92 @@ settings:
       - "2vxsx-fae"
 ```
 
+### snapshot_visibility
+
+Controls who can read the canister's snapshots — the `list_canister_snapshots`,
+`read_canister_snapshot_metadata`, and `read_canister_snapshot_data` endpoints of
+the management canister, which back `icp canister snapshot list` and
+`icp canister snapshot download`.
+
+| Property | Value |
+|----------|-------|
+| Type | String or Object |
+| Values | `controllers`, `public`, or `allowed_viewers` object |
+| Default | `controllers` |
+
+```yaml
+# Only controllers can read the snapshots (default)
+settings:
+  snapshot_visibility: controllers
+
+# Anyone can read the snapshots
+settings:
+  snapshot_visibility: public
+
+# Specific principals can read the snapshots, in addition to the controllers
+settings:
+  snapshot_visibility:
+    allowed_viewers:
+      - "aaaaa-aa"
+      - "2vxsx-fae"
+```
+
+Reading a snapshot exposes the canister's full state — WASM module, WASM memory,
+stable memory, and chunk store. Granting snapshot access is therefore closer to
+granting a state dump than to granting the read-only report
+[`status_visibility`](#status_visibility) covers.
+
+Like [`log_visibility`](#log_visibility) and unlike
+[`status_visibility`](#status_visibility), `controllers` here is exhaustive:
+there are no always-allowed callers on top of it.
+
+Taking, restoring, and deleting snapshots stays controller-only whatever this is
+set to; the setting governs reading alone.
+
+The replica accepts at most 10 principals in `allowed_viewers`.
+
+### status_visibility
+
+Controls who can read the canister's status through the management canister's
+`canister_status` endpoint — the report `icp canister status` prints, covering
+the running state, cycles balance, memory usage, and the settings themselves.
+
+| Property | Value |
+|----------|-------|
+| Type | String or Object |
+| Values | `controllers`, `public`, or `allowed_viewers` object |
+| Default | `controllers` |
+
+```yaml
+# The canister's controllers can read the status (default)
+settings:
+  status_visibility: controllers
+
+# Anyone can read the status
+settings:
+  status_visibility: public
+
+# Specific principals can read the status, in addition to the controllers
+settings:
+  status_visibility:
+    allowed_viewers:
+      - "aaaaa-aa"
+      - "2vxsx-fae"
+```
+
+Two callers are always allowed, whatever the setting says: the administrators of
+the subnet the canister runs on, and the canister itself reading its own status.
+Unlike [`log_visibility`](#log_visibility), which grants access to the
+controllers and listed viewers alone, `controllers` here is a floor rather than
+an exhaustive list.
+
+A caller that is not allowed to read the status still sees the canister's
+controllers and module hash, which the replica publishes in the state tree and
+`icp canister status` falls back to. Granting status access does not grant any
+control over the canister.
+
+The replica accepts at most 10 principals in `allowed_viewers`.
+
 ### environment_variables
 
 Runtime environment variables accessible to the canister.
@@ -218,7 +304,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
       memory_allocation: 2gib
@@ -227,6 +315,7 @@ canisters:
       wasm_memory_limit: 1gib
       wasm_memory_threshold: 512mib
       log_visibility: controllers
+      status_visibility: controllers
       log_memory_limit: 2mib
       environment_variables:
         ENV: "production"
@@ -257,8 +346,8 @@ environments:
             path: ./secrets/production-api-key
 ```
 
-File references inside an override — `environment_variables` values and
-`init_args` alike — resolve against the *referenced canister's* directory, not the
+File references inside an override — `environment_variables` values,
+`init_args`, and `upgrade_args` alike — resolve against the *referenced canister's* directory, not the
 directory of the manifest declaring the override. For a canister that comes from a
 [dependency](../concepts/project-dependencies.md), that is the dependency's own
 directory.

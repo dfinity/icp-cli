@@ -5,12 +5,14 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release --locked -p canister
-            - mv target/wasm32-unknown-unknown/release/canister.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 
         - type: script
           commands:
             - command -v ic-wasm >/dev/null 2>&1 || { echo >&2 "ic-wasm not found. To install ic-wasm, see https://github.com/dfinity/ic-wasm\n"; exit 1; }
-            - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "$ICP_WASM_OUTPUT_PATH" metadata candid:service -f demo.did --keep-name-section
+            - ic-wasm "$ICP_WASM_OUTPUT_PATH" -o "$ICP_WASM_OUTPUT_PATH" metadata candid:service -f demo.did -v public --keep-name-section
 
     sync:
       steps:
@@ -18,5 +20,5 @@ canisters:
           # Path to the compiled PoC plugin wasm, relative to this directory.
           # Build it first: cargo build -p plugin --target wasm32-wasip2 --release
           path: target/wasm32-wasip2/release/plugin.wasm
-          dirs:
-            - seed-data
+          files:
+            seed: seed-data

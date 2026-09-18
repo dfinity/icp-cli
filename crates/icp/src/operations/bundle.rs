@@ -7,16 +7,14 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-use camino::Utf8Component;
-use flate2::{Compression, write::GzEncoder};
-use icp::{
-    Canister, InitArgs,
+use crate::{
+    Canister, CanisterArgs,
     canister::{ControllerRef, ManifestEnvVar, Settings, build::Build, wasm},
     fs,
     manifest::{
-        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, DependencyManifest,
+        ArgsFormat, BuildStep, BuildSteps, CanisterManifest, CanisterSelection, DependencyManifest,
         EnvironmentManifest, Instructions, Item, LoadManifestFromPathError, ManagedMode,
-        ManifestInitArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
+        ManifestArgs, Mode, NetworkManifest, PROJECT_MANIFEST, ProjectManifest, SyncStep,
         SyncSteps, load_manifest_from_path, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
@@ -25,11 +23,19 @@ use icp::{
     project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
     store_artifact,
 };
+use camino::Utf8Component;
+use flate2::{Compression, write::GzEncoder};
+use icp_sync_plugin::{covering_dirs, distinct_paths};
 use snafu::{OptionExt, ResultExt, Snafu};
 use tar::Builder;
+use tracing::warn;
+
+use icp_events::StepReporter;
+
+use crate::operations::task::Reporter;
 
 use crate::operations::{
-    build::{BuildManyError, build_many_with_progress_bar},
+    build::{BuildManyError, build_many},
     customize::{
         CUSTOMIZE_FILE, CustomizeManifest, UnknownCanisterError, validate_canister_refs,
         warn_unread_member_customize_files,
@@ -119,8 +125,8 @@ pub enum BundleError {
         source: LoadManifestFromPathError,
     },
 
-    #[snafu(display("failed to read init_args file '{path}'"))]
-    ReadInitArgs { path: PathBuf, source: fs::IoError },
+    #[snafu(display("failed to read args file '{path}'"))]
+    ReadArgsFile { path: PathBuf, source: fs::IoError },
 
     #[snafu(display(
         "failed to read the file backing environment variable '{variable}' of canister '{canister}'"
@@ -277,8 +283,8 @@ struct PluginFile {
     orig_file: String,
 }
 
-/// init_args file referenced from an environment manifest.
-struct InitArgsFile {
+/// An `init_args` or `upgrade_args` file referenced from an environment manifest.
+struct ArgsFile {
     src_path: PathBuf,
     archive_path: String,
 }
@@ -339,16 +345,70 @@ struct Instance {
     canisters: Vec<(PathBuf, Canister)>,
 }
 
-pub(crate) async fn create_bundle(
+/// The canisters the selected environment leaves out of the bundle, and the
+/// lookup needed to recognize a manifest's reference to one of them.
+///
+/// A reference that survives into a bundled manifest names a canister that
+/// manifest no longer declares, which the extracted bundle rejects at load.
+struct Pruned<'a> {
+    /// Store keys of the canisters the environment does not hold.
+    dropped: &'a HashSet<String>,
+
+    /// Each workspace instance's store-key prefix, by its canonical directory.
+    prefixes_by_dir: &'a HashMap<PathBuf, String>,
+
+    /// The environment the bundle is built for, for diagnostics.
+    environment: &'a str,
+}
+
+impl Pruned<'_> {
+    /// Whether a canister name written in one instance's manifest denotes a
+    /// canister the environment leaves out.
+    ///
+    /// A name that resolves to no instance in the workspace is left alone: it is
+    /// invalid, and reporting it is the manifest loader's job, not the bundler's.
+    fn drops(&self, instance: &Instance, name: &str) -> bool {
+        self.store_key(instance, name)
+            .is_some_and(|key| self.dropped.contains(&key))
+    }
+
+    /// The workspace store key a name written in one instance's manifest refers
+    /// to: either a bare local name, or `<relative path>:<canister>` naming a
+    /// canister of a project that instance reaches through its dependencies. The
+    /// path is the one the store key's own prefix is built from, so resolving it
+    /// against the instance's directory gives that prefix back.
+    fn store_key(&self, instance: &Instance, name: &str) -> Option<String> {
+        let Some((rel, local)) = name.rsplit_once(':') else {
+            return Some(override_store_key(&instance.prefix, name));
+        };
+        let dir = instance.dir.join(rel).canonicalize_utf8().ok()?;
+        Some(override_store_key(self.prefixes_by_dir.get(&dir)?, local))
+    }
+}
+
+pub async fn create_bundle(
     project_dir: &Path,
     canisters: Vec<(PathBuf, Canister)>,
+    selected: &HashSet<String>,
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn store_artifact::Access>,
     pkg_cache: &PackageCache,
-    debug: bool,
+    reporter: &Reporter,
     output: &Path,
 ) -> Result<(), BundleError> {
+    // The bundle carries the canisters the selected environment holds and no
+    // others: it is built for that environment, and a manifest that declared a
+    // canister the archive has no wasm for could not be deployed from the
+    // extraction.
+    let (canisters, left_out): (Vec<_>, Vec<_>) = canisters
+        .into_iter()
+        .partition(|(_, canister)| selected.contains(&canister.name));
+    let dropped: HashSet<String> = left_out
+        .into_iter()
+        .map(|(_, canister)| canister.name)
+        .collect();
+
     // A bundle mirrors the workspace: the root project at the archive root and
     // each dependency instance at its workspace-relative directory, so the
     // dependency declarations — and the store keys and `PUBLIC_CANISTER_ID`
@@ -359,23 +419,32 @@ pub(crate) async fn create_bundle(
         project_dir,
     )?;
     validate_canisters(&instances)?;
+    let mut prefixes_by_dir: HashMap<PathBuf, String> = HashMap::with_capacity(instances.len());
+    for instance in &instances {
+        prefixes_by_dir.insert(canonicalize(&instance.dir)?, instance.prefix.clone());
+    }
+    let pruned = Pruned {
+        dropped: &dropped,
+        prefixes_by_dir: &prefixes_by_dir,
+        environment,
+    };
     let canonical_project_dir = canonicalize(project_dir)?;
     let canonical_sync_dirs =
         validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
     validate_env_var_files(&canisters, &canonical_project_dir)?;
     validate_output_path(output, &canonical_sync_dirs)?;
 
-    build_many_with_progress_bar(
+    build_many(
         canisters.clone(),
         environment,
         builder,
         artifacts.clone(),
         pkg_cache,
-        debug,
+        reporter,
     )
     .await?;
 
-    // A root environment can override a dependency canister's init_args, and
+    // A root environment can override a dependency canister's install args, and
     // that path resolves against the *dependency's* directory, so the file's
     // location in the archive follows the canister's owning instance rather than
     // the manifest that declares the override.
@@ -394,32 +463,37 @@ pub(crate) async fn create_bundle(
         .collect();
 
     let mut bundle_artifacts = BundleArtifacts::default();
-    let mut init_args_files: Vec<InitArgsFile> = Vec::new();
-    // Multiple environments can override the same canister's init_args from the same file,
+    let mut args_files: Vec<ArgsFile> = Vec::new();
+    // Multiple environments can override the same canister's args from the same file,
     // which resolves to an identical archive path (and identical source). Emit each archive
     // entry once so we don't write duplicate tar headers for the same bytes.
-    let mut seen_init_args: HashSet<String> = HashSet::new();
+    let mut seen_args_files: HashSet<String> = HashSet::new();
     let mut manifests: Vec<InstanceManifest> = Vec::with_capacity(instances.len());
 
     for instance in &instances {
-        let canister_items =
-            prepare_canisters(instance, &*artifacts, pkg_cache, &mut bundle_artifacts).await?;
+        let canister_items = prepare_canisters(
+            instance,
+            &pruned,
+            &*artifacts,
+            pkg_cache,
+            &mut bundle_artifacts,
+        )
+        .await?;
         let networks = inline_networks(&instance.manifest.networks, &instance.dir).await?;
         let environments = inline_environments(
-            &instance.manifest.environments,
-            &instance.prefix,
-            &instance.dir,
+            instance,
+            &pruned,
             &canonical_project_dir,
             &canister_dirs,
             &owner_prefixes,
-            &mut seen_init_args,
-            &mut init_args_files,
+            &mut seen_args_files,
+            &mut args_files,
         )
         .await?;
 
         let manifest = ProjectManifest {
             canisters: canister_items,
-            dependencies: rewrite_dependencies(instance)?,
+            dependencies: rewrite_dependencies(instance, &pruned)?,
             networks,
             environments,
         };
@@ -469,7 +543,7 @@ pub(crate) async fn create_bundle(
         &manifests,
         customize_bytes.as_deref(),
         &bundle_artifacts,
-        &init_args_files,
+        &args_files,
         app_manifest.as_ref(),
     )
 }
@@ -538,7 +612,10 @@ fn relative_archive_path(from: &str, to: &str) -> String {
 /// instance sits relative to the workspace root — and therefore not where it sits
 /// in the archive either. For a plainly vendored layout the rewritten path is the
 /// same path, modulo a leading `./`.
-fn rewrite_dependencies(instance: &Instance) -> Result<Vec<DependencyManifest>, BundleError> {
+fn rewrite_dependencies(
+    instance: &Instance,
+    pruned: &Pruned<'_>,
+) -> Result<Vec<DependencyManifest>, BundleError> {
     let declared = &instance.manifest.dependencies;
     let targets = &instance.dependency_prefixes;
     // `workspace_instances` resolves one prefix per declaration, in order.
@@ -557,9 +634,32 @@ fn rewrite_dependencies(instance: &Instance) -> Result<Vec<DependencyManifest>, 
         .map(|(dep, target_prefix)| DependencyManifest {
             name: dep.name.clone(),
             path: relative_archive_path(&instance.prefix, target_prefix),
-            canisters: dep.canisters.clone(),
+            // The exposure list names the dependency's own canisters, so a
+            // left-out one is no longer there to expose.
+            canisters: prune_selection(dep.canisters.clone(), |name| {
+                pruned
+                    .dropped
+                    .contains(&override_store_key(target_prefix, name))
+            }),
         })
         .collect())
+}
+
+/// Drop from a canister selection every name the environment leaves out. A list
+/// emptied by the pruning becomes `CanisterSelection::None`, which is what an
+/// empty list means once written to a manifest and read back.
+fn prune_selection(
+    selection: CanisterSelection,
+    drops: impl Fn(&str) -> bool,
+) -> CanisterSelection {
+    let CanisterSelection::Named(mut names) = selection else {
+        return selection;
+    };
+    names.retain(|name| !drops(name));
+    match names.is_empty() {
+        true => CanisterSelection::None,
+        false => CanisterSelection::Named(names),
+    }
 }
 
 /// Whether an instance's archive directory stays inside the workspace root.
@@ -625,6 +725,7 @@ fn group_canisters(
 /// Build one instance's manifest items and collect the archive artifacts they reference.
 async fn prepare_canisters(
     instance: &Instance,
+    pruned: &Pruned<'_>,
     artifacts: &dyn store_artifact::Access,
     pkg_cache: &PackageCache,
     out: &mut BundleArtifacts,
@@ -644,6 +745,7 @@ async fn prepare_canisters(
             canister_path,
             canister,
             &local_names,
+            pruned,
             artifacts,
             pkg_cache,
             out,
@@ -660,6 +762,7 @@ async fn prepare_canister(
     canister_path: &Path,
     canister: &Canister,
     local_names: &HashMap<&str, &str>,
+    pruned: &Pruned<'_>,
     artifacts: &dyn store_artifact::Access,
     pkg_cache: &PackageCache,
     out: &mut BundleArtifacts,
@@ -701,6 +804,7 @@ async fn prepare_canister(
                         canister_path,
                         &path_name,
                         idx,
+                        local_names,
                         pkg_cache,
                         out,
                     )
@@ -721,8 +825,14 @@ async fn prepare_canister(
 
     Ok(Item::Manifest(CanisterManifest {
         name: local.to_owned(),
-        settings: localize_controllers(canister.settings.clone().into(), local_names),
-        init_args: canister.init_args.as_ref().map(convert_init_args),
+        settings: localize_controllers(
+            canister.settings.clone().into(),
+            &canister.name,
+            local_names,
+            pruned,
+        ),
+        init_args: canister.init_args.as_ref().map(convert_args),
+        upgrade_args: canister.upgrade_args.as_ref().map(convert_args),
         instructions: Instructions::BuildSync {
             build: BuildSteps {
                 steps: vec![BuildStep::Prebuilt(prebuilt::Adapter {
@@ -738,7 +848,8 @@ async fn prepare_canister(
 }
 
 /// Rewrite controller references from workspace store keys back to the local
-/// names of the instance being written.
+/// names of the instance being written, dropping the ones the selected
+/// environment leaves out of the bundle.
 ///
 /// Consolidation translates a dependency's references to its own siblings into
 /// store keys, which contain `:` and so are not valid canister names. References
@@ -747,9 +858,24 @@ async fn prepare_canister(
 /// same way from the bundle.
 fn localize_controllers<EnvVar>(
     mut settings: Settings<EnvVar>,
+    canister: &str,
     local_names: &HashMap<&str, &str>,
+    pruned: &Pruned<'_>,
 ) -> Settings<EnvVar> {
     if let Some(controllers) = &mut settings.controllers {
+        // A reference consolidation has already resolved is spelled as the store
+        // key it resolved to, so the left-out keys are what to match against.
+        controllers.retain(|cref| match cref {
+            ControllerRef::CanisterName(name) if pruned.dropped.contains(name.as_str()) => {
+                warn!(
+                    "Canister '{canister}' names '{name}' as a controller, which environment \
+                     '{}' does not contain; the bundle drops the reference.",
+                    pruned.environment,
+                );
+                false
+            }
+            _ => true,
+        });
         for cref in controllers.iter_mut() {
             if let ControllerRef::CanisterName(name) = cref
                 && let Some(local) = local_names.get(name.as_str())
@@ -761,6 +887,24 @@ fn localize_controllers<EnvVar>(
     settings
 }
 
+/// Rewrite a plugin's declared call targets from workspace store keys back to the
+/// local names of the instance being written, on the same grounds as
+/// [`localize_controllers`].
+fn localize_call_targets(
+    canisters: Option<&[String]>,
+    local_names: &HashMap<&str, &str>,
+) -> Option<Vec<String>> {
+    canisters.map(|canisters| {
+        canisters
+            .iter()
+            .map(|target| match local_names.get(target.as_str()) {
+                Some(local) => (*local).to_owned(),
+                None => target.clone(),
+            })
+            .collect()
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_plugin_step(
     adapter: &plugin::Adapter,
@@ -769,6 +913,7 @@ async fn prepare_plugin_step(
     canister_path: &Path,
     path_name: &str,
     idx: usize,
+    local_names: &HashMap<&str, &str>,
     pkg_cache: &PackageCache,
     out: &mut BundleArtifacts,
 ) -> Result<SyncStep, BundleError> {
@@ -778,7 +923,7 @@ async fn prepare_plugin_step(
         &adapter.source,
         canister_path,
         adapter.sha256.as_deref(),
-        None,
+        &StepReporter::null(),
         pkg_cache,
     )
     .await
@@ -795,51 +940,80 @@ async fn prepare_plugin_step(
         bytes: plugin_bytes,
     });
 
-    // Plugin preopened dirs go under a `dirs/` subdir so a user-supplied dir literally named
-    // `files` cannot collide with the `files/` area used for plugin input files.
-    let bundle_dirs = adapter.dirs.as_ref().map(|dirs| {
-        dirs.iter()
-            .map(|d| {
-                let manifest_path = format!(
-                    "plugins/{path_name}/{idx}/dirs/{}",
-                    normalize_archive_dir(d)
-                );
-                out.plugin_dirs.push(DirEntry {
-                    src_path: canister_path.join(d),
-                    archive_prefix: archive_join(prefix, &manifest_path),
-                });
-                manifest_path
-            })
-            .collect::<Vec<_>>()
-    });
-
+    // A `dirs:` entry (which only an `icp:sync-plugin@0.1` plugin takes) goes under a `dirs/`
+    // subdir so a user-supplied dir literally named `files` cannot collide with the `files/`
+    // area the `files:` entries occupy. The declared paths are rewritten to their archive
+    // locations; each entry's map key is carried through unchanged.
+    let dirs_prefix = format!("plugins/{path_name}/{idx}/dirs");
+    let files_prefix = format!("plugins/{path_name}/{idx}/files");
+    let bundle_dirs = adapter
+        .dirs
+        .as_ref()
+        .map(|dirs| dirs.map_paths(|dir| format!("{dirs_prefix}/{}", normalize_archive_dir(dir))));
     let bundle_files = adapter.files.as_ref().map(|files| {
-        files
-            .iter()
-            .map(|f| {
-                let manifest_path = format!(
-                    "plugins/{path_name}/{idx}/files/{}",
-                    normalize_archive_dir(f)
-                );
-                out.plugin_files.push(PluginFile {
-                    src_path: canister_path.join(f),
-                    archive_path: archive_join(prefix, &manifest_path),
-                    canister_name: canister.name.clone(),
-                    orig_file: f.clone(),
-                });
-                manifest_path
-            })
-            .collect::<Vec<_>>()
+        files.map_paths(|file| format!("{files_prefix}/{}", normalize_archive_dir(file)))
     });
 
-    Ok(SyncStep::Plugin(plugin::Adapter {
+    // The rewritten manifest above keeps every declared entry; the archive holds
+    // the trees and files behind them, of which there are fewer. A directory
+    // named under two keys is one tree to copy, and a declared subdirectory of
+    // another is already inside its copy — writing either twice would collide in
+    // the archive. The reduction runs over the paths as declared, so two that
+    // only *look* alike once rewritten (`../shared` and `shared` both normalize
+    // to `shared`) stay separate and are still caught as a collision.
+    let declared = |paths: &Option<plugin::NamedPaths>| -> Vec<String> {
+        paths
+            .iter()
+            .flat_map(plugin::NamedPaths::entries)
+            .map(|entry| entry.path.to_string())
+            .collect()
+    };
+    // A `files:` entry names a directory or a file, and which it is comes from what is on
+    // disk — the same rule the plugin host applies. So partition on that before deciding
+    // whether the archive gets a tree or a single file.
+    let (file_dirs, file_files): (Vec<String>, Vec<String>) = declared(&adapter.files)
+        .into_iter()
+        .partition(|path| canister_path.join(path).is_dir());
+
+    for (dir, dir_prefix) in covering_dirs(declared(&adapter.dirs).iter().map(String::as_str))
+        .into_iter()
+        .map(|dir| (dir, &dirs_prefix))
+        .chain(
+            covering_dirs(file_dirs.iter().map(String::as_str))
+                .into_iter()
+                .map(|dir| (dir, &files_prefix)),
+        )
+    {
+        out.plugin_dirs.push(DirEntry {
+            src_path: canister_path.join(dir),
+            archive_prefix: archive_join(
+                prefix,
+                &format!("{dir_prefix}/{}", normalize_archive_dir(dir)),
+            ),
+        });
+    }
+    for file in distinct_paths(file_files.iter().map(String::as_str)) {
+        out.plugin_files.push(PluginFile {
+            src_path: canister_path.join(file),
+            archive_path: archive_join(
+                prefix,
+                &format!("{files_prefix}/{}", normalize_archive_dir(file)),
+            ),
+            canister_name: canister.name.clone(),
+            orig_file: file.to_string(),
+        });
+    }
+
+    Ok(SyncStep::Plugin(Box::new(plugin::Adapter {
         source: SourceField::Local(LocalSource {
             path: plugin_wasm_path.as_str().into(),
         }),
         sha256: Some(plugin_sha256),
         dirs: bundle_dirs,
         files: bundle_files,
-    }))
+        canisters: localize_call_targets(adapter.canisters.as_deref(), local_names),
+        fields: adapter.fields.clone(),
+    })))
 }
 
 async fn inline_networks(
@@ -893,17 +1067,83 @@ fn override_base_dir<'a>(
         .unwrap_or(instance_dir)
 }
 
+/// Archive directory holding the files an environment's `init_args` overrides
+/// point at, and the one for its `upgrade_args` overrides. Kept apart so the
+/// same canister can override both from same-named files.
+const INIT_ARGS_DIR: &str = "init-args";
+const UPGRADE_ARGS_DIR: &str = "upgrade-args";
+
+/// Relocate the files one environment's args overrides point at into
+/// `archive_dir`, rewriting each override to name the archived copy.
 #[allow(clippy::too_many_arguments)]
-async fn inline_environments(
-    items: &[Item<EnvironmentManifest>],
+fn relocate_args_overrides(
+    overrides: &mut HashMap<String, ManifestArgs>,
+    archive_dir: &str,
     instance_prefix: &str,
     instance_dir: &Path,
     canonical_project_dir: &Path,
     canister_dirs: &HashMap<&str, &Path>,
     owner_prefixes: &HashMap<&str, &str>,
     seen_archive_paths: &mut HashSet<String>,
-    init_args_files: &mut Vec<InitArgsFile>,
+    args_files: &mut Vec<ArgsFile>,
+) -> Result<(), BundleError> {
+    for (canister_name, ma) in overrides.iter_mut() {
+        let ManifestArgs::Path {
+            path: orig_path,
+            format: fmt,
+        } = &*ma
+        else {
+            continue;
+        };
+        let store_key = override_store_key(instance_prefix, canister_name);
+        let base = override_base_dir(&store_key, canister_dirs, instance_dir);
+        let src = base.join(orig_path);
+        // Same containment rule as asset/plugin sources — a malicious manifest
+        // could otherwise point the args at host files outside the project, and
+        // normalize_archive_dir would silently strip any leading `..` from the
+        // rewritten archive path so the escape wouldn't be visible there.
+        canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
+        let manifest_path = format!(
+            "{archive_dir}/{}/{}",
+            path_segment(canister_name),
+            normalize_archive_dir(orig_path)
+        );
+        // The reference is resolved against the canister's directory, so the
+        // file has to be archived under the *canister's* instance — which is not
+        // the declaring instance when the root overrides a dependency's canister.
+        let owner_prefix = owner_prefixes
+            .get(store_key.as_str())
+            .copied()
+            .unwrap_or(instance_prefix);
+        let archive_path = archive_join(owner_prefix, &manifest_path);
+        if seen_archive_paths.insert(archive_path.clone()) {
+            args_files.push(ArgsFile {
+                src_path: src,
+                archive_path,
+            });
+        }
+        *ma = ManifestArgs::Path {
+            path: manifest_path,
+            format: fmt.clone(),
+        };
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn inline_environments(
+    instance: &Instance,
+    pruned: &Pruned<'_>,
+    canonical_project_dir: &Path,
+    canister_dirs: &HashMap<&str, &Path>,
+    owner_prefixes: &HashMap<&str, &str>,
+    seen_archive_paths: &mut HashSet<String>,
+    args_files: &mut Vec<ArgsFile>,
 ) -> Result<Vec<Item<EnvironmentManifest>>, BundleError> {
+    let items = &instance.manifest.environments;
+    let instance_prefix = instance.prefix.as_str();
+    let instance_dir = instance.dir.as_path();
     let mut out = Vec::with_capacity(items.len());
 
     for item in items {
@@ -918,48 +1158,30 @@ async fn inline_environments(
             }
         };
 
-        if let Item::Manifest(ref mut env) = inlined
-            && let Some(ref mut overrides) = env.init_args
-        {
-            for (canister_name, mia) in overrides.iter_mut() {
-                if let ManifestInitArgs::Path {
-                    path: orig_path,
-                    format: fmt,
-                } = &*mia
-                {
-                    let store_key = override_store_key(instance_prefix, canister_name);
-                    let base = override_base_dir(&store_key, canister_dirs, instance_dir);
-                    let src = base.join(orig_path);
-                    // Same containment rule as asset/plugin sources — a malicious manifest
-                    // could otherwise point init_args at host files outside the project, and
-                    // normalize_archive_dir would silently strip any leading `..` from the
-                    // rewritten archive path so the escape wouldn't be visible there.
-                    canonicalize_within_project(&src, canonical_project_dir, canister_name)?;
-                    let manifest_path = format!(
-                        "init-args/{}/{}",
-                        path_segment(canister_name),
-                        normalize_archive_dir(orig_path)
-                    );
-                    // The reference is resolved against the canister's directory,
-                    // so the file has to be archived under the *canister's*
-                    // instance — which is not the declaring instance when the root
-                    // overrides a dependency's canister.
-                    let owner_prefix = owner_prefixes
-                        .get(store_key.as_str())
-                        .copied()
-                        .unwrap_or(instance_prefix);
-                    let archive_path = archive_join(owner_prefix, &manifest_path);
-                    if seen_archive_paths.insert(archive_path.clone()) {
-                        init_args_files.push(InitArgsFile {
-                            src_path: src,
-                            archive_path,
-                        });
-                    }
-                    *mia = ManifestInitArgs::Path {
-                        path: manifest_path,
-                        format: fmt.clone(),
-                    };
-                }
+        // Before the overrides below are followed to the files they name: an
+        // override for a left-out canister resolves its paths against that
+        // canister's directory, which the bundle no longer knows.
+        if let Item::Manifest(ref mut env) = inlined {
+            prune_environment(env, instance, pruned);
+        }
+
+        if let Item::Manifest(ref mut env) = inlined {
+            for (overrides, archive_dir) in [
+                (env.init_args.as_mut(), INIT_ARGS_DIR),
+                (env.upgrade_args.as_mut(), UPGRADE_ARGS_DIR),
+            ] {
+                let Some(overrides) = overrides else { continue };
+                relocate_args_overrides(
+                    overrides,
+                    archive_dir,
+                    instance_prefix,
+                    instance_dir,
+                    canonical_project_dir,
+                    canister_dirs,
+                    owner_prefixes,
+                    seen_archive_paths,
+                    args_files,
+                )?;
             }
         }
 
@@ -1006,6 +1228,48 @@ async fn inline_environments(
     }
 
     Ok(out)
+}
+
+/// Drop from one environment every reference to a canister the selected
+/// environment leaves out of the bundle: the canisters it lists, the
+/// per-canister settings and init_args it overrides, and the controllers those
+/// settings name.
+///
+/// The environment being pruned is not necessarily the one the bundle was built
+/// for — a bundle keeps every environment its manifests declare, and each of
+/// them can only ever hold canisters the bundle carries.
+fn prune_environment(env: &mut EnvironmentManifest, instance: &Instance, pruned: &Pruned<'_>) {
+    env.canisters = prune_selection(std::mem::take(&mut env.canisters), |name| {
+        pruned.drops(instance, name)
+    });
+    if let Some(settings) = &mut env.settings {
+        settings.retain(|name, _| !pruned.drops(instance, name));
+        // An override's own controller list survives the pruning above, which
+        // only reaches the canister an override configures: a kept canister can
+        // still be handed a controller the bundle does not carry.
+        for (canister, overrides) in settings.iter_mut() {
+            let Some(controllers) = &mut overrides.controllers else {
+                continue;
+            };
+            controllers.retain(|cref| match cref {
+                ControllerRef::CanisterName(name) if pruned.drops(instance, name) => {
+                    warn!(
+                        "Environment '{}' names '{name}' as a controller of '{canister}', which \
+                         environment '{}' does not contain; the bundle drops the reference.",
+                        env.name, pruned.environment,
+                    );
+                    false
+                }
+                _ => true,
+            });
+        }
+    }
+    if let Some(init_args) = &mut env.init_args {
+        init_args.retain(|name, _| !pruned.drops(instance, name));
+    }
+    if let Some(upgrade_args) = &mut env.upgrade_args {
+        upgrade_args.retain(|name, _| !pruned.drops(instance, name));
+    }
 }
 
 /// Load `icp_appmanifest.yaml` if present, rewriting its top-level `images` paths to point at
@@ -1185,7 +1449,7 @@ fn write_archive(
     manifests: &[InstanceManifest],
     customize_bytes: Option<&[u8]>,
     artifacts: &BundleArtifacts,
-    init_args_files: &[InitArgsFile],
+    args_files: &[ArgsFile],
     app_manifest: Option<&AppManifest>,
 ) -> Result<(), BundleError> {
     let paths: Vec<&str> = manifests
@@ -1196,7 +1460,7 @@ fn write_archive(
         }))
         .chain(customize_bytes.map(|_| CUSTOMIZE_FILE))
         .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
-        .chain(init_args_files.iter().map(|f| f.archive_path.as_str()))
+        .chain(args_files.iter().map(|f| f.archive_path.as_str()))
         .chain(
             artifacts
                 .plugin_wasms
@@ -1246,8 +1510,8 @@ fn write_archive(
         archive.bytes(&nb.archive_path, &nb.bytes)?;
     }
 
-    for entry in init_args_files {
-        let data = fs::read(&entry.src_path).context(ReadInitArgsSnafu {
+    for entry in args_files {
+        let data = fs::read(&entry.src_path).context(ReadArgsFileSnafu {
             path: entry.src_path.clone(),
         })?;
         archive.bytes(&entry.archive_path, &data)?;
@@ -1336,8 +1600,8 @@ fn validate_source_paths(
                 SyncStep::Script(_) => {}
                 SyncStep::Plugin(adapter) => {
                     if let Some(dirs) = &adapter.dirs {
-                        for d in dirs {
-                            let src = canister_path.join(d);
+                        for dir in dirs.entries() {
+                            let src = canister_path.join(dir.path);
                             let resolved = resolve_within_project(
                                 &src,
                                 project_dir,
@@ -1348,8 +1612,8 @@ fn validate_source_paths(
                         }
                     }
                     if let Some(files) = &adapter.files {
-                        for f in files {
-                            let src = canister_path.join(f);
+                        for file in files.entries() {
+                            let src = canister_path.join(file.path);
                             resolve_within_project(
                                 &src,
                                 project_dir,
@@ -1614,13 +1878,13 @@ fn path_segment(name: &str) -> String {
     s
 }
 
-fn convert_init_args(args: &InitArgs) -> ManifestInitArgs {
+fn convert_args(args: &CanisterArgs) -> ManifestArgs {
     match args {
-        InitArgs::Text { content, format } => ManifestInitArgs::Value {
+        CanisterArgs::Text { content, format } => ManifestArgs::Value {
             value: content.clone(),
             format: format.clone(),
         },
-        InitArgs::Binary(bytes) => ManifestInitArgs::Value {
+        CanisterArgs::Binary(bytes) => ManifestArgs::Value {
             value: hex::encode(bytes),
             format: ArgsFormat::Hex,
         },

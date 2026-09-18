@@ -10,7 +10,7 @@ use icp_canister_interfaces::cycles_ledger::{
 use tracing::info;
 
 use crate::commands::args;
-use crate::operations::token::TokenAmount;
+use icp::operations::token::TokenAmount;
 
 /// Top up a canister with cycles
 #[derive(Debug, Args)]

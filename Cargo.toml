@@ -8,7 +8,7 @@ resolver = "3"
 [workspace.package]
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2024"
-version = "1.3.0"
+version = "1.5.0"
 repository = "https://github.com/dfinity/icp-cli"
 rust-version = "1.88.0"
 license = "Apache-2.0"
@@ -56,10 +56,11 @@ httptest = "0.16.3"
 ic-agent = { version = "0.49.1" }
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
-ic-management-canister-types = { version = "0.8.0" }
+ic-management-canister-types = { version = "0.9.0" }
 ic-utils = { version = "0.49.1" }
 icp = { path = "crates/icp" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
+icp-events = { path = "crates/icp-events" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }
 ic-identity-hsm = "0.49.1"
 icrc-ledger-types = "0.1.10"
@@ -87,7 +88,7 @@ pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
 rand = "0.10.1"
 regex = "1.12.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "stream"] }
-schemars = { version = "1.0.4", features = ["derive", "url2"] }
+schemars = { version = "1.0.4", features = ["derive", "indexmap2", "url2"] }
 scrypt = "0.11.0"
 sec1 = { version = "0.7.3", features = ["pkcs8"] }
 send_ctrlc = "0.6"
@@ -125,8 +126,17 @@ missing_debug_implementations = "warn"
 [workspace.lints.clippy]
 enum_variant_names = "allow"
 
-[profile.dev.package.scrypt]
-opt-level = 3
+[profile.dev.package]
+# too slow to ever leave unoptimized
+scrypt = { opt-level = 3 }
+# these bloat the exception handling table producing a macos linker warning
+cargo-generate = { opt-level = 1 }
+cranelift-codegen = { opt-level = 1 }
+rhai = { opt-level = 1 }
+wasmparser = { opt-level = 1 }
+wasmtime-environ = { opt-level = 1 }
+wasmtime-internal-cranelift = { opt-level = 1 }
+wast = { opt-level = 1 }
 
 # The profile that 'dist' will build with
 [profile.dist]

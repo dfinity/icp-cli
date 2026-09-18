@@ -6,19 +6,21 @@ use ic_management_canister_types::{
     ClearChunkStoreArgs, InstallChunkedCodeArgs, InstallCodeArgs, UpgradeFlags, UploadChunkArgs,
     WasmMemoryPersistence,
 };
+use icp_events::TaskOutcome;
+
+use crate::operations::task::{Reporter, Task};
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
-use tracing::{debug, error, warn};
-
-use crate::progress::{ProgressManager, ProgressManagerSettings};
+use tracing::{debug, warn};
 
 use super::misc::fetch_canister_metadata;
 use super::proxy::UpdateOrProxyError;
 use super::proxy_management;
 
 /// CLI-facing choice for `wasm_memory_persistence` on EOP upgrades.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum WasmMemoryPersistenceOpt {
     /// Preserve canister main memory across upgrade (normal EOP upgrade).
     Keep,
@@ -38,7 +40,7 @@ impl WasmMemoryPersistenceOpt {
 
 /// Returns true if the canister exposes the `enhanced-orthogonal-persistence`
 /// custom-section metadata (i.e. it is a Motoko EOP canister).
-pub(crate) async fn is_eop_canister(agent: &Agent, canister_id: &Principal) -> bool {
+pub async fn is_eop_canister(agent: &Agent, canister_id: &Principal) -> bool {
     fetch_canister_metadata(agent, *canister_id, "enhanced-orthogonal-persistence")
         .await
         .is_some()
@@ -71,17 +73,10 @@ pub struct InstallManyError {
     names: Vec<String>,
 }
 
-/// Holds error information from a failed canister install operation
-struct InstallFailure {
-    canister_name: String,
-    canister_id: Principal,
-    error: InstallOperationError,
-}
-
 /// Resolve a mode string ("auto", "install", "reinstall", "upgrade") into
 /// a [`CanisterInstallMode`]. For "auto", queries `canister_status` to
 /// determine whether the canister already has code installed.
-pub(crate) async fn resolve_install_mode_and_status(
+pub async fn resolve_install_mode_and_status(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_name: &str,
@@ -113,12 +108,12 @@ pub(crate) async fn resolve_install_mode_and_status(
 
 #[derive(Debug, Snafu)]
 #[snafu(display("Failed to resolve install mode for canister {canister_name}"))]
-pub(crate) struct ResolveInstallModeError {
+pub struct ResolveInstallModeError {
     canister_name: String,
     source: UpdateOrProxyError,
 }
 
-pub(crate) async fn install_canister(
+pub async fn install_canister(
     agent: &Agent,
     proxy: Option<Principal>,
     canister_id: &Principal,
@@ -349,8 +344,8 @@ async fn stop_and_start_if_upgrade(
     install_result
 }
 
-/// Installs code to multiple canisters and displays progress bars.
-pub(crate) async fn install_many(
+/// Installs code to multiple canisters concurrently.
+pub async fn install_many(
     agent: Agent,
     proxy: Option<Principal>,
     canisters: impl IntoIterator<
@@ -362,23 +357,18 @@ pub(crate) async fn install_many(
             Option<Vec<u8>>,
         ),
     >,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
-    debug: bool,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
+    reporter: &Reporter,
 ) -> Result<(), InstallManyError> {
     let mut futs = FuturesOrdered::new();
-    let progress_manager = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode, status, init_args) in canisters {
-        let pb = progress_manager.create_progress_bar(&name);
+        let task = reporter.task(Task::install(name.clone(), cid));
         let agent = agent.clone();
-        let install_fn = {
-            let pb = pb.clone();
-            let artifacts = artifacts.clone();
-            let name = name.clone();
+        let artifacts = artifacts.clone();
 
-            async move {
-                pb.set_message("Installing...");
-
+        futs.push_back(async move {
+            let result = async {
                 let wasm = artifacts.lookup(&name).await.map_err(|_| {
                     InstallOperationError::ArtifactNotFound {
                         canister_name: name.clone(),
@@ -398,48 +388,28 @@ pub(crate) async fn install_many(
                 )
                 .await
             }
-        };
-
-        futs.push_back(async move {
-            let result = ProgressManager::execute_with_progress(
-                &pb,
-                install_fn,
-                || "Installed successfully".to_string(),
-                |err| format!("Failed to install canister: {err}"),
-            )
             .await;
 
-            result.map_err(|error| InstallFailure {
-                canister_name: name.clone(),
-                canister_id: cid,
-                error,
-            })
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| name)
         });
     }
 
-    let mut errors: Vec<InstallFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = futs.next().await {
-        if let Err(failure) = res {
-            errors.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !errors.is_empty() {
-        for failure in &errors {
-            error!(
-                "----- Failed to install canister '{}': {} -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!("'{}'", failure.error);
-        }
-
-        return InstallManySnafu {
-            names: errors
-                .iter()
-                .map(|e| e.canister_name.clone())
-                .collect::<Vec<String>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return InstallManySnafu { names: failed }.fail();
     }
 
     Ok(())

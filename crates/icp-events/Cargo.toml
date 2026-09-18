@@ -1,0 +1,14 @@
+[package]
+name = "icp-events"
+version.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

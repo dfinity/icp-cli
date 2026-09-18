@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use crate::commands::args::TokenCommandArgs;
 use crate::commands::parsers::parse_subaccount;
-use crate::operations::token::transfer::icrc1_transfer;
+use icp::operations::token::transfer::icrc1_transfer;
 
 /// Transfer cycles to another principal
 #[derive(Debug, Args)]

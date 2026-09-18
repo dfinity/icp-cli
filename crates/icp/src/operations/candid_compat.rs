@@ -8,77 +8,62 @@ use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
 use ic_agent::Agent;
 use ic_management_canister_types::CanisterInstallMode;
-use snafu::Snafu;
-use tracing::{debug, error};
+use icp_events::TaskOutcome;
 
-use crate::{
-    operations::{misc::fetch_canister_metadata, wasm::extract_candid_service},
-    progress::{ProgressManager, ProgressManagerSettings},
-};
+use crate::operations::task::{Reporter, Task};
+use snafu::Snafu;
+use tracing::debug;
+
+use crate::operations::{misc::fetch_canister_metadata, wasm::extract_candid_service};
 
 /// Checks Candid interface compatibility for all canisters that would be
 /// upgraded. Aborts if any canister has an incompatible interface.
-pub(crate) async fn check_candid_compatibility_many(
+pub async fn check_candid_compatibility_many(
     agent: Agent,
     canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
-    artifacts: Arc<dyn icp::store_artifact::Access>,
-    debug: bool,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
+    reporter: &Reporter,
 ) -> Result<(), CandidCheckManyError> {
     let mut check_futs = FuturesOrdered::new();
-    let check_progress = ProgressManager::new(ProgressManagerSettings { hidden: debug });
 
     for (name, cid, mode) in canisters {
-        let pb = check_progress.create_progress_bar(name);
+        let task = reporter.task(Task::candid_check(name, cid));
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
         let agent = agent.clone();
         let artifacts = artifacts.clone();
 
         check_futs.push_back(async move {
             if !is_upgrade {
-                pb.finish_with_message("Skipped (not an upgrade)");
-                return Ok::<_, CandidCheckFailure>(());
+                task.finish(TaskOutcome::Skipped {
+                    reason: "not an upgrade".to_owned(),
+                });
+                return Ok::<_, String>(());
             }
 
-            pb.set_message("Checking compatibility...");
+            let result = check_canister_candid_compat(&agent, &cid, name, &*artifacts).await;
 
-            ProgressManager::execute_with_progress(
-                &pb,
-                check_canister_candid_compat(&agent, &cid, name, &*artifacts),
-                || "Compatible".to_string(),
-                |_| "Incompatible".to_string(),
-            )
-            .await
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                // The renderer words the breaking-change dump; the incompatibility
+                // details ride as the failure message.
+                Err(failure) => task.finish(TaskOutcome::failed(failure.details.clone())),
+            }
+
+            result.map_err(|failure| failure.canister_name)
         });
     }
 
-    let mut check_failures: Vec<CandidCheckFailure> = Vec::new();
+    // Collect the failed canister names; the renderer owns displaying each
+    // failure.
+    let mut failed: Vec<String> = Vec::new();
     while let Some(res) = check_futs.next().await {
-        if let Err(failure) = res {
-            check_failures.push(failure);
+        if let Err(name) = res {
+            failed.push(name);
         }
     }
 
-    if !check_failures.is_empty() {
-        for failure in &check_failures {
-            error!(
-                " ----- Candid interface compatibility check failed: '{}' ({}) -----",
-                failure.canister_name, failure.canister_id,
-            );
-            error!(
-                "You are making a BREAKING change. Other canisters or frontend clients \
-                 relying on your canister may stop working.\n\n{}",
-                failure.details,
-            );
-        }
-        error!("Use --yes to bypass this check.");
-
-        return CandidCheckManySnafu {
-            names: check_failures
-                .iter()
-                .map(|f| f.canister_name.clone())
-                .collect::<Vec<_>>(),
-        }
-        .fail();
+    if !failed.is_empty() {
+        return CandidCheckManySnafu { names: failed }.fail();
     }
 
     Ok(())
@@ -92,7 +77,7 @@ async fn check_canister_candid_compat(
     agent: &Agent,
     canister_id: &Principal,
     canister_name: &str,
-    artifacts: &dyn icp::store_artifact::Access,
+    artifacts: &dyn crate::store_artifact::Access,
 ) -> Result<(), CandidCheckFailure> {
     let wasm = match artifacts.lookup(canister_name).await {
         Ok(w) => w,
@@ -108,7 +93,6 @@ async fn check_canister_candid_compat(
         }
         CandidCompatibility::Incompatible(details) => Err(CandidCheckFailure {
             canister_name: canister_name.to_owned(),
-            canister_id: *canister_id,
             details,
         }),
     }
@@ -119,7 +103,7 @@ async fn check_canister_candid_compat(
 ///
 /// Returns [`CandidCompatibility::Skipped`] if either side lacks a
 /// `candid:service` metadata section or if the interfaces cannot be parsed.
-pub(crate) async fn check_candid_compatibility(
+pub async fn check_candid_compatibility(
     agent: &Agent,
     canister_id: &Principal,
     wasm: &[u8],
@@ -187,12 +171,11 @@ pub(crate) async fn check_candid_compatibility(
 /// Holds error information from a failed candid compatibility check
 struct CandidCheckFailure {
     canister_name: String,
-    canister_id: Principal,
     details: String,
 }
 
 /// Result of a Candid interface compatibility check.
-pub(crate) enum CandidCompatibility {
+pub enum CandidCompatibility {
     /// Both interfaces present and compatible.
     Compatible,
     /// Both interfaces present but the new one is not a subtype of the old.

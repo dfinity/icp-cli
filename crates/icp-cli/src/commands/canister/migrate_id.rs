@@ -15,12 +15,12 @@ use num_traits::ToPrimitive;
 use tracing::{info, warn};
 
 use crate::commands::args::{self, Canister};
-use crate::operations::canister_migration::{
+use icp::context::CanisterSelection;
+use icp::operations::canister_migration::{
     get_subnet_for_canister, migrate_canister, migration_status,
 };
-use crate::operations::misc::format_timestamp;
-use crate::operations::proxy_management;
-use icp::context::CanisterSelection;
+use icp::operations::misc::format_timestamp;
+use icp::operations::proxy_management;
 
 /// Minimum cycles required for migration (10T).
 const MIN_CYCLES_FOR_MIGRATION: u128 = 10_000_000_000_000;

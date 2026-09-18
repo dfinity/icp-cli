@@ -14,10 +14,9 @@ use icp::{Canister, context::CanisterSelection, prelude::*};
 use serde::Serialize;
 use tracing::{info, warn};
 
-use crate::{
-    commands::args,
-    operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote},
-};
+use icp::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
+
+use crate::commands::args;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -164,7 +163,17 @@ impl CreateArgs {
                 .or(default.settings.reserved_cycles_limit.clone())
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
-            log_visibility: default.settings.log_visibility.clone().map(Into::into),
+            log_visibility: default.settings.log_visibility.clone().map(|v| v.0.into()),
+            snapshot_visibility: default
+                .settings
+                .snapshot_visibility
+                .clone()
+                .map(|v| v.0.into()),
+            status_visibility: default
+                .settings
+                .status_visibility
+                .clone()
+                .map(|v| v.0.into()),
             memory_allocation: self
                 .settings
                 .memory_allocation
@@ -255,6 +264,8 @@ impl CreateArgs {
                 .map(|c| Nat::from(c.get())),
             // TODO This should be configurable from the CLI
             log_visibility: None,
+            snapshot_visibility: None,
+            status_visibility: None,
             memory_allocation: self
                 .settings
                 .memory_allocation
@@ -377,7 +388,7 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
     ctx.set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    crate::operations::settings::sync_controller_dependents(
+    icp::operations::settings::sync_controller_dependents(
         ctx,
         &agent,
         args.proxy,

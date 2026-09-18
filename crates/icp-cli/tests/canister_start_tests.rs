@@ -80,7 +80,7 @@ async fn canister_start() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Stopped"))
-                .and(contains("Controllers: 2vxsx-fae")),
+                .and(contains("controller: 2vxsx-fae")),
         );
 
     // Start canister
@@ -111,7 +111,7 @@ async fn canister_start() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
-                .and(contains("Controllers: 2vxsx-fae")),
+                .and(contains("controller: 2vxsx-fae")),
         );
 }
 

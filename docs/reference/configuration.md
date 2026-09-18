@@ -59,8 +59,9 @@ canisters:
 | `build` | object | Yes | Build configuration |
 | `sync` | object | No | Post-deployment sync configuration |
 | `settings` | object | No | Canister settings |
-| `init_args` | string or object | No | Initialization arguments (see [Init Args](#init-args)) |
-| `recipe` | object | No | Recipe reference (alternative to build) |
+| `init_args` | string or object | No | Initialization arguments (see [Install Args](#install-args)) |
+| `upgrade_args` | string or object | No | Upgrade arguments; defaults to `init_args` (see [Install Args](#install-args)) |
+| `recipe` | object | No | Recipe reference (alternative to build; may be combined with `sync`) |
 
 ## Build Steps
 
@@ -74,7 +75,9 @@ build:
     - type: script
       commands:
         - cargo build --target wasm32-unknown-unknown --release
-        - cp target/wasm32-unknown-unknown/release/my_canister.wasm "$ICP_WASM_OUTPUT_PATH"
+        - |-
+          TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+          cp "${TARGET_DIR}/wasm32-unknown-unknown/release/my_canister.wasm" "$ICP_WASM_OUTPUT_PATH"
 ```
 
 **Environment variables:**
@@ -146,11 +149,15 @@ sync:
     - type: plugin
       path: ./plugins/populate-data.wasm
       sha256: e3b0c44298fc1c149afb...   # optional for path, recommended
-      dirs:                              # directories preopened read-only
-        - assets/seed-data
-        - config
-      files:                             # files read by the host and passed inline
-        - config.txt
+      files:                             # named directories and files
+        seed: assets/seed-data           #   a directory, preopened read-only
+        config: config.txt               #   a file, read and passed inline
+      fields:                            # key-value fields passed inline
+        api_url: https://example.com
+        retries: 3
+      canisters:                          # extra canisters the plugin may reach
+        - ledger                          #   by name (resolved for the environment)
+        - services/open-crm:backend
 
     # Remote plugin (downloaded and verified before execution)
     - type: plugin
@@ -163,12 +170,48 @@ sync:
 | `path` | string | One of `path` or `url` | Local path to the wasm, relative to the canister directory |
 | `url` | string | One of `path` or `url` | URL to download the wasm from |
 | `sha256` | string | Required for `url`, optional for `path` | SHA-256 hex digest of the wasm file, verified before execution |
-| `dirs` | array of string | No | Directories (relative to the canister directory) the plugin may read; each is preopened read-only via WASI |
-| `files` | array of string | No | Files (relative to the canister directory) read by the host and passed inline to the plugin |
+| `files` | map of name → path(s) | No | What the plugin may read (relative to the canister directory, anywhere inside the project). A directory is made readable read-only via WASI; a file is read by the host and passed inline |
+| `dirs` | list of paths | No | Directories the plugin may read. Only for a plugin built against `icp:sync-plugin@0.1` — see below |
+| `fields` | map of string to string | No | Key-value fields passed inline to the plugin; the plugin decides how to interpret them |
+| `canisters` | array of string | No | Canisters the plugin may call, or read metadata from, in addition to the one being synced. Each entry is a canister name, resolved against the project's canister IDs for the environment |
 
-Entries in `dirs:`/`files:` must be relative, may not contain `..`, and may not be — or traverse — a symlink, so a declared path cannot resolve to a target outside the canister directory.
+`files:` holds directories and files together; which an entry is comes from what is on disk, not from how it was written. Each key names a single path or a list of paths, and is surfaced to the plugin as that entry's `key` — a key holding a list produces several entries sharing it. For example:
 
-The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced and read the declared `dirs`/`files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
+```yaml
+    - type: plugin
+      path: ./plugins/populate-data.wasm
+      files:
+        seed: assets/seed-data        # one path under a name
+        migrations:                   # several paths sharing a name
+          - migrations/2025
+          - migrations/2026
+        config: config.txt            # a file, read and passed inline
+```
+
+Entries in `files:` must be relative to the canister directory. They may reach the rest of the project with `..` — `shared: ../shared/assets` is fine — but may not resolve outside the project directory. They may not be, or traverse, a symlink, so a declared path cannot resolve to a target outside the project.
+
+#### Plugins built against `icp:sync-plugin@0.1`
+
+The older interface has no name for an entry and keeps directories in a list of their own, so a plugin implementing it takes the shape that interface has: a separate `dirs:`, and plain lists of paths rather than named entries.
+
+```yaml
+    - type: plugin
+      path: ./plugins/legacy.wasm
+      dirs:
+        - assets/seed-data
+      files:
+        - config.txt
+```
+
+The two shapes cannot be mixed, and which one applies is settled by the plugin rather than the manifest, so a mismatch is reported when the plugin is loaded: naming an entry for a `@0.1` plugin, or writing `dirs:` or a plain list for a `@0.2` one, fails the sync step with an error saying which form that plugin takes.
+
+A plugin receives every `fields:` value as a string. Numbers and booleans need no quoting — `port: 8080` arrives as `"8080"` — but a value may not be a list, a mapping, or empty.
+
+A canister name in `canisters:` is the same name you use elsewhere in the project — a bare local name for a sibling canister, or a namespaced `subproject:canister` key for a canister defined in a subproject. A name that does not resolve to a known canister for the environment fails the sync step.
+
+Names are always written from this project's point of view, so they keep working when the project is vendored into a workspace as a subproject: a plugin on a canister in `services/crm` reaches a canister of its own `vendor/ledger` dependency as `vendor/ledger:ledger` either way, even though the workspace keys that canister `services/crm/vendor/ledger:ledger`. Both spellings resolve; if a canister elsewhere in the workspace happens to be keyed `vendor/ledger:ledger`, the name means your own.
+
+The plugin runs in a WASI sandbox: it can call update and query methods on the canister being synced (and any canister listed in `canisters:`), read those canisters' metadata sections, and read the declared `files`, but cannot open network sockets, spawn subprocesses, or write to disk. See [Sync Plugins](../concepts/sync-plugins.md) for the mechanism and [Writing a Sync Plugin](../guides/writing-sync-plugins.md) to author one.
 
 ## Recipes
 
@@ -178,7 +221,7 @@ The plugin runs in a WASI sandbox: it can call update and query methods on the c
 canisters:
   - name: my-canister
     recipe:
-      type: "@dfinity/rust@v3.0.0"
+      type: "@dfinity/rust@v3.4.0"
       sha256: abc123...  # Required for remote URLs
       configuration:
         package: my-crate
@@ -190,11 +233,31 @@ canisters:
 | `sha256` | string | Conditional | Required for remote URLs |
 | `configuration` | object | No | Parameters passed to recipe template |
 
+### Adding Sync Steps to a Recipe
+
+A canister that uses a recipe may declare a `sync` section of its own. Its steps
+run after the ones the recipe renders, in the order written:
+
+```yaml
+canisters:
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: dist
+    sync:
+      steps:
+        - type: script
+          command: ./scripts/warm-cache.sh
+```
+
+A `recipe` still cannot be combined with `build` — the recipe defines the build.
+
 ### Recipe Type Formats
 
 ```yaml
 # Registry (recommended)
-type: "@dfinity/rust@v3.0.0"
+type: "@dfinity/rust@v3.4.0"
 
 # Local file
 type: ./recipes/my-recipe.hb.yaml
@@ -369,9 +432,10 @@ environments:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Environment identifier |
 | `network` | string | Yes | Network to deploy to |
-| `canisters` | array | No | Canisters to include (default: all) |
+| `canisters` | array | No | This project's own canisters to include (default: all of them) |
 | `settings` | object | No | Per-canister setting overrides |
-| `init_args` | object | No | Per-canister init arg overrides (see [Init Args](#init-args)) |
+| `init_args` | object | No | Per-canister init arg overrides (see [Install Args](#install-args)) |
+| `upgrade_args` | object | No | Per-canister upgrade arg overrides (see [Install Args](#install-args)) |
 
 ## Canister Settings
 
@@ -386,6 +450,8 @@ settings:
   wasm_memory_limit: 1gib
   wasm_memory_threshold: 512mib
   log_visibility: controllers
+  snapshot_visibility: controllers
+  status_visibility: controllers
   environment_variables:
     KEY: "value"
     # A value may also be read from a file, relative to the canister directory
@@ -395,12 +461,18 @@ settings:
 
 Memory values accept suffixes: `kb` (1000), `kib` (1024), `mb`, `mib`, `gb`, `gib`. Cycles values accept suffixes: `k` (thousand), `m` (million), `b` (billion), `t` (trillion). Duration values accept suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks). Decimals and underscores are supported where applicable (e.g. `2.5gib`, `1_000_000`).
 
-## Init Args
+## Install Args
+
+`init_args` are passed to the canister when its code is installed or
+reinstalled; `upgrade_args` are passed when it is upgraded. A canister that
+omits `upgrade_args` is upgraded with its `init_args`. Both fields take the same
+forms, and `--args` / `--args-file` on `icp deploy` override either of them.
 
 A plain string is shorthand for inline Candid content:
 
 ```yaml
 init_args: "(record { owner = principal \"aaaaa-aa\" })"
+upgrade_args: "(record { owner = principal \"aaaaa-aa\"; migrate = true })"
 ```
 
 File reference:
@@ -421,8 +493,8 @@ init_args:
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `path` | string | Yes* | Path to a file containing init args, relative to the canister directory |
-| `value` | string | Yes* | Inline init args value |
+| `path` | string | Yes* | Path to a file containing the args, relative to the canister directory |
+| `value` | string | Yes* | Inline args value |
 | `format` | string | No | `hex`, `candid`, or `bin` (default: `candid`) |
 
 *Exactly one of `path` or `value` must be specified.
@@ -466,7 +538,9 @@ canisters:
         - type: script
           commands:
             - cargo build --target wasm32-unknown-unknown --release
-            - cp target/wasm32-unknown-unknown/release/backend.wasm "$ICP_WASM_OUTPUT_PATH"
+            - |-
+              TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+              cp "${TARGET_DIR}/wasm32-unknown-unknown/release/backend.wasm" "$ICP_WASM_OUTPUT_PATH"
     settings:
       compute_allocation: 5
     init_args:

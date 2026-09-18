@@ -1,4 +1,5 @@
 // Host-side Component Model runtime for sync plugins.
+use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -21,28 +22,198 @@ pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
 pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
 
 use bytes::Bytes;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use candid::{Encode, Principal};
 use ic_agent::Agent;
+use ic_agent::hash_tree::{Label, LookupResult};
+use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
+use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
+use semver::{Version, VersionReq};
 use snafu::prelude::*;
+// Aliased because wasmtime-wasi also has an `OutputStream` (imported below).
+use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
-use tokio::sync::mpsc::Sender;
+use url::Url;
+use wasmtime::component::{Component, HasSelf, Linker};
+use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 use wasmtime_wasi::p2::{OutputStream, Pollable, StreamError};
 use wasmtime_wasi::{DirPerms, FilePerms};
 
-wasmtime::component::bindgen!({
-    world: "sync-plugin",
-    path: "sync-plugin.wit",
-});
+// Both the current and the legacy plugin interfaces are bound, each in its own
+// module so their generated type names don't collide. `run_plugin` reads the
+// interface version from the component's own metadata (see `detect_plugin_abi`)
+// and drives it through the matching module, so plugins built against either
+// interface load.
+mod v2 {
+    wasmtime::component::bindgen!({
+        world: "sync-plugin",
+        path: "sync-plugin.wit",
+    });
+}
 
-use icp::sync_plugin::types::CallType;
+mod v1 {
+    wasmtime::component::bindgen!({
+        world: "sync-plugin",
+        path: "sync-plugin-v1.wit",
+    });
+}
+
+use v2::icp::sync_plugin::types::{CallTarget, CallType, CanisterIdEntry};
+
+/// A manifest path passed to a plugin, tagged with the map key it was declared
+/// under. Both `dirs` and `files` are lists of these.
+///
+/// The key is `None` when the manifest wrote the setting as a plain list, and
+/// `Some(name)` when it wrote a map. It is *non-unique*: several paths share a
+/// key when a map key resolves to a list of paths. Which form a plugin accepts
+/// depends on the interface it was built against — see [`PluginAbi`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyedPath {
+    /// The map key this path was declared under, or `None` for a plain-list entry.
+    pub key: Option<String>,
+    /// Manifest-relative path, anchored at the invocation's `base_dir`.
+    pub path: String,
+}
+
+/// A declared entry the host has resolved to a location on disk, and what it
+/// found there. Held version-agnostically so it can be converted to whichever
+/// interface version's records the plugin turns out to use.
+struct ResolvedEntry {
+    /// The map key the entry was declared under, dropped for a v0.1.0 plugin
+    /// whose records have no room for it.
+    key: Option<String>,
+    /// The path as the manifest wrote it: what the guest sees, and where a
+    /// directory is preopened.
+    path: String,
+    /// Where the entry lives on the host.
+    host_path: Utf8PathBuf,
+    /// The file's contents, or `None` for a directory.
+    content: Option<String>,
+}
+
+/// The canisters a sync plugin is permitted to call, beyond the canister being
+/// synced (which is always reachable via [`CallTarget::Host`]).
+///
+/// Built by the CLI from the plugin step's `canisters` list, resolved against
+/// the project's canister ID table. Keeping the resolution on the CLI side
+/// keeps this runtime crate free of any manifest knowledge.
+#[derive(Clone, Debug, Default)]
+pub struct CallableCanisters {
+    /// Canisters callable by name ([`CallTarget::Name`]). Maps the name — as it
+    /// appears in the canister ID table — to the principal it resolves to.
+    pub by_name: BTreeMap<String, Principal>,
+}
+
+/// What a certificate says about a metadata section. A section the reader may
+/// not have is neither of these: the state tree will not certify it, so it
+/// reaches the caller as an error like any other failed read.
+enum CertifiedSection {
+    Present(Vec<u8>),
+    Absent,
+}
+
+/// Ask the target's subnet to certify a metadata section, reporting only what
+/// the certificate proves.
+///
+/// The section path is requested together with `controllers`, because a
+/// metadata path proven absent is equally what a canister that was never created
+/// looks like — `controllers` is written at creation, so its presence is what
+/// separates the two. A canister with no module installed has no sections at
+/// all, which the certificate reports as an absent path under a canister that
+/// exists, and so as [`CertifiedSection::Absent`].
+async fn certified_metadata_section(
+    agent: &Agent,
+    target: Principal,
+    name: &str,
+) -> Result<CertifiedSection, String> {
+    let metadata_path: Vec<Label<Vec<u8>>> = vec![
+        "canister".into(),
+        Label::from_bytes(target.as_slice()),
+        "metadata".into(),
+        name.into(),
+    ];
+    let controllers_path: Vec<Label<Vec<u8>>> = vec![
+        "canister".into(),
+        Label::from_bytes(target.as_slice()),
+        "controllers".into(),
+    ];
+    let cert = agent
+        .read_state_raw(
+            vec![metadata_path.clone(), controllers_path.clone()],
+            target,
+        )
+        .await
+        .map_err(|err| format!("metadata read failed: {err}"))?;
+
+    match cert.tree.lookup_path(&metadata_path) {
+        LookupResult::Found(bytes) => Ok(CertifiedSection::Present(bytes.to_vec())),
+        LookupResult::Absent => match cert.tree.lookup_path(&controllers_path) {
+            LookupResult::Found(_) => Ok(CertifiedSection::Absent),
+            LookupResult::Absent => Err(format!("canister {target} does not exist")),
+            _ => Err(format!(
+                "metadata read failed: certificate proves nothing about canister {target}"
+            )),
+        },
+        // Not proof of absence, just a certificate that says nothing about the
+        // path — reporting the section missing off this would be a guess.
+        _ => Err(format!(
+            "metadata read failed: certificate proves nothing about section `{name}` \
+             of canister {target}"
+        )),
+    }
+}
+
+/// Whether the management canister rejected a metadata read by claiming the
+/// target has no such section, rather than because the read itself failed.
+///
+/// The claim is not proof: the same rejection covers a section private to
+/// someone other than the proxy, so the caller confirms it against a
+/// certificate. A proxied read reaches the plugin as reject text with no code
+/// attached, so recognizing the claim at all means matching the replica's
+/// wording. Both sentences name the canister and one names the section, so the
+/// match is anchored on the values this call supplied rather than on a loose
+/// phrase that text relayed from elsewhere might happen to contain. A reword
+/// upstream turns the claim into an error rather than into a wrong answer.
+fn rejected_as_no_such_section(message: &str, target: Principal, name: &str) -> bool {
+    // A canister with no module installed has no sections at all, so it reports
+    // absence in its own words. The certificate says the same thing about it:
+    // the metadata path is absent while the canister itself is there.
+    message.contains(&format!(
+        "The canister {target} has no Wasm module and hence no metadata is available."
+    )) || message.contains(&format!(
+        "The canister {target} has no metadata section with the name {name}."
+    ))
+}
+
+/// Resolve a plugin-supplied [`CallTarget`] to a concrete principal, enforcing
+/// that the plugin listed it in `canisters`. The canister being synced (`host`)
+/// is always permitted.
+fn resolve_call_target(
+    target: &CallTarget,
+    host_canister_id: Principal,
+    callable: &CallableCanisters,
+) -> Result<Principal, String> {
+    match target {
+        CallTarget::Host => Ok(host_canister_id),
+        CallTarget::Name(name) => callable.by_name.get(name).copied().ok_or_else(|| {
+            format!(
+                "plugin is not permitted to call canister '{name}': declare it in the sync step's \
+                 `canisters` list to allow it"
+            )
+        }),
+    }
+}
 
 // HostState holds everything the plugin's import functions need.
 struct HostState {
-    target_canister_id: Principal,
+    /// The canister being synced — the target of [`CallTarget::Host`] calls.
+    host_canister_id: Principal,
+    /// Canisters the plugin declared in `canisters` and may also call.
+    callable: CallableCanisters,
     agent: Arc<Agent>,
-    /// Proxy canister to route update calls through, if configured.
+    /// Proxy canister to route update calls and metadata reads through, if
+    /// configured.
     proxy: Option<Principal>,
     // WASI context. Preopened directories in this context are the only
     // filesystem locations the plugin can access.
@@ -64,31 +235,34 @@ impl wasmtime_wasi::WasiView for HostState {
     }
 }
 
-// `types::Host` is an empty marker trait generated for the `types` interface.
-impl icp::sync_plugin::types::Host for HostState {}
-
-impl SyncPluginImports for HostState {
-    fn canister_call(&mut self, req: CanisterCallRequest) -> Result<Vec<u8>, String> {
-        use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
-
-        let arg_bytes = req.arg;
-        let cid = self.target_canister_id;
-        let method = req.method.clone();
+impl HostState {
+    /// Perform a canister call to an already-resolved target principal. Shared
+    /// by both interface versions: the v0.1.0 import always passes the canister
+    /// being synced; the v0.2.0 import passes the resolved `call-target`.
+    fn do_canister_call(
+        &mut self,
+        target: Principal,
+        method: String,
+        arg_bytes: Vec<u8>,
+        call_type: CallType,
+        direct: bool,
+        cycles: u64,
+    ) -> Result<Vec<u8>, String> {
         let agent = Arc::clone(&self.agent);
-        let proxy = if req.direct { None } else { self.proxy };
+        let proxy = if direct { None } else { self.proxy };
 
         // We are already inside tokio::task::block_in_place (see sync/plugin.rs),
         // so blocking the thread here is safe.
         let start = Instant::now();
         let result = tokio::runtime::Handle::current().block_on(async move {
-            match req.call_type {
+            match call_type {
                 CallType::Update => {
                     if let Some(proxy_cid) = proxy {
                         let proxy_args = ProxyArgs {
-                            canister_id: cid,
+                            canister_id: target,
                             method: method.clone(),
                             args: arg_bytes,
-                            cycles: candid::Nat::from(req.cycles),
+                            cycles: candid::Nat::from(cycles),
                         };
                         let encoded = Encode!(&proxy_args)
                             .map_err(|e| format!("proxy encode failed: {e}"))?;
@@ -105,26 +279,164 @@ impl SyncPluginImports for HostState {
                         }
                     } else {
                         agent
-                            .update(&cid, &method)
+                            .update(&target, &method)
                             .with_arg(arg_bytes)
                             .await
                             .map_err(|e| format!("canister call failed: {e}"))
                     }
                 }
                 CallType::Query => agent
-                    .query(&cid, &method)
+                    .query(&target, &method)
                     .with_arg(arg_bytes)
                     .call()
                     .await
                     .map_err(|e| format!("canister call failed: {e}")),
             }
         });
-        // Return the time spent in the host call to the compute budget so
-        // canister network latency doesn't count against the plugin's limit.
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Read a metadata section from an already-resolved target principal.
+    /// `Ok(None)` means a certificate proved the target has no such section,
+    /// kept distinct from a failed read so a plugin can probe for an optional
+    /// section without inspecting error text. A section the reader may not have
+    /// is a failed read, not an absent one, whichever route asked.
+    ///
+    /// A direct read is a certified `read_state` signed by the sync identity —
+    /// `read_state` is not a canister method, so it cannot be forwarded. A
+    /// proxied read therefore goes the other way around: the proxy calls the
+    /// management canister's `canister_metadata` on the plugin's behalf, which
+    /// checks the *proxy* against the target's controllers and so reaches
+    /// sections private to it. The management canister does not distinguish
+    /// absence from privacy, so a proxied read that comes back claiming absence
+    /// is confirmed against a certificate before it is reported as one.
+    fn do_canister_metadata_section(
+        &mut self,
+        target: Principal,
+        name: String,
+        direct: bool,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let agent = Arc::clone(&self.agent);
+        let proxy = if direct { None } else { self.proxy };
+
+        let start = Instant::now();
+        let result = tokio::runtime::Handle::current().block_on(async move {
+            let Some(proxy_cid) = proxy else {
+                return certified_metadata_section(&agent, target, &name)
+                    .await
+                    .map(|section| match section {
+                        CertifiedSection::Present(bytes) => Some(bytes),
+                        CertifiedSection::Absent => None,
+                    });
+            };
+
+            let metadata_args = Encode!(&CanisterMetadataArgs {
+                canister_id: target,
+                name: name.clone(),
+            })
+            .map_err(|e| format!("metadata encode failed: {e}"))?;
+            let proxy_args = ProxyArgs {
+                canister_id: Principal::management_canister(),
+                method: "canister_metadata".to_string(),
+                args: metadata_args,
+                cycles: candid::Nat::from(0u8),
+            };
+            let encoded = Encode!(&proxy_args).map_err(|e| format!("proxy encode failed: {e}"))?;
+            let raw = agent
+                .update(&proxy_cid, "proxy")
+                .with_arg(encoded)
+                .await
+                .map_err(|e| format!("proxy call failed: {e}"))?;
+            let (result,): (ProxyResult,) =
+                candid::decode_args(&raw).map_err(|e| format!("proxy decode failed: {e}"))?;
+            match result {
+                ProxyResult::Ok(ok) => {
+                    let (metadata,): (CanisterMetadataResult,) = candid::decode_args(&ok.result)
+                        .map_err(|e| format!("metadata decode failed: {e}"))?;
+                    Ok(Some(metadata.value))
+                }
+                ProxyResult::Err(err) => {
+                    let message = err.format_error();
+                    if !rejected_as_no_such_section(&message, target, &name) {
+                        return Err(format!("metadata read failed: {message}"));
+                    }
+                    // The management canister says the same thing about a
+                    // section that isn't there and one that is private to
+                    // someone else, so its word alone cannot be reported as
+                    // absence. Only a certificate proves the section absent.
+                    match certified_metadata_section(&agent, target, &name).await? {
+                        CertifiedSection::Absent => Ok(None),
+                        CertifiedSection::Present(_) => Err(format!(
+                            "metadata read failed: canister {target} does not let the proxy \
+                             read section `{name}`"
+                        )),
+                    }
+                }
+            }
+        });
+        self.refund_host_call_time(start);
+        result
+    }
+
+    /// Return the wall-clock time a host call spent off-wasm to the compute
+    /// budget, so network latency doesn't count against the plugin's limit.
+    fn refund_host_call_time(&self, start: Instant) {
         let elapsed_ticks = start.elapsed().as_secs() + 1;
         self.epoch_extension
             .fetch_add(elapsed_ticks, Ordering::Relaxed);
-        result
+    }
+}
+
+// -- v0.2.0 interface: the plugin chooses the target via `call-target`. --------
+
+// `types::Host` is an empty marker trait generated for the `types` interface.
+impl v2::icp::sync_plugin::types::Host for HostState {}
+
+impl v2::SyncPluginImports for HostState {
+    fn canister_call(
+        &mut self,
+        req: v2::icp::sync_plugin::types::CanisterCallRequest,
+    ) -> Result<Vec<u8>, String> {
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_canister_call(
+            target,
+            req.method,
+            req.arg,
+            req.call_type,
+            req.direct,
+            req.cycles,
+        )
+    }
+
+    fn canister_metadata_section(
+        &mut self,
+        req: v2::icp::sync_plugin::types::MetadataSectionRequest,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
+        self.do_canister_metadata_section(target, req.name, req.direct)
+    }
+}
+
+// -- v0.1.0 interface: calls always go to the canister being synced. -----------
+
+impl v1::icp::sync_plugin::types::Host for HostState {}
+
+impl v1::SyncPluginImports for HostState {
+    fn canister_call(
+        &mut self,
+        req: v1::icp::sync_plugin::types::CanisterCallRequest,
+    ) -> Result<Vec<u8>, String> {
+        // The legacy interface has no target field; always call the host canister.
+        let target = self.host_canister_id;
+        // v1's `call-type` is a distinct generated enum; map it to the shared one.
+        let call_type = match req.call_type {
+            v1::icp::sync_plugin::types::CallType::Update => CallType::Update,
+            v1::icp::sync_plugin::types::CallType::Query => CallType::Query,
+        };
+        self.do_canister_call(
+            target, req.method, req.arg, call_type, req.direct, req.cycles,
+        )
     }
 }
 
@@ -154,14 +466,26 @@ pub enum RunPluginError {
     },
 
     #[snafu(display(
-        "plugin dir '{dir}' is not a safe relative path (no absolute paths or '..' allowed)"
+        "plugin path '{declared}' is not a relative path (absolute paths are not allowed)"
     ))]
-    UnsafeDir { dir: String },
+    UnsafePath { declared: String },
 
     #[snafu(display(
-        "plugin dir '{dir}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin dirs"
+        "plugin path '{declared}' resolves outside '{project_dir}'; \
+         a plugin may only read paths inside the project directory"
     ))]
-    SymlinkDir { dir: String, link: Utf8PathBuf },
+    PathOutsideProject {
+        declared: String,
+        project_dir: Utf8PathBuf,
+    },
+
+    #[snafu(display(
+        "plugin path '{declared}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin paths"
+    ))]
+    SymlinkPath { declared: String, link: Utf8PathBuf },
+
+    #[snafu(display("plugin dir '{dir}' is not an existing directory"))]
+    MissingDir { dir: String },
 
     #[snafu(display("failed to preopen directory '{dir}' for the plugin"))]
     PreopenDir {
@@ -169,27 +493,48 @@ pub enum RunPluginError {
         dir: Utf8PathBuf,
     },
 
-    #[snafu(display(
-        "plugin file '{name}' is not a safe relative path (no absolute paths or '..' allowed)"
-    ))]
-    UnsafeFile { name: String },
-
-    #[snafu(display(
-        "plugin file '{name}' resolves through a symlink ('{link}'); symlinks are not allowed in plugin files"
-    ))]
-    SymlinkFile { name: String, link: Utf8PathBuf },
-
     #[snafu(display("failed to read plugin input file at {path}"))]
     ReadFile {
         source: std::io::Error,
         path: Utf8PathBuf,
     },
 
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.1, whose entries carry no name, \
+         but '{declared}' was declared under the name '{key}'. Write `dirs:`/`files:` as a \
+         plain list of paths, or rebuild the plugin against icp:sync-plugin@0.2."
+    ))]
+    NamedPathUnsupported {
+        path: Utf8PathBuf,
+        key: String,
+        declared: String,
+    },
+
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.2, which names every entry, but \
+         '{declared}' was declared in a plain list. Write `files:` as a map of name → path, \
+         or rebuild the plugin against icp:sync-plugin@0.1."
+    ))]
+    UnnamedPathUnsupported { path: Utf8PathBuf, declared: String },
+
+    #[snafu(display(
+        "the plugin at {path} implements icp:sync-plugin@0.2, which has no separate `dirs:` \
+         setting. List the directory '{declared}' under `files:` instead — the host tells a \
+         directory from a file by what is on disk."
+    ))]
+    DirsUnsupported { path: Utf8PathBuf, declared: String },
+
     #[snafu(display("failed to instantiate wasm component at {path}"))]
     Instantiate {
         source: wasmtime::Error,
         path: Utf8PathBuf,
     },
+
+    #[snafu(display(
+        "wasm component at {path} does not implement a supported sync-plugin interface ({detail}). \
+         Supported: icp:sync-plugin@0.1 and icp:sync-plugin@0.2."
+    ))]
+    UnsupportedInterface { path: Utf8PathBuf, detail: String },
 
     #[snafu(display("failed to call exec() on plugin at {path}"))]
     CallExec {
@@ -201,22 +546,257 @@ pub enum RunPluginError {
     PluginFailed { message: String },
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn run_plugin(
-    wasm_path: Utf8PathBuf,
-    base_dir: Utf8PathBuf,
-    dirs: Vec<String>,
-    files: Vec<String>,
-    target_canister_id: Principal,
-    agent: Agent,
-    proxy: Option<Principal>,
-    identity_principal: Principal,
-    environment: String,
-    compute_limit_secs: u64,
-    stdio: Option<Sender<String>>,
-) -> Result<Vec<String>, RunPluginError> {
-    use wasmtime::component::{Component, Linker};
-    use wasmtime::{Config, Engine, Store};
+/// Which version of the sync-plugin interface a component was built against.
+///
+/// The two disagree about how declared paths are written, so the ABI decides
+/// which manifest forms are accepted as well as which world is instantiated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PluginAbi {
+    /// Current interface (`icp:sync-plugin@0.2.x`): `canister-call` chooses a
+    /// target and `sync-exec-input` carries the canister ID table. Directories
+    /// and files share one named `files` list, so `dirs:` is not accepted and
+    /// every entry must carry a key.
+    V2,
+    /// Legacy interface (`icp:sync-plugin@0.1.x`): calls always reach the
+    /// canister being synced. `dirs` and `files` are separate lists of bare
+    /// paths, so both must be written as plain lists.
+    V1,
+}
+
+/// The interface package a `use`-ing plugin component imports, whose version we
+/// read to pick the ABI. wit-bindgen emits this import for any world that pulls
+/// types from the interface, so it is present on every real plugin.
+const TYPES_INTERFACE_PREFIX: &str = "icp:sync-plugin/types@";
+
+/// Determine which interface a component implements by reading the version off
+/// its imported `icp:sync-plugin/types@<version>` instance — the plugin's own
+/// declared metadata — rather than probing with a trial instantiation. The
+/// version is matched with semver caret requirements, so each supported minor
+/// (the breaking unit for 0.x) accepts any patch release within it.
+fn detect_plugin_abi(
+    engine: &Engine,
+    component: &Component,
+    wasm_path: &Utf8PathBuf,
+) -> Result<PluginAbi, RunPluginError> {
+    let raw = component
+        .component_type()
+        .imports(engine)
+        .find_map(|(name, _)| name.strip_prefix(TYPES_INTERFACE_PREFIX).map(str::to_owned));
+
+    let Some(raw) = raw else {
+        return UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("no {TYPES_INTERFACE_PREFIX}<version> import found"),
+        }
+        .fail();
+    };
+
+    let version = Version::parse(&raw).map_err(|source| {
+        UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("interface version '{raw}' is not valid semver: {source}"),
+        }
+        .build()
+    })?;
+
+    // `^0.1`/`^0.2` follow semver's 0.x rule: they match within the minor and
+    // exclude the next one (>=0.1.0, <0.2.0 and >=0.2.0, <0.3.0 respectively).
+    if VersionReq::parse("^0.2")
+        .expect("valid req")
+        .matches(&version)
+    {
+        Ok(PluginAbi::V2)
+    } else if VersionReq::parse("^0.1")
+        .expect("valid req")
+        .matches(&version)
+    {
+        Ok(PluginAbi::V1)
+    } else {
+        UnsupportedInterfaceSnafu {
+            path: wasm_path.clone(),
+            detail: format!("unsupported interface version {version}"),
+        }
+        .fail()
+    }
+}
+
+/// Reject a manifest that declared its paths in a form the plugin's interface
+/// cannot carry.
+///
+/// The two interfaces disagree on both counts. v0.1.0 has a bare path in each
+/// list and no room for a key, so its entries must be written as plain lists;
+/// v0.2.0 names every entry and has no `dirs:` of its own, so its entries must
+/// be written as a map under `files:` alone. Refusing the mismatch here is what
+/// keeps the discrepancy from surfacing as a silently dropped key or a
+/// directory the plugin was never told about.
+fn check_declared_forms(
+    abi: PluginAbi,
+    wasm_path: &Utf8PathBuf,
+    dirs: &[KeyedPath],
+    files: &[KeyedPath],
+) -> Result<(), RunPluginError> {
+    match abi {
+        PluginAbi::V1 => {
+            for entry in dirs.iter().chain(files) {
+                if let Some(key) = &entry.key {
+                    return NamedPathUnsupportedSnafu {
+                        path: wasm_path,
+                        key,
+                        declared: &entry.path,
+                    }
+                    .fail();
+                }
+            }
+        }
+        PluginAbi::V2 => {
+            if let Some(entry) = dirs.first() {
+                return DirsUnsupportedSnafu {
+                    path: wasm_path,
+                    declared: &entry.path,
+                }
+                .fail();
+            }
+            for entry in files {
+                if entry.key.is_none() {
+                    return UnnamedPathUnsupportedSnafu {
+                        path: wasm_path,
+                        declared: &entry.path,
+                    }
+                    .fail();
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolve each declared entry against the sandbox root and open it with
+/// `open`, which reports a file's contents or `None` for a directory.
+///
+/// Every entry is checked whether or not it ends up needing a preopen of its
+/// own: the plugin is handed each as configuration, so one that is unsafe or
+/// unusable fails the step rather than reaching the plugin as a path it cannot
+/// use.
+fn resolve_entries<'a>(
+    root: &Utf8Path,
+    base_rel: &[&'a str],
+    declared: &'a [KeyedPath],
+    mut open: impl FnMut(&Utf8PathBuf, &str) -> Result<Option<String>, RunPluginError>,
+) -> Result<Vec<ResolvedEntry>, RunPluginError> {
+    let mut entries = Vec::with_capacity(declared.len());
+    for KeyedPath {
+        key,
+        path: declared,
+    } in declared
+    {
+        let resolved = match crate::path::resolve(base_rel, declared) {
+            Ok(resolved) => resolved,
+            Err(crate::path::Escape::NotRelative) => return UnsafePathSnafu { declared }.fail(),
+            Err(crate::path::Escape::AboveRoot) => {
+                return PathOutsideProjectSnafu {
+                    declared,
+                    project_dir: root,
+                }
+                .fail();
+            }
+        };
+        // Reject symlinks in the resolved path: neither the final entry nor any
+        // intermediate component may be a symlink, so a preopen or a read
+        // cannot escape the project to a target elsewhere on disk. (Symlinks
+        // *inside* a preopen that escape it are separately rejected by the WASI
+        // sandbox.)
+        if let Some(link) = resolved.first_symlink_component(root) {
+            return SymlinkPathSnafu { declared, link }.fail();
+        }
+        let host_path = root.join(resolved.path());
+        let content = open(&host_path, declared)?;
+        entries.push(ResolvedEntry {
+            key: key.clone(),
+            path: declared.clone(),
+            host_path,
+            content,
+        });
+    }
+    Ok(entries)
+}
+
+/// Everything [`run_plugin`] needs to load and drive one sync plugin.
+#[derive(Debug)]
+pub struct PluginInvocation {
+    /// On-disk path to the plugin's wasm component.
+    pub wasm_path: Utf8PathBuf,
+    /// Directory the declared `dirs`/`files` are anchored at (the canister dir).
+    pub base_dir: Utf8PathBuf,
+    /// The project directory: the sandbox boundary. A declared path may rise
+    /// out of `base_dir` with `..` and reach anything inside the project, but
+    /// nothing above it.
+    ///
+    /// A `base_dir` that does not lie within this directory — a dependency
+    /// project reached by an out-of-tree `path:` — is its own boundary instead,
+    /// which grants nothing above the canister directory.
+    pub project_dir: Utf8PathBuf,
+    /// The manifest's `dirs:` entries: directories to preopen read-only. Only
+    /// v0.1.0 plugins have a `dirs` list to receive them; declaring any
+    /// alongside a v0.2.0 plugin is an error.
+    pub dirs: Vec<KeyedPath>,
+    /// The manifest's `files:` entries. For a v0.1.0 plugin these are files to
+    /// read and pass inline; for a v0.2.0 plugin the list holds directories
+    /// too, and the host preopens or reads each by what is on disk.
+    pub files: Vec<KeyedPath>,
+    /// Key-value fields to pass inline. Passed to v0.2.0 plugins; ignored by
+    /// v0.1.0 plugins, whose interface has no `fields`.
+    pub fields: BTreeMap<String, String>,
+    /// The canister being synced. Reachable via `call-target::host`.
+    pub host_canister_id: Principal,
+    /// Agent used for canister calls.
+    pub agent: Agent,
+    /// Proxy canister to route update calls and metadata reads through, if
+    /// configured.
+    pub proxy: Option<Principal>,
+    /// Signing identity principal, surfaced to the plugin.
+    pub identity_principal: Principal,
+    /// Name of the environment being synced.
+    pub environment: String,
+    /// The network's API endpoint — where canister calls are submitted.
+    /// Surfaced to v0.2.0 plugins; v0.1.0 plugins have no field for it.
+    pub api_url: Url,
+    /// The network's HTTP gateway, when it exposes one. Surfaced to v0.2.0
+    /// plugins; v0.1.0 plugins have no field for it.
+    pub gateway_url: Option<Url>,
+    /// Pure-wasm compute-time budget in seconds.
+    pub compute_limit_secs: u64,
+    /// The project's canister ID table for this environment, as exposed to the
+    /// plugin. Same-project canisters appear both under their fully-qualified
+    /// key and their bare local name (see the WIT `canister-id-entry` docs).
+    pub canister_ids: BTreeMap<String, Principal>,
+    /// Canisters the plugin declared in `canisters` and may call, beyond the
+    /// canister being synced. Ignored by v0.1.0 plugins, which can only reach
+    /// the canister being synced.
+    pub callable: CallableCanisters,
+    /// Reporter the plugin's live stdout/stderr is emitted on.
+    pub reporter: StepReporter,
+}
+
+pub fn run_plugin(invocation: PluginInvocation) -> Result<Vec<String>, RunPluginError> {
+    let PluginInvocation {
+        wasm_path,
+        base_dir,
+        project_dir,
+        dirs,
+        files,
+        fields,
+        host_canister_id,
+        agent,
+        proxy,
+        identity_principal,
+        environment,
+        api_url,
+        gateway_url,
+        compute_limit_secs,
+        canister_ids,
+        callable,
+        reporter,
+    } = invocation;
 
     let mut config = Config::new();
     config.wasm_component_model(true);
@@ -257,19 +837,64 @@ pub fn run_plugin(
             path: wasm_path.clone(),
         })?;
 
-    // Preopen each declared directory read-only. The guest sees it at the
-    // same relative path it used in the manifest.
-    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
-    for dir in &dirs {
-        ensure!(!crate::path::escapes_base(dir), UnsafeDirSnafu { dir });
-        // Reject symlinks in the declared path: neither the final entry nor any
-        // intermediate component may be a symlink, so the preopen cannot escape
-        // `base_dir` to a target elsewhere on disk. (Symlinks *inside* a preopen
-        // that escape it are separately rejected by the WASI sandbox.)
-        if let Some(link) = crate::path::first_symlink_component(&base_dir, dir) {
-            return SymlinkDirSnafu { dir, link }.fail();
+    // Which interface the plugin was built against is read from the component's
+    // own declared metadata (see `detect_plugin_abi`) rather than probed by
+    // trial instantiation. It settles how the declared paths are written as
+    // well as which world is instantiated, so it is needed before they are
+    // opened.
+    let abi = detect_plugin_abi(&engine, &component, &wasm_path)?;
+    check_declared_forms(abi, &wasm_path, &dirs, &files)?;
+
+    // Declared paths are written relative to the canister directory but are
+    // resolved against — and confined to — the project directory, so an entry
+    // may reach a sibling canister's tree with `..` while nothing outside the
+    // project is reachable. A canister directory that lies outside the project
+    // is its own root, which grants nothing above it (see `project_dir`).
+    let (root, base_rel) = match crate::path::base_within_root(&project_dir, &base_dir) {
+        Some(base_rel) => (&project_dir, base_rel),
+        None => (&base_dir, Vec::new()),
+    };
+
+    // A `dirs:` entry is a directory by declaration — one that names anything
+    // else is rejected rather than quietly read. A `files:` entry is whichever
+    // the filesystem says (v0.2.0 holds both there; a v0.1.0 plugin has no
+    // `is-dir` to report a directory with, and reading one fails below).
+    let dir_entries = resolve_entries(root, &base_rel, &dirs, |host_path, declared| {
+        let is_dir = std::fs::metadata(host_path.as_std_path()).is_ok_and(|meta| meta.is_dir());
+        ensure!(is_dir, MissingDirSnafu { dir: declared });
+        Ok(None)
+    })?;
+    let file_entries = resolve_entries(root, &base_rel, &files, |host_path, _| {
+        if abi == PluginAbi::V2 && host_path.is_dir() {
+            return Ok(None);
         }
-        let host_path = base_dir.join(dir);
+        std::fs::read_to_string(host_path.as_std_path())
+            .map(Some)
+            .context(ReadFileSnafu {
+                path: host_path.clone(),
+            })
+    })?;
+
+    // Preopen read-only, one per distinct tree — a directory declared twice, or
+    // one already reachable through a declared ancestor, needs no preopen of its
+    // own. The guest sees each preopen at the same relative path it used in the
+    // manifest, and reaches a nested declared directory through its ancestor.
+    // `covering_dirs` picks between equal spellings by written order, so it is
+    // given the entries as declared rather than the deduplicated lookup below.
+    let declared_dirs: Vec<&ResolvedEntry> = dir_entries
+        .iter()
+        .chain(&file_entries)
+        .filter(|entry| entry.content.is_none())
+        .collect();
+    let host_paths: BTreeMap<&str, &Utf8PathBuf> = declared_dirs
+        .iter()
+        .map(|entry| (entry.path.as_str(), &entry.host_path))
+        .collect();
+    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+    for dir in crate::path::covering_dirs(declared_dirs.iter().map(|entry| entry.path.as_str())) {
+        // `covering_dirs` returns a subset of the spellings it was given, so
+        // every one of them is in the map.
+        let host_path = host_paths[dir];
         wasi_builder
             .preopened_dir(
                 host_path.as_std_path(),
@@ -277,53 +902,33 @@ pub fn run_plugin(
                 DirPerms::READ,
                 FilePerms::READ,
             )
-            .context(PreopenDirSnafu { dir: host_path })?;
-    }
-
-    // Read each declared file on the host and pass its content inline. The same
-    // path-safety checks as `dirs` apply: reject escaping or symlinked paths so
-    // a read cannot leave `base_dir`.
-    let mut file_inputs: Vec<FileInput> = Vec::with_capacity(files.len());
-    for name in &files {
-        ensure!(!crate::path::escapes_base(name), UnsafeFileSnafu { name });
-        if let Some(link) = crate::path::first_symlink_component(&base_dir, name) {
-            return SymlinkFileSnafu { name, link }.fail();
-        }
-        let path = base_dir.join(name);
-        let content =
-            std::fs::read_to_string(path.as_std_path()).context(ReadFileSnafu { path })?;
-        file_inputs.push(FileInput {
-            name: name.clone(),
-            content,
-        });
+            .context(PreopenDirSnafu {
+                dir: host_path.clone(),
+            })?;
     }
 
     let persistent_stderr: Arc<StdMutex<Vec<String>>> = Arc::default();
-    let stdout_capture = LineCapture::new("stdout", stdio.clone(), None);
-    let stderr_capture = LineCapture::new("stderr", stdio.clone(), Some(persistent_stderr.clone()));
+    let stdout_capture = LineCapture::new("stdout", EventStream::Stdout, reporter.clone(), None);
+    let stderr_capture = LineCapture::new(
+        "stderr",
+        EventStream::Stderr,
+        reporter.clone(),
+        Some(persistent_stderr.clone()),
+    );
     wasi_builder
         .stdout(stdout_capture.clone())
         .stderr(stderr_capture.clone());
 
     let epoch_extension = Arc::new(AtomicU64::new(0));
     let host_state = HostState {
-        target_canister_id,
+        host_canister_id,
+        callable,
         agent: Arc::new(agent),
         proxy,
         wasi_ctx: wasi_builder.build(),
         wasi_table: wasmtime_wasi::ResourceTable::new(),
         epoch_extension: epoch_extension.clone(),
     };
-
-    let mut linker: Linker<HostState> = Linker::new(&engine);
-    wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-        path: wasm_path.clone(),
-    })?;
-    SyncPlugin::add_to_linker::<_, wasmtime::component::HasSelf<_>>(&mut linker, |s| s).context(
-        InstantiateSnafu {
-            path: wasm_path.clone(),
-        },
-    )?;
 
     let mut store = Store::new(&engine, host_state);
     store.set_epoch_deadline(compute_limit_secs);
@@ -339,21 +944,109 @@ pub fn run_plugin(
         }
     });
 
-    let plugin =
-        SyncPlugin::instantiate(&mut store, &component, &linker).context(InstantiateSnafu {
-            path: wasm_path.clone(),
-        })?;
+    let canister_id_text = host_canister_id.to_text();
+    let identity_text = identity_principal.to_text();
+    let proxy_text = proxy.map(|p| p.to_text());
 
-    let input = SyncExecInput {
-        canister_id: target_canister_id.to_text(),
-        environment,
-        dirs,
-        files: file_inputs,
-        identity_principal: identity_principal.to_text(),
-        proxy_canister_id: proxy.map(|p| p.to_text()),
+    // Both interfaces are served in parallel: v0.2.0 plugins choose a call
+    // target and receive the canister ID table; v0.1.0 plugins get neither and
+    // always call the canister being synced.
+    let call_result = match abi {
+        PluginAbi::V2 => {
+            let mut linker: Linker<HostState> = Linker::new(&engine);
+            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+                path: wasm_path.clone(),
+            })?;
+            v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let plugin = v2::SyncPlugin::instantiate(&mut store, &component, &linker).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            // The manifest declares directories and files together under
+            // `files:`; the interface keeps them apart, so split by what the
+            // host found on disk. `check_declared_forms` has established that
+            // every entry carries a key and that `dirs:` was left unwritten.
+            let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
+                .into_iter()
+                .partition(|entry| entry.content.is_none());
+            let input = v2::SyncExecInput {
+                canister_id: canister_id_text,
+                environment,
+                api_url: api_url.to_string(),
+                gateway_url: gateway_url.map(|url| url.to_string()),
+                dirs: dir_inputs
+                    .into_iter()
+                    .map(|entry| v2::DirInput {
+                        key: entry.key.expect("v0.2.0 entries all carry a key"),
+                        path: entry.path,
+                    })
+                    .collect(),
+                files: file_inputs
+                    .into_iter()
+                    .map(|entry| v2::FileInput {
+                        key: entry.key.expect("v0.2.0 entries all carry a key"),
+                        name: entry.path,
+                        content: entry.content.expect("a file entry carries its content"),
+                    })
+                    .collect(),
+                fields: fields
+                    .into_iter()
+                    .map(|(name, value)| v2::FieldInput { name, value })
+                    .collect(),
+                identity_principal: identity_text,
+                proxy_canister_id: proxy_text,
+                canister_ids: canister_ids
+                    .into_iter()
+                    .map(|(name, id)| CanisterIdEntry {
+                        name,
+                        id: id.to_text(),
+                    })
+                    .collect(),
+            };
+            plugin.call_exec(&mut store, &input)
+        }
+        PluginAbi::V1 => {
+            let mut linker: Linker<HostState> = Linker::new(&engine);
+            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
+                path: wasm_path.clone(),
+            })?;
+            v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let plugin = v1::SyncPlugin::instantiate(&mut store, &component, &linker).context(
+                InstantiateSnafu {
+                    path: wasm_path.clone(),
+                },
+            )?;
+            let input = v1::SyncExecInput {
+                canister_id: canister_id_text,
+                environment,
+                // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
+                // neither record has a key — `check_declared_forms` has
+                // established that no entry carries one.
+                dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
+                files: file_entries
+                    .into_iter()
+                    .map(|entry| v1::FileInput {
+                        name: entry.path,
+                        content: entry
+                            .content
+                            .expect("a v0.1.0 entry is always read as a file"),
+                    })
+                    .collect(),
+                identity_principal: identity_text,
+                proxy_canister_id: proxy_text,
+            };
+            plugin.call_exec(&mut store, &input)
+        }
     };
-
-    let call_result = plugin.call_exec(&mut store, &input);
 
     // Flush any partial line and emit the truncation note (if any) before
     // we hand control back, so the last line of plugin output isn't lost.
@@ -376,9 +1069,9 @@ pub fn run_plugin(
 // `LineCapture` implements both `StdoutStream` (so it can be installed on a
 // `WasiCtxBuilder`) and `OutputStream` / `AsyncWrite` (so the bytes written
 // by the guest flow through the same code path). Each write is split on
-// newlines; complete lines have ANSI escapes stripped and are pushed to the
-// rolling-view `Sender<String>` via `try_send` (best-effort). For stderr,
-// the same lines are also appended to `persistent`, which is drained by
+// newlines; complete lines have ANSI escapes stripped and are emitted as
+// output events on the step reporter (non-blocking). For stderr, the same
+// lines are also appended to `persistent`, which is drained by
 // `run_plugin()` after `exec()` returns. Total accepted bytes are capped at
 // `MAX_PLUGIN_OUTPUT` per stream; further bytes are dropped and `finalize`
 // emits a single "… N bytes of <label> truncated" line.
@@ -397,20 +1090,23 @@ struct CaptureState {
 struct LineCapture {
     state: Arc<StdMutex<CaptureState>>,
     label: &'static str,
-    forward: Option<Sender<String>>,
+    stream: EventStream,
+    reporter: StepReporter,
     persistent: Option<Arc<StdMutex<Vec<String>>>>,
 }
 
 impl LineCapture {
     fn new(
         label: &'static str,
-        forward: Option<Sender<String>>,
+        stream: EventStream,
+        reporter: StepReporter,
         persistent: Option<Arc<StdMutex<Vec<String>>>>,
     ) -> Self {
         Self {
             state: Arc::default(),
             label,
-            forward,
+            stream,
+            reporter,
             persistent,
         }
     }
@@ -441,9 +1137,7 @@ impl LineCapture {
     }
 
     fn emit(&self, line: String) {
-        if let Some(tx) = &self.forward {
-            let _ = tx.try_send(line.clone());
-        }
+        self.reporter.output(self.stream, line.clone());
         if let Some(p) = &self.persistent {
             p.lock().unwrap().push(line);
         }
@@ -539,25 +1233,97 @@ mod tests {
         Principal::anonymous()
     }
 
+    /// Plain (unkeyed) [`KeyedPath`]s, as a plain-list manifest entry produces
+    /// — the only form a v0.1.0 plugin accepts.
+    fn unkeyed(paths: &[&str]) -> Vec<KeyedPath> {
+        paths
+            .iter()
+            .map(|p| KeyedPath {
+                key: None,
+                path: (*p).to_string(),
+            })
+            .collect()
+    }
+
+    /// Key-tagged [`KeyedPath`]s, as the map form of `files:` produces — the
+    /// only form a v0.2.0 plugin accepts.
+    fn keyed(entries: &[(&str, &str)]) -> Vec<KeyedPath> {
+        entries
+            .iter()
+            .map(|(key, path)| KeyedPath {
+                key: Some((*key).to_string()),
+                path: (*path).to_string(),
+            })
+            .collect()
+    }
+
+    /// A [`PluginInvocation`] with test-friendly defaults: anonymous canister
+    /// and identity, no proxy, no declared callable canisters, the default
+    /// compute limit, a local network with no gateway of its own, and the
+    /// current directory as both the base and the project. Tests override the
+    /// few fields they care about.
+    fn invocation(wasm_path: &str, environment: &str) -> PluginInvocation {
+        PluginInvocation {
+            wasm_path: wasm_path.into(),
+            base_dir: ".".into(),
+            project_dir: ".".into(),
+            dirs: vec![],
+            files: vec![],
+            fields: BTreeMap::new(),
+            host_canister_id: anon(),
+            agent: dummy_agent(),
+            proxy: None,
+            identity_principal: anon(),
+            environment: environment.to_string(),
+            api_url: Url::parse("http://127.0.0.1:4943").expect("valid api url"),
+            gateway_url: None,
+            compute_limit_secs: DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
+            canister_ids: BTreeMap::new(),
+            callable: CallableCanisters::default(),
+            reporter: StepReporter::null(),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Call-target resolution (enforcement) — pure logic, no fixture WASM needed
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn resolve_target_host_is_always_allowed() {
+        let host = Principal::from_slice(&[1; 4]);
+        let callable = CallableCanisters::default();
+        assert_eq!(
+            resolve_call_target(&CallTarget::Host, host, &callable).unwrap(),
+            host
+        );
+    }
+
+    #[test]
+    fn resolve_target_name_requires_declaration() {
+        let host = Principal::from_slice(&[1; 4]);
+        let dep = Principal::from_slice(&[2; 4]);
+        let callable = CallableCanisters {
+            by_name: BTreeMap::from([("backend".to_string(), dep)]),
+        };
+        assert_eq!(
+            resolve_call_target(&CallTarget::Name("backend".into()), host, &callable).unwrap(),
+            dep
+        );
+        let err = resolve_call_target(&CallTarget::Name("frontend".into()), host, &callable)
+            .expect_err("undeclared name must be rejected");
+        assert!(
+            err.contains("not permitted") && err.contains("frontend"),
+            "got: {err}"
+        );
+    }
+
     // -------------------------------------------------------------------------
     // Error-path tests — no fixture WASM needed
     // -------------------------------------------------------------------------
 
     #[test]
     fn load_component_error_on_missing_file() {
-        let result = run_plugin(
-            "nonexistent.wasm".into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
+        let result = run_plugin(invocation("nonexistent.wasm", "test"));
         assert!(matches!(result, Err(RunPluginError::LoadComponent { .. })));
     }
 
@@ -578,25 +1344,237 @@ mod tests {
     // Fixture-dependent tests
     // -------------------------------------------------------------------------
 
+    /// A v0.2.0 plugin has no `dirs` list of its own: the manifest declares
+    /// directories under `files:` alongside the files, and the host tells them
+    /// apart by what is on disk. Declaring `dirs:` alongside one is rejected
+    /// rather than silently dropped.
     #[test]
-    fn preopen_dir_error_on_missing_dir() {
+    fn dirs_are_rejected_for_a_v2_plugin() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec!["nonexistent_dir".to_string()],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
+        let mut inv = invocation(wasm_path, "test");
+        inv.dirs = keyed(&[("seed", "data")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::DirsUnsupported { .. })
+        ));
+    }
+
+    /// Every entry a v0.2.0 plugin receives carries a key, so `files:` must be
+    /// written as a map; a plain list has no key to give it.
+    #[test]
+    fn unnamed_files_are_rejected_for_a_v2_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "test");
+        inv.files = unkeyed(&["cfg.txt"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::UnnamedPathUnsupported { .. })
+        ));
+    }
+
+    /// The v0.1.0 interface has nowhere to put a key, so the map form is
+    /// rejected for a plugin built against it.
+    #[test]
+    fn named_paths_are_rejected_for_a_v1_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "ok");
+        inv.dirs = keyed(&[("seed", "data")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::NamedPathUnsupported { .. })
+        ));
+    }
+
+    /// A v0.1.0 plugin keeps the manifest's own `dirs:`/`files:` split, so a
+    /// `dirs:` entry there must name an existing directory.
+    #[test]
+    fn missing_dir_is_rejected_for_a_v1_plugin() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "ok");
+        inv.dirs = unkeyed(&["nonexistent_dir"]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::MissingDir { .. })
+        ));
+    }
+
+    /// A directory declared under several keys, or nested inside another
+    /// declared one, reaches the plugin as every entry it was written as. Only
+    /// the preopens behind those entries collapse — `data/inner` has none of its
+    /// own here, and is read through the `data` preopen that covers it.
+    #[test]
+    fn aliased_and_nested_dirs_are_all_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("data/inner")).expect("create dir");
+        std::fs::write(base.join("data/top.txt"), b"top").expect("write file");
+        std::fs::write(base.join("data/inner/deep.txt"), b"deep").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = base.to_path_buf();
+        inv.files = keyed(&[("seed", "data"), ("backup", "data"), ("sub", "data/inner")]);
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            [
+                "seed=inner,top.txt".to_string(),
+                "backup=inner,top.txt".to_string(),
+                "sub=deep.txt".to_string(),
+            ],
         );
-        assert!(matches!(result, Err(RunPluginError::PreopenDir { .. })));
+    }
+
+    /// A declared entry may rise out of the canister directory into the rest of
+    /// the project. The guest sees it at the path it was declared as, so it
+    /// reads `../shared` verbatim, and a directory below the entry is reached
+    /// through the same preopen.
+    #[test]
+    fn dirs_above_the_canister_dir_are_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("canisters/backend")).expect("create dir");
+        std::fs::create_dir_all(root.join("shared/inner")).expect("create dir");
+        std::fs::write(root.join("shared/top.txt"), b"top").expect("write file");
+        std::fs::write(root.join("shared/inner/deep.txt"), b"deep").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("canisters/backend");
+        inv.project_dir = root.to_path_buf();
+        inv.files = keyed(&[("shared", "../../shared"), ("inner", "../../shared/inner")]);
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            [
+                "shared=inner,top.txt".to_string(),
+                "inner=deep.txt".to_string(),
+            ],
+        );
+    }
+
+    /// Two entries where one reaches further out than the other each need their
+    /// own preopen: `..` is the canister's parent and `../../shared` a child of
+    /// its grandparent, so neither is readable through the other's.
+    #[test]
+    fn dirs_reaching_out_by_different_amounts_are_both_readable() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("canisters/backend")).expect("create dir");
+        std::fs::create_dir_all(root.join("shared")).expect("create dir");
+        std::fs::write(root.join("shared/top.txt"), b"top").expect("write file");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("canisters/backend");
+        inv.project_dir = root.to_path_buf();
+        inv.files = keyed(&[("siblings", ".."), ("shared", "../../shared")]);
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            ["siblings=backend".to_string(), "shared=top.txt".to_string(),],
+        );
+    }
+
+    /// The project directory is the boundary: an entry that rises above it is
+    /// rejected before the plugin runs.
+    #[test]
+    fn dir_above_the_project_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::create_dir_all(tmp.path().join("outside")).expect("create dir");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.clone();
+        inv.files = keyed(&[("outside", "../../outside")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::PathOutsideProject { .. })
+        ));
+    }
+
+    /// A canister directory outside the project — a dependency reached by an
+    /// out-of-tree path — is its own boundary, so nothing above it is reachable.
+    #[test]
+    fn dir_above_an_out_of_project_canister_dir_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        std::fs::create_dir_all(tmp.path().join("outside/backend")).expect("create dir");
+        std::fs::create_dir_all(tmp.path().join("outside/shared")).expect("create dir");
+
+        let mut inv = invocation(wasm_path, "read-dirs");
+        inv.base_dir = tmp.path().join("outside/backend");
+        inv.project_dir = tmp.path().join("project");
+        inv.files = keyed(&[("shared", "../shared")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::PathOutsideProject { .. })
+        ));
+    }
+
+    /// A `files:` entry may reach the rest of the project too; its content is
+    /// read by the host and passed inline.
+    #[test]
+    fn files_above_the_canister_dir_are_read() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::write(root.join("cfg.txt"), b"data").expect("write file");
+
+        let mut inv = invocation(wasm_path, "keys");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.to_path_buf();
+        inv.files = keyed(&[("cfg", "../cfg.txt")]);
+
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(lines, ["file cfg=../cfg.txt".to_string()]);
+    }
+
+    #[test]
+    fn file_above_the_project_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(root.join("backend")).expect("create dir");
+        std::fs::write(tmp.path().join("secret.txt"), b"secret").expect("write file");
+
+        let mut inv = invocation(wasm_path, "keys");
+        inv.base_dir = root.join("backend");
+        inv.project_dir = root.clone();
+        inv.files = keyed(&[("secret", "../../secret.txt")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::PathOutsideProject { .. })
+        ));
     }
 
     #[cfg(unix)]
@@ -611,20 +1589,13 @@ mod tests {
         std::fs::create_dir_all(base.join("real")).expect("create real dir");
         symlink(base.join("real"), base.join("link")).expect("create symlink");
 
-        let result = run_plugin(
-            wasm_path.into(),
-            base.to_path_buf(),
-            vec!["link".to_string()],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
-        assert!(matches!(result, Err(RunPluginError::SymlinkDir { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.base_dir = base.to_path_buf();
+        inv.files = keyed(&[("linked", "link")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::SymlinkPath { .. })
+        ));
     }
 
     #[test]
@@ -632,20 +1603,12 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec!["nonexistent_file.txt".to_string()],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
-        assert!(matches!(result, Err(RunPluginError::ReadFile { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.files = keyed(&[("missing", "nonexistent_file.txt")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::ReadFile { .. })
+        ));
     }
 
     #[cfg(unix)]
@@ -660,20 +1623,13 @@ mod tests {
         std::fs::write(base.join("real.txt"), b"data").expect("write real file");
         symlink(base.join("real.txt"), base.join("link.txt")).expect("create symlink");
 
-        let result = run_plugin(
-            wasm_path.into(),
-            base.to_path_buf(),
-            vec![],
-            vec!["link.txt".to_string()],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "test".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
-        assert!(matches!(result, Err(RunPluginError::SymlinkFile { .. })));
+        let mut inv = invocation(wasm_path, "test");
+        inv.base_dir = base.to_path_buf();
+        inv.files = keyed(&[("linked", "link.txt")]);
+        assert!(matches!(
+            run_plugin(inv),
+            Err(RunPluginError::SymlinkPath { .. })
+        ));
     }
 
     #[test]
@@ -681,20 +1637,7 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "ok".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
-        assert!(result.is_ok());
+        assert!(run_plugin(invocation(wasm_path, "ok")).is_ok());
     }
 
     #[test]
@@ -702,22 +1645,68 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "error".to_string(),
-            DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-            None,
-        );
         assert!(matches!(
-            result,
+            run_plugin(invocation(wasm_path, "error")),
             Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate failure"
+        ));
+    }
+
+    /// A metadata read names its target the same way a call does, and the host
+    /// enforces the `canisters` list before going to the network — so an
+    /// undeclared target is refused without a live canister to read from.
+    #[test]
+    fn metadata_read_of_undeclared_canister_is_rejected() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines = run_plugin(invocation(wasm_path, "metadata-undeclared"))
+            .expect("plugin should succeed");
+        let [refusal] = &lines[..] else {
+            panic!("expected one refusal line, got: {lines:?}");
+        };
+        assert!(
+            refusal.contains("not permitted") && refusal.contains("undeclared"),
+            "got: {refusal}"
+        );
+    }
+
+    /// The replica's own wording for the two ways a target reports it has no
+    /// section, copied from `CanisterManagerError` in the IC repo. Both are
+    /// absence, not failure, so both must reach the plugin as `none`.
+    #[test]
+    fn management_canister_absence_rejects_are_recognized() {
+        let target = Principal::from_text("aaaaa-aa").unwrap();
+        let other = Principal::from_text("2vxsx-fae").unwrap();
+
+        let no_module = format!(
+            "Proxy call failed: The canister {target} has no Wasm module and hence no metadata is available."
+        );
+        let no_section = format!(
+            "Proxy call failed: The canister {target} has no metadata section with the name candid:service."
+        );
+        assert!(rejected_as_no_such_section(
+            &no_module,
+            target,
+            "candid:service"
+        ));
+        assert!(rejected_as_no_such_section(
+            &no_section,
+            target,
+            "candid:service"
+        ));
+
+        // A section by another name, a canister other than the one asked about,
+        // and an unrelated failure are all reads that failed.
+        assert!(!rejected_as_no_such_section(&no_section, target, "dfx"));
+        assert!(!rejected_as_no_such_section(
+            &no_module,
+            other,
+            "candid:service"
+        ));
+        assert!(!rejected_as_no_such_section(
+            &format!("Proxy call failed: Canister {target} not found."),
+            target,
+            "candid:service"
         ));
     }
 
@@ -728,20 +1717,9 @@ mod tests {
         };
         // The "spin" fixture busy-loops forever; a 1-second limit keeps the
         // test fast while still exercising the epoch-interruption trap.
-        let result = run_plugin(
-            wasm_path.into(),
-            ".".into(),
-            vec![],
-            vec![],
-            anon(),
-            dummy_agent(),
-            None,
-            anon(),
-            "spin".to_string(),
-            1,
-            None,
-        );
-        let err = result.expect_err("spinning plugin should hit the compute limit");
+        let mut inv = invocation(wasm_path, "spin");
+        inv.compute_limit_secs = 1;
+        let err = run_plugin(inv).expect_err("spinning plugin should hit the compute limit");
         // The trap surfaces through the CallExec source chain, so walk it and
         // assert the message names both the limit and the override env var.
         let mut chain = err.to_string();
@@ -756,30 +1734,170 @@ mod tests {
         );
     }
 
+    /// Drain the emitted output events into (stream, line) pairs.
+    fn output_lines(
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<icp_events::Event<()>>,
+    ) -> Vec<(EventStream, String)> {
+        let mut lines = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            if let icp_events::EventKind::Output { stream, line } = event.kind {
+                lines.push((stream, line));
+            }
+        }
+        lines
+    }
+
     #[tokio::test(flavor = "multi_thread")]
-    async fn plugin_stdout_forwarded_through_stdio_channel() {
+    async fn plugin_stdout_forwarded_through_step_reporter() {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        // The task payload type is irrelevant here: only step output is observed.
+        let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
-            run_plugin(
-                wasm_path.into(),
-                ".".into(),
-                vec![],
-                vec![],
-                anon(),
-                dummy_agent(),
-                None,
-                anon(),
-                "print".to_string(),
-                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
-            )
+            let mut inv = invocation(wasm_path, "print");
+            inv.reporter = reporter;
+            run_plugin(inv)
         });
         assert!(result.is_ok());
-        let msg = rx.try_recv().expect("expected stdout message on channel");
-        assert!(msg.contains("stdout from plugin"), "got: {msg}");
+        let lines = output_lines(&mut rx);
+        assert!(
+            lines
+                .iter()
+                .any(|(stream, line)| matches!(stream, EventStream::Stdout)
+                    && line.contains("stdout from plugin")),
+            "got: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn plugin_fields_are_passed_through() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "fields");
+        inv.fields = BTreeMap::from([
+            ("greeting".to_string(), "hi".to_string()),
+            ("audience".to_string(), "world".to_string()),
+        ]);
+        // The "fields" fixture echoes what it received to stderr, which
+        // run_plugin returns. The interface promises no field order, but the
+        // BTreeMap makes the host's order name-sorted in practice.
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(lines, vec!["audience=world,greeting=hi".to_string()]);
+    }
+
+    #[test]
+    fn plugin_missing_expected_field_fails() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        // The "fields" fixture requires a `greeting` field; passing none fails.
+        assert!(matches!(
+            run_plugin(invocation(wasm_path, "fields")),
+            Err(RunPluginError::PluginFailed { ref message }) if message == "missing 'greeting' field"
+        ));
+    }
+
+    /// Both network URLs reach the plugin, the gateway one as a `some`.
+    #[test]
+    fn plugin_network_urls_are_passed_through() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let mut inv = invocation(wasm_path, "urls");
+        inv.api_url = Url::parse("https://icp-api.io").expect("valid api url");
+        inv.gateway_url = Some(Url::parse("https://icp0.io").expect("valid gateway url"));
+        let lines = run_plugin(inv).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            vec!["api=https://icp-api.io/ gateway=https://icp0.io/".to_string()]
+        );
+    }
+
+    /// A network with no HTTP gateway leaves `gateway-url` absent rather than
+    /// passing an empty or invented URL.
+    #[test]
+    fn plugin_gateway_url_is_absent_without_a_gateway() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let lines = run_plugin(invocation(wasm_path, "urls")).expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            vec!["api=http://127.0.0.1:4943/ gateway=-".to_string()]
+        );
+    }
+
+    /// One `files:` map holds directories and files alike; the host splits them
+    /// by what is on disk, so each lands in the interface list its kind calls
+    /// for, carrying the key it was declared under.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn file_entries_are_split_by_kind_and_keep_their_keys() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        // Both must exist: the host preopens the dir and reads the file before
+        // calling exec().
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("seeds")).expect("create dir");
+        std::fs::write(base.join("cfg.txt"), b"data").expect("write file");
+
+        // The task payload type is irrelevant here: only step output is observed.
+        let (reporter, mut rx) = icp_events::step_channel::<()>();
+        let result = tokio::task::block_in_place(|| {
+            let mut inv = invocation(wasm_path, "keys");
+            inv.base_dir = base.to_path_buf();
+            inv.files = keyed(&[("assets", "seeds"), ("config", "cfg.txt")]);
+            inv.reporter = reporter;
+            run_plugin(inv)
+        });
+        let lines = result.expect("plugin should succeed");
+        assert_eq!(
+            lines,
+            vec![
+                "dir assets=seeds".to_string(),
+                "file config=cfg.txt".to_string()
+            ],
+        );
+        // The same lines are emitted live as output events.
+        assert!(!output_lines(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn legacy_v1_plugin_is_detected_and_driven() {
+        // A plugin built against the v0.1.0 interface must still load: the host
+        // reads its declared interface version and drives it through the v1 path.
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        assert!(run_plugin(invocation(wasm_path, "ok")).is_ok());
+        // Its error surface flows through the same machinery as v0.2.0 plugins.
+        assert!(matches!(
+            run_plugin(invocation(wasm_path, "error")),
+            Err(RunPluginError::PluginFailed { ref message }) if message == "deliberate v1 failure"
+        ));
+    }
+
+    /// The v0.1.0 split between `dirs:` and `files:` is still served: a plain
+    /// list of each is preopened and read as it always was.
+    #[test]
+    fn legacy_v1_plugin_takes_plain_dirs_and_files() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_V1_WASM") else {
+            return;
+        };
+        let tmp = camino_tempfile::tempdir().expect("create tempdir");
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("seeds")).expect("create dir");
+        std::fs::write(base.join("cfg.txt"), b"data").expect("write file");
+
+        let mut inv = invocation(wasm_path, "ok");
+        inv.base_dir = base.to_path_buf();
+        inv.project_dir = base.to_path_buf();
+        inv.dirs = unkeyed(&["seeds"]);
+        inv.files = unkeyed(&["cfg.txt"]);
+        assert!(run_plugin(inv).is_ok());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -787,26 +1905,22 @@ mod tests {
         let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
             return;
         };
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+        // The task payload type is irrelevant here: only step output is observed.
+        let (reporter, mut rx) = icp_events::step_channel::<()>();
         let result = tokio::task::block_in_place(|| {
-            run_plugin(
-                wasm_path.into(),
-                ".".into(),
-                vec![],
-                vec![],
-                anon(),
-                dummy_agent(),
-                None,
-                anon(),
-                "hello".to_string(),
-                DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
-                Some(tx),
-            )
+            let mut inv = invocation(wasm_path, "hello");
+            inv.reporter = reporter;
+            run_plugin(inv)
         });
         let lines = result.expect("plugin should succeed");
         assert_eq!(lines, vec!["hello".to_string()]);
-        // The same line is forwarded to the rolling-view channel.
-        let live = rx.try_recv().expect("expected stderr line on channel");
-        assert!(live.contains("hello"), "got: {live}");
+        // The same line is also streamed as a live stderr event.
+        let live = output_lines(&mut rx);
+        assert!(
+            live.iter()
+                .any(|(stream, line)| matches!(stream, EventStream::Stderr)
+                    && line.contains("hello")),
+            "got: {live:?}"
+        );
     }
 }

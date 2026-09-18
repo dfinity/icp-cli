@@ -31,6 +31,7 @@ hex = { workspace = true }
 hmac = { workspace = true }
 hybrid-array = { workspace = true }
 ic-agent = { workspace = true }
+ic-certification = { workspace = true }
 ic-ed25519 = { workspace = true }
 ic-identity-hsm = { workspace = true }
 ic-ledger-types = { workspace = true }
@@ -61,6 +62,7 @@ scrypt = { workspace = true }
 semver = { workspace = true }
 sec1 = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

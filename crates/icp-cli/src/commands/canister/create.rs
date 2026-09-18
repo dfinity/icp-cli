@@ -355,13 +355,12 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         return Ok(());
     }
 
-    let identity = ctx.get_identity(&selections.identity, None).await?;
-    let caller = identity
-        .sender()
-        .map_err(|e| anyhow!("failed to get caller principal: {e}"))?;
     let agent = ctx
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
+    let caller = agent
+        .get_principal()
+        .map_err(|e| anyhow!("failed to get caller principal: {e}"))?;
     let ids = ctx
         .ids_by_environment(&selections.environment)
         .await

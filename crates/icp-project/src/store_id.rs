@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ic_agent::export::Principal;
+use candid::Principal;
 use snafu::Snafu;
 
 use crate::manifest::ProjectRootLocateError;

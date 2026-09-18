@@ -6,10 +6,10 @@ use candid::{
 };
 use candid_parser::utils::CandidSource;
 use futures::{StreamExt, stream::FuturesOrdered};
-use ic_agent::Agent;
 use ic_management_canister_types::CanisterInstallMode;
 use icp_events::TaskOutcome;
 
+use crate::calls::CanisterCalls;
 use crate::operations::task::{Reporter, Task};
 use snafu::Snafu;
 use tracing::debug;
@@ -19,7 +19,7 @@ use crate::operations::{misc::fetch_canister_metadata, wasm::extract_candid_serv
 /// Checks Candid interface compatibility for all canisters that would be
 /// upgraded. Aborts if any canister has an incompatible interface.
 pub async fn check_candid_compatibility_many(
-    agent: Agent,
+    calls: Arc<dyn CanisterCalls>,
     canisters: impl IntoIterator<Item = (&str, Principal, CanisterInstallMode)>,
     artifacts: Arc<dyn crate::store_artifact::Access>,
     reporter: &Reporter,
@@ -29,7 +29,7 @@ pub async fn check_candid_compatibility_many(
     for (name, cid, mode) in canisters {
         let task = reporter.task(Task::candid_check(name, cid));
         let is_upgrade = matches!(mode, CanisterInstallMode::Upgrade(_));
-        let agent = agent.clone();
+        let calls = calls.clone();
         let artifacts = artifacts.clone();
 
         check_futs.push_back(async move {
@@ -40,7 +40,8 @@ pub async fn check_candid_compatibility_many(
                 return Ok::<_, String>(());
             }
 
-            let result = check_canister_candid_compat(&agent, &cid, name, &*artifacts).await;
+            let result =
+                check_canister_candid_compat(calls.as_ref(), &cid, name, &*artifacts).await;
 
             match &result {
                 Ok(()) => task.finish(TaskOutcome::succeeded()),
@@ -74,7 +75,7 @@ pub async fn check_candid_compatibility_many(
 /// Returns `Ok(())` if the check passes or cannot be performed (missing metadata, etc.).
 /// Returns `Err(CandidCheckFailure)` only when a genuine incompatibility is found.
 async fn check_canister_candid_compat(
-    agent: &Agent,
+    calls: &dyn CanisterCalls,
     canister_id: &Principal,
     canister_name: &str,
     artifacts: &dyn crate::store_artifact::Access,
@@ -85,7 +86,7 @@ async fn check_canister_candid_compat(
         Err(_) => return Ok(()),
     };
 
-    match check_candid_compatibility(agent, canister_id, &wasm).await {
+    match check_candid_compatibility(calls, canister_id, &wasm).await {
         CandidCompatibility::Compatible => Ok(()),
         CandidCompatibility::Skipped(reason) => {
             debug!("Candid compatibility check skipped for {canister_name}: {reason}");
@@ -104,7 +105,7 @@ async fn check_canister_candid_compat(
 /// Returns [`CandidCompatibility::Skipped`] if either side lacks a
 /// `candid:service` metadata section or if the interfaces cannot be parsed.
 pub async fn check_candid_compatibility(
-    agent: &Agent,
+    calls: &dyn CanisterCalls,
     canister_id: &Principal,
     wasm: &[u8],
 ) -> CandidCompatibility {
@@ -119,7 +120,7 @@ pub async fn check_candid_compatibility(
     };
 
     // Fetch candid:service from the deployed canister
-    let old_candid = match fetch_canister_metadata(agent, *canister_id, "candid:service").await {
+    let old_candid = match fetch_canister_metadata(calls, *canister_id, "candid:service").await {
         Some(s) => s,
         None => {
             return CandidCompatibility::Skipped(

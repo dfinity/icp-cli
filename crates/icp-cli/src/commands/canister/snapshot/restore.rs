@@ -35,6 +35,8 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -45,12 +47,9 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
 
     // Check canister status - must be stopped to restore a snapshot
     let name = &args.cmd_args.canister;
-    let status = proxy_management::canister_status(
-        &agent,
-        args.proxy,
-        CanisterIdRecord { canister_id: cid },
-    )
-    .await?;
+    let status =
+        proxy_management::canister_status(calls.as_ref(), CanisterIdRecord { canister_id: cid })
+            .await?;
     match status.status {
         CanisterStatusType::Running => {
             bail!(
@@ -69,7 +68,7 @@ pub(crate) async fn exec(ctx: &Context, args: &RestoreArgs) -> Result<(), anyhow
         sender_canister_version: None,
     };
 
-    proxy_management::load_canister_snapshot(&agent, args.proxy, load_args).await?;
+    proxy_management::load_canister_snapshot(calls.as_ref(), load_args).await?;
 
     info!(
         "Restored canister {name} ({cid}) from snapshot {id}",

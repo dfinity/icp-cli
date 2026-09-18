@@ -32,6 +32,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -45,7 +47,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
         snapshot_id: args.snapshot_id.0.clone(),
     };
 
-    proxy_management::delete_canister_snapshot(&agent, args.proxy, delete_args).await?;
+    proxy_management::delete_canister_snapshot(calls.as_ref(), delete_args).await?;
 
     let name = &args.cmd_args.canister;
     info!(

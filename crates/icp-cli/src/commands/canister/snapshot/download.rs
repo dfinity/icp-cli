@@ -49,6 +49,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -92,7 +94,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                     id = hex::encode(snapshot_id),
                 );
 
-                let metadata = read_snapshot_metadata(&agent, args.proxy, cid, snapshot_id).await?;
+                let metadata = read_snapshot_metadata(calls.as_ref(), cid, snapshot_id).await?;
 
                 info!(
                     "  Timestamp: {}",
@@ -134,8 +136,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                         ),
                         async |task| {
                             download_blob_to_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 snapshot_id,
                                 BlobType::WasmModule,
@@ -166,8 +167,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                         ),
                         async |task| {
                             download_blob_to_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 snapshot_id,
                                 BlobType::WasmMemory,
@@ -201,8 +201,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                         ),
                         async |task| {
                             download_blob_to_file(
-                                &agent,
-                                args.proxy,
+                                calls.as_ref(),
                                 cid,
                                 snapshot_id,
                                 BlobType::StableMemory,
@@ -233,15 +232,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DownloadArgs) -> Result<(), anyho
                 for chunk_hash in &metadata.wasm_chunk_store {
                     let chunk_path = paths.wasm_chunk_path(&chunk_hash.hash);
                     if !chunk_path.exists() {
-                        download_wasm_chunk(
-                            &agent,
-                            args.proxy,
-                            cid,
-                            snapshot_id,
-                            chunk_hash,
-                            paths,
-                        )
-                        .await?;
+                        download_wasm_chunk(calls.as_ref(), cid, snapshot_id, chunk_hash, paths)
+                            .await?;
                     }
                 }
                 info!("WASM chunks: done");

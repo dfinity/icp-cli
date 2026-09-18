@@ -8,9 +8,9 @@ publish.workspace = true
 [features]
 # `clap::ValueEnum` derives on the settings/identity enums used as CLI value
 # types. Enabled by `icp-cli`.
-clap = ["dep:clap", "icp/clap"]
-# Exposes this crate's mocks, as `icp`'s own feature does for its seams.
-test-util = ["icp/test-util"]
+clap = ["dep:clap", "icp-project/clap"]
+# Exposes this crate's mocks, as `icp-project`'s own feature does for its seams.
+test-util = ["icp-project/test-util"]
 
 [dependencies]
 async-dropper = { workspace = true }
@@ -40,7 +40,7 @@ ic-identity-hsm = { workspace = true }
 ic-ledger-types = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-utils = { workspace = true }
-icp = { workspace = true }
+icp-project = { workspace = true }
 icp-canister-interfaces = { workspace = true }
 icp-events = { workspace = true }
 icrc-ledger-types = { workspace = true }
@@ -81,6 +81,6 @@ winreg = { workspace = true }
 
 [dev-dependencies]
 httptest = { workspace = true }
-icp = { workspace = true, features = ["test-util"] }
+icp-project = { workspace = true, features = ["test-util"] }
 indexmap = { workspace = true }
 indoc = { workspace = true }

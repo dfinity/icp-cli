@@ -5,7 +5,7 @@ use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::TestContext;
-use icp::fs::{read_to_string, write_string};
+use icp_project::fs::{read_to_string, write_string};
 
 mod common;
 

@@ -10,9 +10,9 @@ use std::{
 };
 
 use clap::parser::ValueSource;
-use icp::prelude::*;
 use icp_app::settings::Settings;
 use icp_app::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
+use icp_project::prelude::*;
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

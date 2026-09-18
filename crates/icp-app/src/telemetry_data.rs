@@ -44,7 +44,7 @@ impl TelemetryData {
         *self.network_type.lock().unwrap()
     }
 
-    fn set_project(&self, project: &icp::Project) {
+    fn set_project(&self, project: &icp_project::Project) {
         let recipes: Vec<String> = project
             .canisters
             .values()
@@ -66,11 +66,15 @@ impl TelemetryData {
 /// The project facts telemetry keeps are established during environment
 /// resolution, so the bag receives them from there rather than the other way
 /// around.
-impl icp::host::Observe for TelemetryData {
-    fn environment_resolved(&self, project: &icp::Project, environment: &icp::Environment) {
+impl icp_project::host::Observe for TelemetryData {
+    fn environment_resolved(
+        &self,
+        project: &icp_project::Project,
+        environment: &icp_project::Environment,
+    ) {
         let network_type = match &environment.network.configuration {
-            icp::network::Configuration::Managed { .. } => NetworkType::Managed,
-            icp::network::Configuration::Connected { .. } => NetworkType::Connected,
+            icp_project::network::Configuration::Managed { .. } => NetworkType::Managed,
+            icp_project::network::Configuration::Connected { .. } => NetworkType::Connected,
         };
         self.set_network_type(network_type);
         self.set_project(project);

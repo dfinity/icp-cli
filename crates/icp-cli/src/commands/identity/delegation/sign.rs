@@ -5,13 +5,13 @@ use std::{
 
 use clap::{Args, ValueHint};
 use ic_agent::{Identity as _, export::Principal, identity::Delegation as AgentDelegation};
-use icp::{fs::read_to_string, prelude::*};
 use icp_app::{
     context::{Context, GetIdentityError},
     identity::delegation::{
         Delegation as WireDelegation, DelegationChain, SignedDelegation as WireSignedDelegation,
     },
 };
+use icp_project::{fs::read_to_string, prelude::*};
 use pem::Pem;
 use snafu::{OptionExt, ResultExt, Snafu};
 
@@ -173,7 +173,7 @@ pub(crate) enum SignError {
     AnonymousIdentity,
 
     #[snafu(display("failed to read key PEM file"))]
-    ReadKeyPem { source: icp::fs::IoError },
+    ReadKeyPem { source: icp_project::fs::IoError },
 
     #[snafu(display("corrupted PEM file `{path}`"))]
     ParseKeyPem {

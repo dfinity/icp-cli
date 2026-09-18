@@ -21,7 +21,7 @@ use crate::common::{
     ENVIRONMENT_DOCKER, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER, NETWORK_RANDOM_PORT, TestContext,
     TestNetwork, clients,
 };
-use icp::{
+use icp_project::{
     fs::{read_to_string, write_string},
     prelude::*,
 };

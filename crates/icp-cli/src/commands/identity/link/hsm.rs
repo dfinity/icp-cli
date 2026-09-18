@@ -1,10 +1,10 @@
 use clap::{Args, ValueHint};
 use dialoguer::Password;
-use icp::prelude::*;
 use icp_app::{
     context::Context,
     identity::{key::link_hsm_identity, manifest::IdentityList},
 };
+use icp_project::prelude::*;
 use snafu::{ResultExt, Snafu, ensure};
 use tracing::info;
 
@@ -48,7 +48,7 @@ pub(crate) async fn exec(ctx: &Context, args: &HsmArgs) -> Result<(), HsmError> 
         Some(path) => {
             let path = path.clone();
             Box::new(move || {
-                icp::fs::read_to_string(&path)
+                icp_project::fs::read_to_string(&path)
                     .map(|s| s.trim().to_string())
                     .map_err(|e| e.to_string())
             })
@@ -92,7 +92,9 @@ pub(crate) enum HsmError {
     },
 
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to link HSM identity"))]
     LinkHsm {

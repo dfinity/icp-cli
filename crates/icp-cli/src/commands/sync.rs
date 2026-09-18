@@ -61,7 +61,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     let agent = ctx
         .get_agent_for_env(&identity_selection, &environment_selection)
         .await?;
-    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+    let calls = icp_app::calls::calls(agent, args.proxy)?;
 
     // Prepare list of canisters with their info for syncing
     let sync_canisters = try_join_all(cnames.iter().map(|name| async {
@@ -135,7 +135,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     rendered(ctx.debug, async |reporter| {
         sync_many(
             ctx.host.syncer.clone(),
-            agent,
+            calls,
             sync_canisters,
             project_dir,
             environment_selection.name().to_owned(),

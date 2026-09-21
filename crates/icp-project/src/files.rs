@@ -485,6 +485,30 @@ mod tests {
         );
     }
 
+    /// A name that is not UTF-8 cannot be a project path, so it is left out of
+    /// a listing rather than failing it. Only Linux lets such a name be written
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn a_name_that_is_not_utf8_is_skipped_rather_than_an_error() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let d = tree(&["packages/a/canister.yaml"]);
+        let stray = d
+            .path()
+            .join("packages")
+            .into_std_path_buf()
+            .join(OsStr::from_bytes(b"caf\xe9"));
+        std::fs::create_dir(&stray).expect("mkdir");
+        std::fs::write(stray.join("canister.yaml"), b"").expect("write");
+
+        assert_eq!(expand(d.path(), "packages/*").await, ["packages/a"]);
+        assert_eq!(
+            expand(d.path(), "packages/**/canister.yaml").await,
+            ["packages/a/canister.yaml"]
+        );
+    }
+
     #[tokio::test]
     async fn character_classes_and_question_marks_work() {
         let d = tree(&["c/a1.yaml", "c/b2.yaml", "c/cc.yaml"]);

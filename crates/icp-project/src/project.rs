@@ -53,9 +53,6 @@ pub enum ConsolidateManifestError {
     #[snafu(display("failed to expand a canister path glob"))]
     ExpandGlob { source: crate::files::GlobError },
 
-    #[snafu(display("failed to convert path to UTF-8"))]
-    Utf8Path { source: FromPathBufError },
-
     #[snafu(display("failed to load canister manifest"))]
     LoadCanister { source: LoadManifestFromPathError },
 

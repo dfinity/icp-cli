@@ -67,7 +67,8 @@ pub enum RecoverCyclesError {
     #[snafu(display("the recover_cycles call to canister {canister_id} failed"))]
     CallRecover {
         canister_id: Principal,
-        source: ic_agent::AgentError,
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
     },
 
     #[snafu(display("failed to decode the recover_cycles result from canister {canister_id}"))]

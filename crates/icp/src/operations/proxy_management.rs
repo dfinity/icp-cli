@@ -208,7 +208,10 @@ pub enum FetchCanisterLogsError {
     CandidDecode { source: candid::Error },
 
     #[snafu(display("direct query call failed: {source}"))]
-    DirectQueryCall { source: ic_agent::AgentError },
+    DirectQueryCall {
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
+    },
 
     #[snafu(display("proxied call failed: {source}"))]
     ProxiedCall { source: UpdateOrProxyError },

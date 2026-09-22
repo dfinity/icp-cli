@@ -9,7 +9,10 @@ use crate::prelude::*;
 #[derive(Debug, Snafu)]
 pub enum CreateAgentError {
     #[snafu(display("failed to create agent"))]
-    Agent { source: AgentError },
+    Agent {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 }
 
 /// How far ahead of now an agent dates the messages it expires, unless the

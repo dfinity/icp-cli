@@ -10,10 +10,16 @@ pub enum UpdateOrProxyError {
     ProxyEncode { source: candid::Error },
 
     #[snafu(display("direct update call failed: {source}"))]
-    DirectUpdateCall { source: ic_agent::AgentError },
+    DirectUpdateCall {
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
+    },
 
     #[snafu(display("proxy update call failed: {source}"))]
-    ProxyUpdateCall { source: ic_agent::AgentError },
+    ProxyUpdateCall {
+        #[snafu(source(from(ic_agent::AgentError, Box::new)))]
+        source: Box<ic_agent::AgentError>,
+    },
 
     #[snafu(display("failed to decode proxy canister response: {source}"))]
     ProxyDecode { source: candid::Error },

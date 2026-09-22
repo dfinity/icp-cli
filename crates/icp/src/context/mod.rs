@@ -740,7 +740,8 @@ pub enum SetCanisterIdForEnvError {
         environment_name
     ))]
     CanisterIdRegister {
-        source: crate::store_id::RegisterError,
+        #[snafu(source(from(crate::store_id::RegisterError, Box::new)))]
+        source: Box<crate::store_id::RegisterError>,
         canister_name: String,
         environment_name: String,
     },

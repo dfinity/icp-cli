@@ -615,7 +615,11 @@ pub async fn initialize_network(
 #[derive(Debug, Snafu)]
 pub enum InitializeNetworkError {
     #[snafu(display("failed to build agent for url {}", url))]
-    BuildAgent { source: AgentError, url: String },
+    BuildAgent {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+        url: String,
+    },
 
     #[snafu(display("Failed to seed initial balances: {error}"))]
     SeedTokens { error: String },

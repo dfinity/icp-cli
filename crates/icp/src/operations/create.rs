@@ -47,26 +47,37 @@ pub enum CreateOperationError {
     CandidDecode { source: candid::Error },
 
     #[snafu(display("agent error: {source}"))]
-    Agent { source: AgentError },
+    Agent {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to create canister: {message}"))]
     CreateCanister { message: String },
 
     #[snafu(display("failed to get subnet for canister: {source}"))]
-    GetSubnet { source: AgentError },
+    GetSubnet {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to sign the subnet-scoped create_canister call: {source}"))]
-    SignSubnetCreate { source: AgentError },
+    SignSubnetCreate {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to submit create_canister to subnet {subnet}: {source}"))]
     SubmitSubnetCreate {
-        source: AgentError,
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
         subnet: Principal,
     },
 
     #[snafu(display("failed to await create_canister on subnet {subnet}: {source}"))]
     AwaitSubnetCreate {
-        source: AgentError,
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
         subnet: Principal,
     },
 
@@ -74,7 +85,10 @@ pub enum CreateOperationError {
     EngineCanisterId { message: String },
 
     #[snafu(display("failed to query the engine-canister registry: {source}"))]
-    EngineCanisterQuery { source: AgentError },
+    EngineCanisterQuery {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display(
         "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
@@ -91,7 +105,10 @@ pub enum CreateOperationError {
     MissingSubnetId,
 
     #[snafu(display("failed to get available subnets: {source}"))]
-    GetAvailableSubnets { source: AgentError },
+    GetAvailableSubnets {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("no available subnets found"))]
     NoAvailableSubnets,
@@ -109,7 +126,10 @@ pub enum CreateOperationError {
     InvalidIcpAmount { message: String },
 
     #[snafu(display("failed to transfer ICP to the cycles minting canister: {source}"))]
-    TransferIcp { source: AgentError },
+    TransferIcp {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("ICP ledger transfer failed: {message}"))]
     TransferFailed { message: String },

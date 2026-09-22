@@ -452,7 +452,8 @@ pub(crate) enum LoadKeyError {
     #[snafu(display("malformed key in PEM file `{path}`"))]
     BadPemContent {
         path: PathBuf,
-        source: pkcs8::der::Error,
+        #[snafu(source(from(pkcs8::der::Error, Box::new)))]
+        source: Box<pkcs8::der::Error>,
     },
 
     #[snafu(display(

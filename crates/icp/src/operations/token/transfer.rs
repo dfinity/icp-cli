@@ -32,13 +32,22 @@ pub enum TokenTransferError {
     AccountIdentifierNotSupported,
 
     #[snafu(display("failed to query fee"))]
-    QueryFee { source: AgentError },
+    QueryFee {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query decimals"))]
-    QueryDecimals { source: AgentError },
+    QueryDecimals {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query symbol"))]
-    QuerySymbol { source: AgentError },
+    QuerySymbol {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode fee response"))]
     DecodeFee { source: candid::Error },
@@ -56,15 +65,18 @@ pub enum TokenTransferError {
     EncodeTransferArg { source: candid::Error },
 
     #[snafu(display("failed to execute transfer"))]
-    ExecuteTransfer { source: AgentError },
+    ExecuteTransfer {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode transfer response"))]
     DecodeTransferResponse { source: candid::Error },
 
     #[snafu(display("insufficient funds. balance: {balance}, required: {required}"))]
     InsufficientFunds {
-        balance: TokenAmount,
-        required: TokenAmount,
+        balance: Box<TokenAmount>,
+        required: Box<TokenAmount>,
     },
 
     #[snafu(display("transfer failed: {message}"))]
@@ -74,7 +86,10 @@ pub enum TokenTransferError {
     EncodeLegacyTransferArg { source: candid::Error },
 
     #[snafu(display("failed to execute legacy ICP transfer"))]
-    ExecuteLegacyTransfer { source: AgentError },
+    ExecuteLegacyTransfer {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode legacy ICP transfer response"))]
     DecodeLegacyTransferResponse { source: candid::Error },
@@ -143,14 +158,14 @@ pub async fn icrc1_transfer(
                 BigDecimal::from_biguint(&ledger_amount.0 + fee.0, decimals as i64);
 
             TokenTransferError::InsufficientFunds {
-                balance: TokenAmount {
+                balance: Box::new(TokenAmount {
                     amount: balance_amount,
                     symbol: symbol.clone(),
-                },
-                required: TokenAmount {
+                }),
+                required: Box::new(TokenAmount {
                     amount: required_amount,
                     symbol: symbol.clone(),
-                },
+                }),
             }
         }
 
@@ -233,14 +248,14 @@ pub async fn icp_legacy_transfer(
                 BigDecimal::from_biguint(&ledger_amount.0 + fee.0, decimals as i64);
 
             TokenTransferError::InsufficientFunds {
-                balance: TokenAmount {
+                balance: Box::new(TokenAmount {
                     amount: balance_amount,
                     symbol: symbol.clone(),
-                },
-                required: TokenAmount {
+                }),
+                required: Box::new(TokenAmount {
                     amount: required_amount,
                     symbol: symbol.clone(),
-                },
+                }),
             }
         }
         _ => TokenTransferError::TransferFailed {

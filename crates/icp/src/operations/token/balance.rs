@@ -18,13 +18,22 @@ pub enum GetBalanceError {
     GetPrincipal { err: String },
 
     #[snafu(display("failed to query balance"))]
-    QueryBalance { source: AgentError },
+    QueryBalance {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query decimals"))]
-    QueryDecimals { source: AgentError },
+    QueryDecimals {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query symbol"))]
-    QuerySymbol { source: AgentError },
+    QuerySymbol {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode balance response"))]
     DecodeBalance { source: candid::Error },

@@ -19,10 +19,16 @@ const GET_SUBNET_FOR_CANISTER_METHOD: &str = "get_subnet_for_canister";
 #[derive(Debug, Snafu)]
 pub enum CanisterMigrationError {
     #[snafu(display("Failed to call NNS migration canister"))]
-    CallMigrationCanister { source: AgentError },
+    CallMigrationCanister {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("Failed to query migration status"))]
-    QueryMigrationStatus { source: AgentError },
+    QueryMigrationStatus {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("Validation failed: {source}"))]
     ValidationFailed { source: ValidationError },
@@ -31,7 +37,10 @@ pub enum CanisterMigrationError {
     ValidationFailedUnknown,
 
     #[snafu(display("Failed to query registry canister"))]
-    QueryRegistryCanister { source: AgentError },
+    QueryRegistryCanister {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("Failed to determine subnet for canister {canister_id}: {reason}"))]
     SubnetLookupFailed {
@@ -154,10 +163,14 @@ pub async fn get_subnet_for_canister(
                     tokio::time::sleep(duration).await;
                     continue;
                 }
-                return Err(CanisterMigrationError::QueryRegistryCanister { source: agent_err });
+                return Err(CanisterMigrationError::QueryRegistryCanister {
+                    source: Box::new(agent_err),
+                });
             }
             Err(agent_err) => {
-                return Err(CanisterMigrationError::QueryRegistryCanister { source: agent_err });
+                return Err(CanisterMigrationError::QueryRegistryCanister {
+                    source: Box::new(agent_err),
+                });
             }
         }
     }

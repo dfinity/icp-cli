@@ -16,13 +16,22 @@ pub enum GetAllowanceError {
     },
 
     #[snafu(display("failed to query decimals"))]
-    QueryDecimals { source: AgentError },
+    QueryDecimals {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query symbol"))]
-    QuerySymbol { source: AgentError },
+    QuerySymbol {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query allowance"))]
-    QueryAllowance { source: AgentError },
+    QueryAllowance {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode decimals response"))]
     DecodeDecimals { source: candid::Error },

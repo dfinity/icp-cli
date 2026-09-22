@@ -38,11 +38,11 @@ const E_STATUS_ACCESS_DENIED: [&str; 3] = ["IC0512", "IC0541", "IC0542"];
 /// from the first and certified from the second.
 fn direct_call_reject(err: &UpdateOrProxyError) -> Option<&RejectResponse> {
     match err {
-        UpdateOrProxyError::DirectUpdateCall {
-            source:
-                AgentError::CertifiedReject { reject, .. }
-                | AgentError::UncertifiedReject { reject, .. },
-        } => Some(reject),
+        UpdateOrProxyError::DirectUpdateCall { source } => match &**source {
+            AgentError::CertifiedReject { reject, .. }
+            | AgentError::UncertifiedReject { reject, .. } => Some(reject),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -636,7 +636,9 @@ mod tests {
                 operation: None,
             },
         ] {
-            let err = UpdateOrProxyError::DirectUpdateCall { source };
+            let err = UpdateOrProxyError::DirectUpdateCall {
+                source: Box::new(source),
+            };
             let found = direct_call_reject(&err).expect("reject should be extracted");
             assert!(E_STATUS_ACCESS_DENIED.contains(&found.error_code.as_deref().unwrap()));
         }

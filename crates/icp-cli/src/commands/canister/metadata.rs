@@ -42,9 +42,10 @@ pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyho
             &selections.environment,
         )
         .await?;
+    let calls = icp_app::calls::calls(agent.clone(), None)?;
 
     // Fetch the metadata
-    let metadata = fetch_canister_metadata(&agent, canister_id, &args.metadata_name).await;
+    let metadata = fetch_canister_metadata(calls.as_ref(), canister_id, &args.metadata_name).await;
 
     match metadata {
         Some(value) => {

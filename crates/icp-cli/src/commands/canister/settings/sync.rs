@@ -36,6 +36,8 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -50,7 +52,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let unresolved =
-        icp_project::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister, &ids)
+        icp_project::operations::settings::sync_settings(calls.as_ref(), &cid, &canister, &ids)
             .await?;
     for controller_name in &unresolved {
         warn!(

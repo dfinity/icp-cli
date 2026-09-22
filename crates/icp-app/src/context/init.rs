@@ -113,7 +113,10 @@ pub fn initialize(
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
 
     // Canister syncer
-    let syncer = Arc::new(Syncer::host(wasm.clone()));
+    let syncer = Arc::new(Syncer::host(
+        wasm.clone(),
+        Arc::new(icp_sync_plugin::Wasmtime),
+    ));
 
     // Project loader
     let pload = ProjectLoadImpl {

@@ -65,6 +65,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
             environment_selection.name(),
             ctx.host.builder.clone(),
             ctx.host.artifacts.clone(),
+            ctx.host.files.as_ref(),
             reporter,
         )
         .await

@@ -11,8 +11,8 @@ use std::{
 
 use clap::parser::ValueSource;
 use icp::prelude::*;
-use icp::settings::Settings;
-use icp::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
+use icp_app::settings::Settings;
+use icp_app::telemetry_data::{IdentityStorageType, NetworkType, TelemetryData};
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -161,7 +161,7 @@ impl TelemetrySession {
 
 /// Initialise a telemetry session unless telemetry is disabled.
 pub(crate) async fn setup(
-    ctx: &icp::context::Context,
+    ctx: &icp_app::context::Context,
     raw_args: &[String],
     clap_command: &clap::Command,
 ) -> Option<TelemetrySession> {

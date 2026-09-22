@@ -59,6 +59,7 @@ ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.9.0" }
 ic-utils = { version = "0.49.1" }
 icp = { path = "crates/icp" }
+icp-app = { path = "crates/icp-app" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icp-events = { path = "crates/icp-events" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }

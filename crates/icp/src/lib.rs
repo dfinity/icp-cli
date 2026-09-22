@@ -26,28 +26,24 @@ use crate::{
 
 pub mod agent;
 pub mod canister;
-pub mod context;
-pub mod directories;
 pub mod fs;
 pub mod host;
-pub mod identity;
 pub mod manifest;
 pub mod network;
 pub mod operations;
-pub mod package;
 pub mod parsers;
 pub mod prelude;
 pub mod project;
-pub mod settings;
 pub mod signal;
-pub mod signed_message;
 pub mod store_artifact;
 pub mod store_id;
-pub mod telemetry_data;
 
-const ICP_BASE: &str = ".icp";
-const CACHE_DIR: &str = "cache";
-const DATA_DIR: &str = "data";
+/// The per-project state directory. `cache` holds what can be thrown away and
+/// rebuilt (ids for managed networks, build artifacts); `data` holds what
+/// cannot (ids for connected networks).
+pub const ICP_BASE: &str = ".icp";
+pub const CACHE_DIR: &str = "cache";
+pub const DATA_DIR: &str = "data";
 
 /// Resolved canister arguments, with any file references already loaded.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -346,14 +342,14 @@ impl<T: ProjectLoad> ProjectLoad for Lazy<T, Project> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 /// Mock project loader for testing.
 /// Returns a pre-configured `Project` when `load()` is called.
 pub struct MockProjectLoader {
     project: Project,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 impl MockProjectLoader {
     /// Creates a new mock project loader with the given project.
     pub fn new(project: Project) -> Self {
@@ -671,7 +667,7 @@ impl MockProjectLoader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 #[async_trait]
 impl ProjectLoad for MockProjectLoader {
     async fn load(&self) -> Result<Project, ProjectLoadError> {
@@ -683,12 +679,12 @@ impl ProjectLoad for MockProjectLoader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 /// Mock project loader that always fails with a Locate error.
 /// Useful for testing scenarios where no project exists.
 pub struct NoProjectLoader;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-util"))]
 #[async_trait]
 impl ProjectLoad for NoProjectLoader {
     async fn load(&self) -> Result<Project, ProjectLoadError> {
@@ -747,7 +743,7 @@ mod tests {
                           path: dummy.wasm
                 "#}
                 .to_owned(),
-                pending_cache: None,
+                deferred: false,
             })
         }
     }

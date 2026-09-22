@@ -46,7 +46,6 @@ use crate::operations::{
     sync::{SyncOperationError, sync_many},
     task::{Reporter, Task, TaskReporter, notice},
 };
-use crate::package::PackageCache;
 use crate::project::ArgsField;
 use crate::{CanisterArgsToBytesError, ProjectLoadError};
 
@@ -218,7 +217,6 @@ pub struct DeployReport {
 pub async fn deploy(
     host: &Host,
     agent: &LazyAgent<'_>,
-    pkg_cache: &PackageCache,
     params: &DeployParams,
     reporter: &Reporter,
     report: &mut DeployReport,
@@ -240,7 +238,6 @@ pub async fn deploy(
         environment_selection.name(),
         host.builder.clone(),
         host.artifacts.clone(),
-        pkg_cache,
         &phase.reporter(),
     )
     .await;
@@ -411,7 +408,7 @@ pub async fn deploy(
     .await;
     finish(&phase, result)?;
 
-    sync(host, pkg_cache, params, agent, reporter).await?;
+    sync(host, params, agent, reporter).await?;
 
     Ok(())
 }
@@ -522,7 +519,6 @@ async fn create_canisters(
 /// Run the sync steps of every canister that has any.
 async fn sync(
     host: &Host,
-    pkg_cache: &PackageCache,
     params: &DeployParams,
     agent: &Agent,
     reporter: &Reporter,
@@ -619,7 +615,6 @@ async fn sync(
         urls,
         canister_ids,
         proxy,
-        pkg_cache,
         &phase.reporter(),
     )
     .await;

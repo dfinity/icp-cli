@@ -18,7 +18,6 @@ use crate::{
         SyncSteps, load_manifest_from_path, plugin, prebuilt,
         prebuilt::{LocalSource, SourceField},
     },
-    package::PackageCache,
     prelude::*,
     project::{WorkspaceInstance, WorkspaceInstancesError, workspace_instances},
     store_artifact,
@@ -192,7 +191,7 @@ pub enum BundleError {
     #[snafu(display("failed to resolve plugin wasm for canister '{canister}'"))]
     ResolvePlugin {
         canister: String,
-        source: wasm::WasmError,
+        source: wasm::FetchError,
     },
 
     #[snafu(display("failed to read plugin wasm for canister '{canister}'"))]
@@ -375,7 +374,7 @@ pub async fn create_bundle(
     environment: &str,
     builder: Arc<dyn Build>,
     artifacts: Arc<dyn store_artifact::Access>,
-    pkg_cache: &PackageCache,
+    wasm_fetch: &dyn wasm::Fetch,
     reporter: &Reporter,
     output: &Path,
 ) -> Result<(), BundleError> {
@@ -421,7 +420,6 @@ pub async fn create_bundle(
         environment,
         builder,
         artifacts.clone(),
-        pkg_cache,
         reporter,
     )
     .await?;
@@ -457,7 +455,7 @@ pub async fn create_bundle(
             instance,
             &pruned,
             &*artifacts,
-            pkg_cache,
+            wasm_fetch,
             &mut bundle_artifacts,
         )
         .await?;
@@ -676,7 +674,7 @@ async fn prepare_canisters(
     instance: &Instance,
     pruned: &Pruned<'_>,
     artifacts: &dyn store_artifact::Access,
-    pkg_cache: &PackageCache,
+    wasm_fetch: &dyn wasm::Fetch,
     out: &mut BundleArtifacts,
 ) -> Result<Vec<Item<CanisterManifest>>, BundleError> {
     // Store key -> local name, for rewriting controller references back to the
@@ -696,7 +694,7 @@ async fn prepare_canisters(
             &local_names,
             pruned,
             artifacts,
-            pkg_cache,
+            wasm_fetch,
             out,
         )
         .await?;
@@ -713,7 +711,7 @@ async fn prepare_canister(
     local_names: &HashMap<&str, &str>,
     pruned: &Pruned<'_>,
     artifacts: &dyn store_artifact::Access,
-    pkg_cache: &PackageCache,
+    wasm_fetch: &dyn wasm::Fetch,
     out: &mut BundleArtifacts,
 ) -> Result<Item<CanisterManifest>, BundleError> {
     let local = local_name(&canister.name);
@@ -754,7 +752,7 @@ async fn prepare_canister(
                         &path_name,
                         idx,
                         local_names,
-                        pkg_cache,
+                        wasm_fetch,
                         out,
                     )
                     .await?,
@@ -863,22 +861,22 @@ async fn prepare_plugin_step(
     path_name: &str,
     idx: usize,
     local_names: &HashMap<&str, &str>,
-    pkg_cache: &PackageCache,
+    wasm_fetch: &dyn wasm::Fetch,
     out: &mut BundleArtifacts,
 ) -> Result<SyncStep, BundleError> {
     let plugin_wasm_path = format!("plugins/{path_name}/{idx}.wasm");
 
-    let resolved = wasm::resolve(
-        &adapter.source,
-        canister_path,
-        adapter.sha256.as_deref(),
-        &StepReporter::null(),
-        pkg_cache,
-    )
-    .await
-    .context(ResolvePluginSnafu {
-        canister: canister.name.clone(),
-    })?;
+    let resolved = wasm_fetch
+        .wasm(
+            &adapter.source,
+            canister_path,
+            adapter.sha256.as_deref(),
+            &StepReporter::null(),
+        )
+        .await
+        .context(ResolvePluginSnafu {
+            canister: canister.name.clone(),
+        })?;
 
     let plugin_bytes = fs::read(&resolved).context(ReadPluginSnafu {
         canister: canister.name.clone(),

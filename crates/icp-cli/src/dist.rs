@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 use axoupdater::AxoUpdater;
-use icp::settings::UpdateCheck;
+use icp_app::settings::UpdateCheck;
 use reqwest::Client;
 use tracing::debug;
 
@@ -181,10 +181,10 @@ fn newer_than_current(version_str: &str) -> bool {
 const ONE_DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Check for CLI updates, returning the latest version string if one is available.
-pub(crate) async fn update_check(ctx: &icp::context::Context) -> Option<String> {
+pub(crate) async fn update_check(ctx: &icp_app::context::Context) -> Option<String> {
     let update_check_setting = match ctx.dirs.settings() {
         Ok(dirs) => {
-            dirs.with_read(async |dirs| icp::settings::Settings::load_from(dirs).ok())
+            dirs.with_read(async |dirs| icp_app::settings::Settings::load_from(dirs).ok())
                 .await
                 .ok()
                 .flatten()

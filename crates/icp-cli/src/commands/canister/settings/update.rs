@@ -8,16 +8,16 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable,
     UpdateSettingsArgs,
 };
-use icp::ProjectLoadError;
-use icp::canister::Visibility;
-use icp::host::CanisterSelection;
-use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use icp_app::context::Context;
+use icp_project::ProjectLoadError;
+use icp_project::canister::Visibility;
+use icp_project::host::CanisterSelection;
+use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -732,7 +732,7 @@ fn get_environment_variables(
 }
 
 fn maybe_warn_on_env_vars_change(
-    configured_settings: &icp::canister::Settings,
+    configured_settings: &icp_project::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
 ) {
     if let Some(configured_vars) = &configured_settings.environment_variables {

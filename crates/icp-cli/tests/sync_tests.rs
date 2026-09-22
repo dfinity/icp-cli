@@ -1,4 +1,4 @@
-use icp::{
+use icp_project::{
     fs::{create_dir_all, write_string},
     prelude::*,
     store_id::IdMapping,
@@ -940,7 +940,7 @@ async fn sync_script_icp_env_vars() {
         .assert()
         .success();
 
-    let id_mapping: IdMapping = icp::fs::json::load(
+    let id_mapping: IdMapping = icp_project::fs::json::load(
         &project_dir
             .join(".icp")
             .join("cache")

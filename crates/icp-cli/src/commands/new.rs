@@ -1,5 +1,5 @@
 #[allow(clippy::disallowed_types)]
-// In this case we allow PathBuf instead of using icp::prelude::* because
+// In this case we allow PathBuf instead of using icp_project::prelude::* because
 // this is what the crargo generate crate expects
 use std::path::PathBuf;
 

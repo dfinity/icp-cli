@@ -3,7 +3,7 @@ use indoc::{formatdoc, indoc};
 use predicates::str::contains;
 
 use crate::common::TestContext;
-use icp::fs::{create_dir_all, write_string};
+use icp_project::fs::{create_dir_all, write_string};
 
 mod common;
 

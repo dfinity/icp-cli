@@ -1,12 +1,12 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::host::EnvironmentSelection;
 use icp_app::context::Context;
+use icp_project::host::EnvironmentSelection;
 
 use tracing::info;
 
-use icp::operations::build::build_many;
+use icp_project::operations::build::build_many;
 
 use crate::{
     options::{EnvironmentOpt, arg_struct_change_help},

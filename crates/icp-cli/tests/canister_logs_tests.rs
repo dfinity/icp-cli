@@ -1,7 +1,7 @@
 #[cfg(unix)]
 use {
     crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext},
-    icp::fs::write_string,
+    icp_project::fs::write_string,
     indoc::formatdoc,
     predicates::prelude::PredicateBooleanExt,
     predicates::str::contains,

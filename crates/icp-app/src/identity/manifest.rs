@@ -7,7 +7,7 @@ use strum::{Display, EnumString};
 use url::Url;
 
 use crate::identity::IdentityPaths;
-use icp::{
+use icp_project::{
     fs::{
         json,
         lock::{LRead, LWrite},
@@ -213,10 +213,12 @@ pub enum WriteIdentityManifestError {
     WriteJsonError { source: json::Error },
 
     #[snafu(transparent)]
-    CreateDirectoryError { source: icp::fs::IoError },
+    CreateDirectoryError { source: icp_project::fs::IoError },
 
     #[snafu(transparent)]
-    DirectoryLockError { source: icp::fs::lock::LockError },
+    DirectoryLockError {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -228,7 +230,9 @@ pub enum LoadIdentityManifestError {
     BadVersion { path: PathBuf },
 
     #[snafu(transparent)]
-    DirectoryLockError { source: icp::fs::lock::LockError },
+    DirectoryLockError {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 #[derive(Debug, Snafu)]

@@ -23,8 +23,8 @@ use ic_agent::agent::{
     signed_update_inspect,
 };
 use ic_agent::{AgentError, RequestId};
-use icp::network::RootKeySpec;
-use icp::prelude::*;
+use icp_project::network::RootKeySpec;
+use icp_project::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
@@ -230,7 +230,7 @@ pub struct Validated {
 impl SignedMessage {
     /// Writes the message to `path`.
     pub fn save(&self, path: &Path) -> Result<(), Error> {
-        icp::fs::json::save(path, self).context(SaveSnafu { path })
+        icp_project::fs::json::save(path, self).context(SaveSnafu { path })
     }
 
     /// Renders the message exactly as [`SignedMessage::save`] would write it, for
@@ -242,7 +242,7 @@ impl SignedMessage {
     /// Reads a message from `path`. The result is unvalidated — call
     /// [`SignedMessage::validate`] before acting on any of it.
     pub fn load(path: &Path) -> Result<Self, Error> {
-        icp::fs::json::load(path).context(LoadSnafu { path })
+        icp_project::fs::json::load(path).context(LoadSnafu { path })
     }
 
     /// Checks the file against its envelope and reports where `now` falls in the
@@ -481,7 +481,7 @@ pub fn format_timestamp(t: OffsetDateTime) -> String {
 pub enum Error {
     #[snafu(display("failed to write the signed message to {path}"))]
     Save {
-        source: icp::fs::json::Error,
+        source: icp_project::fs::json::Error,
         path: PathBuf,
     },
 
@@ -490,7 +490,7 @@ pub enum Error {
 
     #[snafu(display("failed to read the signed message at {path}"))]
     Load {
-        source: icp::fs::json::Error,
+        source: icp_project::fs::json::Error,
         path: PathBuf,
     },
 

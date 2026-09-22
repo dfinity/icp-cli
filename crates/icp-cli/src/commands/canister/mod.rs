@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use icp::canister::Visibility;
+use icp_project::canister::Visibility;
 
 pub(crate) mod call;
 pub(crate) mod create;

@@ -10,7 +10,7 @@ use tokio::select;
 /// # Examples
 ///
 /// ```no_run
-/// use icp::signal::stop_signal;
+/// use icp_project::signal::stop_signal;
 /// use tokio::select;
 ///
 /// # async fn example() {
@@ -45,7 +45,7 @@ pub async fn stop_signal() {
 /// # Examples
 ///
 /// ```no_run
-/// use icp::signal::stop_signal;
+/// use icp_project::signal::stop_signal;
 /// use tokio::select;
 ///
 /// # async fn example() {

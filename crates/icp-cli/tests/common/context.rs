@@ -9,7 +9,7 @@ use std::{
 use assert_cmd::Command;
 use camino_tempfile::{Utf8TempDir as TempDir, tempdir};
 use ic_agent::Agent;
-use icp::prelude::*;
+use icp_project::prelude::*;
 use reqwest::Client;
 use serde_json::json;
 use time::UtcDateTime;

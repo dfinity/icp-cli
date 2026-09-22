@@ -2,7 +2,7 @@ use anyhow::bail;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::context::{Context, EnvironmentSelection};
+use icp::{context::Context, host::EnvironmentSelection};
 use tracing::info;
 
 use crate::options::EnvironmentOpt;
@@ -35,7 +35,7 @@ pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), anyhow::E
 
     // A principal must map to at most one canister within an environment; linking an
     // ID already claimed by another canister would create an ambiguous mapping.
-    let existing = ctx.ids_by_environment(&environment).await?;
+    let existing = ctx.host.ids_by_environment(&environment).await?;
     if let Some((owner, _)) = existing
         .iter()
         .find(|(name, id)| **id == args.principal && *name != &args.name)
@@ -50,11 +50,13 @@ pub(crate) async fn exec(ctx: &Context, args: &LinkArgs) -> Result<(), anyhow::E
     // Replacing an existing entry requires clearing it first; the id store refuses
     // to register a name that is already mapped.
     if args.force {
-        ctx.remove_canister_id_for_env(&args.name, &environment)
+        ctx.host
+            .remove_canister_id_for_env(&args.name, &environment)
             .await?;
     }
 
-    ctx.set_canister_id_for_env(&args.name, args.principal, &environment)
+    ctx.host
+        .set_canister_id_for_env(&args.name, args.principal, &environment)
         .await?;
 
     info!(

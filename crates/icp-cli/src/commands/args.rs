@@ -4,11 +4,14 @@ use anyhow::{Context as _, bail};
 use candid::Principal;
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use icp::context::{CanisterSelection, EnvironmentSelection, NetworkSelection};
 use icp::identity::IdentitySelection;
 use icp::manifest::ArgsFormat;
 use icp::prelude::PathBuf;
 use icp::{CanisterArgs, fs};
+use icp::{
+    context::NetworkSelection,
+    host::{CanisterSelection, EnvironmentSelection},
+};
 
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 

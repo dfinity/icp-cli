@@ -6,7 +6,7 @@ use std::{
 use crate::{
     Canister, Environment,
     canister::{Settings, Visibility, resolve_controllers},
-    context::{Context, EnvironmentSelection},
+    host::{EnvironmentSelection, Host},
     store_id::IdMapping,
 };
 use candid::{Nat, Principal};
@@ -301,12 +301,12 @@ pub async fn sync_settings_many(
 pub enum SyncControllerDependentsError {
     #[snafu(display("failed to load environment for controller dependent sync"))]
     GetEnvironment {
-        source: crate::context::GetEnvironmentError,
+        source: crate::host::GetEnvironmentError,
     },
 
     #[snafu(display("failed to load canister IDs for controller dependent sync"))]
     GetIds {
-        source: crate::context::GetIdsByEnvironmentError,
+        source: crate::host::GetIdsByEnvironmentError,
     },
 }
 
@@ -314,17 +314,17 @@ pub enum SyncControllerDependentsError {
 /// that list `newly_created_name` as a controller and already have a stored ID. Calls
 /// `sync_settings` for each so the controller is applied now that it can be resolved.
 pub async fn sync_controller_dependents(
-    ctx: &Context,
+    host: &Host,
     agent: &Agent,
     proxy: Option<Principal>,
     newly_created_name: &str,
     env: &EnvironmentSelection,
 ) -> Result<(), SyncControllerDependentsError> {
-    let env_data = ctx
+    let env_data = host
         .get_environment(env)
         .await
         .context(GetEnvironmentSnafu)?;
-    let ids = ctx.ids_by_environment(env).await.context(GetIdsSnafu)?;
+    let ids = host.ids_by_environment(env).await.context(GetIdsSnafu)?;
 
     for (name, (_, canister)) in &env_data.canisters {
         let references_new = canister.settings.controllers.as_ref().is_some_and(|crefs| {

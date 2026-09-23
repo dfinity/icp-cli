@@ -80,6 +80,14 @@ jobs:
           dir="$(mktemp -d)"
           keychain="$dir/discover.keychain-db"
           echo "$CODESIGN_CERTIFICATE" | base64 --decode > "$dir/cert.p12"
+          # Diagnose the container format without printing anything secret.
+          echo "decoded .p12: $(wc -c < "$dir/cert.p12") bytes, first byte 0x$(xxd -p -l1 "$dir/cert.p12")"
+          case "$CODESIGN_CERTIFICATE_PASSWORD" in *[[:space:]]) echo "::warning::password secret ends with whitespace";; esac
+          openssl="$(brew --prefix openssl@3)/bin/openssl"
+          "$openssl" version
+          "$openssl" pkcs12 -in "$dir/cert.p12" -info -noout -passin env:CODESIGN_CERTIFICATE_PASSWORD 2>&1 || echo "::warning::openssl could not open the .p12 with the password"
+          "$openssl" pkcs12 -in "$dir/cert.p12" -nokeys -clcerts -passin env:CODESIGN_CERTIFICATE_PASSWORD 2>/dev/null \
+            | "$openssl" x509 -noout -subject -issuer -enddate -nameopt utf8,sep_multiline || true
           security create-keychain -p discover "$keychain"
           security unlock-keychain -p discover "$keychain"
           security import "$dir/cert.p12" -k "$keychain" -P "$CODESIGN_CERTIFICATE_PASSWORD" -f pkcs12 -A

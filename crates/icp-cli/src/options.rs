@@ -1,10 +1,11 @@
 use clap::error::ErrorKind;
 use clap::{ArgGroup, ArgMatches, Args, FromArgMatches};
 use clap_complete::ArgValueCandidates;
-use icp::context::{EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
-use icp::network::RootKeySpec;
-use icp::prelude::LOCAL;
+use icp_app::context::NetworkSelection;
+use icp_app::identity::IdentitySelection;
+use icp_project::host::EnvironmentSelection;
+use icp_project::network::RootKeySpec;
+use icp_project::prelude::LOCAL;
 use url::Url;
 
 mod heading {

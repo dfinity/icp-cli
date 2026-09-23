@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Args;
 
-use icp::context::Context;
+use icp_app::context::Context;
 
 /// Outputs the project's effective yaml configuration.
 ///
@@ -20,7 +20,12 @@ pub(crate) struct ShowArgs;
 /// after resolving recipes
 pub(crate) async fn exec(ctx: &Context, _: &ShowArgs) -> Result<(), anyhow::Error> {
     // Load the project manifest, which defines the canisters to be built.
-    let p = ctx.project.load().await.context("failed to load project")?;
+    let p = ctx
+        .host
+        .project
+        .load()
+        .await
+        .context("failed to load project")?;
 
     let yaml = serde_yaml::to_string(&p).expect("Serializing to yaml failed");
     print!("{yaml}");

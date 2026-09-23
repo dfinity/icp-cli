@@ -2,13 +2,13 @@ use bip39::{Language, Mnemonic};
 use clap::{ArgGroup, Args, ValueHint};
 use dialoguer::Password;
 use elliptic_curve::zeroize::Zeroizing;
-use icp::identity::{
+use icp_app::identity::{
     delegation::DelegationChain,
     key::{CreateFormat, CreateIdentityError, IdentityKey, create_identity},
     manifest::IdentityKeyAlgorithm,
     seed::derive_key_from_seed_slip10,
 };
-use icp::{
+use icp_project::{
     fs::{json, read_to_string},
     prelude::*,
 };
@@ -24,7 +24,7 @@ use sec1::{EcParameters, EcPrivateKey};
 use snafu::{OptionExt, ResultExt, Snafu, ensure};
 use tracing::{info, warn};
 
-use icp::context::Context;
+use icp_app::context::Context;
 
 use crate::commands::identity::StorageMode;
 
@@ -438,7 +438,7 @@ pub(crate) enum LoadKeyError {
     BadEdAssertion { path: PathBuf },
 
     #[snafu(display("failed to read file"))]
-    ReadFileError { source: icp::fs::IoError },
+    ReadFileError { source: icp_project::fs::IoError },
 
     #[snafu(display("expected 1 key block in PEM file `{path}`, found {count}"))]
     TooManyKeyBlocks { path: PathBuf, count: usize },
@@ -452,8 +452,7 @@ pub(crate) enum LoadKeyError {
     #[snafu(display("malformed key in PEM file `{path}`"))]
     BadPemContent {
         path: PathBuf,
-        #[snafu(source(from(pkcs8::der::Error, Box::new)))]
-        source: Box<pkcs8::der::Error>,
+        source: pkcs8::der::Error,
     },
 
     #[snafu(display(
@@ -481,7 +480,7 @@ pub(crate) enum LoadKeyError {
     StoragePasswordTermReadError { source: dialoguer::Error },
 
     #[snafu(display("failed to read storage password file"))]
-    ReadStoragePasswordFileError { source: icp::fs::IoError },
+    ReadStoragePasswordFileError { source: icp_project::fs::IoError },
 
     #[snafu(display("PEM file `{path}` uses unsupported algorithm {found}, expected {}", expected.iter().format(", ")))]
     UnsupportedAlgorithm {
@@ -497,13 +496,15 @@ pub(crate) enum LoadKeyError {
     CreateIdentityError { source: CreateIdentityError },
 
     #[snafu(transparent)]
-    LockIdentityDirError { source: icp::fs::lock::LockError },
+    LockIdentityDirError {
+        source: icp_project::fs::lock::LockError,
+    },
 }
 
 #[derive(Debug, Snafu)]
 pub(crate) enum DeriveKeyError {
     #[snafu(display("failed to read seed file"))]
-    ReadSeedFile { source: icp::fs::IoError },
+    ReadSeedFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to read seed phrase from terminal"))]
     ReadSeedPhraseFromTerminal { source: dialoguer::Error },
@@ -515,5 +516,7 @@ pub(crate) enum DeriveKeyError {
     CreateIdentity { source: CreateIdentityError },
 
     #[snafu(transparent)]
-    LockIdentityDirError { source: icp::fs::lock::LockError },
+    LockIdentityDirError {
+        source: icp_project::fs::lock::LockError,
+    },
 }

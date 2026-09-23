@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 use axoupdater::AxoUpdater;
-use icp::settings::UpdateCheck;
+use icp_app::settings::UpdateCheck;
 use reqwest::Client;
 use tracing::debug;
 
@@ -181,10 +181,10 @@ fn newer_than_current(version_str: &str) -> bool {
 const ONE_DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Check for CLI updates, returning the latest version string if one is available.
-pub(crate) async fn update_check(ctx: &icp::context::Context) -> Option<String> {
+pub(crate) async fn update_check(ctx: &icp_app::context::Context) -> Option<String> {
     let update_check_setting = match ctx.dirs.settings() {
         Ok(dirs) => {
-            dirs.with_read(async |dirs| icp::settings::Settings::load_from(dirs).ok())
+            dirs.with_read(async |dirs| icp_app::settings::Settings::load_from(dirs).ok())
                 .await
                 .ok()
                 .flatten()
@@ -203,7 +203,7 @@ pub(crate) async fn update_check(ctx: &icp::context::Context) -> Option<String> 
     let nag_path = ctx.dirs.cli_update_nag_timestamp();
 
     // Throttle to at most once per day
-    if let Ok(contents) = icp::fs::read_to_string(&nag_path)
+    if let Ok(contents) = icp_project::fs::read_to_string(&nag_path)
         && let Ok(ts) = contents.trim().parse::<u64>()
     {
         let then = SystemTime::UNIX_EPOCH + Duration::from_secs(ts);
@@ -218,8 +218,8 @@ pub(crate) async fn update_check(ctx: &icp::context::Context) -> Option<String> 
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("since epoch")
         .as_secs();
-    let _ = icp::fs::create_dir_all(nag_path.parent().unwrap());
-    let _ = icp::fs::write(&nag_path, format!("{now}\n").as_bytes());
+    let _ = icp_project::fs::create_dir_all(nag_path.parent().unwrap());
+    let _ = icp_project::fs::write(&nag_path, format!("{now}\n").as_bytes());
 
     let client = reqwest::Client::new();
     dist_check_for_updates(&client, beta).await

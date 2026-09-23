@@ -8,15 +8,16 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusResult, EnvironmentVariable,
     UpdateSettingsArgs,
 };
-use icp::ProjectLoadError;
-use icp::canister::Visibility;
-use icp::context::{CanisterSelection, Context};
-use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
+use icp_app::context::Context;
+use icp_project::ProjectLoadError;
+use icp_project::canister::Visibility;
+use icp_project::host::CanisterSelection;
+use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount};
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
 use crate::commands::args;
-use icp::operations::proxy_management;
+use icp_project::operations::proxy_management;
 
 #[derive(Clone, Debug, Default, Args)]
 pub(crate) struct ControllerOpt {
@@ -403,6 +404,8 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -412,7 +415,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
         .await?;
 
     let configured_settings = if let CanisterSelection::Named(name) = &selections.canister {
-        match ctx.project.load().await {
+        match ctx.host.project.load().await {
             Ok(p) => p.canisters[name].1.settings.clone(),
             Err(ProjectLoadError::Locate { .. }) => <_>::default(),
             Err(e) => bail!("failed to load project: {}", e),
@@ -425,8 +428,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     if require_current_settings(args) {
         current_status = Some(
             proxy_management::canister_status(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 CanisterIdRecord { canister_id: cid },
             )
             .await?,
@@ -588,8 +590,7 @@ pub(crate) async fn exec(ctx: &Context, args: &UpdateArgs) -> Result<(), anyhow:
     };
 
     proxy_management::update_settings(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         UpdateSettingsArgs {
             canister_id: cid,
             settings,
@@ -731,7 +732,7 @@ fn get_environment_variables(
 }
 
 fn maybe_warn_on_env_vars_change(
-    configured_settings: &icp::canister::Settings,
+    configured_settings: &icp_project::canister::Settings,
     environment_variables_opt: &EnvironmentVariableOpt,
 ) {
     if let Some(configured_vars) = &configured_settings.environment_variables {

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use clap::Args;
 use clap_complete::ArgValueCandidates;
-use icp::{
+use icp_app::{
     context::Context,
     identity::{
         key,
@@ -136,16 +136,18 @@ pub(crate) async fn exec(ctx: &Context, args: &ReauthArgs) -> Result<(), LoginEr
 #[derive(Debug, Snafu)]
 pub(crate) enum LoginError {
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(transparent)]
     LoadManifest {
-        source: icp::identity::manifest::LoadIdentityManifestError,
+        source: icp_app::identity::manifest::LoadIdentityManifestError,
     },
 
     #[snafu(transparent)]
     LoadSettings {
-        source: icp::settings::LoadSettingsError,
+        source: icp_app::settings::LoadSettingsError,
     },
 
     #[snafu(display("no identity found with name `{name}`"))]

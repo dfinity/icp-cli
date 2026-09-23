@@ -4,23 +4,23 @@ use candid_parser::assist;
 use candid_parser::parse_idl_args;
 use clap::{Args, ValueHint};
 use ic_agent::agent::EffectiveId;
-use icp::context::{Context, EnvironmentSelection, NetworkSelection};
-use icp::manifest::ArgsFormat;
-use icp::network::{Configuration as NetworkConfiguration, RootKeySpec};
-use icp::parsers::{CyclesAmount, DurationAmount};
-use icp::prelude::*;
-use icp::signed_message::{
+use icp_app::context::{Context, NetworkSelection};
+use icp_app::signed_message::{
     self, CallType, Destination, Request, SignedMessage, Summary, WindowState,
 };
+use icp_project::calls::Call;
+use icp_project::host::EnvironmentSelection;
+use icp_project::manifest::ArgsFormat;
+use icp_project::network::{Configuration as NetworkConfiguration, RootKeySpec};
+use icp_project::parsers::{CyclesAmount, DurationAmount};
+use icp_project::prelude::*;
 use std::io::{self, Write};
 use std::str::FromStr;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::warn;
 use url::Url;
 
-use icp::operations::{
-    create::shell_quote, proxy::update_or_proxy_raw, wasm::extract_candid_service,
-};
+use icp_project::operations::{create::shell_quote, wasm::extract_candid_service};
 
 use crate::{
     call_output::{
@@ -170,7 +170,10 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
 
     let candid_types = match (&args.candid, &agent) {
         (Some(path), _) => Some(load_candid_from_file(path)?),
-        (None, Some(agent)) => get_candid_type(agent, cid).await,
+        (None, Some(agent)) => {
+            let calls = icp_app::calls::calls(agent.clone(), None)?;
+            get_candid_type(calls.as_ref(), cid).await
+        }
         // Fetching `candid:service` is a network round trip, so signing falls
         // back to the interface of whatever this project last built.
         (None, None) => local_candid_type(ctx, &selections.canister).await,
@@ -210,20 +213,20 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
         "a positional argument",
     )? {
         None => None,
-        Some(icp::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Binary(bytes)) => Some(ResolvedArgs::Bytes(bytes)),
+        Some(icp_project::CanisterArgs::Text {
             content,
             format: ArgsFormat::Candid,
         }) => Some(ResolvedArgs::Candid(
             parse_idl_args(&content).context("failed to parse Candid arguments")?,
         )),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Text {
             content,
             format: ArgsFormat::Hex,
         }) => Some(ResolvedArgs::Bytes(
             hex::decode(&content).context("failed to decode hex arguments")?,
         )),
-        Some(icp::CanisterArgs::Text {
+        Some(icp_project::CanisterArgs::Text {
             format: ArgsFormat::Bin,
             ..
         }) => {
@@ -293,23 +296,12 @@ pub(crate) async fn exec(ctx: &Context, args: &CallArgs) -> Result<(), anyhow::E
     }
 
     let agent = agent.expect("an agent is built whenever the call is submitted");
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+    let call = Call::new(cid, &method, arg_bytes).with_cycles(args.cycles.get());
     let res = if args.query {
-        agent
-            .query(&cid, &method)
-            .with_arg(arg_bytes)
-            .call()
-            .await?
+        calls.query(call).await?
     } else {
-        update_or_proxy_raw(
-            &agent,
-            cid,
-            &method,
-            arg_bytes,
-            args.proxy,
-            None,
-            args.cycles.get(),
-        )
-        .await?
+        calls.update(call).await?
     };
 
     print_response(&res, args.output, declared_method.as_ref(), args.json)
@@ -505,7 +497,7 @@ async fn resolve_network_offline(
         | (EnvironmentSelection::Named(_), NetworkSelection::Url(_, _)) => {
             bail!("You can't specify both an environment and a network")
         }
-        (_, NetworkSelection::Default) => ctx.get_environment(environment).await?.network,
+        (_, NetworkSelection::Default) => ctx.host.get_environment(environment).await?.network,
         (EnvironmentSelection::Default, _) => ctx.get_network(network).await?,
     };
 
@@ -525,7 +517,7 @@ async fn resolve_network_offline(
         // A managed network's root key comes out of the descriptor this machine
         // wrote when it started the network: a local file, not a request.
         NetworkConfiguration::Managed { .. } => {
-            let access = ctx.network.access(&net).await?;
+            let access = ctx.host.network.access(&net).await?;
             Ok((access.api_url, RootKeySpec::Explicit(access.root_key)))
         }
     }
@@ -550,11 +542,11 @@ fn floor_to_minute(t: OffsetDateTime) -> OffsetDateTime {
 /// by principal rather than by name, simply yields nothing.
 async fn local_candid_type(
     ctx: &Context,
-    canister: &icp::context::CanisterSelection,
+    canister: &icp_project::host::CanisterSelection,
 ) -> Option<CanisterInterface> {
-    let icp::context::CanisterSelection::Named(name) = canister else {
+    let icp_project::host::CanisterSelection::Named(name) = canister else {
         return None;
     };
-    let wasm = ctx.artifacts.lookup(name).await.ok()?;
+    let wasm = ctx.host.artifacts.lookup(name).await.ok()?;
     CanisterInterface::from_text(extract_candid_service(&wasm)?).ok()
 }

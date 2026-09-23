@@ -2,11 +2,12 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use clap::{Args, ValueHint};
-use icp::context::{Context, EnvironmentSelection};
-use icp::prelude::*;
+use icp_app::context::Context;
+use icp_project::host::EnvironmentSelection;
+use icp_project::prelude::*;
 use tracing::warn;
 
-use icp::operations::bundle::create_bundle;
+use icp_project::operations::bundle::create_bundle;
 
 use crate::render::rendered;
 
@@ -32,9 +33,14 @@ pub(crate) struct BundleArgs {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow::Error> {
-    let project = ctx.project.load().await.context("failed to load project")?;
+    let project = ctx
+        .host
+        .project
+        .load()
+        .await
+        .context("failed to load project")?;
     let environment_selection = EnvironmentSelection::Named(args.environment.clone());
-    let env = ctx.get_environment(&environment_selection).await?;
+    let env = ctx.host.get_environment(&environment_selection).await?;
 
     let canisters: Vec<_> = project.canisters.into_values().collect();
     let selected: HashSet<String> = env.canisters.keys().cloned().collect();
@@ -45,16 +51,16 @@ pub(crate) async fn exec(ctx: &Context, args: &BundleArgs) -> Result<(), anyhow:
         );
     }
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     rendered(ctx.debug, async |reporter| {
         create_bundle(
+            ctx.host.files.as_ref(),
             &project.dir,
             canisters,
             &selected,
             &args.environment,
-            ctx.builder.clone(),
-            ctx.artifacts.clone(),
-            &pkg_cache,
+            ctx.host.builder.clone(),
+            ctx.host.artifacts.clone(),
+            ctx.host.wasm.as_ref(),
             reporter,
             &args.output,
         )

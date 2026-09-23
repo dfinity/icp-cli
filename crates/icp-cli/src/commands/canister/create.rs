@@ -5,16 +5,18 @@ use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
-use icp::canister::resolve_controllers;
-use icp::context::{Context, EnvironmentSelection, NetworkSelection};
-use icp::identity::IdentitySelection;
-use icp::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
-use icp::store_id::IdMapping;
-use icp::{Canister, context::CanisterSelection, prelude::*};
+use icp_app::context::{Context, NetworkSelection};
+use icp_app::identity::IdentitySelection;
+use icp_canister_interfaces::engine_canister::engine_canister_id;
+use icp_project::canister::resolve_controllers;
+use icp_project::host::EnvironmentSelection;
+use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
+use icp_project::store_id::IdMapping;
+use icp_project::{Canister, host::CanisterSelection, prelude::*};
 use serde::Serialize;
 use tracing::{info, warn};
 
-use icp::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
+use icp_project::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
 
 use crate::commands::args;
 
@@ -240,7 +242,7 @@ impl CreateArgs {
     fn create_target(&self) -> CreateTarget {
         match (self.subnet, self.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),
-            (_, Some(proxy)) => CreateTarget::Proxy(proxy),
+            (_, Some(_)) => CreateTarget::Proxy,
             _ => CreateTarget::None,
         }
     }
@@ -304,8 +306,16 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         )
         .await?;
 
-    let create_operation =
-        CreateOperation::new(agent, args.create_target(), args.funding(), vec![]);
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+
+    let create_operation = CreateOperation::new(
+        calls,
+        ctx.host.random.clone(),
+        args.create_target(),
+        args.funding(),
+        vec![],
+        engine_canister_id().map_err(|message| anyhow!(message))?,
+    );
 
     let canister_settings = args.canister_settings();
 
@@ -340,12 +350,13 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         CanisterSelection::Principal(_) => Err(anyhow!("Cannot create a canister by principal"))?,
     };
 
-    let env = ctx.get_environment(&selections.environment).await?;
+    let env = ctx.host.get_environment(&selections.environment).await?;
     let (_, canister_info) = env.get_canister_info(&canister).map_err(|e| anyhow!(e))?;
 
     if ctx
+        .host
         .get_canister_id_for_env(
-            &icp::context::CanisterSelection::Named(canister.clone()),
+            &icp_project::host::CanisterSelection::Named(canister.clone()),
             &selections.environment,
         )
         .await
@@ -363,15 +374,20 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .get_agent_for_env(&selections.identity, &selections.environment)
         .await?;
     let ids = ctx
+        .host
         .ids_by_environment(&selections.environment)
         .await
         .map_err(|e| anyhow!(e))?;
 
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+
     let create_operation = CreateOperation::new(
-        agent.clone(),
+        calls.clone(),
+        ctx.host.random.clone(),
         args.create_target(),
         args.funding(),
         ids.values().copied().collect(),
+        engine_canister_id().map_err(|message| anyhow!(message))?,
     );
 
     let (canister_settings, unresolved) =
@@ -385,20 +401,22 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 
     let id = create_operation.create(&canister_settings).await?;
 
-    ctx.set_canister_id_for_env(&canister, id, &selections.environment)
+    ctx.host
+        .set_canister_id_for_env(&canister, id, &selections.environment)
         .await?;
 
-    icp::operations::settings::sync_controller_dependents(
-        ctx,
-        &agent,
-        args.proxy,
+    icp_project::operations::settings::sync_controller_dependents(
+        &ctx.host,
+        calls.as_ref(),
         &canister,
         &selections.environment,
     )
     .await
     .map_err(|e| anyhow!(e))?;
 
-    ctx.update_custom_domains(&selections.environment).await;
+    ctx.host
+        .update_custom_domains(&selections.environment)
+        .await;
 
     if args.quiet {
         println!("{id}");

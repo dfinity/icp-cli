@@ -1,0 +1,78 @@
+[package]
+name = "icp-project"
+version.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+publish.workspace = true
+
+[features]
+default = ["host"]
+# Implementations of this crate's seams that use the machine it is running on:
+# the filesystem, the project-local `.icp` stores, subprocesses, randomness.
+# Turned off for a build that has to run somewhere without them, such as inside
+# a canister — which CI checks by building this crate for
+# `wasm32-unknown-unknown` with default features off, reading the host calls
+# back out of that build with `scripts/check-no-host-reach.sh`, and running the
+# tests in the same configuration.
+#
+# Strictly additive: it may add implementations, never change what the rest of
+# the crate does, or those checks prove nothing about the shipped binary.
+host = ["dep:camino-tempfile", "dep:dunce", "dep:rand", "dep:tar", "tokio/io-std", "tokio/process", "tokio/signal"]
+# Exposes this crate's mocks and fixtures so downstream crates can test against
+# the same seams. Off in a normal build, so none of it ships.
+test-util = []
+
+[dependencies]
+async-trait = { workspace = true }
+bigdecimal = { workspace = true }
+camino = { workspace = true }
+camino-tempfile = { workspace = true, optional = true }
+candid = { workspace = true }
+candid_parser = { workspace = true }
+clap = { workspace = true, optional = true }
+dunce = { workspace = true, optional = true }
+flate2 = { workspace = true }
+futures = { workspace = true }
+glob = { workspace = true }
+handlebars = { workspace = true }
+hex = { workspace = true }
+ic-ledger-types = { workspace = true }
+ic-management-canister-types = { workspace = true }
+icrc-ledger-types = { workspace = true }
+icp-canister-interfaces = { workspace = true }
+icp-events = { workspace = true }
+indexmap = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+num-bigint = { workspace = true }
+num-integer = { workspace = true }
+num-traits = { workspace = true }
+pathdiff = { workspace = true }
+rand = { workspace = true, optional = true }
+schemars = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+shellwords = { workspace = true }
+snafu = { workspace = true }
+strum = { workspace = true }
+tar = { workspace = true, optional = true }
+time = { workspace = true }
+# Everything a canister build can have: no `process`, `signal` or `io-std`,
+# which the `host` feature adds.
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time", "io-util"] }
+tracing = { workspace = true }
+url = { workspace = true }
+wasmparser = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }
+
+[dev-dependencies]
+# Also an optional dependency above, for `host`'s `scratch_dir`. Unconditional
+# here so the tests build with `host` off, which is the configuration CI checks.
+camino-tempfile = { workspace = true }
+httptest = { workspace = true }
+jsonschema = { workspace = true }

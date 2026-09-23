@@ -14,11 +14,11 @@ use std::time::Duration;
 use clap::CommandFactory as _;
 use clap_complete::CompleteEnv;
 use clap_complete::engine::CompletionCandidate;
-use icp::context::Context;
-use icp::identity::manifest::IdentityList;
-use icp::network::Configuration;
-use icp::prelude::*;
-use icp::{Environment, Network, Project};
+use icp_app::context::Context;
+use icp_app::identity::manifest::IdentityList;
+use icp_project::network::Configuration;
+use icp_project::prelude::*;
+use icp_project::{Environment, Network, Project};
 
 /// Answer a completion request and exit, if this invocation is one.
 ///
@@ -61,7 +61,7 @@ fn context() -> Option<&'static Context> {
 
     CONTEXT
         .get_or_init(|| {
-            icp::context::initialize(
+            icp_app::context::initialize(
                 std::env::var("ICP_PROJECT_ROOT").ok().map(PathBuf::from),
                 false,
                 Arc::new(|| Err("cannot prompt while completing".to_string())),
@@ -77,7 +77,7 @@ fn project() -> Option<&'static Project> {
     static PROJECT: OnceLock<Option<Project>> = OnceLock::new();
 
     PROJECT
-        .get_or_init(|| block_on(context()?.project.load())?.ok())
+        .get_or_init(|| block_on(context()?.host.project.load())?.ok())
         .as_ref()
 }
 

@@ -39,7 +39,8 @@ ic-ledger-types.workspace = true
 ic-management-canister-types.workspace = true
 ic-utils.workspace = true
 icp-canister-interfaces.workspace = true
-icp = { workspace = true, features = ["clap"] }
+icp-project = { workspace = true, features = ["clap"] }
+icp-app = { workspace = true, features = ["clap"] }
 icp-events.workspace = true
 icrc-ledger-types.workspace = true
 indicatif.workspace = true
@@ -66,7 +67,7 @@ snafu.workspace = true
 sysinfo.workspace = true
 tiny-bip39.workspace = true
 time.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing-subscriber.workspace = true
 tracing.workspace = true
 url.workspace = true

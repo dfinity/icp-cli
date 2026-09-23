@@ -2,14 +2,15 @@ use anyhow::{Context as _, bail};
 use candid::{IDLArgs, TypeEnv, types::Function};
 use clap::{Args, ValueHint};
 use ic_agent::agent::CallResponse;
-use icp::context::{Context, IC_ROOT_KEY};
-use icp::identity::IdentitySelection;
-use icp::network::RootKeySpec;
-use icp::prelude::*;
-use icp::signed_message::{
+use icp_app::context::Context;
+use icp_app::identity::IdentitySelection;
+use icp_app::signed_message::{
     CallType, Destination, SUBMISSION_WINDOW, SignedMessage, Validated, WindowState,
     format_timestamp,
 };
+use icp_project::network::RootKeySpec;
+use icp_project::prelude::IC_ROOT_KEY;
+use icp_project::prelude::*;
 use std::io::{self, IsTerminal, Read};
 use time::{Duration, OffsetDateTime};
 use tracing::warn;
@@ -18,7 +19,7 @@ use url::Url;
 use crate::call_output::{
     CallOutputMode, CanisterInterface, get_candid_type, load_candid_from_file, print_response,
 };
-use icp::operations::create::shell_quote;
+use icp_project::operations::create::shell_quote;
 
 /// Submit a message signed on another machine
 ///
@@ -257,7 +258,10 @@ async fn resolve_interface(
         }
     }
     match agent {
-        Some(agent) => Ok(get_candid_type(agent, validated.canister_id).await),
+        Some(agent) => {
+            let calls = icp_app::calls::calls(agent.clone(), None)?;
+            Ok(get_candid_type(calls.as_ref(), validated.canister_id).await)
+        }
         None => Ok(None),
     }
 }

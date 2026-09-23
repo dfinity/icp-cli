@@ -4,12 +4,12 @@ use byte_unit::{Byte, UnitType};
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::Context;
+use icp_app::context::Context;
 use itertools::Itertools;
 use serde::Serialize;
 
 use crate::commands::args;
-use icp::operations::{misc::format_timestamp, proxy_management};
+use icp_project::operations::{misc::format_timestamp, proxy_management};
 
 /// List all snapshots for a canister
 #[derive(Debug, Args)]
@@ -40,6 +40,8 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -49,8 +51,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ListArgs) -> Result<(), anyhow::E
         .await?;
 
     let snapshots = proxy_management::list_canister_snapshots(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         CanisterIdRecord { canister_id: cid },
     )
     .await?;

@@ -1,7 +1,8 @@
 use anyhow::bail;
 use candid::Principal;
 use clap::Args;
-use icp::context::{CanisterSelection, Context};
+use icp_app::context::Context;
+use icp_project::host::CanisterSelection;
 use tracing::warn;
 
 use crate::commands::args::CanisterCommandArgs;
@@ -24,6 +25,7 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     };
 
     let (_, canister) = ctx
+        .host
         .get_canister_and_path_for_env(name, &selections.environment)
         .await?;
 
@@ -34,6 +36,8 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -42,12 +46,14 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
         )
         .await?;
     let ids = ctx
+        .host
         .ids_by_environment(&selections.environment)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let unresolved =
-        icp::operations::settings::sync_settings(&agent, args.proxy, &cid, &canister, &ids).await?;
+        icp_project::operations::settings::sync_settings(calls.as_ref(), &cid, &canister, &ids)
+            .await?;
     for controller_name in &unresolved {
         warn!(
             "Controller canister '{controller_name}' for '{name}' has not been created yet; \

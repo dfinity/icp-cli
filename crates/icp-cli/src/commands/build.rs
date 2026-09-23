@@ -1,11 +1,12 @@
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use icp::context::{Context, EnvironmentSelection};
+use icp_app::context::Context;
+use icp_project::host::EnvironmentSelection;
 
 use tracing::info;
 
-use icp::operations::build::build_many;
+use icp_project::operations::build::build_many;
 
 use crate::{
     options::{EnvironmentOpt, arg_struct_change_help},
@@ -34,7 +35,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
     let environment_selection: EnvironmentSelection = args.environment.0.clone().into();
 
     // Load target environment
-    let env = ctx.get_environment(&environment_selection).await?;
+    let env = ctx.host.get_environment(&environment_selection).await?;
 
     // Determine which canisters to build
     let cnames = match args.canisters.is_empty() {
@@ -50,23 +51,21 @@ pub(crate) async fn exec(ctx: &Context, args: &BuildArgs) -> Result<(), anyhow::
         return Ok(());
     }
 
-    let canisters_to_build = try_join_all(
-        cnames
-            .iter()
-            .map(|name| ctx.get_canister_and_path_for_env(name, &environment_selection)),
-    )
+    let canisters_to_build = try_join_all(cnames.iter().map(|name| {
+        ctx.host
+            .get_canister_and_path_for_env(name, &environment_selection)
+    }))
     .await?;
     // Build the selected canisters
     info!("Building canisters:");
 
-    let pkg_cache = ctx.dirs.package_cache()?;
     rendered(ctx.debug, async |reporter| {
         build_many(
             canisters_to_build,
             environment_selection.name(),
-            ctx.builder.clone(),
-            ctx.artifacts.clone(),
-            &pkg_cache,
+            ctx.host.builder.clone(),
+            ctx.host.artifacts.clone(),
+            ctx.host.files.as_ref(),
             reporter,
         )
         .await

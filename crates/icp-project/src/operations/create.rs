@@ -1,0 +1,880 @@
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::calls::{Call, CanisterCalls, RouteTo};
+use crate::parsers::to_token_unit_amount;
+use crate::signal::stop_signal;
+use bigdecimal::{BigDecimal, ToPrimitive};
+use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
+use ic_ledger_types::{
+    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
+};
+use icp_canister_interfaces::{
+    cycles_ledger::{
+        CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
+        SubnetSelectionArg,
+    },
+    cycles_minting_canister::{
+        CYCLES_MINTING_CANISTER_CID, CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_CREATE_CANISTER,
+        NotifyCreateCanisterArg, NotifyCreateCanisterResponse, NotifyError, SubnetSelection,
+    },
+    engine_canister::{
+        GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
+        GetEngineOperatorBySubnetResult,
+    },
+    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+};
+use snafu::{OptionExt, ResultExt, Snafu};
+use tokio::{select, sync::OnceCell, time::sleep};
+use tracing::{info, warn};
+
+use super::proxy_management;
+
+#[derive(Debug, Snafu)]
+pub enum CreateOperationError {
+    #[snafu(display("failed to encode candid"))]
+    CandidEncode { source: candid::Error },
+
+    #[snafu(display("failed to decode candid"))]
+    CandidDecode { source: candid::Error },
+
+    #[snafu(display("a canister call failed"))]
+    Call { source: crate::calls::CallError },
+
+    #[snafu(transparent)]
+    TypedCall {
+        source: crate::calls::TypedCallError,
+    },
+
+    #[snafu(display("failed to create canister: {message}"))]
+    CreateCanister { message: String },
+
+    #[snafu(display(
+        "failed to check whether subnet {subnet} creates canisters through an engine operator"
+    ))]
+    CheckEngineOperator {
+        source: crate::calls::CallError,
+        subnet: Principal,
+    },
+
+    #[snafu(display("failed to submit create_canister to subnet {subnet}"))]
+    SubmitSubnetCreate {
+        source: crate::calls::CallError,
+        subnet: Principal,
+    },
+
+    #[snafu(display("failed to query the engine-canister registry"))]
+    EngineCanisterQuery { source: crate::calls::CallError },
+
+    #[snafu(display(
+        "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
+    ))]
+    NoEngineOperator {
+        subnet: Principal,
+        engine_registry: Principal,
+    },
+
+    #[snafu(display("registry error: {message}"))]
+    Registry { message: String },
+
+    #[snafu(display("missing subnet id in registry response"))]
+    MissingSubnetId,
+
+    #[snafu(display("failed to get available subnets"))]
+    GetAvailableSubnets { source: crate::calls::CallError },
+
+    #[snafu(display("no available subnets found"))]
+    NoAvailableSubnets,
+
+    #[snafu(display("failed to resolve subnet: {message}"))]
+    SubnetResolution { message: String },
+
+    #[snafu(display("failed to get caller principal: {message}"))]
+    GetPrincipal { message: String },
+
+    #[snafu(display("ICP amount is too large"))]
+    IcpAmountOverflow,
+
+    #[snafu(display("invalid ICP amount: {message}"))]
+    InvalidIcpAmount { message: String },
+
+    #[snafu(display("failed to transfer ICP to the cycles minting canister"))]
+    TransferIcp { source: crate::calls::CallError },
+
+    #[snafu(display("ICP ledger transfer failed: {message}"))]
+    TransferFailed { message: String },
+
+    #[snafu(display("failed to create canister via the cycles minting canister: {message}"))]
+    NotifyCreateFailed { message: String },
+
+    #[snafu(display(
+        "the cycles minting canister did not confirm creation within one minute.\n\
+         Your ICP was transferred to the CMC at block {height}; no cycles were lost. \
+         Once the CMC has caught up, complete the creation by running:\n\n    {command}\n"
+    ))]
+    NotifyCreateTimeout { height: u64, command: String },
+
+    #[snafu(display(
+        "interrupted while waiting for the cycles minting canister to confirm creation.\n\
+         Your ICP was transferred to the CMC at block {height}; no cycles were lost. \
+         Complete the creation by running:\n\n    {command}\n"
+    ))]
+    NotifyCreateInterrupted { height: u64, command: String },
+}
+
+/// How long to keep retrying `notify_create_canister` before giving up.
+const NOTIFY_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+/// Delay between `notify_create_canister` retries.
+const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+
+/// The outcome of a single `notify_create_canister` attempt.
+enum NotifyStep {
+    /// The canister was created.
+    Created(Principal),
+    /// A transient failure; worth retrying.
+    Retry(String),
+    /// A definitive failure (e.g. the ICP was refunded); retrying will not help.
+    Terminal(String),
+}
+
+/// How canister creation is funded.
+pub enum CreateFunding {
+    /// Attach cycles from the cycles ledger (or provisional/proxy creation).
+    Cycles(u128),
+    /// Convert ICP to cycles through the cycles minting canister (CMC).
+    Icp {
+        /// Amount of ICP to convert into cycles.
+        amount: BigDecimal,
+        /// Identity/network/environment flags to append to the CMC recovery
+        /// command, so a timed-out or interrupted creation can be finished by
+        /// pasting the printed command verbatim.
+        recovery_flags: String,
+    },
+}
+
+/// Determines how a new canister is created.
+pub enum CreateTarget {
+    /// Create the canister on a specific subnet, chosen by the caller.
+    Subnet(Principal),
+    /// Create the canister through the caller's proxy canister, which pays for
+    /// it and whose subnet the new canister lands on. Which proxy that is is a
+    /// property of the caller — every call it makes is forwarded through the
+    /// same one — so the target only says that the cycles come from there.
+    Proxy,
+    /// No explicit target. The subnet is resolved automatically: either from an
+    /// existing canister in the project or by picking a random available subnet.
+    None,
+}
+
+struct CreateOperationInner {
+    calls: Arc<dyn CanisterCalls>,
+    random: Arc<dyn crate::random::Random>,
+    target: CreateTarget,
+    funding: CreateFunding,
+    existing_canisters: Vec<Principal>,
+    /// The engine-canister registry to ask which engine-operator serves a
+    /// subnet. Resolved by the caller, which is where an override of it — an
+    /// environment variable — is something to read at all.
+    engine_registry: Principal,
+    resolved_subnet: OnceCell<Result<Principal, String>>,
+}
+
+pub struct CreateOperation {
+    inner: Arc<CreateOperationInner>,
+}
+
+impl Clone for CreateOperation {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl CreateOperation {
+    pub fn new(
+        calls: Arc<dyn CanisterCalls>,
+        random: Arc<dyn crate::random::Random>,
+        target: CreateTarget,
+        funding: CreateFunding,
+        existing_canisters: Vec<Principal>,
+        engine_registry: Principal,
+    ) -> Self {
+        Self {
+            inner: Arc::new(CreateOperationInner {
+                calls,
+                random,
+                target,
+                funding,
+                existing_canisters,
+                engine_registry,
+                resolved_subnet: OnceCell::new(),
+            }),
+        }
+    }
+
+    /// Creates the canister if it does not exist yet.
+    /// Returns
+    /// - `Ok(principal)` if a canister was created.
+    /// - `Err(CreateOperationError)` if an error occurred.
+    pub async fn create(
+        &self,
+        settings: &CanisterSettings,
+    ) -> Result<Principal, CreateOperationError> {
+        // Funding with ICP always goes through the CMC, which handles subnet
+        // selection and payment itself.
+        if let CreateFunding::Icp {
+            amount,
+            recovery_flags,
+        } = &self.inner.funding
+        {
+            return self.create_cmc(settings, amount, recovery_flags).await;
+        }
+
+        if let CreateTarget::Proxy = self.inner.target {
+            return self.create_proxy(settings).await;
+        }
+
+        let selected_subnet = self
+            .get_subnet()
+            .await
+            .map_err(|e| CreateOperationError::SubnetResolution { message: e })?;
+        let uses_engine_operator = self
+            .inner
+            .calls
+            .subnet_uses_engine_operator(selected_subnet)
+            .await
+            .context(CheckEngineOperatorSnafu {
+                subnet: selected_subnet,
+            })?;
+        let cid = if uses_engine_operator {
+            // Resolve the subnet's engine-operator first. Only a definitive
+            // "could not resolve an operator" resolution failure falls back to
+            // the legacy management-canister path — this covers both no operator
+            // being registered for the subnet and the engine-canister registry
+            // not being deployed on this network (a `DestinationInvalid` reject,
+            // mapped to `NoEngineOperator` in `resolve_engine_operator`). Every
+            // other resolution error (invalid registry id, other query/decode
+            // failures) is propagated. Crucially, the fallback is decided
+            // *before* any operator `create_canister` update is submitted: once
+            // we hand off to the operator, a failure may mean the canister was
+            // already created, so retrying via the management canister could
+            // double-create and double-charge. Those errors propagate too.
+            match self.resolve_engine_operator(selected_subnet).await {
+                Ok(operator) => self.create_via_operator(settings, operator).await?,
+                Err(e @ CreateOperationError::NoEngineOperator { .. }) => {
+                    warn!(
+                        "{e}; falling back to management-canister creation on this CloudEngine subnet"
+                    );
+                    self.create_mgmt(settings, selected_subnet).await?
+                }
+                Err(e) => return Err(e),
+            }
+        } else {
+            self.create_ledger(settings, selected_subnet).await?
+        };
+        Ok(cid)
+    }
+
+    /// Cycles amount for the cycles-ledger and proxy paths. Panics if called on
+    /// an ICP-funded operation, which never routes through those paths.
+    fn cycles(&self) -> u128 {
+        match self.inner.funding {
+            CreateFunding::Cycles(cycles) => cycles,
+            CreateFunding::Icp { .. } => {
+                panic!("cycles() called on an ICP-funded create operation")
+            }
+        }
+    }
+
+    async fn create_ledger(
+        &self,
+        settings: &CanisterSettings,
+        selected_subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let creation_args = CreationArgs {
+            subnet_selection: Some(SubnetSelectionArg::Subnet {
+                subnet: selected_subnet,
+            }),
+            settings: Some(settings.clone()),
+        };
+        let arg = CreateCanisterArgs {
+            from_subaccount: None,
+            created_at_time: None,
+            amount: Nat::from(self.cycles()),
+            creation_args: Some(creation_args),
+        };
+
+        // Call cycles ledger create_canister
+        let resp = self
+            .inner
+            .calls
+            .update(Call::new(
+                CYCLES_LEDGER_PRINCIPAL,
+                "create_canister",
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
+            .await
+            .context(CallSnafu)?;
+        let resp: CreateCanisterResponse =
+            Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
+        let cid = match resp {
+            CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+            CreateCanisterResponse::Err(err) => {
+                return CreateCanisterSnafu {
+                    message: err.format_error(self.cycles()),
+                }
+                .fail();
+            }
+        };
+        Ok(cid)
+    }
+
+    /// Ask the engine-canister registry which engine-operator serves `subnet`.
+    async fn resolve_engine_operator(
+        &self,
+        subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let engine_registry = self.inner.engine_registry;
+
+        let arg = GetEngineOperatorBySubnetArgs {
+            subnet_id: Some(subnet),
+        };
+        let resp = match self
+            .inner
+            .calls
+            .query(Call::new(
+                engine_registry,
+                GET_ENGINE_OPERATOR_BY_SUBNET_METHOD,
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
+            .await
+        {
+            Ok(resp) => resp,
+            // The engine-canister registry itself is not deployed on this
+            // network (e.g. a local/test env). The replica rejects the query
+            // with `DestinationInvalid` ("Canister ... not found", IC0301).
+            // Treat a missing registry the same as "no operator registered":
+            // this happens before any operator update is submitted, so the
+            // legacy management-canister fallback is safe.
+            Err(e) if is_canister_not_found(&e) => {
+                return NoEngineOperatorSnafu {
+                    subnet,
+                    engine_registry,
+                }
+                .fail();
+            }
+            Err(e) => return Err(e).context(EngineCanisterQuerySnafu),
+        };
+        let resp = Decode!(&resp, GetEngineOperatorBySubnetResult).context(CandidDecodeSnafu)?;
+
+        resp.engine_operator_id.context(NoEngineOperatorSnafu {
+            subnet,
+            engine_registry,
+        })
+    }
+
+    /// Delegate creation to a subnet's engine-operator canister. The operator's
+    /// `create_canister` is byte-compatible with the cycles ledger, so we reuse
+    /// the same request/response types and simply target the operator principal.
+    async fn create_via_operator(
+        &self,
+        settings: &CanisterSettings,
+        operator: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let creation_args = CreationArgs {
+            // CloudEngine subnets only create on themselves; the operator
+            // ignores subnet selection, so leave it unset.
+            subnet_selection: None,
+            settings: Some(settings.clone()),
+        };
+        let arg = CreateCanisterArgs {
+            from_subaccount: None,
+            created_at_time: None,
+            amount: Nat::from(self.cycles()),
+            creation_args: Some(creation_args),
+        };
+
+        let resp = self
+            .inner
+            .calls
+            .update(Call::new(
+                operator,
+                "create_canister",
+                Encode!(&arg).context(CandidEncodeSnafu)?,
+            ))
+            .await
+            .context(CallSnafu)?;
+        let resp: CreateCanisterResponse =
+            Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
+        let cid = match resp {
+            CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+            CreateCanisterResponse::Err(err) => {
+                return CreateCanisterSnafu {
+                    message: err.format_error(self.cycles()),
+                }
+                .fail();
+            }
+        };
+        Ok(cid)
+    }
+
+    /// Legacy CloudEngine creation: call the management canister's
+    /// `create_canister`, routing to the target subnet by its id (subnet-scoped,
+    /// so no canister on that subnet is needed to derive an effective canister
+    /// id). Requires subnet-administrator permissions. Kept as a fallback for
+    /// the engine-operator path.
+    async fn create_mgmt(
+        &self,
+        settings: &CanisterSettings,
+        subnet: Principal,
+    ) -> Result<Principal, CreateOperationError> {
+        let arg = encode_create_canister_arg(settings).context(CandidEncodeSnafu)?;
+
+        // A subnet-scoped call is routed to the subnet rather than to any
+        // canister on it; what that takes to submit and await is the caller
+        // implementation's business.
+        let bytes = self
+            .inner
+            .calls
+            .update(
+                Call::new(Principal::management_canister(), "create_canister", arg)
+                    .with_route(RouteTo::Subnet(subnet)),
+            )
+            .await
+            .context(SubmitSubnetCreateSnafu { subnet })?;
+        let (record,): (CanisterIdRecord,) =
+            candid::decode_args(&bytes).context(CandidDecodeSnafu)?;
+        Ok(record.canister_id)
+    }
+
+    /// Creation paid for by the proxy the caller already routes through: an
+    /// ordinary `create_canister` with cycles attached, which only a call made
+    /// from inside a canister can carry.
+    async fn create_proxy(
+        &self,
+        settings: &CanisterSettings,
+    ) -> Result<Principal, CreateOperationError> {
+        let args = MgmtCreateCanisterArgs {
+            settings: Some(settings.clone()),
+            sender_canister_version: None,
+        };
+
+        let result =
+            proxy_management::create_canister(self.inner.calls.as_ref(), self.cycles(), args)
+                .await?;
+
+        Ok(result.canister_id)
+    }
+
+    /// Fund creation by converting ICP to cycles through the CMC.
+    ///
+    /// Transfers the ICP to the CMC's account (a subaccount derived from the
+    /// caller) with the create-canister memo, then calls `notify_create_canister`.
+    /// The CMC mints the cycles, picks the subnet, and creates the canister.
+    async fn create_cmc(
+        &self,
+        settings: &CanisterSettings,
+        icp: &BigDecimal,
+        recovery_flags: &str,
+    ) -> Result<Principal, CreateOperationError> {
+        let caller = self.inner.calls.caller();
+
+        // ICP ledger amounts are denominated in e8s (10^-8 ICP). Reject any amount
+        // with more precision than e8s can represent rather than silently
+        // truncating it (which would still charge the ledger fee).
+        let e8s = to_token_unit_amount(icp.clone(), 8)
+            .map_err(|message| CreateOperationError::InvalidIcpAmount { message })?
+            .to_u64()
+            .context(IcpAmountOverflowSnafu)?;
+
+        // The CMC creates on the resolved subnet, matching the cycles-ledger path.
+        let selected_subnet = self
+            .get_subnet()
+            .await
+            .map_err(|e| CreateOperationError::SubnetResolution { message: e })?;
+
+        // Transfer the ICP to the CMC's account, which is a subaccount of the CMC
+        // derived from the caller's principal.
+        let to = AccountIdentifier::new(
+            &CYCLES_MINTING_CANISTER_PRINCIPAL,
+            &Subaccount::from(caller),
+        );
+        let transfer_args = TransferArgs {
+            memo: Memo(MEMO_CREATE_CANISTER),
+            amount: Tokens::from_e8s(e8s),
+            fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
+            from_subaccount: None,
+            to,
+            created_at_time: None,
+        };
+        let transfer_result = self
+            .inner
+            .calls
+            .update(Call::new(
+                ICP_LEDGER_PRINCIPAL,
+                "transfer",
+                Encode!(&transfer_args).context(CandidEncodeSnafu)?,
+            ))
+            .await
+            .context(TransferIcpSnafu)?;
+        let block_index =
+            match Decode!(&transfer_result, TransferResult).context(CandidDecodeSnafu)? {
+                Ok(block_index) => block_index,
+                Err(TransferError::TxDuplicate { duplicate_of }) => duplicate_of,
+                Err(err) => {
+                    return TransferFailedSnafu {
+                        message: format!("{err:?}"),
+                    }
+                    .fail();
+                }
+            };
+
+        // Ask the CMC to mint cycles from the transferred ICP and create the
+        // canister. `controller` must be the caller; the real controllers are
+        // set through `settings`.
+        let arg = NotifyCreateCanisterArg {
+            block_index,
+            controller: caller,
+            subnet_selection: Some(SubnetSelection::Subnet {
+                subnet: selected_subnet,
+            }),
+            settings: Some(settings.clone()),
+        };
+        // Encode once: the argument does not change between retries, and an
+        // encoding failure is a bug rather than something to retry.
+        let arg_bytes = Encode!(&arg).context(CandidEncodeSnafu)?;
+
+        // The CMC often reports `Processing` for a while after the transfer, so
+        // retry until it confirms, up to a one-minute budget. On timeout or
+        // interruption we surface the transfer's block height and the command to
+        // finish creation manually, so the paid-for ICP is never stranded.
+        info!("Waiting for the cycles minting canister to create the canister...");
+        let notify_loop = async {
+            // Only log the CMC's status when it changes, so a normal wait (which
+            // repeats `Processing`) does not flood the output.
+            let mut last_message: Option<String> = None;
+            loop {
+                match self.notify_create(&arg_bytes).await? {
+                    NotifyStep::Created(canister_id) => return Ok(canister_id),
+                    NotifyStep::Terminal(message) => {
+                        return NotifyCreateFailedSnafu { message }.fail();
+                    }
+                    NotifyStep::Retry(message) => {
+                        if last_message.as_deref() != Some(message.as_str()) {
+                            info!("cycles minting canister is not ready yet: {message}");
+                            last_message = Some(message);
+                        }
+                        sleep(NOTIFY_RETRY_INTERVAL).await;
+                    }
+                }
+            }
+        };
+
+        select! {
+            result = notify_loop => result,
+            _ = sleep(NOTIFY_RETRY_TIMEOUT) => NotifyCreateTimeoutSnafu {
+                height: block_index,
+                command: notify_recovery_command(&arg, recovery_flags),
+            }
+            .fail(),
+            _ = stop_signal() => NotifyCreateInterruptedSnafu {
+                height: block_index,
+                command: notify_recovery_command(&arg, recovery_flags),
+            }
+            .fail(),
+        }
+    }
+
+    /// Performs a single `notify_create_canister` attempt, classifying the result
+    /// into [`NotifyStep`]. Agent/transport errors and the CMC's own transient
+    /// states are retryable; a refund is terminal.
+    async fn notify_create(&self, arg_bytes: &[u8]) -> Result<NotifyStep, CreateOperationError> {
+        let resp = match self
+            .inner
+            .calls
+            .update(Call::new(
+                CYCLES_MINTING_CANISTER_PRINCIPAL,
+                "notify_create_canister",
+                arg_bytes.to_vec(),
+            ))
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => return Ok(NotifyStep::Retry(err.to_string())),
+        };
+
+        let resp = Decode!(&resp, NotifyCreateCanisterResponse).context(CandidDecodeSnafu)?;
+        Ok(match resp {
+            Ok(canister_id) => NotifyStep::Created(canister_id),
+            // These are definitive outcomes for this block: the ICP was refunded,
+            // or the transfer can no longer be notified. Re-notifying will never
+            // succeed, so fail fast instead of retrying for a minute.
+            Err(
+                err @ (NotifyError::Refunded { .. }
+                | NotifyError::TransactionTooOld(_)
+                | NotifyError::InvalidTransaction(_)),
+            ) => NotifyStep::Terminal(err.format_error()),
+            // `Processing` is expected while the CMC works; `Other` may be a
+            // transient internal error. Both are worth retrying.
+            Err(err) => NotifyStep::Retry(err.format_error()),
+        })
+    }
+
+    /// 1. If a subnet is explicitly provided, use it
+    /// 2. If no canisters exist yet, pick a random available subnet
+    /// 3. If canisters exist, use the same subnet as the first existing canister
+    ///
+    /// Both successful results and errors are cached, so failed resolutions will not be retried.
+    async fn get_subnet(&self) -> Result<Principal, String> {
+        let result = self
+            .inner
+            .resolved_subnet
+            .get_or_init(|| async {
+                // If subnet is explicitly provided, use it
+                if let CreateTarget::Subnet(subnet) = self.inner.target {
+                    return Ok(subnet);
+                }
+
+                if let Some(canister) = self.inner.existing_canisters.first() {
+                    self.inner
+                        .calls
+                        .subnet_of(*canister)
+                        .await
+                        .map_err(|e| e.to_string())
+                } else {
+                    // If no canisters exist, pick a random available subnet
+                    let subnets = get_available_subnets(self.inner.calls.as_ref())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    if subnets.is_empty() {
+                        return Err("no available subnets found".to_string());
+                    }
+
+                    let chosen = self
+                        .inner
+                        .random
+                        .index_below(subnets.len())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    // `index_below` promises an index below the count, and the
+                    // count is not zero, so a miss is the seam's bug and says so
+                    // rather than posing as an empty list.
+                    chosen.and_then(|i| subnets.get(i).copied()).ok_or_else(|| {
+                        format!(
+                            "randomness chose {chosen:?}, which is not one of the {} \
+                             available subnets",
+                            subnets.len()
+                        )
+                    })
+                }
+            })
+            .await;
+
+        result.clone()
+    }
+}
+
+/// Builds the `icp canister call` command that re-runs `notify_create_canister`
+/// for an already-paid transfer, so the user can finish a creation that timed out
+/// or was interrupted.
+///
+/// `recovery_flags` carries the identity/network/environment selection used for
+/// the original call, so the printed command targets the same network and identity
+/// and can be pasted verbatim.
+///
+/// The argument is rendered from the exact typed `arg`, so every requested setting
+/// is preserved and the manual call matches the original request.
+fn notify_recovery_command(arg: &NotifyCreateCanisterArg, recovery_flags: &str) -> String {
+    // Rendering a value we just constructed should never fail; fall back to the
+    // essential fields if candid's textual conversion ever does.
+    let rendered = IDLValue::try_from_candid_type(arg)
+        .map(|value| IDLArgs::new(&[value]).to_string())
+        .unwrap_or_else(|_| {
+            format!(
+                "(record {{ block_index = {} : nat64; controller = principal \"{}\" }})",
+                arg.block_index, arg.controller
+            )
+        });
+    // Single-quote the candid argument (and any selection flags) for the shell so
+    // the command is safe to paste as-is.
+    format!(
+        "icp canister call {CYCLES_MINTING_CANISTER_CID} notify_create_canister {}{recovery_flags}",
+        shell_quote(&rendered)
+    )
+}
+
+/// Single-quotes a value for safe pasting into a POSIX shell, escaping embedded
+/// single quotes with the `'\''` idiom.
+pub fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+/// Whether `err` is a rejection meaning the target canister does not exist on
+/// this network (IC0301, "Canister ... not found"). Used to treat a missing
+/// engine-canister registry as "no operator registered" so the CloudEngine path
+/// can fall back safely.
+///
+/// A rejection specifically: a call that never reached a verdict says nothing
+/// about whether the canister is there, and must not be read as absence.
+///
+/// A replica that populated no error code leaves only the message to go on, so
+/// that is the fallback — and a call with no verdict has no message either,
+/// which is what keeps it out of this.
+fn is_canister_not_found(err: &crate::calls::CallError) -> bool {
+    match err.code() {
+        Some(code) => code == CANISTER_NOT_FOUND,
+        None => err
+            .message()
+            .is_some_and(|message| message.contains("Canister") && message.contains("not found")),
+    }
+}
+
+/// The replica's error code for a call addressed to a canister that does not
+/// exist.
+const CANISTER_NOT_FOUND: &str = "IC0301";
+
+async fn get_available_subnets(
+    calls: &dyn CanisterCalls,
+) -> Result<Vec<Principal>, CreateOperationError> {
+    let bs = calls
+        .query(Call::new(
+            CYCLES_MINTING_CANISTER_PRINCIPAL,
+            "get_default_subnets",
+            Encode!(&()).context(CandidEncodeSnafu)?,
+        ))
+        .await
+        .context(GetAvailableSubnetsSnafu)?;
+
+    let resp = Decode!(&bs, Vec<Principal>).context(CandidDecodeSnafu)?;
+
+    // Check if any subnets are available
+    if resp.is_empty() {
+        return NoAvailableSubnetsSnafu.fail();
+    }
+
+    Ok(resp)
+}
+
+/// Encodes the argument of the management canister's `create_canister`.
+///
+/// The interface defines it as `record { settings : opt canister_settings; ... }`,
+/// so the settings have to be wrapped: a bare `canister_settings` decodes as "no
+/// settings" and the canister is created with defaults.
+fn encode_create_canister_arg(settings: &CanisterSettings) -> candid::Result<Vec<u8>> {
+    Encode!(&MgmtCreateCanisterArgs {
+        settings: Some(settings.clone()),
+        sender_canister_version: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `create_canister` takes `record { settings : opt canister_settings; ... }`,
+    /// not a bare `canister_settings`. Encoding the latter — which is what the
+    /// `ic-utils` builder this path used to go through does — decodes as "no
+    /// settings", and the canister is created with defaults.
+    #[test]
+    fn subnet_create_encodes_settings_inside_the_argument_record() {
+        let settings = CanisterSettings {
+            controllers: Some(vec![Principal::anonymous()]),
+            ..Default::default()
+        };
+
+        let arg = encode_create_canister_arg(&settings).unwrap();
+        let (decoded,): (MgmtCreateCanisterArgs,) = candid::decode_args(&arg).unwrap();
+        assert_eq!(decoded.settings, Some(settings.clone()));
+
+        let bare = Encode!(&settings).unwrap();
+        let (as_args,): (MgmtCreateCanisterArgs,) = candid::decode_args(&bare).unwrap();
+        assert!(as_args.settings.is_none());
+    }
+
+    #[test]
+    fn recovery_command_preserves_all_settings() {
+        let arg = NotifyCreateCanisterArg {
+            block_index: 42,
+            controller: Principal::anonymous(),
+            subnet_selection: Some(SubnetSelection::Subnet {
+                subnet: CYCLES_MINTING_CANISTER_PRINCIPAL,
+            }),
+            settings: Some(CanisterSettings {
+                controllers: Some(vec![Principal::anonymous()]),
+                compute_allocation: Some(Nat::from(5u8)),
+                memory_allocation: Some(Nat::from(4_294_967_296u64)),
+                freezing_threshold: Some(Nat::from(2_592_000u64)),
+                reserved_cycles_limit: Some(Nat::from(1_000_000_000u64)),
+                ..Default::default()
+            }),
+        };
+
+        let command = notify_recovery_command(&arg, " --identity alice --network ic");
+
+        // The command targets the CMC's notify method with named candid fields, and
+        // every requested setting survives the round-trip (not just controllers).
+        assert!(command.contains("notify_create_canister"));
+        assert!(command.contains("block_index = 42"));
+        assert!(command.contains("compute_allocation = opt (5"));
+        assert!(command.contains("memory_allocation = opt (4_294_967_296"));
+        assert!(command.contains("freezing_threshold = opt (2_592_000"));
+        assert!(command.contains("reserved_cycles_limit = opt (1_000_000_000"));
+
+        // The identity/network selection is appended so the printed command targets
+        // the same network and identity as the original call.
+        assert!(
+            command
+                .trim_end()
+                .ends_with(" --identity alice --network ic")
+        );
+    }
+
+    #[test]
+    fn shell_quote_escapes_single_quotes() {
+        assert_eq!(shell_quote("plain"), "'plain'");
+        // An embedded single quote is closed, escaped, and reopened via `'\''`.
+        assert_eq!(shell_quote("a'b"), r"'a'\''b'");
+    }
+
+    #[test]
+    fn detects_canister_not_found_rejections() {
+        let rejected = |code: Option<&str>, message: &str| crate::calls::CallError::Rejected {
+            canister: Principal::anonymous(),
+            method: "get_engine_operator_by_subnet".to_owned(),
+            code: code.map(String::from),
+            message: message.to_owned(),
+        };
+
+        // IC0301 means the registry canister is not deployed here.
+        assert!(is_canister_not_found(&rejected(
+            Some("IC0301"),
+            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+        )));
+
+        // So does the same rejection from a replica that gave no error code,
+        // which leaves nothing but the message to read it from.
+        assert!(is_canister_not_found(&rejected(
+            None,
+            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+        )));
+
+        // Other rejections (e.g. a canister trap) must NOT be treated as
+        // "not found" — they should propagate rather than fall back.
+        assert!(!is_canister_not_found(&rejected(None, "trapped")));
+        assert!(!is_canister_not_found(&rejected(Some("IC0503"), "trapped")));
+
+        // Neither may a call that reached no verdict at all: it says nothing
+        // about whether the canister is there.
+        assert!(!is_canister_not_found(
+            &crate::calls::CallError::unanswered(
+                Principal::anonymous(),
+                "get_engine_operator_by_subnet",
+                std::io::Error::other("connection reset"),
+            )
+        ));
+    }
+}

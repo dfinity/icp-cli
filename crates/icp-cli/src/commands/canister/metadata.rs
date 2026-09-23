@@ -2,11 +2,11 @@ use std::io::stdout;
 
 use anyhow::bail;
 use clap::Args;
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use crate::commands::args;
-use icp::operations::misc::fetch_canister_metadata;
+use icp_project::operations::misc::fetch_canister_metadata;
 
 /// Read a metadata section from a canister
 #[derive(Debug, Args)]
@@ -42,9 +42,10 @@ pub(crate) async fn exec(ctx: &Context, args: &MetadataArgs) -> Result<(), anyho
             &selections.environment,
         )
         .await?;
+    let calls = icp_app::calls::calls(agent.clone(), None)?;
 
     // Fetch the metadata
-    let metadata = fetch_canister_metadata(&agent, canister_id, &args.metadata_name).await;
+    let metadata = fetch_canister_metadata(calls.as_ref(), canister_id, &args.metadata_name).await;
 
     match metadata {
         Some(value) => {

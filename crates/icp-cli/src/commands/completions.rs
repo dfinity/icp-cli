@@ -2,7 +2,7 @@ use std::io::{self, Write as _};
 
 use clap::Args;
 use clap_complete::Shell;
-use icp::prelude::*;
+use icp_project::prelude::*;
 use indoc::formatdoc;
 use snafu::prelude::*;
 

@@ -7,12 +7,12 @@ use clap::Args;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterStatusType, TakeCanisterSnapshotArgs,
 };
-use icp::context::Context;
+use icp_app::context::Context;
 use serde::Serialize;
 
 use super::SnapshotId;
 use crate::commands::args;
-use icp::operations::{misc::format_timestamp, proxy_management};
+use icp_project::operations::{misc::format_timestamp, proxy_management};
 
 /// Create a snapshot of a canister's state
 #[derive(Debug, Args)]
@@ -48,6 +48,8 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -58,12 +60,9 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     // Check canister status - must be stopped to create a snapshot
     let name = &args.cmd_args.canister;
-    let status = proxy_management::canister_status(
-        &agent,
-        args.proxy,
-        CanisterIdRecord { canister_id: cid },
-    )
-    .await?;
+    let status =
+        proxy_management::canister_status(calls.as_ref(), CanisterIdRecord { canister_id: cid })
+            .await?;
     match status.status {
         CanisterStatusType::Running => {
             bail!(
@@ -83,7 +82,7 @@ pub(crate) async fn exec(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         sender_canister_version: None,
     };
 
-    let snapshot = proxy_management::take_canister_snapshot(&agent, args.proxy, take_args).await?;
+    let snapshot = proxy_management::take_canister_snapshot(calls.as_ref(), take_args).await?;
     if args.json {
         serde_json::to_writer(
             stdout(),

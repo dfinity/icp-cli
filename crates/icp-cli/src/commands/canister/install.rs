@@ -5,12 +5,13 @@ use candid::Principal;
 use clap::{Args, ValueHint};
 use dialoguer::Confirm;
 use ic_management_canister_types::CanisterInstallMode;
-use icp::context::{CanisterSelection, Context};
-use icp::fs;
-use icp::prelude::*;
+use icp_app::context::Context;
+use icp_project::fs;
+use icp_project::host::CanisterSelection;
+use icp_project::prelude::*;
 use tracing::{info, warn};
 
-use icp::operations::{
+use icp_project::operations::{
     candid_compat::{CandidCompatibility, check_candid_compatibility},
     install::{
         WasmMemoryPersistenceOpt, install_canister, is_eop_canister,
@@ -76,7 +77,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 ))?;
             }
         };
-        ctx.artifacts
+        ctx.host
+            .artifacts
             .lookup(canister)
             .await
             .map_err(|e| anyhow!(e))?
@@ -89,6 +91,8 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let canister_id = ctx
         .get_canister_id(
             &selections.canister,
@@ -110,7 +114,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
                 args.mode
             );
         }
-        if !is_eop_canister(&agent, &canister_id).await {
+        if !is_eop_canister(calls.as_ref(), &canister_id).await {
             bail!(
                 "--wasm-memory-persistence only applies to Motoko canisters with enhanced \
                  orthogonal persistence (EOP). The target canister is not an EOP canister."
@@ -146,8 +150,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     let canister_display = args.cmd_args.canister.to_string();
     let (install_mode, status) = resolve_install_mode_and_status(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         &canister_display,
         &canister_id,
         &args.mode,
@@ -156,7 +159,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     // Candid interface compatibility check for upgrades
     if !args.yes && matches!(install_mode, CanisterInstallMode::Upgrade(_)) {
-        match check_candid_compatibility(&agent, &canister_id, &wasm).await {
+        match check_candid_compatibility(calls.as_ref(), &canister_id, &wasm).await {
             CandidCompatibility::Compatible | CandidCompatibility::Skipped(_) => {}
             CandidCompatibility::Incompatible(details) => {
                 let warning = format!(
@@ -184,8 +187,7 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     }
 
     install_canister(
-        &agent,
-        args.proxy,
+        calls.as_ref(),
         &canister_id,
         &canister_display,
         &wasm,

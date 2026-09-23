@@ -1,15 +1,14 @@
 use clap::{Args, ValueHint};
 use clap_complete::ArgValueCandidates;
-use icp::{
+use icp_app::{
     context::Context,
-    fs::json,
     identity::{
         delegation::DelegationChain,
         key,
         manifest::{DelegationKeyStorage, PemFormat},
     },
-    prelude::*,
 };
+use icp_project::{fs::json, prelude::*};
 use snafu::{ResultExt, Snafu};
 use tracing::{info, warn};
 
@@ -60,7 +59,9 @@ pub(crate) enum UseError {
     LoadDelegationChain { source: json::Error },
 
     #[snafu(transparent)]
-    LockIdentityDir { source: icp::fs::lock::LockError },
+    LockIdentityDir {
+        source: icp_project::fs::lock::LockError,
+    },
 
     #[snafu(display("failed to complete delegation identity"))]
     Complete {

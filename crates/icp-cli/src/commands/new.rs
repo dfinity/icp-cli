@@ -1,5 +1,5 @@
 #[allow(clippy::disallowed_types)]
-// In this case we allow PathBuf instead of using icp::prelude::* because
+// In this case we allow PathBuf instead of using icp_project::prelude::* because
 // this is what the crargo generate crate expects
 use std::path::PathBuf;
 
@@ -197,7 +197,7 @@ fn resolve_name(args: &IcpGenerateArgs) -> Result<Option<String>, anyhow::Error>
 }
 
 pub(crate) async fn exec(
-    ctx: &icp::context::Context,
+    ctx: &icp_app::context::Context,
     args: &IcpGenerateArgs,
 ) -> Result<(), anyhow::Error> {
     // Check for conflicting flags: --quiet and --debug cannot be used together

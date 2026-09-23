@@ -8,19 +8,19 @@ use dialoguer::Confirm;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CanisterStatusType, UpdateSettingsArgs,
 };
-use icp::context::Context;
+use icp_app::context::Context;
 use icp_canister_interfaces::nns_migration::{MigrationStatus, NNS_MIGRATION_PRINCIPAL};
 use indicatif::{ProgressBar, ProgressStyle};
 use num_traits::ToPrimitive;
 use tracing::{info, warn};
 
 use crate::commands::args::{self, Canister};
-use icp::context::CanisterSelection;
-use icp::operations::canister_migration::{
+use icp_app::operations::canister_migration::{
     get_subnet_for_canister, migrate_canister, migration_status,
 };
-use icp::operations::misc::format_timestamp;
-use icp::operations::proxy_management;
+use icp_project::host::CanisterSelection;
+use icp_project::operations::misc::format_timestamp;
+use icp_project::operations::proxy_management;
 
 /// Minimum cycles required for migration (10T).
 const MIN_CYCLES_FOR_MIGRATION: u128 = 10_000_000_000_000;
@@ -64,6 +64,8 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
 
     let source_cid = ctx
         .get_canister_id(
@@ -114,16 +116,14 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         // Fetch status of both canisters
         let source_status = proxy_management::canister_status(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: source_cid,
             },
         )
         .await?;
         let target_status = proxy_management::canister_status(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -176,8 +176,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
 
         // Check target canister has no snapshots
         let snapshots = proxy_management::list_canister_snapshots(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             CanisterIdRecord {
                 canister_id: target_cid,
             },
@@ -215,8 +214,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             let mut new_controllers = source_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 UpdateSettingsArgs {
                     canister_id: source_cid,
                     settings: CanisterSettings {
@@ -235,8 +233,7 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             let mut new_controllers = target_controllers;
             new_controllers.push(NNS_MIGRATION_PRINCIPAL);
             proxy_management::update_settings(
-                &agent,
-                args.proxy,
+                calls.as_ref(),
                 UpdateSettingsArgs {
                     canister_id: target_cid,
                     settings: CanisterSettings {

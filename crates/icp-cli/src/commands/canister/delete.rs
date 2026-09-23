@@ -2,9 +2,10 @@ use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use ic_management_canister_types::CanisterIdRecord;
-use icp::context::{CanisterSelection, Context};
+use icp_app::context::Context;
+use icp_project::host::CanisterSelection;
 
-use icp::operations::{proxy_management, recover_cycles};
+use icp_project::operations::{proxy_management, recover_cycles};
 
 use crate::commands::args;
 
@@ -37,6 +38,8 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
             &selections.environment,
         )
         .await?;
+
+    let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
     let cid = ctx
         .get_canister_id(
             &selections.canister,
@@ -50,8 +53,7 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
             .get_principal()
             .map_err(|e| anyhow!("could not determine caller principal: {e}"))?;
         recover_cycles::recover_cycles_before_delete(
-            &agent,
-            args.proxy,
+            calls.as_ref(),
             cid,
             destination,
             crate::artifacts::get_recover_cycles_wasm(),
@@ -61,16 +63,18 @@ pub(crate) async fn exec(ctx: &Context, args: &DeleteArgs) -> Result<(), anyhow:
 
     // delete_canister requires the canister be stopped; stopping an
     // already-stopped canister is a no-op, and the recovery step leaves it running.
-    proxy_management::stop_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
-        .await?;
-    proxy_management::delete_canister(&agent, args.proxy, CanisterIdRecord { canister_id: cid })
+    proxy_management::stop_canister(calls.as_ref(), CanisterIdRecord { canister_id: cid }).await?;
+    proxy_management::delete_canister(calls.as_ref(), CanisterIdRecord { canister_id: cid })
         .await?;
 
     // Remove canister ID from the id store if it was referenced by name
     if let CanisterSelection::Named(canister_name) = &selections.canister {
-        ctx.remove_canister_id_for_env(canister_name, &selections.environment)
+        ctx.host
+            .remove_canister_id_for_env(canister_name, &selections.environment)
             .await?;
-        ctx.update_custom_domains(&selections.environment).await;
+        ctx.host
+            .update_custom_domains(&selections.environment)
+            .await;
     }
 
     Ok(())

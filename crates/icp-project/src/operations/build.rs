@@ -1,0 +1,147 @@
+use std::sync::Arc;
+
+use crate::{
+    Canister,
+    canister::build::{Build, BuildError, Params},
+    prelude::*,
+};
+use futures::{StreamExt, stream::FuturesOrdered};
+use icp_events::{StepOutcome, TaskOutcome};
+
+use crate::operations::task::{Reporter, Task, TaskReporter};
+use snafu::{ResultExt, Snafu};
+
+#[derive(Debug, Snafu)]
+pub enum BuildOperationError {
+    #[snafu(display("failed to create temporary build directory"))]
+    TempDir { source: crate::files::FsError },
+
+    #[snafu(transparent)]
+    Build { source: BuildError },
+
+    #[snafu(display("build did not produce a wasm output file"))]
+    MissingWasmOutput,
+
+    #[snafu(display("failed to read wasm output file"))]
+    ReadWasmOutput { source: crate::files::FsError },
+
+    #[snafu(display("failed to save wasm artifact"))]
+    SaveWasmArtifact {
+        source: crate::store_artifact::SaveError,
+    },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Canister(s) {names:?} failed to build."))]
+pub struct BuildManyError {
+    names: Vec<String>,
+}
+
+pub async fn build(
+    canister_path: &Path,
+    canister: &Canister,
+    environment: &str,
+    task: &TaskReporter,
+    builder: Arc<dyn Build>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
+) -> Result<(), BuildOperationError> {
+    // From `files`, not from this machine: the step writes the module there and
+    // the read below comes back through the same seam, so both have to be
+    // looking at the same directory.
+    let build_dir = files.scratch_dir().await.context(TempDirSnafu)?;
+    let wasm_output_path = build_dir.path().join("out.wasm");
+
+    let step_count = canister.build.steps.len();
+    for (i, step) in canister.build.steps.iter().enumerate() {
+        let reporter = task.step(i + 1, step_count, step.to_string());
+
+        let build_result = builder
+            .build(
+                step,
+                &Params {
+                    path: canister_path.to_owned(),
+                    output: wasm_output_path.to_owned(),
+                    environment: environment.to_owned(),
+                },
+                &reporter,
+            )
+            .await;
+
+        reporter.done(match &build_result {
+            Ok(()) => StepOutcome::Succeeded,
+            Err(_) => StepOutcome::Failed,
+        });
+
+        build_result?;
+    }
+
+    if !files.exists(&wasm_output_path).await {
+        return MissingWasmOutputSnafu.fail();
+    }
+
+    let wasm = files
+        .read(&wasm_output_path)
+        .await
+        .context(ReadWasmOutputSnafu)?;
+
+    artifacts
+        .save(&canister.name, &wasm)
+        .await
+        .context(SaveWasmArtifactSnafu)?;
+
+    Ok(())
+}
+
+pub async fn build_many(
+    canisters: Vec<(PathBuf, Canister)>,
+    environment: &str,
+    builder: Arc<dyn Build>,
+    artifacts: Arc<dyn crate::store_artifact::Access>,
+    files: &dyn crate::files::FileSystem,
+    reporter: &Reporter,
+) -> Result<(), BuildManyError> {
+    let mut futs = FuturesOrdered::new();
+
+    for (canister_path, canister) in canisters {
+        let task = reporter.task(Task::build(canister.name.clone()));
+        let builder = builder.clone();
+        let artifacts = artifacts.clone();
+
+        let fut = async move {
+            let result = build(
+                &canister_path,
+                &canister,
+                environment,
+                &task,
+                builder,
+                artifacts,
+                files,
+            )
+            .await;
+
+            match &result {
+                Ok(()) => task.finish(TaskOutcome::succeeded()),
+                Err(error) => task.finish(TaskOutcome::failed(error.to_string())),
+            }
+
+            result.map_err(|_| canister.name.clone())
+        };
+        futs.push_back(fut);
+    }
+
+    // Consume the set of futures and collect the failed canister names; the
+    // renderer owns displaying each failure's captured output.
+    let mut failed: Vec<String> = Vec::new();
+    while let Some(res) = futs.next().await {
+        if let Err(name) = res {
+            failed.push(name);
+        }
+    }
+
+    if !failed.is_empty() {
+        return BuildManySnafu { names: failed }.fail();
+    }
+
+    Ok(())
+}

@@ -10,7 +10,7 @@ use crate::common::{
     ENVIRONMENT_DOCKER_ENGINE, ENVIRONMENT_RANDOM_PORT, NETWORK_DOCKER_ENGINE, NETWORK_RANDOM_PORT,
     TestContext, build_sync_plugin_example, clients,
 };
-use icp::{
+use icp_project::{
     fs::{create_dir_all, read_to_string, write_string},
     prelude::*,
     store_id::IdMapping,
@@ -191,6 +191,46 @@ async fn deploy_no_create_fails_when_canister_missing() {
             )
             .and(contains("Creating canisters:").not()),
         );
+}
+
+/// The `--no-create` refusal is decided from the local id store, so it reads
+/// the same whether or not the network is reachable: with the network never
+/// started, the deploy still names the missing canisters rather than failing to
+/// reach the replica.
+#[test]
+fn deploy_no_create_fails_when_canister_missing_without_network() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--no-create",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "`--no-create` was specified but the following canisters do not exist: my-canister",
+        ));
 }
 
 /// `deploy --no-create` succeeds when the canister already exists: it skips
@@ -1433,7 +1473,7 @@ async fn deploy_sync_script_icp_env_vars() {
         .stderr(contains("NET=random-network"));
 
     // Read the assigned canister IDs and verify CID vars and cross-canister visibility.
-    let id_mapping: IdMapping = icp::fs::json::load(
+    let id_mapping: IdMapping = icp_project::fs::json::load(
         &project_dir
             .join(".icp")
             .join("cache")

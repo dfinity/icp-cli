@@ -15,12 +15,25 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
+# Codesign macOS binaries with the Developer ID certificate. `dist build` reads the
+# certificate from CODESIGN_* env vars, which build-local.yml sets from the
+# `release` environment's secrets.
+macos-sign = true
+# The builtin build-local-artifacts job can't declare a GitHub environment, so it
+# can't reach the signing secrets; .github/workflows/build-local.yml replaces it.
+build-local-artifacts = false
+local-artifacts-jobs = ["./build-local"]
 
 # Pin GitHub Actions to exact commit SHAs in the generated release.yml (required by security policy)
 [dist.github-action-commits]
 "actions/checkout" = "de0fac2e4500dabe0009e67214ff5f5447ce83dd"          # v6.0.2
 "actions/upload-artifact" = "b7c566a772e6b6bfb58ed0dc250532a479d7789f"   # v6.0.0
 "actions/download-artifact" = "37930b1c2abaa49bbe596cd826c3c89aef350131" # v7.0.0
+
+# The signing certificate is a .p12 in OpenSSL 3's default format (AES-256/SHA-256),
+# which `security import` on macOS 14 rejects; macOS 15 reads it.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
 
 [dist.dependencies.apt]
 libdbus-1-dev = '*' # required by libdbus-sys introduced by keyring

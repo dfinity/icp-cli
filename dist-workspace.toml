@@ -23,8 +23,6 @@ macos-sign = true
 # can't reach the signing secrets; .github/workflows/build-local.yml replaces it.
 build-local-artifacts = false
 local-artifacts-jobs = ["./build-local"]
-# TEMPORARY: run the full build on PRs to exercise signing before merge. Remove before merging.
-pr-run-mode = "upload"
 
 # Pin GitHub Actions to exact commit SHAs in the generated release.yml (required by security policy)
 [dist.github-action-commits]

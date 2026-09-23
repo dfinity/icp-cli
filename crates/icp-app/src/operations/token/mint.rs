@@ -22,13 +22,22 @@ pub enum MintCyclesError {
     GetPrincipal { message: String },
 
     #[snafu(display("Failed to query CMC for conversion rate"))]
-    QueryConversionRate { source: AgentError },
+    QueryConversionRate {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("Failed to transfer ICP to CMC"))]
-    TransferIcp { source: AgentError },
+    TransferIcp {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("Failed to notify CMC of mint"))]
-    NotifyMint { source: AgentError },
+    NotifyMint {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("ICP amount overflow. Specify less tokens."))]
     IcpAmountOverflow,
@@ -38,8 +47,8 @@ pub enum MintCyclesError {
 
     #[snafu(display("Insufficient funds: {required} required, {available} available."))]
     InsufficientFunds {
-        required: TokenAmount,
-        available: TokenAmount,
+        required: Box<TokenAmount>,
+        available: Box<TokenAmount>,
     },
 
     #[snafu(display("No amount specified. Must provide either ICP or cycles amount."))]

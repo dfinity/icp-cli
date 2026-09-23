@@ -66,7 +66,8 @@ pub enum RecoverCyclesError {
     #[snafu(display("the recover_cycles call to canister {canister_id} failed"))]
     CallRecover {
         canister_id: Principal,
-        source: crate::calls::CallError,
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
     },
 
     #[snafu(display("failed to decode the recover_cycles result from canister {canister_id}"))]

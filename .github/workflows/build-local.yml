@@ -30,13 +30,16 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
       IS_MACOS: ${{ contains(join(matrix.targets, ','), 'apple-darwin') }}
-      # Read by `dist build` (see `macos-sign` in dist-workspace.toml); unset off macOS.
-      CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}
-      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-      # Not secret: it's embedded in every signed binary.
+      # Read by `dist build` (see `macos-sign` in dist-workspace.toml). Not secret:
+      # it's embedded in every signed binary. The certificate itself is passed only
+      # to the steps that need it.
+      #
+      # No CODESIGN_OPTIONS: the hardened runtime (`runtime`) forbids the unsigned
+      # executable memory wasmtime compiles sync plugins into, and macOS kills `icp`
+      # when a plugin runs. Notarization needs it, with the
+      # com.apple.security.cs.allow-unsigned-executable-memory entitlement, which
+      # dist's signing can't pass.
       CODESIGN_IDENTITY: "Developer ID Application: DFINITY Stiftung (7FY8G6QYKD)"
-      # Hardened runtime, which notarization requires.
-      CODESIGN_OPTIONS: runtime
     steps:
       - name: enable windows longpaths
         run: |
@@ -67,6 +70,9 @@ jobs:
       # `dist build` only warns and ships unsigned binaries when a secret is missing.
       - name: Check codesigning secrets
         if: ${{ env.IS_MACOS == 'true' }}
+        env:
+          CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
         run: |
           for var in CODESIGN_CERTIFICATE CODESIGN_CERTIFICATE_PASSWORD; do
             if [ -z "${!var}" ]; then
@@ -75,6 +81,11 @@ jobs:
             fi
           done
       - name: Build artifacts
+        env:
+          # Only the macOS jobs run in the `release` environment, but guard anyway so a
+          # repo-level copy of these secrets would never reach the other builds.
+          CODESIGN_CERTIFICATE: ${{ env.IS_MACOS == 'true' && secrets.CODESIGN_CERTIFICATE || '' }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ env.IS_MACOS == 'true' && secrets.CODESIGN_CERTIFICATE_PASSWORD || '' }}
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ !github.event.pull_request && format('--tag={0}', github.ref_name) || '' }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
@@ -97,12 +108,14 @@ jobs:
               echo "::endgroup::"
               grep -qxF "Authority=$CODESIGN_IDENTITY" <<< "$info" \
                 || { echo "::error::${bin#"$dir"/} in $archive is not signed by $CODESIGN_IDENTITY"; exit 1; }
-              grep -q '^CodeDirectory .*flags=.*(runtime)' <<< "$info" \
-                || { echo "::error::${bin#"$dir"/} in $archive is not signed with the hardened runtime"; exit 1; }
+              # See CODESIGN_IDENTITY above: the hardened runtime would break sync plugins.
+              if grep -q '^CodeDirectory .*flags=.*(runtime)' <<< "$info"; then
+                echo "::error::${bin#"$dir"/} in $archive is signed with the hardened runtime, which kills icp when it runs a sync plugin"
+                exit 1
+              fi
               # A secure timestamp keeps the signature valid after the certificate expires.
               grep -q '^Timestamp=' <<< "$info" \
                 || { echo "::error::${bin#"$dir"/} in $archive has no secure timestamp"; exit 1; }
-              # The hardened runtime can stop a binary from starting; make sure it still runs.
               "$bin" --version
             done < <(find "$dir" -type f -perm -u+x -exec sh -c 'file -b "$1" | grep -q Mach-O' _ {} \; -print)
             [ "$found" = 1 ] || { echo "::error::no Mach-O binary found in $archive"; exit 1; }

@@ -15,6 +15,16 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
+# Codesign macOS binaries with the Developer ID certificate. `dist build` reads the
+# certificate from CODESIGN_* env vars, which build-local.yml sets from the
+# `release` environment's secrets.
+macos-sign = true
+# The builtin build-local-artifacts job can't declare a GitHub environment, so it
+# can't reach the signing secrets; .github/workflows/build-local.yml replaces it.
+build-local-artifacts = false
+local-artifacts-jobs = ["./build-local"]
+# TEMPORARY: run the full build on PRs to exercise signing before merge. Remove before merging.
+pr-run-mode = "upload"
 
 # Pin GitHub Actions to exact commit SHAs in the generated release.yml (required by security policy)
 [dist.github-action-commits]

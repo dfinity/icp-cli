@@ -32,5 +32,10 @@ pr-run-mode = "upload"
 "actions/upload-artifact" = "b7c566a772e6b6bfb58ed0dc250532a479d7789f"   # v6.0.0
 "actions/download-artifact" = "37930b1c2abaa49bbe596cd826c3c89aef350131" # v7.0.0
 
+# The signing certificate is a .p12 in OpenSSL 3's default format (AES-256/SHA-256),
+# which `security import` on macOS 14 rejects; macOS 15 reads it.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
+
 [dist.dependencies.apt]
 libdbus-1-dev = '*' # required by libdbus-sys introduced by keyring

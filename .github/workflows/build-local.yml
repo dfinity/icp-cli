@@ -33,6 +33,8 @@ jobs:
       # Read by `dist build` (see `macos-sign` in dist-workspace.toml); unset off macOS.
       CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}
       CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+      # Not secret: it's embedded in every signed binary.
+      CODESIGN_IDENTITY: "Developer ID Application: DFINITY Stiftung (7FY8G6QYKD)"
       # Hardened runtime, which notarization requires.
       CODESIGN_OPTIONS: runtime
     steps:
@@ -72,32 +74,6 @@ jobs:
               exit 1
             fi
           done
-      # TEMPORARY: discover the certificate's identity so it can be written into
-      # this file as CODESIGN_IDENTITY. Remove once it's hardcoded.
-      - name: Discover codesigning identity
-        if: ${{ env.IS_MACOS == 'true' }}
-        run: |
-          dir="$(mktemp -d)"
-          keychain="$dir/discover.keychain-db"
-          echo "$CODESIGN_CERTIFICATE" | base64 --decode > "$dir/cert.p12"
-          # Diagnose the container format without printing anything secret.
-          echo "decoded .p12: $(wc -c < "$dir/cert.p12") bytes, first byte 0x$(xxd -p -l1 "$dir/cert.p12")"
-          case "$CODESIGN_CERTIFICATE_PASSWORD" in *[[:space:]]) echo "::warning::password secret ends with whitespace";; esac
-          openssl="$(brew --prefix openssl@3)/bin/openssl"
-          "$openssl" version
-          "$openssl" pkcs12 -in "$dir/cert.p12" -info -noout -passin env:CODESIGN_CERTIFICATE_PASSWORD 2>&1 || echo "::warning::openssl could not open the .p12 with the password"
-          "$openssl" pkcs12 -in "$dir/cert.p12" -nokeys -clcerts -passin env:CODESIGN_CERTIFICATE_PASSWORD 2>/dev/null \
-            | "$openssl" x509 -noout -subject -issuer -enddate -nameopt utf8,sep_multiline || true
-          security create-keychain -p discover "$keychain"
-          security unlock-keychain -p discover "$keychain"
-          security import "$dir/cert.p12" -k "$keychain" -P "$CODESIGN_CERTIFICATE_PASSWORD" -f pkcs12 -A
-          security find-identity -v -p codesigning "$keychain"
-          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/^ *1) [0-9A-F]\{40\} "\(.*\)"$/\1/p')"
-          security delete-keychain "$keychain"
-          rm -rf "$dir"
-          [ -n "$identity" ] || { echo "::error::no codesigning identity found in the certificate"; exit 1; }
-          echo "Identity: $identity"
-          echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
@@ -123,6 +99,11 @@ jobs:
                 || { echo "::error::${bin#"$dir"/} in $archive is not signed by $CODESIGN_IDENTITY"; exit 1; }
               grep -q '^CodeDirectory .*flags=.*(runtime)' <<< "$info" \
                 || { echo "::error::${bin#"$dir"/} in $archive is not signed with the hardened runtime"; exit 1; }
+              # A secure timestamp keeps the signature valid after the certificate expires.
+              grep -q '^Timestamp=' <<< "$info" \
+                || { echo "::error::${bin#"$dir"/} in $archive has no secure timestamp"; exit 1; }
+              # The hardened runtime can stop a binary from starting; make sure it still runs.
+              "$bin" --version
             done < <(find "$dir" -type f -perm -u+x -exec sh -c 'file -b "$1" | grep -q Mach-O' _ {} \; -print)
             [ "$found" = 1 ] || { echo "::error::no Mach-O binary found in $archive"; exit 1; }
             rm -rf "$dir"

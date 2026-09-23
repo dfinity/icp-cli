@@ -17,10 +17,16 @@ pub enum TokenApproveError {
     },
 
     #[snafu(display("failed to query decimals"))]
-    QueryDecimals { source: AgentError },
+    QueryDecimals {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to query symbol"))]
-    QuerySymbol { source: AgentError },
+    QuerySymbol {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode decimals response"))]
     DecodeDecimals { source: candid::Error },
@@ -35,7 +41,10 @@ pub enum TokenApproveError {
     EncodeApproveArg { source: candid::Error },
 
     #[snafu(display("failed to execute approve"))]
-    ExecuteApprove { source: AgentError },
+    ExecuteApprove {
+        #[snafu(source(from(AgentError, Box::new)))]
+        source: Box<AgentError>,
+    },
 
     #[snafu(display("failed to decode approve response"))]
     DecodeApproveResponse { source: candid::Error },

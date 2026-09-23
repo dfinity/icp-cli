@@ -84,7 +84,8 @@ pub enum LoadIdentityError {
     #[snafu(display("failed to load PEM from `{origin}`: failed to decipher key"))]
     ParseDerError {
         origin: PemOrigin,
-        source: pkcs8::der::Error,
+        #[snafu(source(from(pkcs8::der::Error, Box::new)))]
+        source: Box<pkcs8::der::Error>,
     },
     #[snafu(display("failed to load PEM from `{origin}`: failed to decipher key"))]
     ParseEd25519KeyError {
@@ -123,7 +124,8 @@ pub enum LoadIdentityError {
     #[snafu(display("failed to validate delegation chain loaded from `{path}`"))]
     ValidateDelegationChain {
         path: PathBuf,
-        source: DelegationError,
+        #[snafu(source(from(DelegationError, Box::new)))]
+        source: Box<DelegationError>,
     },
 
     #[snafu(display(
@@ -132,7 +134,8 @@ pub enum LoadIdentityError {
     ))]
     ValidateDelegationChainNetworkHint {
         path: PathBuf,
-        source: DelegationError,
+        #[snafu(source(from(DelegationError, Box::new)))]
+        source: Box<DelegationError>,
     },
 
     #[snafu(display(
@@ -704,7 +707,7 @@ fn load_webauth_identity(
                     Err(_) => {
                         return Err(LoadIdentityError::ValidateDelegationChainNetworkHint {
                             path: chain_path,
-                            source: mainnet_err,
+                            source: Box::new(mainnet_err),
                         });
                     }
                 }
@@ -1676,7 +1679,10 @@ pub enum ValidateDelegationChainError {
     ConvertChain { source: delegation::ConversionError },
 
     #[snafu(display("delegation chain failed validation"))]
-    ValidateChain { source: DelegationError },
+    ValidateChain {
+        #[snafu(source(from(DelegationError, Box::new)))]
+        source: Box<DelegationError>,
+    },
 }
 
 /// Validates that `chain` connects its root key to `session`'s public key and returns the
@@ -2061,7 +2067,10 @@ pub enum ExportIdentityError {
     DecryptPemForExport { source: pkcs8::Error },
 
     #[snafu(display("failed to parse decrypted PEM content"))]
-    ParseDecryptedForExport { source: pkcs8::der::Error },
+    ParseDecryptedForExport {
+        #[snafu(source(from(pkcs8::der::Error, Box::new)))]
+        source: Box<pkcs8::der::Error>,
+    },
 
     #[snafu(display("failed to read password: {message}"))]
     GetPasswordForExport { message: String },

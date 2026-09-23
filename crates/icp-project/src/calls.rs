@@ -345,7 +345,10 @@ pub enum TypedCallError {
     },
 
     #[snafu(transparent)]
-    Call { source: CallError },
+    Call {
+        #[snafu(source(from(CallError, Box::new)))]
+        source: Box<CallError>,
+    },
 
     #[snafu(display("failed to decode the reply from '{method}'"))]
     Decode {

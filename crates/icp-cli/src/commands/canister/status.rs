@@ -577,12 +577,12 @@ mod tests {
     fn access_denied_codes_are_recognised() {
         for code in E_STATUS_ACCESS_DENIED {
             let err = TypedCallError::Call {
-                source: icp_project::calls::CallError::Rejected {
+                source: Box::new(icp_project::calls::CallError::Rejected {
                     canister: Principal::anonymous(),
                     method: "canister_status".to_owned(),
                     code: Some(code.to_string()),
                     message: "access denied".to_owned(),
-                },
+                }),
             };
             assert_eq!(rejection_code(&err), Some(code));
         }
@@ -590,11 +590,11 @@ mod tests {
         // A call that reached no verdict has no code to branch on, so the
         // caller must not read it as an access refusal.
         let no_verdict = TypedCallError::Call {
-            source: icp_project::calls::CallError::unanswered(
+            source: Box::new(icp_project::calls::CallError::unanswered(
                 Principal::anonymous(),
                 "canister_status",
                 std::io::Error::other("connection reset"),
-            ),
+            )),
         };
         assert_eq!(rejection_code(&no_verdict), None);
     }

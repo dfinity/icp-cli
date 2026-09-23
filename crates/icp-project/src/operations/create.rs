@@ -42,7 +42,10 @@ pub enum CreateOperationError {
     CandidDecode { source: candid::Error },
 
     #[snafu(display("a canister call failed"))]
-    Call { source: crate::calls::CallError },
+    Call {
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
+    },
 
     #[snafu(transparent)]
     TypedCall {
@@ -56,18 +59,23 @@ pub enum CreateOperationError {
         "failed to check whether subnet {subnet} creates canisters through an engine operator"
     ))]
     CheckEngineOperator {
-        source: crate::calls::CallError,
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
         subnet: Principal,
     },
 
     #[snafu(display("failed to submit create_canister to subnet {subnet}"))]
     SubmitSubnetCreate {
-        source: crate::calls::CallError,
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
         subnet: Principal,
     },
 
     #[snafu(display("failed to query the engine-canister registry"))]
-    EngineCanisterQuery { source: crate::calls::CallError },
+    EngineCanisterQuery {
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
+    },
 
     #[snafu(display(
         "could not resolve an engine-operator for CloudEngine subnet {subnet} via engine-canister {engine_registry} (no operator registered, or the registry is not deployed on this network)"
@@ -84,7 +92,10 @@ pub enum CreateOperationError {
     MissingSubnetId,
 
     #[snafu(display("failed to get available subnets"))]
-    GetAvailableSubnets { source: crate::calls::CallError },
+    GetAvailableSubnets {
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
+    },
 
     #[snafu(display("no available subnets found"))]
     NoAvailableSubnets,
@@ -102,7 +113,10 @@ pub enum CreateOperationError {
     InvalidIcpAmount { message: String },
 
     #[snafu(display("failed to transfer ICP to the cycles minting canister"))]
-    TransferIcp { source: crate::calls::CallError },
+    TransferIcp {
+        #[snafu(source(from(crate::calls::CallError, Box::new)))]
+        source: Box<crate::calls::CallError>,
+    },
 
     #[snafu(display("ICP ledger transfer failed: {message}"))]
     TransferFailed { message: String },

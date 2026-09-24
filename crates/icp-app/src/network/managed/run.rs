@@ -256,15 +256,16 @@ async fn run_network_launcher(
             gateway.port,
             instance.use_friendly_domains,
         );
-        info!("Seeding Internet Identity identities");
-        let identities = ii_identities::seed(
+        let count = cfg.ii_identities.len();
+        let noun = if count == 1 { "identity" } else { "identities" };
+        info!("Seeding Internet Identity with {count} {noun}");
+        ii_identities::seed(
             &gateway_url,
             &instance.root_key,
             &cfg.ii_identities,
             &origin,
         )
         .await?;
-        ii_identities::report(&origin, &identities);
     }
 
     let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.installs_ii());

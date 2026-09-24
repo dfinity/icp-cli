@@ -14,7 +14,7 @@ use icp_canister_interfaces::internet_identity::{
     IdRegNextStepResult, IdRegStartError, MetadataEntryV2, RegistrationFlowNextStep, WebAuthn,
 };
 use snafu::prelude::*;
-use tracing::info;
+use tracing::debug;
 use url::Url;
 
 use crate::network::custom_domains::gateway_domain;
@@ -51,6 +51,7 @@ pub async fn seed(
     let mut identities = Vec::with_capacity(names.len());
     for (index, name) in (0u64..).zip(names) {
         let identity_number = seed_one(api_url, root_key, name, index, origin).await?;
+        debug!("Internet Identity identity {name}: seed index {index}, identity {identity_number}");
         identities.push(IiIdentity {
             name: name.clone(),
             index,
@@ -139,23 +140,12 @@ async fn seed_one(
     Ok(finished.identity_number)
 }
 
-/// Logs which seed index signs in as which identity.
-pub fn report(origin: &str, identities: &[IiIdentity]) {
-    let width = identities.iter().map(|i| i.name.len()).max().unwrap_or(0);
-    info!("Sign in to Internet Identity at {origin} with one of these seed indexes:");
-    for identity in identities {
-        info!(
-            "  {:<width$}  index {}  identity {}",
-            identity.name, identity.index, identity.identity_number
-        );
-    }
-}
-
 /// The origin the Internet Identity frontend is served from on this network.
 pub fn frontend_origin(gateway_url: &Url, port: u16, use_friendly_domains: bool) -> String {
     match gateway_domain(gateway_url) {
         Some(domain) if use_friendly_domains => format!("http://id.ai.{domain}:{port}"),
-        _ => format!("http://{INTERNET_IDENTITY_FRONTEND_CID}.localhost:{port}"),
+        Some(domain) => format!("http://{INTERNET_IDENTITY_FRONTEND_CID}.{domain}:{port}"),
+        None => format!("http://{INTERNET_IDENTITY_FRONTEND_CID}.localhost:{port}"),
     }
 }
 
@@ -235,6 +225,23 @@ mod tests {
         let mut expected = [0u8; 32];
         expected[6] = 1;
         assert_eq!(dummy_auth_seed(256), expected);
+    }
+
+    #[test]
+    fn frontend_origin_follows_the_gateway_domain() {
+        let url = |u: &str| Url::parse(u).unwrap();
+        assert_eq!(
+            frontend_origin(&url("http://127.0.0.1:8000"), 8000, true),
+            "http://id.ai.localhost:8000"
+        );
+        assert_eq!(
+            frontend_origin(&url("http://my-app.localhost:8000"), 8000, false),
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CID}.my-app.localhost:8000")
+        );
+        assert_eq!(
+            frontend_origin(&url("http://192.168.1.2:8000"), 8000, true),
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CID}.localhost:8000")
+        );
     }
 
     #[test]

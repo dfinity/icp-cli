@@ -341,7 +341,7 @@ networks:
     # ii-identities: []
 ```
 
-Local Internet Identity signs in with a seed index instead of a passkey. Each name's index is its position in the list, and `icp network start` prints the index for each name. To sign in as one of them, choose to use an existing passkey and enter its index.
+Local Internet Identity signs in with a seed index instead of a passkey. Each name's index is its position in the list (`alice` is 0, `bob` is 1, and so on). To sign in as one of them, choose to use an existing passkey and enter its index.
 
 Identities that already exist are left as they are, so restarting a network that keeps its state does not register them again, and renaming or reordering entries takes effect only once the network state is reset.
 

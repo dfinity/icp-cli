@@ -343,7 +343,7 @@ networks:
 
 Local Internet Identity signs in with a seed index instead of a passkey. Each name's index is its position in the list (`alice` is 0, `bob` is 1, and so on). To sign in as one of them, choose to use an existing passkey and enter its index.
 
-Identities are registered in list order, so each name gets the same identity number on every start. Identities created by hand in the Internet Identity frontend don't survive a restart; to keep one, add its name to `ii-identities`.
+Identities are registered in list order, so each position gets the same identity number on every start. The identity number and the principals a dapp sees belong to the position, not to the name: reordering the list renames identities rather than moving them. For example, after changing `[alice, bob]` to `[bob, alice]`, index 0 is still identity 10000 with the same principals, but it is now named `bob`. Identities created by hand in the Internet Identity frontend don't survive a restart; to keep one, add its name to `ii-identities`.
 
 #### Bitcoin and Dogecoin Integration
 

@@ -724,6 +724,16 @@
                 "null"
               ]
             },
+            "ii-identities": {
+              "description": "Names of the Internet Identity identities registered when the network starts with\nInternet Identity enabled. Each name's index in the list is the seed index the local\nInternet Identity login asks for. Defaults to `alice`, `bob` and `charlie` when\nomitted; an empty list registers none",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "nns": {
               "description": "Set up the NNS",
               "type": [

@@ -48,7 +48,7 @@ The `@dfinity` prefix is hardcoded to `https://github.com/dfinity/icp-cli-recipe
 
 Two network types, modelled in `crates/icp-project/src/network/` and run from `crates/icp-app/src/network/`:
 
-- **Managed Networks**: Local test networks launched via `icp-cli-network-launcher` (wraps PocketIC)
+- **Managed Networks**: Local test networks launched via `icp-cli-network-launcher` (wraps PocketIC). Once the launcher is up, `network/managed/run.rs` seeds ICP and cycles balances, installs the Candid UI and proxy canisters, and, when Internet Identity is enabled, registers the manifest's `ii-identities` with it (`network/managed/ii_identities.rs`)
 - **Connected Networks**: Remote networks (mainnet, testnets) accessed via HTTP
 
 ### Implicit Networks and Environments

@@ -302,6 +302,7 @@ mod tests {
                             gateway: None,
                             artificial_delay_ms: None,
                             ii: None,
+                            ii_identities: None,
                             nns: None,
                             subnets: None,
                             bitcoind_addr: None,

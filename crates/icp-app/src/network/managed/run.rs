@@ -33,6 +33,7 @@ use crate::network::{
     },
     managed::{
         docker::{DockerDropGuard, ManagedImageOptions, spawn_docker_launcher},
+        ii_identities::{self, SeedIiIdentitiesError},
         launcher::{ChildSignalOnDrop, launcher_settings_flags, spawn_network_launcher},
     },
 };
@@ -246,6 +247,26 @@ async fn run_network_launcher(
     )
     .await?;
 
+    if let ManagedMode::Launcher(cfg) = &config.mode
+        && (cfg.ii || cfg.nns)
+        && !cfg.ii_identities.is_empty()
+    {
+        let origin = ii_identities::frontend_origin(
+            &gateway_url,
+            gateway.port,
+            instance.use_friendly_domains,
+        );
+        info!("Seeding Internet Identity identities");
+        let identities = ii_identities::seed(
+            &gateway_url,
+            &instance.root_key,
+            &cfg.ii_identities,
+            &origin,
+        )
+        .await?;
+        ii_identities::report(&origin, &identities);
+    }
+
     let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.ii);
 
     network_root
@@ -425,6 +446,9 @@ pub enum RunNetworkLauncherError {
 
     #[snafu(transparent)]
     InitNetwork { source: InitializeNetworkError },
+
+    #[snafu(transparent)]
+    SeedIiIdentities { source: SeedIiIdentitiesError },
 
     #[snafu(transparent)]
     WaitForPort { source: WaitForPortError },
@@ -836,6 +860,7 @@ mod tests {
             },
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: None,
@@ -874,6 +899,7 @@ mod tests {
             },
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: None,
@@ -898,6 +924,7 @@ mod tests {
             },
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: None,
@@ -921,6 +948,7 @@ mod tests {
             },
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: None,
@@ -943,6 +971,7 @@ mod tests {
             gateway: Gateway::default(),
             artificial_delay_ms: None,
             ii: true,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),
@@ -967,6 +996,7 @@ mod tests {
             gateway: Gateway::default(),
             artificial_delay_ms: Some(50),
             ii: false,
+            ii_identities: vec![],
             nns: true,
             subnets: None,
             bitcoind_addr: None,
@@ -992,6 +1022,7 @@ mod tests {
             gateway: Gateway::default(),
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: Some(vec!["192.168.1.5:18444".to_string()]),
@@ -1012,6 +1043,7 @@ mod tests {
             gateway: Gateway::default(),
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: vec![],
             nns: false,
             subnets: None,
             bitcoind_addr: Some(vec!["0.0.0.0:18444".to_string()]),

@@ -295,6 +295,7 @@ networks:
 | `gateway.domains` | array | No | Custom domain names the gateway responds to (e.g. `my-app.localhost`) |
 | `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
 | `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. When enabled, the internet identity frontend is available at id.ai.localhost:<port> |
+| `ii-identities` | array | No | Names of the Internet Identity identities registered on start when II is enabled (default: `alice`, `bob`, `charlie`; `[]` registers none). See [Internet Identity Identities](#internet-identity-identities). |
 | `nns` | boolean | No | Install NNS and SNS canisters (default: false). Implies `ii` and adds an SNS subnet. |
 | `subnets` | array | No | Configure subnet types. See [Subnet Configuration](#subnet-configuration). |
 | `bitcoind-addr` | array | No | Bitcoin P2P node addresses (e.g. `127.0.0.1:18444`). Adds a bitcoin and II subnet. |
@@ -323,6 +324,26 @@ networks:
 ```
 
 Available subnet types: `application`, `system`, `verified-application`, `bitcoin`, `fiduciary`, `nns`, `sns`
+
+#### Internet Identity Identities
+
+When Internet Identity is enabled (`ii` or `nns`), `icp network start` registers a set of named identities with it, so they exist right after startup, including after the network state was reset:
+
+```yaml
+networks:
+  - name: local
+    mode: managed
+    ii: true
+    # Leave out ii-identities to register alice, bob and charlie.
+    # A list replaces the defaults:
+    ii-identities: [admin, user]   # admin = index 0, user = index 1
+    # An empty list registers none:
+    # ii-identities: []
+```
+
+Local Internet Identity signs in with a seed index instead of a passkey. Each name's index is its position in the list, and `icp network start` prints the index for each name. To sign in as one of them, choose to use an existing passkey and enter its index.
+
+Identities that already exist are left as they are, so restarting a network that keeps its state does not register them again, and renaming or reordering entries takes effect only once the network state is reset.
 
 #### Bitcoin and Dogecoin Integration
 

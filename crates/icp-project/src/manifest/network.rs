@@ -84,6 +84,12 @@ pub enum ManagedMode {
         /// id.ai.localhost:<port>
         #[serde(skip_serializing_if = "Option::is_none")]
         ii: Option<bool>,
+        /// Names of the Internet Identity identities registered when the network starts with
+        /// Internet Identity enabled. Each name's index in the list is the seed index the local
+        /// Internet Identity login asks for. Defaults to `alice`, `bob` and `charlie` when
+        /// omitted; an empty list registers none
+        #[serde(skip_serializing_if = "Option::is_none")]
+        ii_identities: Option<Vec<String>>,
         /// Set up the NNS
         #[serde(skip_serializing_if = "Option::is_none")]
         nns: Option<bool>,
@@ -108,6 +114,7 @@ impl Default for ManagedMode {
             gateway: None,
             artificial_delay_ms: None,
             ii: None,
+            ii_identities: None,
             nns: None,
             subnets: None,
             bitcoind_addr: None,
@@ -386,6 +393,35 @@ mod tests {
                         gateway: None,
                         artificial_delay_ms: None,
                         ii: None,
+                        ii_identities: None,
+                        nns: None,
+                        subnets: None,
+                        bitcoind_addr: None,
+                        dogecoind_addr: None,
+                        version: None,
+                    })
+                })
+            },
+        );
+    }
+
+    #[test]
+    fn managed_network_with_ii_identities() {
+        assert_eq!(
+            validate_network_yaml(indoc! {r#"
+                    name: my-network
+                    mode: managed
+                    ii: true
+                    ii-identities: [admin, user]
+                "#}),
+            NetworkManifest {
+                name: "my-network".to_string(),
+                configuration: Mode::Managed(Managed {
+                    mode: Box::new(ManagedMode::Launcher {
+                        gateway: None,
+                        artificial_delay_ms: None,
+                        ii: Some(true),
+                        ii_identities: Some(vec!["admin".to_string(), "user".to_string()]),
                         nns: None,
                         subnets: None,
                         bitcoind_addr: None,
@@ -417,6 +453,7 @@ mod tests {
                         }),
                         artificial_delay_ms: None,
                         ii: None,
+                        ii_identities: None,
                         nns: None,
                         subnets: None,
                         bitcoind_addr: None,
@@ -449,6 +486,7 @@ mod tests {
                         }),
                         artificial_delay_ms: None,
                         ii: None,
+                        ii_identities: None,
                         nns: None,
                         subnets: None,
                         bitcoind_addr: None,
@@ -476,6 +514,7 @@ mod tests {
                         gateway: None,
                         artificial_delay_ms: None,
                         ii: None,
+                        ii_identities: None,
                         nns: None,
                         subnets: None,
                         bitcoind_addr: None,
@@ -538,6 +577,7 @@ mod tests {
                         gateway: None,
                         artificial_delay_ms: None,
                         ii: None,
+                        ii_identities: None,
                         nns: None,
                         subnets: None,
                         bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),

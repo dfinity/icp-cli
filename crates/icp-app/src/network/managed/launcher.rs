@@ -245,6 +245,7 @@ pub fn launcher_settings_flags(config: &ManagedLauncherConfig) -> Vec<String> {
         version: _,
         artificial_delay_ms,
         ii,
+        ii_identities: _,
         nns,
         subnets,
         bitcoind_addr,

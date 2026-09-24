@@ -178,7 +178,7 @@ networks:
 
 The `args` field passes values directly to the container entrypoint with no processing. The Docker image determines what arguments it accepts — see the image's documentation for available options.
 
-**Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher.
+**Comparison with native launcher mode:** When using native managed networks (without `image`), settings like `bitcoind-addr`, `ii`, `nns`, and `subnets` are configured as top-level YAML fields. In Docker image mode, these are passed via `args` instead, since the image could be any Docker image — not necessarily the official network launcher. Because icp-cli does not know which of them an image enables, it also does not register [Internet Identity identities](../reference/configuration.md#internet-identity-identities) on Docker image networks.
 
 > **Docker networking note:** When referencing services running on the host machine from inside a container (e.g., a local Bitcoin node), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. Inside a container, `127.0.0.1` refers to the container's own loopback, not the host. For example: `--bitcoind-addr=host.docker.internal:18444`. Docker Desktop (macOS/Windows) resolves `host.docker.internal` automatically. On Linux Docker Engine, add the `extra-hosts` option to ensure it resolves:
 >

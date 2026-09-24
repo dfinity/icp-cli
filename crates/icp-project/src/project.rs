@@ -1496,6 +1496,7 @@ pub async fn consolidate_manifest(
                             },
                             artificial_delay_ms: None,
                             ii: false,
+                            ii_identities: vec![],
                             nns: false,
                             subnets: None,
                             bitcoind_addr: None,

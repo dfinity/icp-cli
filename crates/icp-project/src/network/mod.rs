@@ -84,6 +84,7 @@ pub struct ManagedLauncherConfig {
     pub gateway: Gateway,
     pub artificial_delay_ms: Option<u64>,
     pub ii: bool,
+    pub ii_identities: Vec<String>,
     pub nns: bool,
     pub subnets: Option<Vec<SubnetKind>>,
     pub bitcoind_addr: Option<Vec<String>>,
@@ -126,6 +127,7 @@ impl ManagedMode {
             },
             artificial_delay_ms: None,
             ii: false,
+            ii_identities: default_ii_identities(),
             nns: false,
             subnets: None,
             bitcoind_addr: None,
@@ -133,6 +135,18 @@ impl ManagedMode {
             version: None,
         }))
     }
+}
+
+impl ManagedLauncherConfig {
+    /// Whether the launcher installs Internet Identity, which `nns` implies.
+    pub fn installs_ii(&self) -> bool {
+        self.ii || self.nns
+    }
+}
+
+/// The Internet Identity identities registered when a network's manifest names none.
+pub fn default_ii_identities() -> Vec<String> {
+    ["alice", "bob", "charlie"].map(String::from).to_vec()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, JsonSchema, Serialize)]
@@ -246,6 +260,7 @@ impl From<Mode> for Configuration {
                     gateway,
                     artificial_delay_ms,
                     ii,
+                    ii_identities,
                     nns,
                     subnets,
                     bitcoind_addr,
@@ -272,6 +287,7 @@ impl From<Mode> for Configuration {
                                 gateway,
                                 artificial_delay_ms,
                                 ii: ii.unwrap_or(false),
+                                ii_identities: ii_identities.unwrap_or_else(default_ii_identities),
                                 nns: nns.unwrap_or(false),
                                 subnets,
                                 bitcoind_addr,
@@ -469,6 +485,48 @@ mod tests {
         Mode,
     };
 
+    fn launcher_config(ii_identities: Option<Vec<String>>) -> ManagedLauncherConfig {
+        let mode = Mode::Managed(ManifestManaged {
+            mode: Box::new(ManifestManagedMode::Launcher {
+                gateway: None,
+                artificial_delay_ms: None,
+                ii: Some(true),
+                ii_identities,
+                nns: None,
+                subnets: None,
+                bitcoind_addr: None,
+                dogecoind_addr: None,
+                version: None,
+            }),
+        });
+        match Configuration::from(mode) {
+            Configuration::Managed {
+                managed:
+                    Managed {
+                        mode: ManagedMode::Launcher(launcher_config),
+                    },
+            } => *launcher_config,
+            _ => panic!("expected ManagedMode::Launcher"),
+        }
+    }
+
+    #[test]
+    fn ii_identities_default_when_omitted() {
+        assert_eq!(
+            launcher_config(None).ii_identities,
+            ["alice", "bob", "charlie"]
+        );
+    }
+
+    #[test]
+    fn ii_identities_replace_the_defaults() {
+        assert_eq!(
+            launcher_config(Some(vec!["admin".to_string()])).ii_identities,
+            ["admin"]
+        );
+        assert!(launcher_config(Some(vec![])).ii_identities.is_empty());
+    }
+
     #[test]
     fn from_mode_launcher_with_bitcoind_addr() {
         let mode = Mode::Managed(ManifestManaged {
@@ -480,6 +538,7 @@ mod tests {
                 }),
                 artificial_delay_ms: None,
                 ii: None,
+                ii_identities: None,
                 nns: None,
                 subnets: None,
                 bitcoind_addr: Some(vec!["127.0.0.1:18444".to_string()]),

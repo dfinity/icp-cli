@@ -1,11 +1,14 @@
 use std::net::SocketAddr;
 
-use candid::Principal;
+use candid::{Decode, Encode, Principal};
+use icp_app::network::managed::ii_identities::dummy_auth_seed;
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
-    cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL, icp_ledger::ICP_LEDGER_PRINCIPAL,
+    cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
+    icp_ledger::ICP_LEDGER_PRINCIPAL,
     internet_identity::INTERNET_IDENTITY_FRONTEND_PRINCIPAL,
-    internet_identity::INTERNET_IDENTITY_PRINCIPAL, registry::REGISTRY_PRINCIPAL,
+    internet_identity::{DeviceKeyWithAnchor, INTERNET_IDENTITY_PRINCIPAL},
+    registry::REGISTRY_PRINCIPAL,
 };
 use indoc::{formatdoc, indoc};
 use predicates::{
@@ -609,6 +612,45 @@ async fn network_starts_with_canisters_preset() {
         .read_state_canister_module_hash(INTERNET_IDENTITY_FRONTEND_PRINCIPAL)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn network_seeds_ii_identities() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            networks:
+              - name: random-network
+                mode: managed
+                gateway:
+                    port: 0
+                ii: true
+                ii-identities: [admin, user]
+            {ENVIRONMENT_RANDOM_PORT}
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let _guard = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let agent = ctx.agent();
+    let lookup = async |index| {
+        let response = agent
+            .query(&INTERNET_IDENTITY_PRINCIPAL, "lookup_device_key")
+            .with_arg(Encode!(&dummy_auth_seed(index).to_vec()).unwrap())
+            .call()
+            .await
+            .unwrap();
+        Decode!(&response, Option<DeviceKeyWithAnchor>)
+            .unwrap()
+            .map(|device| device.anchor_number)
+    };
+    assert_eq!(lookup(0).await, Some(10_000));
+    assert_eq!(lookup(1).await, Some(10_001));
+    assert_eq!(lookup(2).await, None);
 }
 
 #[tag(docker)]

@@ -327,7 +327,7 @@ Available subnet types: `application`, `system`, `verified-application`, `bitcoi
 
 #### Internet Identity Identities
 
-When Internet Identity is enabled (`ii` or `nns`), `icp network start` registers a set of named identities with it, so they exist right after startup, including after the network state was reset:
+When Internet Identity is enabled (`ii` or `nns`), `icp network start` registers a set of named identities with it. Every start begins with a fresh network, so they exist right after each start:
 
 ```yaml
 networks:
@@ -343,7 +343,7 @@ networks:
 
 Local Internet Identity signs in with a seed index instead of a passkey. Each name's index is its position in the list (`alice` is 0, `bob` is 1, and so on). To sign in as one of them, choose to use an existing passkey and enter its index.
 
-Identities that already exist are left as they are, so restarting a network that keeps its state does not register them again, and renaming or reordering entries takes effect only once the network state is reset.
+Identities are registered in list order, so each name gets the same identity number on every start. Identities created by hand in the Internet Identity frontend don't survive a restart; to keep one, add its name to `ii-identities`.
 
 #### Bitcoin and Dogecoin Integration
 

@@ -9,9 +9,9 @@ use candid::{Decode, Encode};
 use ic_agent::{Agent, AgentError, Identity, identity::BasicIdentity};
 use icp_canister_interfaces::internet_identity::{
     AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
-    AuthnMethodSecuritySettings, DeviceKeyWithAnchor, INTERNET_IDENTITY_FRONTEND_CID,
-    INTERNET_IDENTITY_PRINCIPAL, IdRegFinishArg, IdRegFinishError, IdRegFinishResult,
-    IdRegNextStepResult, IdRegStartError, MetadataEntryV2, RegistrationFlowNextStep, WebAuthn,
+    AuthnMethodSecuritySettings, INTERNET_IDENTITY_FRONTEND_CID, INTERNET_IDENTITY_PRINCIPAL,
+    IdRegFinishArg, IdRegFinishError, IdRegFinishResult, IdRegNextStepResult, IdRegStartError,
+    MetadataEntryV2, RegistrationFlowNextStep, WebAuthn,
 };
 use snafu::prelude::*;
 use tracing::debug;
@@ -19,7 +19,7 @@ use url::Url;
 
 use crate::network::custom_domains::gateway_domain;
 
-/// An identity registered with Internet Identity, or found already registered.
+/// An identity registered with Internet Identity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IiIdentity {
     pub name: String,
@@ -36,9 +36,8 @@ pub fn dummy_auth_seed(index: u64) -> [u8; 32] {
     seed
 }
 
-/// Registers each of `names` with Internet Identity, the name at position `i` under seed index
-/// `i`. Names whose key is already registered are left as they are, so this can run on every
-/// start of a network that keeps its state.
+/// Registers each of `names` with a fresh Internet Identity, the name at position `i` under seed
+/// index `i`.
 ///
 /// Registration is sequential: Internet Identity hands out identity numbers in order, so a fresh
 /// network always gives the same names the same numbers.
@@ -51,7 +50,9 @@ pub async fn seed(
     let mut identities = Vec::with_capacity(names.len());
     for (index, name) in (0u64..).zip(names) {
         let identity_number = seed_one(api_url, root_key, name, index, origin).await?;
-        debug!("Internet Identity identity {name}: seed index {index}, identity {identity_number}");
+        debug!(
+            "II identity '{name}' registered: seed index {index}, identity number {identity_number}"
+        );
         identities.push(IiIdentity {
             name: name.clone(),
             index,
@@ -79,18 +80,6 @@ async fn seed_one(
         .build()
         .context(BuildAgentSnafu { name })?;
     agent.set_root_key(root_key.to_vec());
-
-    let response = agent
-        .query(&INTERNET_IDENTITY_PRINCIPAL, "lookup_device_key")
-        .with_arg(Encode!(&seed.to_vec()).expect("encoding a blob cannot fail"))
-        .call()
-        .await
-        .context(LookupSnafu { name })?;
-    let existing =
-        Decode!(&response, Option<DeviceKeyWithAnchor>).context(DecodeLookupSnafu { name })?;
-    if let Some(existing) = existing {
-        return Ok(existing.anchor_number);
-    }
 
     let response = agent
         .update(&INTERNET_IDENTITY_PRINCIPAL, "identity_registration_start")
@@ -157,16 +146,6 @@ pub enum SeedIiIdentitiesError {
         #[snafu(source(from(AgentError, Box::new)))]
         source: Box<AgentError>,
     },
-
-    #[snafu(display("failed to look up Internet Identity identity `{name}`"))]
-    Lookup {
-        name: String,
-        #[snafu(source(from(AgentError, Box::new)))]
-        source: Box<AgentError>,
-    },
-
-    #[snafu(display("failed to decode the lookup of Internet Identity identity `{name}`"))]
-    DecodeLookup { name: String, source: candid::Error },
 
     #[snafu(display("failed to start registering Internet Identity identity `{name}`"))]
     StartRegistration {

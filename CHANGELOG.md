@@ -8,6 +8,9 @@ air-gapped signing
 
 # Unreleased
 
+* chore: the macOS `icp` release binaries are now code-signed with DFINITY's Developer ID certificate. This improves the Keychain experience for identities stored in the keyring. macOS used to treat each unsigned release as a different app, so choosing "Always Allow" lasted only until the next upgrade. The signed binary keeps the same identity across releases, so after you allow access once more on the first signed version, it stays allowed through later upgrades. The signed binary is what you get from the GitHub release (including the shell installer) and npm. `brew install icp-cli` from homebrew-core is not signed, because Homebrew builds that formula from source on its own infrastructure. The binary is not notarized, so a release archive downloaded through a browser still gets a Gatekeeper warning; the shell installer and npm are unaffected.
+* chore: the codebase is reorganized as groundwork for running project operations inside a canister. The former `icp` library crate is split into `icp-project` (the project model and the build, install, sync and deploy operations) and `icp-app` (identities, settings, local networks and other machine-level state), and `icp-project` now reaches the file system, the network and sync plugins only through traits. This is internal only — no command, flag or manifest behavior changes.
+
 # v1.5.0
 
 * feat(sync-plugin): Introduced v0.2.0 of the sync-plugin interface. v0.1.0 plugins are still supported. v0.2.0 introduces the following features:

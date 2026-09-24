@@ -137,6 +137,13 @@ impl ManagedMode {
     }
 }
 
+impl ManagedLauncherConfig {
+    /// Whether the launcher installs Internet Identity, which `nns` implies.
+    pub fn installs_ii(&self) -> bool {
+        self.ii || self.nns
+    }
+}
+
 /// The Internet Identity identities registered when a network's manifest names none.
 pub fn default_ii_identities() -> Vec<String> {
     ["alice", "bob", "charlie"].map(String::from).to_vec()

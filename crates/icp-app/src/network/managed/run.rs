@@ -248,7 +248,7 @@ async fn run_network_launcher(
     .await?;
 
     if let ManagedMode::Launcher(cfg) = &config.mode
-        && (cfg.ii || cfg.nns)
+        && cfg.installs_ii()
         && !cfg.ii_identities.is_empty()
     {
         let origin = ii_identities::frontend_origin(
@@ -267,7 +267,7 @@ async fn run_network_launcher(
         ii_identities::report(&origin, &identities);
     }
 
-    let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.ii);
+    let ii = matches!(&config.mode, ManagedMode::Launcher(cfg) if cfg.installs_ii());
 
     network_root
         .with_write(async |root| -> Result<_, RunNetworkLauncherError> {

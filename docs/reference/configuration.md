@@ -294,12 +294,12 @@ networks:
 | `gateway.port` | integer | No | Port number (default: 8000, use 0 for random) |
 | `gateway.domains` | array | No | Custom domain names the gateway responds to (e.g. `my-app.localhost`) |
 | `artificial-delay-ms` | integer | No | Artificial delay for update calls (ms) |
-| `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`, `bitcoind-addr`, and `dogecoind-addr`. When enabled, the internet identity frontend is available at id.ai.localhost:<port> |
+| `ii` | boolean | No | Install Internet Identity canister (default: false). Also implicitly enabled by `nns`. When enabled, the internet identity frontend is available at id.ai.localhost:<port> |
 | `ii-identities` | array | No | Names of the Internet Identity identities registered on start when II is enabled (default: `alice`, `bob`, `charlie`; `[]` registers none). See [Internet Identity Identities](#internet-identity-identities). |
 | `nns` | boolean | No | Install NNS and SNS canisters (default: false). Implies `ii` and adds an SNS subnet. |
 | `subnets` | array | No | Configure subnet types. See [Subnet Configuration](#subnet-configuration). |
-| `bitcoind-addr` | array | No | Bitcoin P2P node addresses (e.g. `127.0.0.1:18444`). Adds a bitcoin and II subnet. |
-| `dogecoind-addr` | array | No | Dogecoin P2P node addresses. Adds a bitcoin and II subnet. |
+| `bitcoind-addr` | array | No | Bitcoin P2P node addresses (e.g. `127.0.0.1:18444`). Adds a bitcoin subnet. |
+| `dogecoind-addr` | array | No | Dogecoin P2P node addresses. Adds a bitcoin subnet. |
 
 For full details on how these settings interact, see the [network launcher CLI reference](https://github.com/dfinity/icp-cli-network-launcher#cli-reference).
 
@@ -359,7 +359,7 @@ networks:
 
 The `bitcoind-addr` field specifies the P2P address (not RPC) of the Bitcoin node. Multiple addresses can be specified. Dogecoin integration works the same way via `dogecoind-addr`. Both can be configured simultaneously.
 
-**Implicit effects:** When `bitcoind-addr` or `dogecoind-addr` is configured, the network launcher automatically adds a **bitcoin** subnet and an **II** subnet (provides threshold signing keys required for chain operations). If you also explicitly specify `subnets`, you must include `application` to keep the default application subnet:
+**Implicit effects:** When `bitcoind-addr` or `dogecoind-addr` is configured, the network launcher automatically adds a **bitcoin** subnet. The threshold signing keys that chain operations need come from a subnet the launcher always creates. If you also explicitly specify `subnets`, you must include `application` to keep the default application subnet:
 
 ```yaml
 networks:

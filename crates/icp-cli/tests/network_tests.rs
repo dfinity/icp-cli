@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use candid::{Decode, Encode, Principal};
-use icp_app::network::managed::ii_identities::dummy_auth_seed;
+use icp_app::network::managed::ii_identities::{self, dummy_auth_seed};
 use icp_canister_interfaces::{
     cycles_ledger::CYCLES_LEDGER_PRINCIPAL,
     cycles_minting_canister::CYCLES_MINTING_CANISTER_PRINCIPAL,
@@ -650,6 +650,20 @@ async fn network_seeds_ii_identities() {
     };
     assert_eq!(lookup(0).await, Some(10_000));
     assert_eq!(lookup(1).await, Some(10_001));
+    assert_eq!(lookup(2).await, None);
+
+    // Seeding again, as every later start of this network does, keeps the existing identities.
+    let names = ["admin".to_string(), "user".to_string()];
+    let identities = ii_identities::seed(
+        ctx.gateway_url(),
+        &agent.read_root_key(),
+        &names,
+        "http://id.ai.localhost",
+    )
+    .await
+    .unwrap();
+    let numbers: Vec<_> = identities.iter().map(|i| i.identity_number).collect();
+    assert_eq!(numbers, [10_000, 10_001]);
     assert_eq!(lookup(2).await, None);
 }
 

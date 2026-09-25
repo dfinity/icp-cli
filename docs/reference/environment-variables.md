@@ -100,6 +100,19 @@ icp token balance  # Checks balance on IC mainnet
 
 This is equivalent to passing `-n ic` to commands that accept a network flag. The explicit `-n` flag takes precedence over this variable.
 
+### `ICP_PROJECT_ROOT`
+
+Sets the project root directory, equivalent to the global `--project-root-override` flag.
+
+By default, icp-cli walks up from the current directory to the workspace root (the top-most project that declares the one you are in as a dependency). When this variable is set, the given directory is used as the root with no upward walk. It must contain an `icp.yaml`:
+
+```bash
+export ICP_PROJECT_ROOT=./vendor/my-project
+icp deploy  # Deploys my-project on its own, not as part of the workspace
+```
+
+The explicit `--project-root-override` flag takes precedence over this variable. See [Project Dependencies](../concepts/project-dependencies.md#setting-the-root-explicitly).
+
 ### `ICP_HOME`
 
 Overrides the default location for global icp-cli data (identities, package cache).
@@ -143,6 +156,17 @@ export ICP_CLI_NETWORK_LAUNCHER_PATH=/path/to/icp-cli-network-launcher
 
 Download the launcher manually from [icp-cli-network-launcher releases](https://github.com/dfinity/icp-cli-network-launcher/releases).
 
+### `ICP_CLI_GITHUB_TOKEN`
+
+A GitHub token icp-cli sends when it fetches the [network launcher](#icp_cli_network_launcher_path) or checks GitHub for updates. Set it in CI to avoid hitting GitHub's rate limit for unauthenticated requests.
+
+In GitHub Actions:
+
+```yaml
+env:
+  ICP_CLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
 ### `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`
 
 Maximum seconds of pure WebAssembly compute a [sync plugin](../concepts/sync-plugins.md) may use during `icp sync`. Defaults to `60`.
@@ -160,6 +184,32 @@ An invalid value (non-integer or `0`) is rejected rather than silently ignored, 
 **Use cases:**
 - CI jobs syncing large asset bundles that trip the default limit
 - Compression-heavy or otherwise compute-intensive sync plugins
+
+### `NO_COLOR`
+
+When set to any value, icp-cli prints its output without colors, following the [`NO_COLOR`](https://no-color.org/) convention. Colors are also turned off when output is not a terminal.
+
+## Telemetry Variables
+
+Any of these turns off [telemetry](../telemetry.md#opting-out):
+
+| Variable | Effect |
+|----------|--------|
+| `ICP_TELEMETRY_DISABLED` | Disables telemetry when set to any value |
+| `DO_NOT_TRACK` | Cross-tool standard; disables telemetry when set to any value |
+| `CI` | Set by most CI providers; telemetry is disabled automatically |
+
+## Docker Variables
+
+These apply to [containerized networks](../guides/containerized-networks.md), including every local network on Windows.
+
+### `DOCKER_HOST`
+
+The address of the Docker daemon, e.g. `unix:///var/run/docker.sock` or `tcp://<ip>:<port>`. When unset, icp-cli uses `\\.\pipe\docker_engine` on Windows. On macOS and Linux it uses `/var/run/docker.sock` if it exists, and otherwise asks `docker context inspect` for the current context's endpoint.
+
+### `ICP_CLI_DOCKER_WSL2_DISTRO`
+
+On Windows, the name of the WSL2 distribution running `dockerd`, for setups without Docker Desktop. icp-cli uses it to translate the paths it mounts into the container. See [Manual dockerd in WSL2](../guides/containerized-networks.md#advanced-manual-dockerd-in-wsl2).
 
 ## Windows-Specific Variables
 

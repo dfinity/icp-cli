@@ -25,9 +25,10 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # Check out the dispatching branch, not the release tag: the tag only
+      # supplies the binaries, which are downloaded from its GitHub release,
+      # so a fix to the packaging scripts applies to re-runs of old releases.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.version }}
       
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0

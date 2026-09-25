@@ -10,7 +10,7 @@ use icp_app::identity::{
     manifest::{IdentityKeyAlgorithm, IdentityList},
     seed::derive_key_from_seed_slip10,
 };
-use icp_project::{fs::write_string, prelude::*};
+use icp_project::{fs::write_private, prelude::*};
 
 use icp_app::context::Context;
 use serde::Serialize;
@@ -107,7 +107,8 @@ pub(crate) async fn exec(ctx: &Context, args: &NewArgs) -> Result<(), anyhow::Er
 
     match &args.output_seed {
         Some(path) => {
-            write_string(path, mnemonic.as_ref()).context("failed to write seed file")?;
+            write_private(path, mnemonic.as_ref().as_bytes())
+                .context("failed to write seed file")?;
             warn!(
                 "Store the seed phrase file in a secure location. If you lose it, you will lose access to your identity."
             );

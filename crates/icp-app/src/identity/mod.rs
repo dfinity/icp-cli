@@ -65,7 +65,7 @@ impl IdentityPaths {
     }
 
     pub fn ensure_key_pem_path(&self, name: &str) -> Result<PathBuf, icp_project::fs::IoError> {
-        icp_project::fs::create_dir_all(&self.dir.join("keys"))?;
+        icp_project::fs::create_private_dir_all(&self.dir.join("keys"))?;
         Ok(self.dir.join(format!("keys/{name}.pem")))
     }
 
@@ -77,7 +77,7 @@ impl IdentityPaths {
         &self,
         name: &str,
     ) -> Result<PathBuf, icp_project::fs::IoError> {
-        icp_project::fs::create_dir_all(&self.dir.join("delegations"))?;
+        icp_project::fs::create_private_dir_all(&self.dir.join("delegations"))?;
         Ok(self.dir.join(format!("delegations/{name}.json")))
     }
 }

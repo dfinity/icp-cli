@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 25 Sep 2026 08:11:03 GMT</lastBuildDate>
-    <pubDate>Wed, 09 Sep 2026 08:20:43 GMT</pubDate>
+    <lastBuildDate>Fri, 25 Sep 2026 11:14:32 GMT</lastBuildDate>
+    <pubDate>Fri, 25 Sep 2026 11:13:30 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Fri, 25 Sep 2026 11:13:30 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Project Dependencies</title>
       <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
@@ -39,14 +47,6 @@
       <description>All available canister settings for resource allocation, memory limits, logging, and runtime behavior.</description>
       <pubDate>Tue, 08 Sep 2026 13:55:36 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/canister-settings/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Tue, 08 Sep 2026 13:55:36 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

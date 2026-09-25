@@ -158,9 +158,14 @@ Download the launcher manually from [icp-cli-network-launcher releases](https://
 
 ### `ICP_CLI_GITHUB_TOKEN`
 
-A GitHub token icp-cli sends when it downloads the [network launcher](#icp_cli_network_launcher_path) and when it checks for new icp-cli releases. Other downloads, such as recipes and templates, don't use it.
+A GitHub token icp-cli sends with its requests to GitHub for:
 
-GitHub limits unauthenticated API requests to 60 per hour per IP address. Authenticated requests get a much higher [limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api): 5,000 per hour for a personal access token, and 1,000 per hour per repository for the `GITHUB_TOKEN` in GitHub Actions. CI jobs that share a runner IP can use up the unauthenticated limit quickly, and the launcher download then fails. The token only reads public releases, so it needs no extra permissions.
+- the [network launcher](#icp_cli_network_launcher_path): resolving and downloading it, and checking for a newer version (at most once a day) when `icp network start` reuses a cached one
+- the icp-cli update check, when icp-cli was installed from GitHub releases or the Homebrew beta tap
+
+Other requests don't use it. These include recipe and template downloads, and the update check for Homebrew core and npm installs, which queries those registries instead.
+
+GitHub limits unauthenticated API requests to 60 per hour per IP address. Authenticated requests get a much higher [limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api): 5,000 per hour for a personal access token, and 1,000 per hour per repository for the `GITHUB_TOKEN` in GitHub Actions. CI jobs that share a runner IP can use up the unauthenticated limit quickly, after which icp-cli can no longer resolve or download the launcher. The token only reads public releases, so it needs no extra permissions.
 
 In GitHub Actions, pass the workflow's built-in token:
 

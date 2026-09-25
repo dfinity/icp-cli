@@ -158,27 +158,14 @@ Download the launcher manually from [icp-cli-network-launcher releases](https://
 
 ### `ICP_CLI_GITHUB_TOKEN`
 
-A GitHub token icp-cli sends with its requests to GitHub for:
+A GitHub token icp-cli sends when it fetches the [network launcher](#icp_cli_network_launcher_path) or checks GitHub for updates. Without it, GitHub allows 60 requests per hour per IP address, which parallel CI jobs sharing a runner can quickly exhaust. With it, the higher [authenticated limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) apply.
 
-- the [network launcher](#icp_cli_network_launcher_path): resolving and downloading it, and checking for a newer version (at most once a day) when `icp network start` reuses a cached one
-- the icp-cli update check, when icp-cli was installed from GitHub releases or the Homebrew beta tap
-
-Other requests don't use it. These include recipe and template downloads, and the update check for Homebrew core and npm installs, which queries those registries instead.
-
-GitHub limits unauthenticated API requests to 60 per hour per IP address. Authenticated requests get a much higher [limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api): 5,000 per hour for a personal access token, and 1,000 per hour per repository for the `GITHUB_TOKEN` in GitHub Actions. CI jobs that share a runner IP can use up the unauthenticated limit quickly, after which icp-cli can no longer resolve or download the launcher. The token only reads public releases, so it needs no extra permissions.
-
-In GitHub Actions, pass the workflow's built-in token:
+In GitHub Actions:
 
 ```yaml
 env:
   ICP_CLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
-
-The token is only sent to GitHub. It is dropped when a release download redirects to GitHub's CDN.
-
-**Use cases:**
-- CI pipelines that start local networks, especially with parallel jobs
-- Shared networks (offices, VPNs) where many users download from the same IP
 
 ### `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`
 

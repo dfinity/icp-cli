@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
 use crate::{
-    fs::{read, write_string},
+    fs::{read, write_private, write_string},
     prelude::*,
 };
 
@@ -40,6 +40,19 @@ pub fn save<T: Serialize>(path: &Path, value: &T) -> Result<(), Error> {
     write_string(
         path,
         &serde_json::to_string_pretty(&value).context(SerializeSnafu { path })?,
+    )?;
+
+    Ok(())
+}
+
+/// Like [`save`], but the file is only readable and writable by its owner
+/// (see [`write_private`]).
+pub fn save_private<T: Serialize>(path: &Path, value: &T) -> Result<(), Error> {
+    write_private(
+        path,
+        serde_json::to_string_pretty(&value)
+            .context(SerializeSnafu { path })?
+            .as_bytes(),
     )?;
 
     Ok(())

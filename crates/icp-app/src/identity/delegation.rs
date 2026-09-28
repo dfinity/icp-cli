@@ -225,6 +225,21 @@ mod tests {
 
         assert!(is_expiring_soon(&chain, 0).is_err());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_writes_an_owner_only_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
+        let path = tmp.path().join("alice.json");
+        let chain = chain_with_delegations(vec![signed_delegation("1".to_string(), None)]);
+        save(&path, &chain).unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        assert_eq!(load(&path).unwrap().public_key, chain.public_key);
+    }
 }
 
 /// Returns the earliest expiration (nanoseconds since epoch) across all
@@ -259,8 +274,12 @@ pub fn load(path: &Path) -> Result<DelegationChain, LoadError> {
     Ok(fs::json::load(path)?)
 }
 
+/// Saves `chain` readable by its owner only. The chain holds no private key and
+/// travels with every call it signs, so this is defense in depth rather than
+/// secrecy: it keeps other local users from learning which principal and
+/// targets this machine holds a delegation for.
 pub fn save(path: &Path, chain: &DelegationChain) -> Result<(), SaveError> {
-    fs::json::save(path, chain)?;
+    fs::json::save_private(path, chain)?;
     Ok(())
 }
 

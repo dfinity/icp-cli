@@ -1143,7 +1143,7 @@ fn write_identity(
     pem: &str,
 ) -> Result<(), WriteIdentityError> {
     let pem_path = dirs.ensure_key_pem_path(name).context(WriteFileSnafu)?;
-    fs::write_string(&pem_path, pem).context(WriteFileSnafu)?;
+    fs::write_private(&pem_path, pem.as_bytes()).context(WriteFileSnafu)?;
 
     Ok(())
 }
@@ -1251,7 +1251,7 @@ pub fn rename_identity(
             let old_path = dirs.key_pem_path(old_name);
             let new_path = dirs.key_pem_path(new_name);
             let contents = fs::read(&old_path).context(CopyKeyFileSnafu)?;
-            fs::write(&new_path, &contents).context(CopyKeyFileSnafu)?;
+            fs::write_private(&new_path, &contents).context(CopyKeyFileSnafu)?;
 
             // Best-effort: migrate any cached session delegation.
             if let Ok(old_entry) = Entry::new(SERVICE_NAME, &dlg_keyring_key(old_name))
@@ -1266,7 +1266,7 @@ pub fn rename_identity(
             if let Ok(chain_bytes) = fs::read(&old_chain_path)
                 && let Ok(new_chain_path) = (*dirs).ensure_delegation_chain_path(new_name)
             {
-                let _ = fs::write(&new_chain_path, &chain_bytes);
+                let _ = fs::write_private(&new_chain_path, &chain_bytes);
                 let _ = fs::remove_file(&old_chain_path);
             }
 
@@ -1294,7 +1294,7 @@ pub fn rename_identity(
                 .ensure_delegation_chain_path(new_name)
                 .context(CopyKeyFileSnafu)?;
             let delegation_contents = fs::read(&old_delegation).context(CopyKeyFileSnafu)?;
-            fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
+            fs::write_private(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
 
             match storage {
                 DelegationKeyStorage::Keyring => {
@@ -1314,7 +1314,7 @@ pub fn rename_identity(
                     let old_pem = dirs.key_pem_path(old_name);
                     let new_pem = dirs.key_pem_path(new_name);
                     let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
-                    fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                    fs::write_private(&new_pem, &contents).context(CopyKeyFileSnafu)?;
                     OldKeyMaterial::WebAuthPemAndDelegation(old_pem, old_delegation)
                 }
             }
@@ -1344,7 +1344,7 @@ pub fn rename_identity(
                 let old_pem = dirs.key_pem_path(old_name);
                 let new_pem = dirs.key_pem_path(new_name);
                 let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
-                fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                fs::write_private(&new_pem, &contents).context(CopyKeyFileSnafu)?;
                 OldKeyMaterial::DelegationPem(old_pem)
             }
         },
@@ -1354,7 +1354,7 @@ pub fn rename_identity(
                 .ensure_delegation_chain_path(new_name)
                 .context(CopyKeyFileSnafu)?;
             let delegation_contents = fs::read(&old_delegation).context(CopyKeyFileSnafu)?;
-            fs::write(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
+            fs::write_private(&new_delegation, &delegation_contents).context(CopyKeyFileSnafu)?;
 
             match storage {
                 DelegationKeyStorage::Keyring => {
@@ -1374,7 +1374,7 @@ pub fn rename_identity(
                     let old_pem = dirs.key_pem_path(old_name);
                     let new_pem = dirs.key_pem_path(new_name);
                     let contents = fs::read(&old_pem).context(CopyKeyFileSnafu)?;
-                    fs::write(&new_pem, &contents).context(CopyKeyFileSnafu)?;
+                    fs::write_private(&new_pem, &contents).context(CopyKeyFileSnafu)?;
                     OldKeyMaterial::WebAuthPemAndDelegation(old_pem, old_delegation)
                 }
             }
@@ -1774,7 +1774,7 @@ pub fn link_webauth_identity(
             let pem_path = dirs
                 .ensure_key_pem_path(name)
                 .context(DlgWritePemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            fs::write_private(&pem_path, pem.as_bytes()).context(DlgWritePemFileSnafu { name })?;
             DelegationKeyStorage::Pem {
                 format: PemFormat::Plaintext,
             }
@@ -1784,7 +1784,7 @@ pub fn link_webauth_identity(
             let pem_path = dirs
                 .ensure_key_pem_path(name)
                 .context(DlgWritePemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            fs::write_private(&pem_path, pem.as_bytes()).context(DlgWritePemFileSnafu { name })?;
             DelegationKeyStorage::Pem {
                 format: PemFormat::Pbes2,
             }
@@ -1908,7 +1908,7 @@ pub fn create_pending_delegation(
             let pem_path = dirs
                 .ensure_key_pem_path(name)
                 .context(DlgWritePemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            fs::write_private(&pem_path, pem.as_bytes()).context(DlgWritePemFileSnafu { name })?;
             DelegationKeyStorage::Pem {
                 format: PemFormat::Plaintext,
             }
@@ -1918,7 +1918,7 @@ pub fn create_pending_delegation(
             let pem_path = dirs
                 .ensure_key_pem_path(name)
                 .context(DlgWritePemFileSnafu { name })?;
-            fs::write_string(&pem_path, &pem).context(DlgWritePemFileSnafu { name })?;
+            fs::write_private(&pem_path, pem.as_bytes()).context(DlgWritePemFileSnafu { name })?;
             DelegationKeyStorage::Pem {
                 format: PemFormat::Pbes2,
             }

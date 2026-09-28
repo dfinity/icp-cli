@@ -138,6 +138,16 @@ pub enum ConsolidateManifestError {
     ))]
     InvalidDependencyAlias { alias: String },
 
+    #[snafu(display(
+        "network name '{name}' is invalid: only ASCII letters, digits, '_' and '-' are allowed"
+    ))]
+    InvalidNetworkName { name: String },
+
+    #[snafu(display(
+        "environment name '{name}' is invalid: only ASCII letters, digits, '_' and '-' are allowed"
+    ))]
+    InvalidEnvironmentName { name: String },
+
     #[snafu(display("project declares two dependencies with the same alias '{alias}'"))]
     DuplicateDependencyAlias { alias: String },
 
@@ -318,14 +328,17 @@ fn is_glob(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[') || s.contains('{')
 }
 
-/// Whether `name` is a valid canister name or dependency alias: non-empty and
-/// containing only ASCII letters, digits, `_`, or `-`.
+/// Whether `name` is a valid canister name, dependency alias, network name or
+/// environment name: non-empty and containing only ASCII letters, digits, `_`,
+/// or `-`.
 ///
 /// A single strict rule keeps names safe for every purpose they are reused for —
-/// store-key segments, `PUBLIC_CANISTER_ID:<name>` env vars, DNS subdomains, and
-/// archive paths — so no per-site sanitizing is needed. In particular `:` is the
-/// dependency namespace separator, and `.` / `/` would be ambiguous in
-/// subdomains and paths.
+/// store-key segments, `PUBLIC_CANISTER_ID:<name>` env vars, DNS subdomains,
+/// archive paths, and the path components under `.icp` that network and
+/// environment names become — so no per-site sanitizing is needed. In
+/// particular `:` is the dependency namespace separator, `.` / `/` would be
+/// ambiguous in subdomains and paths, and `/`, `..` or an absolute name would
+/// escape `.icp`.
 fn is_valid_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -1449,6 +1462,10 @@ pub async fn consolidate_manifest(
             Item::Manifest(ms) => ms.clone(),
         };
 
+        if !is_valid_name(&m.name) {
+            return InvalidNetworkNameSnafu { name: m.name }.fail();
+        }
+
         match networks.entry(m.name.to_owned()) {
             // Duplicate
             Entry::Occupied(e) => {
@@ -1528,6 +1545,10 @@ pub async fn consolidate_manifest(
             }
             Item::Manifest(ms) => ms.clone(),
         };
+
+        if !is_valid_name(&m.name) {
+            return InvalidEnvironmentNameSnafu { name: m.name }.fail();
+        }
 
         match environments.entry(m.name.to_owned()) {
             // Duplicate
@@ -2606,6 +2627,35 @@ environments:
                 "bar.libfoo.openemail.service-b"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn path_like_network_and_environment_names_are_rejected() {
+        // Both names become path components under `.icp` (the network's state
+        // directory, the environment's `<env>.ids.json`), so anything that could
+        // leave that directory must be refused before it is ever joined.
+        for bad in ["/tmp/evil", "../../evil", "a/b", "..", "a.b", ""] {
+            let tmp = Utf8TempDir::new().unwrap();
+            let body = manifest(
+                &[],
+                &format!("networks:\n  - name: \"{bad}\"\n    mode: managed\n"),
+            );
+            write(tmp.path(), "icp.yaml", &body);
+            let err = consolidate(tmp.path()).await.unwrap_err();
+            assert!(
+                matches!(err, ConsolidateManifestError::InvalidNetworkName { .. }),
+                "network {bad:?}: got {err:?}"
+            );
+
+            let tmp = Utf8TempDir::new().unwrap();
+            let body = manifest(&[], &format!("environments:\n  - name: \"{bad}\"\n"));
+            write(tmp.path(), "icp.yaml", &body);
+            let err = consolidate(tmp.path()).await.unwrap_err();
+            assert!(
+                matches!(err, ConsolidateManifestError::InvalidEnvironmentName { .. }),
+                "environment {bad:?}: got {err:?}"
+            );
+        }
     }
 
     #[tokio::test]

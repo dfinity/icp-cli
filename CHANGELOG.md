@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+fix: reject path-like network and environment names
+
 # v1.6.0
 
 * chore: the macOS `icp` release binaries are now code-signed with DFINITY's Developer ID certificate. This improves the Keychain experience for identities stored in the keyring. macOS used to treat each unsigned release as a different app, so choosing "Always Allow" lasted only until the next upgrade. The signed binary keeps the same identity across releases, so after you allow access once more on the first signed version, it stays allowed through later upgrades. The signed binary is what you get from the GitHub release (including the shell installer) and npm. `brew install icp-cli` from homebrew-core is not signed, because Homebrew builds that formula from source on its own infrastructure. The binary is not notarized, so a release archive downloaded through a browser still gets a Gatekeeper warning; the shell installer and npm are unaffected.

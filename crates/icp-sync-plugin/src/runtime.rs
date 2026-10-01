@@ -28,9 +28,9 @@ use icp_events::{OutputStream as EventStream, StepReporter};
 use tokio::io::{self, AsyncWrite};
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::FsPerms;
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 use wasmtime_wasi::p2::{OutputStream, Pollable, StreamError};
-use wasmtime_wasi::{DirPerms, FilePerms};
 
 // Both the current and the legacy plugin interfaces are bound, each in its own
 // module so their generated type names don't collide. `run_plugin` reads the
@@ -666,12 +666,7 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
         // every one of them is in the map.
         let host_path = host_paths[dir];
         wasi_builder
-            .preopened_dir(
-                host_path.as_std_path(),
-                dir,
-                DirPerms::READ,
-                FilePerms::READ,
-            )
+            .preopened_dir(host_path.as_std_path(), dir, FsPerms::ReadOnly)
             .context(PreopenDirSnafu {
                 dir: host_path.clone(),
             })?;

@@ -301,9 +301,9 @@ async fn deploy_no_create_succeeds_when_canister_exists() {
         .stdout(eq("(\"Hello, test!\")").trim());
 }
 
-/// `--no-create` conflicts with the creation-only flags (`--subnet`, `--cycles`)
-/// at the clap level, so no network setup is needed. The defaulted `--cycles`
-/// only conflicts when passed explicitly, which is what this exercises.
+/// `--no-create` conflicts with the creation-only flags (`--subnet`, `--engine`,
+/// `--cycles`) at the clap level, so no network setup is needed. The defaulted
+/// `--cycles` only conflicts when passed explicitly, which is what this exercises.
 #[tokio::test]
 async fn deploy_no_create_conflicts_with_creation_flags() {
     let ctx = TestContext::new();
@@ -319,6 +319,31 @@ async fn deploy_no_create_conflicts_with_creation_flags() {
         .assert()
         .failure()
         .stderr(contains("--no-create").and(contains("--subnet")));
+
+    ctx.icp()
+        .args(["deploy", "--no-create", "--engine", "my-engine"])
+        .assert()
+        .failure()
+        .stderr(contains("--no-create").and(contains("--engine")));
+}
+
+/// `--engine` stands in for `--subnet`, so the two cannot be combined, nor can
+/// either be combined with `--proxy`.
+#[tokio::test]
+async fn deploy_engine_conflicts_with_subnet_and_proxy() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["deploy", "--engine", "my-engine", "--subnet", "aaaaa-aa"])
+        .assert()
+        .failure()
+        .stderr(contains("--engine").and(contains("--subnet")));
+
+    ctx.icp()
+        .args(["deploy", "--engine", "my-engine", "--proxy", "aaaaa-aa"])
+        .assert()
+        .failure()
+        .stderr(contains("--engine").and(contains("--proxy")));
 }
 
 #[tokio::test]

@@ -374,7 +374,7 @@ impl CreateOperation {
             // Treat a missing registry the same as "no operator registered":
             // this happens before any operator update is submitted, so the
             // legacy management-canister fallback is safe.
-            Err(e) if is_canister_not_found(&e) => {
+            Err(e) if e.is_canister_not_found() => {
                 return NoEngineOperatorSnafu {
                     subnet,
                     engine_registry,
@@ -732,25 +732,6 @@ pub fn shell_quote(value: &str) -> String {
 /// engine-canister registry as "no operator registered" so the CloudEngine path
 /// can fall back safely.
 ///
-/// A rejection specifically: a call that never reached a verdict says nothing
-/// about whether the canister is there, and must not be read as absence.
-///
-/// A replica that populated no error code leaves only the message to go on, so
-/// that is the fallback — and a call with no verdict has no message either,
-/// which is what keeps it out of this.
-fn is_canister_not_found(err: &crate::calls::CallError) -> bool {
-    match err.code() {
-        Some(code) => code == CANISTER_NOT_FOUND,
-        None => err
-            .message()
-            .is_some_and(|message| message.contains("Canister") && message.contains("not found")),
-    }
-}
-
-/// The replica's error code for a call addressed to a canister that does not
-/// exist.
-const CANISTER_NOT_FOUND: &str = "IC0301";
-
 async fn get_available_subnets(
     calls: &dyn CanisterCalls,
 ) -> Result<Vec<Principal>, CreateOperationError> {
@@ -852,43 +833,5 @@ mod tests {
         assert_eq!(shell_quote("plain"), "'plain'");
         // An embedded single quote is closed, escaped, and reopened via `'\''`.
         assert_eq!(shell_quote("a'b"), r"'a'\''b'");
-    }
-
-    #[test]
-    fn detects_canister_not_found_rejections() {
-        let rejected = |code: Option<&str>, message: &str| crate::calls::CallError::Rejected {
-            canister: Principal::anonymous(),
-            method: "get_engine_operator_by_subnet".to_owned(),
-            code: code.map(String::from),
-            message: message.to_owned(),
-        };
-
-        // IC0301 means the registry canister is not deployed here.
-        assert!(is_canister_not_found(&rejected(
-            Some("IC0301"),
-            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
-        )));
-
-        // So does the same rejection from a replica that gave no error code,
-        // which leaves nothing but the message to read it from.
-        assert!(is_canister_not_found(&rejected(
-            None,
-            "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
-        )));
-
-        // Other rejections (e.g. a canister trap) must NOT be treated as
-        // "not found" — they should propagate rather than fall back.
-        assert!(!is_canister_not_found(&rejected(None, "trapped")));
-        assert!(!is_canister_not_found(&rejected(Some("IC0503"), "trapped")));
-
-        // Neither may a call that reached no verdict at all: it says nothing
-        // about whether the canister is there.
-        assert!(!is_canister_not_found(
-            &crate::calls::CallError::unanswered(
-                Principal::anonymous(),
-                "get_engine_operator_by_subnet",
-                std::io::Error::other("connection reset"),
-            )
-        ));
     }
 }

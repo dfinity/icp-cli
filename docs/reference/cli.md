@@ -268,6 +268,9 @@ Examples:
   Default value: `2000000000000`
 * `--with-icp <WITH_ICP>` — Amount of ICP to convert into cycles to fund canister creation. Uses the cycles minting canister (CMC) instead of the cycles ledger. Only needed for restricted system subnets. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--engine <ENGINE>` — The cloud engine to create canisters on, by name, as the equivalent of `--subnet` with the engine's subnet. A subnet id is accepted as-is.
+
+   The name is looked up among the engines visible to the identity in use. When several engines share the name, `name/slug` or the engine's id picks one.
 * `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
 
    When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy's `proxy` method.
@@ -979,6 +982,9 @@ using --args or --args-file:
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--engine <ENGINE>` — The cloud engine to deploy to, by name, as the equivalent of `--subnet` with the engine's subnet. A subnet id is accepted as-is.
+
+   The name is looked up among the engines visible to the identity in use. When several engines share the name, `name/slug` or the engine's id picks one.
 * `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)

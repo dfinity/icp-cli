@@ -47,10 +47,11 @@ impl FromStr for EngineSelector {
 /// The subnet of the engine the caller calls `engine`, among the engines it
 /// may see on `registry`.
 ///
-/// `engine` matches an engine's name, its id, or `name/slug` — the slug being
-/// the disambiguator the registry keeps for engines that share a name. A name
-/// shared by several visible engines is refused rather than guessed at, naming
-/// each so the user can pick one. A deleted engine is never matched.
+/// `engine` matches an engine's id, its name, or `name/slug` — the slug being
+/// the disambiguator the registry keeps for engines that share a name. An id
+/// match wins outright; a name shared by several visible engines is refused
+/// rather than guessed at, naming each so the user can pick one. A deleted
+/// engine is never matched.
 pub(crate) async fn resolve_subnet(
     calls: &dyn CanisterCalls,
     registry: Principal,
@@ -74,13 +75,23 @@ pub(crate) async fn resolve_subnet(
         }))
         .await?;
 
-    // An engine the registry would not name is still there by id.
+    // An id is unique and settles the question on its own, so it is answered
+    // before names are looked at: an engine whose *name* happens to be another
+    // engine's id must not make that id ambiguous. An engine the registry
+    // would not name is still there by id.
+    if let Some((found, metadata)) = named.iter().find(|(e, _)| e.id == engine) {
+        return found.subnet_id.context(NoSubnetSnafu {
+            engine: metadata
+                .as_ref()
+                .map_or(found.id.as_str(), |m| m.name.as_str()),
+            engine_id: &found.id,
+        });
+    }
     let matches: Vec<&(&Engine, Option<EngineMetadata>)> = named
         .iter()
-        .filter(|(e, m)| {
-            e.id == engine
-                || m.as_ref()
-                    .is_some_and(|m| m.name == engine || format!("{}/{}", m.name, m.slug) == engine)
+        .filter(|(_, m)| {
+            m.as_ref()
+                .is_some_and(|m| m.name == engine || format!("{}/{}", m.name, m.slug) == engine)
         })
         .collect();
 
@@ -90,10 +101,8 @@ pub(crate) async fn resolve_subnet(
             engine,
             matches: matches
                 .iter()
-                .map(|(e, m)| match m {
-                    Some(m) => format!("{} (slug {}, id {})", m.name, m.slug, e.id),
-                    None => format!("id {}", e.id),
-                })
+                .filter_map(|(e, m)| m.as_ref().map(|m| (e, m)))
+                .map(|(e, m)| format!("{} (slug {}, id {})", m.name, m.slug, e.id))
                 .collect::<Vec<_>>(),
         }
     );
@@ -445,6 +454,24 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("alpha (slug one, id eng-1)"), "{message}");
         assert!(message.contains("alpha (slug five, id eng-5)"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn an_id_wins_over_an_engine_named_after_it() {
+        let mut registry = registry();
+        registry.engines.push(engine("eng-5", Some(SUBNET_B)));
+        registry.metadata.push(("eng-5", metadata("eng-1", "five")));
+
+        // `eng-1` is both an id and another engine's name; the id settles it.
+        assert_eq!(
+            resolve(&registry, "eng-1").await.unwrap(),
+            principal(SUBNET_A)
+        );
+        // The engine called `eng-1` is still reachable by its own id.
+        assert_eq!(
+            resolve(&registry, "eng-5").await.unwrap(),
+            principal(SUBNET_B)
+        );
     }
 
     #[tokio::test]

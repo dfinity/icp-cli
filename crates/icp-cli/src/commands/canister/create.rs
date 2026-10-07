@@ -1,5 +1,6 @@
 use std::io::stdout;
 
+use crate::engine::EngineSelector;
 use anyhow::anyhow;
 use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
@@ -8,6 +9,7 @@ use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
 use icp_app::context::{Context, NetworkSelection};
 use icp_app::identity::IdentitySelection;
 use icp_canister_interfaces::engine_canister::engine_canister_id;
+use icp_project::calls::CanisterCalls;
 use icp_project::canister::resolve_controllers;
 use icp_project::host::EnvironmentSelection;
 use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
@@ -99,6 +101,15 @@ pub(crate) struct CreateArgs {
     /// The subnet to create canisters on.
     #[arg(long, conflicts_with = "proxy")]
     pub(crate) subnet: Option<Principal>,
+
+    /// The cloud engine to create canisters on, by name, as the equivalent of
+    /// `--subnet` with the engine's subnet. A subnet id is accepted as-is.
+    ///
+    /// The name is looked up among the engines visible to the identity in use.
+    /// When several engines share the name, `name/slug` or the engine's id
+    /// picks one.
+    #[arg(long, conflicts_with_all = ["subnet", "proxy"])]
+    pub(crate) engine: Option<EngineSelector>,
 
     /// Principal of a proxy canister to route the create_canister call through.
     ///
@@ -239,12 +250,32 @@ impl CreateArgs {
         flags
     }
 
-    fn create_target(&self) -> CreateTarget {
-        match (self.subnet, self.proxy) {
+    /// Where the canister goes, once `--engine` has been resolved to the
+    /// subnet it stands for (see [`Self::resolve_subnet`]).
+    fn create_target(&self, subnet: Option<Principal>) -> CreateTarget {
+        match (subnet, self.proxy) {
             (Some(subnet), _) => CreateTarget::Subnet(subnet),
             (_, Some(_)) => CreateTarget::Proxy,
             _ => CreateTarget::None,
         }
+    }
+
+    /// The subnet asked for: `--subnet` itself, or the subnet of the engine
+    /// `--engine` names, looked up on `engine_registry`.
+    async fn resolve_subnet(
+        &self,
+        calls: &dyn CanisterCalls,
+        engine_registry: Principal,
+    ) -> Result<Option<Principal>, anyhow::Error> {
+        Ok(match &self.engine {
+            None => self.subnet,
+            Some(EngineSelector::Subnet(subnet)) => Some(*subnet),
+            Some(EngineSelector::Named(name)) => {
+                let subnet = crate::engine::resolve_subnet(calls, engine_registry, name).await?;
+                info!("Engine '{name}' is on subnet {subnet}");
+                Some(subnet)
+            }
+        })
     }
 
     pub(crate) fn canister_settings(&self) -> MgmtCanisterSettings {
@@ -307,14 +338,16 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
         .await?;
 
     let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+    let engine_registry = engine_canister_id().map_err(|message| anyhow!(message))?;
+    let subnet = args.resolve_subnet(calls.as_ref(), engine_registry).await?;
 
     let create_operation = CreateOperation::new(
         calls,
         ctx.host.random.clone(),
-        args.create_target(),
+        args.create_target(subnet),
         args.funding(),
         vec![],
-        engine_canister_id().map_err(|message| anyhow!(message))?,
+        engine_registry,
     );
 
     let canister_settings = args.canister_settings();
@@ -380,14 +413,16 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         .map_err(|e| anyhow!(e))?;
 
     let calls = icp_app::calls::calls(agent.clone(), args.proxy)?;
+    let engine_registry = engine_canister_id().map_err(|message| anyhow!(message))?;
+    let subnet = args.resolve_subnet(calls.as_ref(), engine_registry).await?;
 
     let create_operation = CreateOperation::new(
         calls.clone(),
         ctx.host.random.clone(),
-        args.create_target(),
+        args.create_target(subnet),
         args.funding(),
         ids.values().copied().collect(),
-        engine_canister_id().map_err(|message| anyhow!(message))?,
+        engine_registry,
     );
 
     let (canister_settings, unresolved) =

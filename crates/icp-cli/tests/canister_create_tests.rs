@@ -198,6 +198,125 @@ async fn canister_create_on_requested_subnet() {
     );
 }
 
+/// Verifies that `canister create --engine <subnet-id>` is `--subnet <subnet-id>`: a principal
+/// given as the engine is taken to be its subnet, with no engine canister consulted.
+///
+/// As in [`canister_create_on_requested_subnet`], the network has several application subnets
+/// so the placement is an actual choice. The same network then shows what naming an engine
+/// does where no engine canister is deployed: a clear refusal, not a lookup failure.
+#[tokio::test]
+async fn canister_create_on_requested_engine() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: echo hi
+
+        networks:
+          - name: random-network
+            mode: managed
+            gateway:
+              port: 0
+            subnets: [application, application]
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let subnet_id = ctx.application_subnet_id().await;
+
+    let icp_client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+    icp_client.mint_cycles(10 * TRILLION);
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "my-canister",
+            "--engine",
+            &subnet_id,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+
+    // The canister must be created on exactly the subnet we requested.
+    let actual_subnet = clients::registry(&ctx)
+        .get_subnet_for_canister(icp_client.get_canister_id("my-canister"))
+        .await;
+    assert_eq!(
+        actual_subnet.to_string(),
+        subnet_id,
+        "canister should be created on the engine's subnet"
+    );
+
+    // A named engine has to be looked up, and this network has no engine
+    // canister to look it up on.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env_remove("ENGINE_CANISTER_ID")
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--engine",
+            "my-engine",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "the engine canister q6cfj-fyaaa-aaaar-qb77q-cai does not exist on this network",
+        ));
+}
+
+/// `--engine` stands in for `--subnet`, so the two cannot be combined, nor can
+/// either be combined with `--proxy`.
+#[test]
+fn canister_create_engine_conflicts_with_subnet_and_proxy() {
+    let ctx = TestContext::new();
+    let subnet = "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe";
+
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--engine",
+            "my-engine",
+            "--subnet",
+            subnet,
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("cannot be used with"));
+
+    ctx.icp()
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--engine",
+            "my-engine",
+            "--proxy",
+            "rrkah-fqaaa-aaaaa-aaaaq-cai",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("cannot be used with"));
+}
+
 #[tokio::test]
 async fn canister_create_with_settings() {
     let ctx = TestContext::new();

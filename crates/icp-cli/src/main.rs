@@ -19,6 +19,7 @@ mod call_output;
 mod commands;
 mod complete;
 mod dist;
+mod engine;
 mod logging;
 mod options;
 mod render;

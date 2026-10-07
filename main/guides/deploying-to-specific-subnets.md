@@ -46,6 +46,24 @@ icp canister create my-canister -e ic --subnet pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt4
 
 The `--subnet` flag only affects canister creation. If the canister already exists, it remains on its current subnet.
 
+## Deploying to a Cloud Engine
+
+A cloud engine is a subnet of your own. You can target it by name instead of looking up its subnet id, with the `--engine` flag on either `icp deploy` or `icp canister create`:
+
+```bash
+# Deploy all canisters to the engine called "my-engine"
+icp deploy -e ic --engine my-engine
+
+# Create a canister on it without deploying code
+icp canister create my-canister -e ic --engine my-engine
+```
+
+The name is resolved through the engine canister, among the engines visible to the identity you are running as, and the command then behaves exactly as `--subnet` would with the engine's subnet. If the identity can't see an engine by that name, the error lists the engines it can see. If several visible engines share a name, pick one as `name/slug` or by the engine's id, which the error also lists.
+
+A subnet id passed as the engine is used as-is: `--engine <subnet-id>` is the same as `--subnet <subnet-id>`.
+
+Engine names are looked up on the engine canister on mainnet. The `ENGINE_CANISTER_ID` environment variable points the lookup at another one.
+
 ## Local Network Subnets
 
 For local development, you can configure multiple subnets to test cross-subnet (Xnet) calls. See the [Configuration Reference](../reference/configuration.md) for available subnet types and setup.

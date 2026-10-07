@@ -6,15 +6,31 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 25 Sep 2026 11:14:32 GMT</lastBuildDate>
-    <pubDate>Fri, 25 Sep 2026 11:13:30 GMT</pubDate>
+    <lastBuildDate>Wed, 07 Oct 2026 05:25:11 GMT</lastBuildDate>
+    <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Environment Variables Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
       <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Fri, 25 Sep 2026 11:13:30 GMT</pubDate>
+      <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Deploying to Specific Subnets</title>
+      <link>https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</link>
+      <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
+      <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -135,14 +151,6 @@
       <description>Upgrading a project from icp-cli 0.2.x — the built-in `type: assets` sync step is removed in later releases; switch to the plugin-based asset sync.</description>
       <pubDate>Fri, 04 Sep 2026 10:41:35 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/upgrading-from-v0-2/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Mon, 31 Aug 2026 17:50:48 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -279,14 +287,6 @@
       <description>Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Deploying to Specific Subnets</title>
-      <link>https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</link>
-      <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

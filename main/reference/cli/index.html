@@ -370,6 +370,10 @@ or a “detached” canister on a network.</p>
 <p><code>--subnet &#x3C;SUBNET></code> — The subnet to create canisters on</p>
 </li>
 <li>
+<p><code>--engine &#x3C;ENGINE></code> — The cloud engine to create canisters on, by name, as the equivalent of <code>--subnet</code> with the engine’s subnet. A subnet id is accepted as-is.</p>
+<p>The name is looked up among the engines visible to the identity in use. When several engines share the name, <code>name/slug</code> or the engine’s id picks one.</p>
+</li>
+<li>
 <p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route the create_canister call through.</p>
 <p>When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy’s <code>proxy</code> method.</p>
 </li>
@@ -1004,6 +1008,10 @@ using —args or —args-file:</p>
 </li>
 <li>
 <p><code>--subnet &#x3C;SUBNET></code> — The subnet to use for the canisters being deployed</p>
+</li>
+<li>
+<p><code>--engine &#x3C;ENGINE></code> — The cloud engine to deploy to, by name, as the equivalent of <code>--subnet</code> with the engine’s subnet. A subnet id is accepted as-is.</p>
+<p>The name is looked up among the engines visible to the identity in use. When several engines share the name, <code>name/slug</code> or the engine’s id picks one.</p>
 </li>
 <li>
 <p><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route management canister calls through</p>

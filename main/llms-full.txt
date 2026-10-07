@@ -3636,6 +3636,24 @@ icp canister create my-canister -e ic --subnet pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt4
 
 The `--subnet` flag only affects canister creation. If the canister already exists, it remains on its current subnet.
 
+## Deploying to a Cloud Engine
+
+A cloud engine is a subnet of your own. You can target it by name instead of looking up its subnet id, with the `--engine` flag on either `icp deploy` or `icp canister create`:
+
+```bash
+# Deploy all canisters to the engine called "my-engine"
+icp deploy -e ic --engine my-engine
+
+# Create a canister on it without deploying code
+icp canister create my-canister -e ic --engine my-engine
+```
+
+The name is resolved through the engine canister, among the engines visible to the identity you are running as, and the command then behaves exactly as `--subnet` would with the engine's subnet. If the identity can't see an engine by that name, the error lists the engines it can see. If several visible engines share a name, pick one as `name/slug` or by the engine's id, which the error also lists.
+
+A subnet id passed as the engine is used as-is: `--engine <subnet-id>` is the same as `--subnet <subnet-id>`.
+
+Engine names are looked up on the engine canister on mainnet. The `ENGINE_CANISTER_ID` environment variable points the lookup at another one.
+
 ## Local Network Subnets
 
 For local development, you can configure multiple subnets to test cross-subnet (Xnet) calls. See the [Configuration Reference](../reference/configuration.md) for available subnet types and setup.
@@ -7550,6 +7568,9 @@ Examples:
   Default value: `2000000000000`
 * `--with-icp <WITH_ICP>` — Amount of ICP to convert into cycles to fund canister creation. Uses the cycles minting canister (CMC) instead of the cycles ledger. Only needed for restricted system subnets. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--subnet <SUBNET>` — The subnet to create canisters on
+* `--engine <ENGINE>` — The cloud engine to create canisters on, by name, as the equivalent of `--subnet` with the engine's subnet. A subnet id is accepted as-is.
+
+   The name is looked up among the engines visible to the identity in use. When several engines share the name, `name/slug` or the engine's id picks one.
 * `--proxy <PROXY>` — Principal of a proxy canister to route the create_canister call through.
 
    When specified, the canister will be created on the same subnet as the proxy canister by forwarding the management canister call through the proxy's `proxy` method.
@@ -8261,6 +8282,9 @@ using --args or --args-file:
   Possible values: `auto`, `install`, `reinstall`, `upgrade`
 
 * `--subnet <SUBNET>` — The subnet to use for the canisters being deployed
+* `--engine <ENGINE>` — The cloud engine to deploy to, by name, as the equivalent of `--subnet` with the engine's subnet. A subnet id is accepted as-is.
+
+   The name is looked up among the engines visible to the identity in use. When several engines share the name, `name/slug` or the engine's id picks one.
 * `--proxy <PROXY>` — Principal of a proxy canister to route management canister calls through
 * `--controller <CONTROLLER>` — One or more controllers for the canisters being deployed. Repeat `--controller` to specify multiple
 * `--cycles <CYCLES>` — Cycles to fund canister creation. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
@@ -9969,6 +9993,15 @@ An invalid value (non-integer or `0`) is rejected rather than silently ignored, 
 **Use cases:**
 - CI jobs syncing large asset bundles that trip the default limit
 - Compression-heavy or otherwise compute-intensive sync plugins
+
+### `ENGINE_CANISTER_ID`
+
+The engine canister that `--engine` resolves cloud engine names through, and that cloud engine subnets are looked up in when creating canisters. When set to a canister id, it overrides the built-in mainnet engine canister. An empty value is ignored; an invalid one is an error.
+
+```bash
+export ENGINE_CANISTER_ID=<canister-id>
+icp deploy -e staging --engine my-engine
+```
 
 ### `NO_COLOR`
 

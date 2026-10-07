@@ -182,6 +182,15 @@ An invalid value (non-integer or `0`) is rejected rather than silently ignored, 
 - CI jobs syncing large asset bundles that trip the default limit
 - Compression-heavy or otherwise compute-intensive sync plugins
 
+### `ENGINE_CANISTER_ID`
+
+The engine canister that `--engine` resolves cloud engine names through, and that cloud engine subnets are looked up in when creating canisters. When set to a canister id, it overrides the built-in mainnet engine canister. An empty value is ignored; an invalid one is an error.
+
+```bash
+export ENGINE_CANISTER_ID=<canister-id>
+icp deploy -e staging --engine my-engine
+```
+
 ### `NO_COLOR`
 
 When set to any value, icp-cli prints its output without colors, following the [`NO_COLOR`](https://no-color.org/) convention. Colors are also turned off when output is not a terminal.

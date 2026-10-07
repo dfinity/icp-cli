@@ -114,6 +114,37 @@ Verify your cycles balance:
 icp cycles balance -n ic
 ```
 
+## Buying Cycles with a Card
+
+If you have a card but no ICP, you can buy cycles directly for the current identity through a cycles gateway canister:
+
+```bash
+icp cycles buy --amount 10 -n ic
+```
+
+The command quotes what the amount buys, shows who is paying and which gateway canister the order goes to, and asks you to confirm:
+
+```
+Buyer:    rv4ez-fgjbj-...-vae (identity 'default')
+Gateway:  saz2a-riaaa-aaaay-aadha-cai (canister id)
+Quote:    10.00 USD -> 7.238T cycles (includes a 0.59 USD card fee; rate locked at order creation)
+Create this order? [y/N]
+```
+
+It then creates the order as your identity, prints the hosted checkout URL (and opens it in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on the payment processor's hosted page; the CLI never sees card details. Amounts are in USD, which is the only currency the gateway accepts today.
+
+Useful flags:
+
+- `--no-open` prints the URL without opening a browser, for SSH sessions and containers. You can pay from any device.
+- `--no-wait` returns right after printing the URL. `--resume <order-id>` waits on an order later, and prints its URL again while it is still payable.
+- `--cancel <order-id>` cancels an open order. An unpaid order also expires on its own at the deadline the command prints.
+- `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created and one when it settles; `-q` prints only the URL, then the final status.
+- `--gateway <canister-id>` buys through another gateway canister. The `ICP_CYCLES_GATEWAY_CANISTER_ID` environment variable does the same.
+
+Pressing Ctrl-C while waiting leaves the order payable; the command prints how to resume or cancel it. If the order ends up needing review, your card was charged and the gateway operator resolves delivery; keep the order id.
+
+The gateway is a third-party canister that takes card payments. The default is the CyclePay backend on mainnet. The cycles arrive in your identity's default cycles-ledger account; fund a canister from there with `icp canister top-up`, or run `icp deploy -e ic`.
+
 ## Transferring ICP Tokens
 
 Send ICP tokens to another principal:

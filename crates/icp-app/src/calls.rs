@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use candid::{Encode, Nat, Principal};
 use ic_agent::{
     Agent, AgentError,
-    agent::{CallResponse, EffectiveId, SubnetType},
+    agent::{CallResponse, EffectiveId, SubnetType, agent_error::HttpErrorPayload},
     hash_tree::{Label, LookupResult},
 };
 use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
@@ -72,6 +72,18 @@ impl AgentCalls {
             },
             AgentError::TimeoutWaitingForResponse() | AgentError::TransportError(_) => {
                 CallError::unanswered(canister, method, err)
+            }
+            // An HTTP gateway that cannot route to the canister answers before
+            // any replica does, with no reject code to carry. It has still
+            // reached the same verdict a replica's IC0301 would, so it is
+            // reported as that rejection rather than as an opaque failure.
+            AgentError::HttpError(payload) if is_canister_not_found_http(payload) => {
+                CallError::Rejected {
+                    canister,
+                    method: method.to_owned(),
+                    code: Some(CANISTER_NOT_FOUND.to_owned()),
+                    message: format!("Canister {canister} not found"),
+                }
             }
             _ => CallError::failed(canister, method, err),
         }
@@ -402,6 +414,17 @@ impl CanisterCalls for AgentCalls {
     }
 }
 
+/// The replica's error code for a call addressed to a canister that does not
+/// exist, which [`CallError::is_canister_not_found`] recognizes.
+const CANISTER_NOT_FOUND: &str = "IC0301";
+
+/// Whether an HTTP gateway's error says the canister it was asked to route to
+/// does not exist: a 4xx whose body is the gateway's `canister_not_found`.
+fn is_canister_not_found_http(payload: &HttpErrorPayload) -> bool {
+    (400..500).contains(&payload.status)
+        && String::from_utf8_lossy(&payload.content).contains("canister_not_found")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +465,29 @@ mod tests {
         assert_eq!(err.code(), Some("IC0508"));
         assert!(err.is_rejection());
         assert!(!err.is_transient());
+    }
+
+    /// A local HTTP gateway refuses to route to a canister it has never heard
+    /// of before any replica sees the call. Callers that branch on "does this
+    /// canister exist" must get the same answer they would from a replica.
+    #[test]
+    fn a_gateway_canister_not_found_is_an_ic0301_rejection() {
+        let err = wrapped(AgentError::HttpError(HttpErrorPayload {
+            status: 400,
+            content_type: Some("text/plain; charset=utf-8".to_owned()),
+            content: b"error: canister_not_found".to_vec(),
+        }));
+        assert!(err.is_canister_not_found(), "{err}");
+        assert!(err.is_rejection());
+
+        // Any other HTTP failure stays what it is: deterministic, not absence.
+        let err = wrapped(AgentError::HttpError(HttpErrorPayload {
+            status: 502,
+            content_type: None,
+            content: b"bad gateway".to_vec(),
+        }));
+        assert!(!err.is_canister_not_found());
+        assert!(!err.is_rejection());
     }
 
     /// The replica's own wording for the two ways a target reports it has no

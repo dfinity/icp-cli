@@ -37,6 +37,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp completions`↴](#icp-completions)
 * [`icp cycles`↴](#icp-cycles)
 * [`icp cycles balance`↴](#icp-cycles-balance)
+* [`icp cycles buy`↴](#icp-cycles-buy)
 * [`icp cycles mint`↴](#icp-cycles-mint)
 * [`icp cycles transfer`↴](#icp-cycles-transfer)
 * [`icp deploy`↴](#icp-deploy)
@@ -880,6 +881,7 @@ Mint and manage cycles
 ###### **Subcommands:**
 
 * `balance` — Display the cycles balance
+* `buy` — Buy cycles with a card
 * `mint` — Convert ICP to cycles
 * `transfer` — Transfer cycles to another principal
 
@@ -901,6 +903,34 @@ Display the cycles balance
 * `--of-principal <OF_PRINCIPAL>` — Check the balance of this principal instead of the current identity
 * `--json` — Output command results as JSON
 * `-q`, `--quiet` — Suppress human-readable output; print only the balance
+
+
+
+## `icp cycles buy`
+
+Buy cycles with a card.
+
+Creates an order on a cycles gateway canister as the current identity, prints the hosted checkout URL (and opens it in a browser when run from a terminal), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. The gateway accepts USD only.
+
+Exactly one of --amount, --resume or --cancel must be given.
+
+**Usage:** `icp cycles buy [OPTIONS]`
+
+###### **Options:**
+
+* `--amount <USD>` — Amount to spend, in USD, as a decimal (e.g. 10 or 12.50)
+* `--resume <ORDER_ID>` — Continue waiting on an existing order instead of creating a new one
+* `--cancel <ORDER_ID>` — Cancel an open order
+* `--gateway <CANISTER_ID>` — Canister id of the cycles gateway to buy through. Defaults to the mainnet gateway, or to ICP_CYCLES_GATEWAY_CANISTER_ID when set
+* `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
+* `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
+* `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
+* `--identity <IDENTITY>` — The user identity to run this command as
+* `-y`, `--yes` — Skip confirmation prompts
+* `--no-open` — Do not open the checkout URL in a browser
+* `--no-wait` — Print the checkout URL and return without waiting for the order to complete
+* `--json` — Output command results as JSON
+* `-q`, `--quiet` — Suppress human-readable output; print only the checkout URL, then the final status
 
 
 

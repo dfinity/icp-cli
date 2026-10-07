@@ -418,3 +418,105 @@ async fn cycles_mint_to_subaccount() {
         .stdout(contains("Balance: 3_519_900_000_000 cycles"))
         .success();
 }
+
+/// The three modes of `cycles buy` are exclusive, and so are its two
+/// machine-readable outputs; none of this needs a network.
+#[test]
+fn cycles_buy_rejects_conflicting_arguments() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--resume", "o1"])
+        .assert()
+        .stderr(contains("cannot be used with"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--resume", "o1", "--cancel", "o1"])
+        .assert()
+        .stderr(contains("cannot be used with"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--json", "--quiet"])
+        .assert()
+        .stderr(contains("cannot be used with"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy"])
+        .assert()
+        .stderr(contains("required arguments were not provided"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10.005"])
+        .assert()
+        .stderr(contains("more than 2 decimal places"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "0"])
+        .assert()
+        .stderr(contains("greater than zero"))
+        .failure();
+}
+
+/// The anonymous identity cannot own an order, so the command refuses before
+/// touching the network.
+#[test]
+fn cycles_buy_refuses_the_anonymous_identity() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--identity",
+            "anonymous",
+            "-n",
+            "ic",
+        ])
+        .assert()
+        .stderr(contains("anonymous identity"))
+        .failure();
+}
+
+/// A local network has no cycles gateway: the command says so and points at
+/// mainnet rather than failing on an opaque rejection.
+#[tokio::test]
+async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .use_new_random_identity();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .stderr(contains("does not exist on this network"))
+        .stderr(contains("-n ic"))
+        .failure();
+}

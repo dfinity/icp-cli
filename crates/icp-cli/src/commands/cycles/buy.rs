@@ -8,7 +8,7 @@ use icp_app::context::Context;
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::cycles_purchase::{
-    self as purchase, CyclesPurchaseError, Money, OrderView, Quote, WaitOptions,
+    self as purchase, Currency, CyclesPurchaseError, Money, OrderView, Quote, WaitOptions,
 };
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_app::operations::token::format_cycles;
@@ -24,7 +24,6 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
 use crate::commands::args::TokenCommandArgs;
-use crate::commands::parsers::parse_usd_amount;
 use crate::render::{ProgressManager, ProgressManagerSettings};
 
 /// Buy cycles with a card.
@@ -33,20 +32,23 @@ use crate::render::{ProgressManager, ProgressManagerSettings};
 /// prints the hosted checkout URL (and opens it in a browser when run from a
 /// terminal), then waits for the cycles to land on the identity's own
 /// cycles-ledger account. Fund a canister from there with `icp canister
-/// top-up`. The gateway accepts USD only.
+/// top-up`. Amounts are in USD unless --currency says otherwise; the gateway accepts USD only today.
 ///
 /// Exactly one of --amount, --resume or --cancel must be given.
 #[derive(Debug, Args)]
 pub(crate) struct BuyArgs {
-    /// Amount to spend, in USD, as a decimal (e.g. 10 or 12.50)
+    /// Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
     #[arg(
         long,
-        value_name = "USD",
-        value_parser = parse_usd_amount,
+        value_name = "AMOUNT",
         required_unless_present_any = ["resume", "cancel"],
         conflicts_with_all = ["resume", "cancel"]
     )]
-    pub(crate) amount: Option<Money>,
+    pub(crate) amount: Option<String>,
+
+    /// ISO 4217 code of the currency to pay in. The gateway accepts USD only.
+    #[arg(long, value_name = "CODE", default_value = "USD")]
+    pub(crate) currency: Currency,
 
     /// Continue waiting on an existing order instead of creating a new one
     #[arg(long, value_name = "ORDER_ID", conflicts_with = "cancel")]
@@ -105,6 +107,14 @@ impl Output {
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Error> {
+    // A malformed amount should fail before any identity is unlocked or any
+    // network reached.
+    let amount = args
+        .amount
+        .as_deref()
+        .map(|amount| Money::parse_decimal(amount, args.currency))
+        .transpose()?;
+
     let selections = args.token_command_args.selections();
     if matches!(selections.identity, IdentitySelection::Anonymous) {
         bail!("cycles cannot be bought as the anonymous identity; choose one with --identity");
@@ -158,9 +168,8 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             order
         }
         None => {
-            let amount = args
-                .amount
-                .expect("clap requires --amount unless --resume or --cancel is given");
+            let amount =
+                amount.expect("clap requires --amount unless --resume or --cancel is given");
             let identity = identity_name(ctx, &selections.identity).await;
             let order =
                 create_order(calls, gateway, buyer, identity.as_deref(), amount, args).await?;
@@ -434,7 +443,7 @@ fn waiting_message(status: OrderStatus) -> String {
 /// What a gateway refusal means for this buyer, with the flag to reach for.
 fn refusal_message(error: &CreateOrderError, buyer: Principal) -> String {
     let usd = |cents: &candid::Nat| {
-        Money::from_nat_minor_units(cents, purchase::Currency::Usd)
+        Money::from_nat_minor_units(cents, Currency::Usd)
             .map(|m| m.to_string())
             .unwrap_or_else(|| format!("{cents} USD cents"))
     };
@@ -647,8 +656,8 @@ mod tests {
     #[test]
     fn quote_line_shows_amount_cycles_and_fee() {
         let line = quote_line(&Quote {
-            amount: Money::from_minor_units(1000, purchase::Currency::Usd),
-            fee: Money::from_minor_units(59, purchase::Currency::Usd),
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            fee: Money::from_minor_units(59, Currency::Usd),
             cycles: 7_238_000_000_000,
         });
         assert_eq!(

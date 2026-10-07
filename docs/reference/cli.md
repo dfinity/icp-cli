@@ -910,7 +910,7 @@ Display the cycles balance
 
 Buy cycles with a card.
 
-Creates an order on a cycles gateway canister as the current identity, prints the hosted checkout URL (and opens it in a browser when run from a terminal), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. The gateway accepts USD only.
+Creates an order on a cycles gateway canister as the current identity, prints the hosted checkout URL (and opens it in a browser when run from a terminal), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Amounts are in USD unless --currency says otherwise; the gateway accepts USD only today.
 
 Exactly one of --amount, --resume or --cancel must be given.
 
@@ -918,7 +918,10 @@ Exactly one of --amount, --resume or --cancel must be given.
 
 ###### **Options:**
 
-* `--amount <USD>` — Amount to spend, in USD, as a decimal (e.g. 10 or 12.50)
+* `--amount <AMOUNT>` — Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
+* `--currency <CODE>` — ISO 4217 code of the currency to pay in. The gateway accepts USD only
+
+  Default value: `USD`
 * `--resume <ORDER_ID>` — Continue waiting on an existing order instead of creating a new one
 * `--cancel <ORDER_ID>` — Cancel an open order
 * `--gateway <CANISTER_ID>` — Canister id of the cycles gateway to buy through. Defaults to the mainnet gateway, or to ICP_CYCLES_GATEWAY_CANISTER_ID when set

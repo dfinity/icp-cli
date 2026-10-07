@@ -51,7 +51,9 @@ impl FromStr for Currency {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_uppercase().as_str() {
             "USD" => Ok(Self::Usd),
-            other => Err(format!("unsupported currency '{other}'")),
+            other => Err(format!(
+                "unsupported currency '{other}'; only USD is supported"
+            )),
         }
     }
 }

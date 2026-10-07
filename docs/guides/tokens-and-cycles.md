@@ -131,7 +131,7 @@ Quote:    10.00 USD -> 7.238T cycles (includes a 0.59 USD card fee; rate locked 
 Create this order? [y/N]
 ```
 
-It then creates the order as your identity, prints the hosted checkout URL (and opens it in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on the payment processor's hosted page; the CLI never sees card details. Amounts are in USD, which is the only currency the gateway accepts today.
+It then creates the order as your identity, prints the hosted checkout URL (and opens it in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on the payment processor's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency the gateway accepts today.
 
 Useful flags:
 

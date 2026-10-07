@@ -1,3 +1,4 @@
+use crate::engine::EngineSelector;
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
@@ -51,6 +52,15 @@ pub(crate) struct DeployArgs {
     #[clap(long, conflicts_with = "proxy")]
     pub(crate) subnet: Option<Principal>,
 
+    /// The cloud engine to deploy to, by name, as the equivalent of `--subnet`
+    /// with the engine's subnet. A subnet id is accepted as-is.
+    ///
+    /// The name is looked up among the engines visible to the identity in use.
+    /// When several engines share the name, `name/slug` or the engine's id
+    /// picks one.
+    #[arg(long, conflicts_with_all = ["subnet", "proxy"])]
+    pub(crate) engine: Option<EngineSelector>,
+
     /// Principal of a proxy canister to route management canister calls through.
     #[arg(long, conflicts_with = "subnet")]
     pub(crate) proxy: Option<Principal>,
@@ -65,7 +75,7 @@ pub(crate) struct DeployArgs {
     pub(crate) cycles: CyclesAmount,
 
     /// If any canisters do not exist, error instead of creating them.
-    #[arg(long, conflicts_with_all = ["subnet", "cycles"])]
+    #[arg(long, conflicts_with_all = ["subnet", "engine", "cycles"])]
     pub(crate) no_create: bool,
 
     /// Skip confirmation prompts, including the Candid interface compatibility check.
@@ -129,14 +139,32 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         icp_app::calls::calls(agent, args.proxy).map_err(DeferredError::new)
     });
 
+    let engine_registry = engine_canister_id().map_err(|message| anyhow!(message))?;
+
+    // `--engine` is `--subnet` once the engine's subnet is known. Named engines
+    // are looked up before anything is built: the lookup is what decides
+    // whether the deploy can go ahead at all, and a name nobody can see should
+    // fail fast rather than after a build.
+    let subnet = match &args.engine {
+        None => args.subnet,
+        Some(EngineSelector::Subnet(subnet)) => Some(*subnet),
+        Some(EngineSelector::Named(name)) => {
+            let calls = calls.get().await?;
+            let subnet =
+                crate::engine::resolve_subnet(calls.as_ref(), engine_registry, name).await?;
+            info!("Engine '{name}' is on subnet {subnet}");
+            Some(subnet)
+        }
+    };
+
     let params = DeployParams {
         environment: environment_selection.clone(),
         canisters: canisters.clone(),
         mode: args.mode.clone(),
-        subnet: args.subnet,
+        subnet,
         proxy: args.proxy,
         cycles: args.cycles.get(),
-        engine_registry: engine_canister_id().map_err(|message| anyhow!(message))?,
+        engine_registry,
         no_create: args.no_create,
         yes: args.yes,
         args: args.args_opt.resolve_bytes()?,

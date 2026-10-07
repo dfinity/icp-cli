@@ -220,7 +220,30 @@ impl CallError {
             CallError::Unanswered { .. } | CallError::Failed { .. } => None,
         }
     }
+
+    /// Whether the network rejected the call because the canister it was
+    /// addressed to does not exist.
+    ///
+    /// A rejection specifically: a call that never reached a verdict says
+    /// nothing about whether the canister is there, and must not be read as
+    /// absence.
+    ///
+    /// A replica that populated no error code leaves only the message to go
+    /// on, so that is the fallback — and a call with no verdict has no message
+    /// either, which is what keeps it out of this.
+    pub fn is_canister_not_found(&self) -> bool {
+        match self.code() {
+            Some(code) => code == CANISTER_NOT_FOUND,
+            None => self.message().is_some_and(|message| {
+                message.contains("Canister") && message.contains("not found")
+            }),
+        }
+    }
 }
+
+/// The replica's error code for a call addressed to a canister that does not
+/// exist.
+const CANISTER_NOT_FOUND: &str = "IC0301";
 
 /// How this crate reaches canisters.
 ///
@@ -395,4 +418,51 @@ where
     let arg = candid::encode_args(args).context(EncodeSnafu { method })?;
     let reply = calls.query(Call::new(canister, method, arg)).await?;
     candid::decode_args(&reply).context(DecodeSnafu { method })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_canister_not_found_rejections() {
+        let rejected = |code: Option<&str>, message: &str| CallError::Rejected {
+            canister: Principal::anonymous(),
+            method: "getEngineOperatorBySubnet".to_owned(),
+            code: code.map(String::from),
+            message: message.to_owned(),
+        };
+
+        // IC0301 means the canister is not deployed here.
+        assert!(
+            rejected(
+                Some("IC0301"),
+                "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found"
+            )
+            .is_canister_not_found()
+        );
+
+        // So does the same rejection from a replica that gave no error code,
+        // which leaves nothing but the message to read it from.
+        assert!(
+            rejected(None, "Canister q6cfj-fyaaa-aaaar-qb77q-cai not found")
+                .is_canister_not_found()
+        );
+
+        // Other rejections (e.g. a canister trap) must NOT be treated as
+        // "not found" — they should propagate rather than fall back.
+        assert!(!rejected(None, "trapped").is_canister_not_found());
+        assert!(!rejected(Some("IC0503"), "trapped").is_canister_not_found());
+
+        // Neither may a call that reached no verdict at all: it says nothing
+        // about whether the canister is there.
+        assert!(
+            !CallError::unanswered(
+                Principal::anonymous(),
+                "getEngineOperatorBySubnet",
+                std::io::Error::other("connection reset"),
+            )
+            .is_canister_not_found()
+        );
+    }
 }

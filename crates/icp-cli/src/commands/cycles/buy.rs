@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
-use icp_app::context::{Context, NetworkSelection};
+use icp_app::context::Context;
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::cycles_purchase::{
@@ -17,8 +17,6 @@ use icp_canister_interfaces::cycles_gateway::{
 };
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_project::calls::CanisterCalls;
-use icp_project::host::EnvironmentSelection;
-use icp_project::prelude::IC;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
 use serde::Serialize;
@@ -190,34 +188,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         return Ok(());
     }
 
-    let next = deploy_hint(&selections.environment, &selections.network);
-    wait_and_report(
-        calls,
-        &agent,
-        gateway,
-        buyer,
-        order,
-        output,
-        next.as_deref(),
-    )
-    .await
-}
-
-/// The deploy command that spends what was bought, if one can be named: the
-/// environment that was selected, or the implicit `ic` environment when the
-/// `ic` network was. A network named any other way has no environment to
-/// point at, and a project's default environment is `icp deploy` itself.
-fn deploy_hint(environment: &EnvironmentSelection, network: &NetworkSelection) -> Option<String> {
-    match (environment, network) {
-        (EnvironmentSelection::Named(env), _) => Some(format!("icp deploy -e {env}")),
-        (EnvironmentSelection::Default, NetworkSelection::Named(name)) if name == IC => {
-            Some(format!("icp deploy -e {IC}"))
-        }
-        (EnvironmentSelection::Default, NetworkSelection::Default) => Some("icp deploy".to_owned()),
-        (EnvironmentSelection::Default, NetworkSelection::Named(_) | NetworkSelection::Url(..)) => {
-            None
-        }
-    }
+    wait_and_report(calls, &agent, gateway, buyer, order, output).await
 }
 
 /// Quote, confirm, create. Re-quotes and re-confirms once if the rate moved
@@ -361,7 +332,6 @@ async fn wait_and_report(
     buyer: Principal,
     order: OrderView,
     output: Output,
-    next: Option<&str>,
 ) -> Result<(), anyhow::Error> {
     let progress = ProgressManager::new(ProgressManagerSettings {
         hidden: output != Output::Human,
@@ -438,9 +408,6 @@ async fn wait_and_report(
                 );
                 if let Some(balance) = balance {
                     println!("Balance: {}", format_cycles(balance));
-                }
-                if let Some(next) = next {
-                    info!("Next: {next}");
                 }
             }
             Ok(())
@@ -718,42 +685,6 @@ mod tests {
             line,
             "10.00 USD -> 7.238T cycles (includes a 0.59 USD card fee; rate locked at order creation)"
         );
-    }
-
-    #[test]
-    fn deploy_hint_names_the_target_that_was_used() {
-        let url = NetworkSelection::Url(
-            "http://localhost:8000".parse().unwrap(),
-            icp_project::network::RootKeySpec::Fetch,
-        );
-        assert_eq!(
-            deploy_hint(
-                &EnvironmentSelection::Named("staging".into()),
-                &NetworkSelection::Default
-            )
-            .as_deref(),
-            Some("icp deploy -e staging")
-        );
-        assert_eq!(
-            deploy_hint(
-                &EnvironmentSelection::Default,
-                &NetworkSelection::Named("ic".into())
-            )
-            .as_deref(),
-            Some("icp deploy -e ic")
-        );
-        assert_eq!(
-            deploy_hint(&EnvironmentSelection::Default, &NetworkSelection::Default).as_deref(),
-            Some("icp deploy")
-        );
-        assert_eq!(
-            deploy_hint(
-                &EnvironmentSelection::Default,
-                &NetworkSelection::Named("local".into())
-            ),
-            None
-        );
-        assert_eq!(deploy_hint(&EnvironmentSelection::Default, &url), None);
     }
 
     #[test]

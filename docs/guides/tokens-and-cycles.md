@@ -143,7 +143,7 @@ Useful flags:
 
 Pressing Ctrl-C while waiting leaves the order payable; the command prints how to resume or cancel it. If the order ends up needing review, your card was charged and the gateway operator resolves delivery; keep the order id.
 
-The gateway is a third-party canister that takes card payments. The default is the CyclePay backend on mainnet. The cycles arrive in your identity's default cycles-ledger account; fund a canister from there with `icp canister top-up`, or run `icp deploy -e ic`.
+The gateway is a third-party canister that takes card payments. The default is the CyclePay backend on mainnet. The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from.
 
 ## Transferring ICP Tokens
 

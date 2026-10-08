@@ -337,6 +337,13 @@ fn announce_payable(order: &OrderView, output: Output, no_open: bool) {
                 .unwrap_or_default();
             info!("Order {}{until}. Pay here:", order.id);
             println!("{url}");
+            // A phone camera is the usual way to reach a card from a terminal;
+            // the code is for eyes, so it only goes where there are some.
+            if stderr().is_terminal()
+                && let Some(qr) = render_qr(url)
+            {
+                eprintln!("{qr}");
+            }
             if !no_open && stderr().is_terminal() {
                 match open::that(url) {
                     Ok(()) => info!("Opened the checkout page in your browser."),
@@ -463,6 +470,21 @@ async fn wait_and_report(
             bail!("order {} is still {}", order.id, order.status)
         }
     }
+}
+
+/// The URL as a QR code drawn with half-block characters, two modules per
+/// row, for scanning off the terminal. Inverted (light modules on the
+/// terminal's dark background) because that is what most terminals are and
+/// scanners read either way. `None` only if the URL is too long to encode.
+fn render_qr(url: &str) -> Option<String> {
+    use qrcode::render::unicode::Dense1x2;
+    let code = qrcode::QrCode::new(url.as_bytes()).ok()?;
+    Some(
+        code.render::<Dense1x2>()
+            .dark_color(Dense1x2::Light)
+            .light_color(Dense1x2::Dark)
+            .build(),
+    )
 }
 
 fn waiting_message(status: OrderStatus) -> String {
@@ -732,6 +754,25 @@ mod tests {
             None
         );
         assert_eq!(deploy_hint(&EnvironmentSelection::Default, &url), None);
+    }
+
+    #[test]
+    fn qr_renders_a_checkout_url() {
+        let qr =
+            render_qr("https://checkout.stripe.com/c/pay/cs_test_a1B2c3D4e5F6g7H8i9J0").unwrap();
+        let lines: Vec<&str> = qr.lines().collect();
+        // Square-ish: every row is the same width and the block characters
+        // are the only ink.
+        let width = lines[0].chars().count();
+        assert!(width > 20, "{width}");
+        assert!(lines.iter().all(|l| l.chars().count() == width));
+        assert!(
+            qr.chars()
+                .all(|c| matches!(c, '█' | '▀' | '▄' | ' ' | '\n')),
+            "{qr}"
+        );
+        // Far beyond a QR code's capacity.
+        assert!(render_qr(&"x".repeat(10_000)).is_none());
     }
 
     #[test]

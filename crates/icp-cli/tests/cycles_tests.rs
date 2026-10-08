@@ -460,6 +460,24 @@ fn cycles_buy_rejects_conflicting_arguments() {
         .assert()
         .stderr(contains("greater than zero"))
         .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--cycles", "5t"])
+        .assert()
+        .stderr(contains("cannot be used with"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--cycles", "5t", "--resume", "o1"])
+        .assert()
+        .stderr(contains("cannot be used with"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--cycles", "0"])
+        .assert()
+        .stderr(contains("greater than zero"))
+        .failure();
 }
 
 /// The anonymous identity cannot own an order, so the command refuses before

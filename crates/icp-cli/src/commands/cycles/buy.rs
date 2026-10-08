@@ -8,7 +8,7 @@ use icp_app::context::Context;
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::cycles_purchase::{
-    self as purchase, Currency, CyclesPurchaseError, Money, OrderView, Quote, WaitOptions,
+    self as purchase, Currency, CyclesPurchaseError, Money, OrderView, Quote, Target, WaitOptions,
 };
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_app::operations::token::format_cycles;
@@ -17,6 +17,7 @@ use icp_canister_interfaces::cycles_gateway::{
 };
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_project::calls::CanisterCalls;
+use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
 use serde::Serialize;
@@ -32,19 +33,27 @@ use crate::render::{ProgressManager, ProgressManagerSettings};
 /// prints the hosted checkout URL (and opens it in a browser when run from a
 /// terminal), then waits for the cycles to land on the identity's own
 /// cycles-ledger account. Fund a canister from there with `icp canister
-/// top-up`. Amounts are in USD unless --currency says otherwise; the gateway accepts USD only today.
+/// top-up`. Say either how much to spend (--amount, in the currency given
+/// by --currency) or how many cycles to receive (--cycles); the latter is
+/// quoted as the least amount that buys them once the card fee is taken out.
+/// The gateway accepts USD only today.
 ///
-/// Exactly one of --amount, --resume or --cancel must be given.
+/// Exactly one of --amount, --cycles, --resume or --cancel must be given.
 #[derive(Debug, Args)]
 pub(crate) struct BuyArgs {
     /// Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
     #[arg(
         long,
         value_name = "AMOUNT",
-        required_unless_present_any = ["resume", "cancel"],
-        conflicts_with_all = ["resume", "cancel"]
+        required_unless_present_any = ["cycles", "resume", "cancel"],
+        conflicts_with_all = ["cycles", "resume", "cancel"]
     )]
     pub(crate) amount: Option<String>,
+
+    /// Cycles to receive; the amount to pay is worked out from the gateway's quote, fee included.
+    /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
+    #[arg(long, value_name = "CYCLES", conflicts_with_all = ["resume", "cancel"])]
+    pub(crate) cycles: Option<CyclesAmount>,
 
     /// ISO 4217 code of the currency to pay in. The gateway accepts USD only.
     #[arg(long, value_name = "CODE", default_value = "USD")]
@@ -109,11 +118,19 @@ impl Output {
 pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Error> {
     // A malformed amount should fail before any identity is unlocked or any
     // network reached.
-    let amount = args
-        .amount
-        .as_deref()
-        .map(|amount| Money::parse_decimal(amount, args.currency))
-        .transpose()?;
+    let target = match (args.amount.as_deref(), args.cycles.as_ref()) {
+        (Some(amount), _) => Some(Target::Spend(Money::parse_decimal(amount, args.currency)?)),
+        (None, Some(cycles)) => {
+            if cycles.get() == 0 {
+                bail!("--cycles must be greater than zero");
+            }
+            Some(Target::Receive {
+                cycles: cycles.get(),
+                currency: args.currency,
+            })
+        }
+        (None, None) => None,
+    };
 
     let selections = args.token_command_args.selections();
     if matches!(selections.identity, IdentitySelection::Anonymous) {
@@ -168,11 +185,11 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             order
         }
         None => {
-            let amount =
-                amount.expect("clap requires --amount unless --resume or --cancel is given");
+            let target = target
+                .expect("clap requires --amount or --cycles unless --resume or --cancel is given");
             let identity = identity_name(ctx, &selections.identity).await;
             let order =
-                create_order(calls, gateway, buyer, identity.as_deref(), amount, args).await?;
+                create_order(calls, gateway, buyer, identity.as_deref(), target, args).await?;
             announce_payable(&order, output, args.no_open);
             order
         }
@@ -198,11 +215,11 @@ async fn create_order(
     gateway: Principal,
     buyer: Principal,
     identity: Option<&str>,
-    amount: Money,
+    target: Target,
     args: &BuyArgs,
 ) -> Result<OrderView, anyhow::Error> {
-    let mut quote = purchase::quote(calls, gateway, amount).await?;
-    confirm(&quote, gateway, buyer, identity, args.yes)?;
+    let mut quote = purchase::quote_target(calls, gateway, target).await?;
+    confirm(&quote, target, gateway, buyer, identity, args.yes)?;
 
     for attempt in 0..2 {
         match purchase::place_order(calls, gateway, &quote).await {
@@ -210,7 +227,7 @@ async fn create_order(
             Err(CyclesPurchaseError::OrderRefused {
                 error: CreateOrderError::QuoteChanged { .. },
             }) if attempt == 0 => {
-                quote = purchase::quote(calls, gateway, amount).await?;
+                quote = purchase::quote_target(calls, gateway, target).await?;
                 if args.yes {
                     info!(
                         "The exchange rate moved. New quote: {}. Retrying once.",
@@ -218,7 +235,7 @@ async fn create_order(
                     );
                 } else {
                     warn!("The exchange rate moved since the quote.");
-                    confirm(&quote, gateway, buyer, identity, false)?;
+                    confirm(&quote, target, gateway, buyer, identity, false)?;
                 }
             }
             Err(CyclesPurchaseError::OrderRefused { error }) => {
@@ -237,6 +254,7 @@ async fn create_order(
 /// to ask, so `--yes` is required.
 fn confirm(
     quote: &Quote,
+    target: Target,
     gateway: Principal,
     buyer: Principal,
     identity: Option<&str>,
@@ -247,6 +265,9 @@ fn confirm(
         .unwrap_or_default();
     info!("Buyer:    {buyer}{identity}");
     info!("Gateway:  {gateway} (canister id)");
+    if let Target::Receive { cycles, .. } = target {
+        info!("Wanted:   at least {}", format_cycles(cycles));
+    }
     info!("Quote:    {}", quote_line(quote));
 
     if yes {
@@ -680,6 +701,7 @@ mod tests {
             amount: Money::from_minor_units(1000, Currency::Usd),
             fee: Money::from_minor_units(59, Currency::Usd),
             cycles: 7_238_000_000_000,
+            minimum_cycles: 0,
         });
         assert_eq!(
             line,

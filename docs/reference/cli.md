@@ -910,15 +910,16 @@ Display the cycles balance
 
 Buy cycles with a card.
 
-Creates an order on a cycles gateway canister as the current identity, prints the hosted checkout URL (and opens it in a browser when run from a terminal), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Amounts are in USD unless --currency says otherwise; the gateway accepts USD only today.
+Creates an order on a cycles gateway canister as the current identity, prints the hosted checkout URL (and opens it in a browser when run from a terminal), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter is quoted as the least amount that buys them once the card fee is taken out. The gateway accepts USD only today.
 
-Exactly one of --amount, --resume or --cancel must be given.
+Exactly one of --amount, --cycles, --resume or --cancel must be given.
 
 **Usage:** `icp cycles buy [OPTIONS]`
 
 ###### **Options:**
 
 * `--amount <AMOUNT>` — Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
+* `--cycles <CYCLES>` — Cycles to receive; the amount to pay is worked out from the gateway's quote, fee included. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--currency <CODE>` — ISO 4217 code of the currency to pay in. The gateway accepts USD only
 
   Default value: `USD`

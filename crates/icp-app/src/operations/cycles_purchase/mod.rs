@@ -71,6 +71,12 @@ pub enum CyclesPurchaseError {
     ))]
     RateUnavailable { gateway: Principal },
 
+    #[snafu(display(
+        "cycles gateway {gateway} quotes no amount that buys {cycles} cycles; \
+         try a different amount, or spend a sum with --amount"
+    ))]
+    CyclesUnpriceable { gateway: Principal, cycles: u128 },
+
     #[snafu(display("failed to create an order on cycles gateway {gateway}"))]
     CreateOrder {
         gateway: Principal,
@@ -146,6 +152,16 @@ pub enum CyclesPurchaseError {
     },
 }
 
+/// What the buyer asked for: a sum to spend, or cycles to receive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// Spend exactly this much; take whatever cycles it buys.
+    Spend(Money),
+    /// Receive at least this many cycles; spend the least `currency` that
+    /// buys them.
+    Receive { cycles: u128, currency: Currency },
+}
+
 /// What an amount buys, as the gateway priced it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quote {
@@ -155,14 +171,29 @@ pub struct Quote {
     pub fee: Money,
     /// The cycles delivered for `amount` at the current rate.
     pub cycles: u128,
+    /// The fewest cycles the buyer will accept. Passed to the gateway so a
+    /// rate move against the buyer is refused rather than silently
+    /// delivering less: the quote less [`QUOTE_SLIPPAGE_PERCENT`] when
+    /// spending a sum, or the cycles asked for when buying a number of them.
+    pub minimum_cycles: u128,
 }
 
-impl Quote {
-    /// The fewest cycles the buyer will accept: the quote less
-    /// [`QUOTE_SLIPPAGE_PERCENT`]. Passed to the gateway so a rate move
-    /// against the buyer is refused rather than silently delivering less.
-    pub fn minimum_cycles(&self) -> u128 {
-        self.cycles * (100 - QUOTE_SLIPPAGE_PERCENT) / 100
+/// The fewest cycles a buyer who is spending a sum will accept for it.
+fn with_slippage(cycles: u128) -> u128 {
+    cycles * (100 - QUOTE_SLIPPAGE_PERCENT) / 100
+}
+
+/// Price a [`Target`].
+pub async fn quote_target(
+    calls: &dyn CanisterCalls,
+    gateway: Principal,
+    target: Target,
+) -> Result<Quote, CyclesPurchaseError> {
+    match target {
+        Target::Spend(amount) => quote(calls, gateway, amount).await,
+        Target::Receive { cycles, currency } => {
+            quote_for_cycles(calls, gateway, cycles, currency).await
+        }
     }
 }
 
@@ -226,11 +257,46 @@ pub async fn quote(
     gateway: Principal,
     amount: Money,
 ) -> Result<Quote, CyclesPurchaseError> {
-    let minor_units = match amount.currency {
-        Currency::Usd => Nat::from(amount.minor_units),
-    };
+    let previews = previews(calls, gateway, &[amount]).await?;
+    let preview = previews
+        .into_iter()
+        .next()
+        .context(QuoteMissingSnafu { gateway, amount })?;
+    let cycles = preview.cycles.context(RateUnavailableSnafu { gateway })?;
+    Ok(Quote {
+        amount,
+        fee: preview.fee,
+        cycles,
+        minimum_cycles: with_slippage(cycles),
+    })
+}
+
+/// A gateway quote with its numbers converted, keyed by the amount quoted.
+#[derive(Clone, Copy, Debug)]
+struct Preview {
+    amount: Money,
+    fee: Money,
+    /// What `amount` buys; `None` when the gateway has no rate, or the fee
+    /// swallows the whole amount.
+    cycles: Option<u128>,
+    /// `amount` less `fee`; `None` when the fee swallows it.
+    net: Option<Money>,
+}
+
+/// Quote several amounts in one round trip.
+async fn previews(
+    calls: &dyn CanisterCalls,
+    gateway: Principal,
+    amounts: &[Money],
+) -> Result<Vec<Preview>, CyclesPurchaseError> {
+    let minor_units: Vec<Nat> = amounts
+        .iter()
+        .map(|amount| match amount.currency {
+            Currency::Usd => Nat::from(amount.minor_units),
+        })
+        .collect();
     let (previews,): (QuotePreviews,) =
-        query_typed(calls, gateway, QUOTE_PREVIEWS_METHOD, (vec![minor_units],))
+        query_typed(calls, gateway, QUOTE_PREVIEWS_METHOD, (minor_units,))
             .await
             .map_err(|source| {
                 map_absent(source, gateway, |source| {
@@ -240,24 +306,136 @@ pub async fn quote(
                     }
                 })
             })?;
-    let preview = previews
+    previews
         .quotes
         .into_iter()
-        .next()
-        .context(QuoteMissingSnafu { gateway, amount })?;
-    let cycles = preview
-        .cycles
-        .context(RateUnavailableSnafu { gateway })?
-        .0
-        .to_u128()
-        .context(ConvertFieldSnafu { field: "cycles" })?;
-    let fee = Money::from_nat_minor_units(&preview.fee_cents, amount.currency)
-        .context(ConvertFieldSnafu { field: "feeCents" })?;
-    Ok(Quote {
-        amount,
-        fee,
-        cycles,
-    })
+        .zip(amounts)
+        .map(|(preview, amount)| {
+            let currency = amount.currency;
+            Ok(Preview {
+                amount: Money::from_nat_minor_units(&preview.usd_cents, currency)
+                    .context(ConvertFieldSnafu { field: "usdCents" })?,
+                fee: Money::from_nat_minor_units(&preview.fee_cents, currency)
+                    .context(ConvertFieldSnafu { field: "feeCents" })?,
+                cycles: preview
+                    .cycles
+                    .map(|cycles| {
+                        cycles
+                            .0
+                            .to_u128()
+                            .context(ConvertFieldSnafu { field: "cycles" })
+                    })
+                    .transpose()?,
+                net: preview
+                    .net_cents
+                    .map(|net| {
+                        Money::from_nat_minor_units(&net, currency)
+                            .context(ConvertFieldSnafu { field: "netCents" })
+                    })
+                    .transpose()?,
+            })
+        })
+        .collect()
+}
+
+/// Amounts whose quotes anchor the search in [`quote_for_cycles`]: large
+/// enough that the fee does not swallow them, far enough apart that the
+/// fee's variable part shows between them.
+const PROBE_MINOR_UNITS: [u64; 2] = [1_000, 2_000];
+
+/// Rounds of estimate-and-check before giving up on a cycles target.
+const CYCLES_SEARCH_ROUNDS: usize = 4;
+
+/// Find the least `currency` whose quote delivers at least `cycles`.
+///
+/// The gateway prices an amount as `(amount - fee) * rate` with a fee of a
+/// fixed part plus a share of the amount, but tells only the outcome, so two
+/// anchor quotes are read back into that model, the model names the amount
+/// that should just clear the target, and that amount and its neighbours
+/// are quoted for real; the least that clears wins. If rounding leaves all
+/// of them short, the shortfall re-anchors the model and it tries again.
+pub async fn quote_for_cycles(
+    calls: &dyn CanisterCalls,
+    gateway: Principal,
+    cycles: u128,
+    currency: Currency,
+) -> Result<Quote, CyclesPurchaseError> {
+    let unpriceable = || CyclesUnpriceableSnafu { gateway, cycles };
+    let probes = PROBE_MINOR_UNITS.map(|units| Money::from_minor_units(units, currency));
+    let quoted = previews(calls, gateway, &probes).await?;
+    let [mut low, mut high]: [Preview; 2] = quoted.try_into().ok().context(QuoteMissingSnafu {
+        gateway,
+        amount: probes[1],
+    })?;
+    if high.cycles.is_none() {
+        return RateUnavailableSnafu { gateway }.fail();
+    }
+
+    for _ in 0..CYCLES_SEARCH_ROUNDS {
+        let estimate = estimate_amount(cycles, &low, &high).context(unpriceable())?;
+        let candidates: Vec<Money> = (estimate.saturating_sub(1)..=estimate.saturating_add(2))
+            .filter(|units| *units > 0)
+            .map(|units| Money::from_minor_units(units, currency))
+            .collect();
+        let quoted = previews(calls, gateway, &candidates).await?;
+        if let Some(hit) = quoted
+            .iter()
+            .filter(|preview| preview.cycles.is_some_and(|got| got >= cycles))
+            .min_by_key(|preview| preview.amount.minor_units)
+        {
+            return Ok(Quote {
+                amount: hit.amount,
+                fee: hit.fee,
+                cycles: hit.cycles.unwrap_or(cycles),
+                minimum_cycles: cycles,
+            });
+        }
+        // Every candidate fell short: re-anchor on the two largest real
+        // quotes and let the model correct itself.
+        let mut priced: Vec<Preview> = quoted
+            .into_iter()
+            .filter(|preview| preview.cycles.is_some())
+            .collect();
+        priced.sort_by_key(|preview| preview.amount.minor_units);
+        match priced.as_slice() {
+            [.., a, b] => {
+                low = *a;
+                high = *b;
+            }
+            _ => return unpriceable().fail(),
+        }
+    }
+    unpriceable().fail()
+}
+
+/// The amount that should deliver `cycles`, read off two priced quotes:
+/// the rate is cycles per net minor unit on `high`, the fee's variable
+/// share is the fee difference over the amount difference, and the fixed
+/// part is what remains. `None` when the figures do not fit or do not
+/// describe a price.
+fn estimate_amount(cycles: u128, low: &Preview, high: &Preview) -> Option<u64> {
+    let rate_cycles = high.cycles?;
+    let rate_net = u128::from(high.net?.minor_units);
+    if rate_cycles == 0 || rate_net == 0 {
+        return None;
+    }
+    let net_needed = cycles.checked_mul(rate_net)?.div_ceil(rate_cycles).max(1);
+
+    let amount_delta = u128::from(high.amount.minor_units)
+        .checked_sub(u128::from(low.amount.minor_units))
+        .filter(|delta| *delta > 0)?;
+    let fee_delta = u128::from(high.fee.minor_units)
+        .saturating_sub(u128::from(low.fee.minor_units))
+        .min(amount_delta - 1);
+    // fixed = fee(low) - share * amount(low), kept over `amount_delta`.
+    let fixed_scaled = (u128::from(low.fee.minor_units) * amount_delta)
+        .saturating_sub(fee_delta * u128::from(low.amount.minor_units));
+    // amount = (net + fixed) / (1 - share)
+    let amount = net_needed
+        .checked_mul(amount_delta)?
+        .checked_add(fixed_scaled)?
+        .div_ceil(amount_delta - fee_delta);
+    u64::try_from(amount).ok()
 }
 
 /// Create an order for `quote`, delivering to the caller's own default
@@ -280,7 +458,7 @@ pub async fn place_order(
         owner: calls.caller(),
         subaccount: None,
     });
-    let min_cycles = Some(Nat::from(quote.minimum_cycles()));
+    let min_cycles = Some(Nat::from(quote.minimum_cycles));
 
     let (result,): (CreateOrderResult,) = update_typed(
         calls,

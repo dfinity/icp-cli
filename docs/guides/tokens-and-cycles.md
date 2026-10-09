@@ -114,6 +114,43 @@ Verify your cycles balance:
 icp cycles balance -n ic
 ```
 
+## Buying Cycles with a Card
+
+If you have a card but no ICP, you can buy cycles directly for the current identity through a cycles gateway canister:
+
+```bash
+# Spend 10 USD
+icp cycles buy --amount 10 -n ic
+
+# Or ask for the cycles you need, and pay the least that buys them
+icp cycles buy --cycles 5t -n ic
+```
+
+The command quotes what the amount buys, shows who is paying and which gateway canister the order goes to, and asks you to confirm:
+
+```
+Buyer:    rv4ez-fgjbj-...-vae (identity 'default')
+Gateway:  saz2a-riaaa-aaaay-aadha-cai (canister id)
+Quote:    10.00 USD -> 7.238T cycles (includes a 0.59 USD card fee; rate locked at order creation)
+Create this order? [y/N]
+```
+
+It then creates the order as your identity, prints the hosted checkout URL together with a QR code to scan with a phone (and opens the URL in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on the payment processor's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency the gateway accepts today.
+
+With `--cycles`, the gateway names the smallest amount, to the cent, whose quote delivers at least that many cycles once the card fee is taken out. The confirmation then shows what you asked for above the quote, and the order is created with that figure as its floor: if the rate moves before the order is created so that the amount would deliver less, the gateway refuses it and the CLI re-quotes once rather than delivering fewer cycles than you asked for. (With `--amount` the floor is 5% below the quote instead.)
+
+Useful flags:
+
+- `--no-open` prints the URL without opening a browser, for SSH sessions and containers. You can pay from any device.
+- `--no-wait` returns right after printing the URL. `--resume <order-id>` waits on an order later, and prints its URL again while it is still payable.
+- `--cancel <order-id>` cancels an open order. An unpaid order also expires on its own at the deadline the command prints.
+- `--yes` skips the confirmation, which is required when there is no terminal to ask. It stands for the quote it was shown: if the rate moves more than 5% between the quote and the order, the command stops without creating one, and you run it again to be quoted afresh. `--json` prints one object after the order is created (with the quoted amount and fee) and one when it settles; `-q` prints only the URL, then the final status.
+- `--gateway <canister-id>` buys through another gateway canister. The `ICP_CYCLES_GATEWAY_CANISTER_ID` environment variable does the same.
+
+Pressing Ctrl-C while waiting leaves the order payable; the command prints how to resume or cancel it. If the order ends up needing review, your card was charged and the gateway operator resolves delivery; keep the order id.
+
+The gateway is a third-party canister that takes card payments. The default is the CyclePay backend on mainnet. The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from.
+
 ## Transferring ICP Tokens
 
 Send ICP tokens to another principal:

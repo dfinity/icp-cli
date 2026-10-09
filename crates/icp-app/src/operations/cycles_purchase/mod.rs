@@ -6,9 +6,10 @@
 //! hosted checkout page the order carries, then wait for the gateway to flip
 //! the order to `delivered`.
 //!
-//! Nothing here prints. [`wait_for_order`] reports each status change through
-//! a callback and hands the last order it saw back inside its error when it
-//! is interrupted, so the caller can say how to resume.
+//! Nothing here prints. [`wait_for_order`] reports its progress as
+//! [`icp_events`] tasks, one per [`PurchasePhase`], and hands the last order
+//! it saw back inside its error when it is interrupted, so the caller can say
+//! how to resume.
 
 mod money;
 
@@ -26,7 +27,9 @@ use icp_canister_interfaces::cycles_gateway::{
     ExpiredBy, GET_ORDER_METHOD, LIST_ORDERS_METHOD, ListOrdersResult, Order, OrderStatus,
     QUOTE_PREVIEWS_METHOD, QuotePreviews, Reason,
 };
+use icp_events::TaskOutcome;
 use icp_project::calls::{CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed};
+use icp_project::operations::task::{PurchasePhase, Reporter, Task, TaskReporter};
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
 use tokio::{select, time::sleep};
@@ -178,9 +181,28 @@ pub struct Quote {
     pub minimum_cycles: u128,
 }
 
+impl Quote {
+    /// Whether a fresh quote for the same target is still within
+    /// [`QUOTE_SLIPPAGE_PERCENT`] of this one: at least the cycles this one
+    /// would accept, for no more than this one's amount plus the slippage.
+    /// A buyer who was shown this quote and is not asked again can be held
+    /// to that much, and no more.
+    pub fn tolerates(&self, fresh: &Quote) -> bool {
+        fresh.cycles >= self.minimum_cycles
+            && fresh.amount.currency == self.amount.currency
+            && fresh.amount.minor_units <= with_slippage_up(self.amount.minor_units)
+    }
+}
+
 /// The fewest cycles a buyer who is spending a sum will accept for it.
+/// Divides first: the figure is the gateway's, and may be any size.
 fn with_slippage(cycles: u128) -> u128 {
-    cycles * (100 - QUOTE_SLIPPAGE_PERCENT) / 100
+    cycles / 100 * (100 - QUOTE_SLIPPAGE_PERCENT)
+}
+
+/// The most a buyer who asked for a number of cycles will pay for them.
+fn with_slippage_up(minor_units: u64) -> u64 {
+    minor_units.saturating_add((minor_units / 100).saturating_mul(QUOTE_SLIPPAGE_PERCENT as u64))
 }
 
 /// Price a [`Target`].
@@ -617,13 +639,51 @@ impl Default for WaitOptions {
     }
 }
 
+/// The legs of a wait, reported as one [`Task`] each so a consumer can tick
+/// off "payment received" before "delivered".
+struct Phases<'a> {
+    reporter: &'a Reporter,
+    id: &'a str,
+    current: Option<(PurchasePhase, TaskReporter)>,
+}
+
+impl Phases<'_> {
+    fn of(status: OrderStatus) -> PurchasePhase {
+        match status {
+            OrderStatus::Paid => PurchasePhase::Delivering,
+            _ => PurchasePhase::AwaitingPayment,
+        }
+    }
+
+    /// Move to the phase `status` is in, finishing the one before it.
+    fn enter(&mut self, status: OrderStatus) {
+        let phase = Self::of(status);
+        if self.current.as_ref().is_some_and(|(p, _)| *p == phase) {
+            return;
+        }
+        self.finish(TaskOutcome::succeeded());
+        let task = self.reporter.task(Task::cycles_purchase(self.id, phase));
+        self.current = Some((phase, task));
+    }
+
+    fn finish(&mut self, outcome: TaskOutcome) {
+        if let Some((_, task)) = self.current.take() {
+            task.finish(outcome);
+        }
+    }
+}
+
 /// Poll the gateway until the order reaches a terminal status.
 ///
-/// `initial` is the order as last seen, if the caller has it: it seeds the
-/// change detection so `on_change` fires only on a transition, and it is what
+/// `initial` is the order as last seen, if the caller has it: it names the
+/// phase the wait starts in, and it is what
 /// [`CyclesPurchaseError::Interrupted`] carries if `interrupt` resolves before
-/// the first poll answers. `on_change` runs for every status change, including
-/// the terminal one.
+/// the first poll answers. Each [`PurchasePhase`] the order passes through is
+/// reported as a task on `reporter`, finished when the next begins or the
+/// wait ends.
+///
+/// `interrupt` is raced against every poll as well as the sleep between
+/// them, so an interrupt lands even while a call is stalled.
 ///
 /// A poll the network never answered is retried; any other failure returns at
 /// once. A terminal status is a success here whatever it is — expired is an
@@ -635,24 +695,56 @@ pub async fn wait_for_order(
     initial: Option<OrderView>,
     options: &WaitOptions,
     interrupt: impl Future<Output = ()>,
-    on_change: &mut dyn FnMut(&OrderView),
+    reporter: &Reporter,
 ) -> Result<OrderView, CyclesPurchaseError> {
     let mut interrupt = pin!(interrupt);
+    let mut phases = Phases {
+        reporter,
+        id,
+        current: None,
+    };
+    phases.enter(initial.as_ref().map_or(OrderStatus::Created, |o| o.status));
     let mut last = initial;
     let mut transient_streak = 0u32;
     let started = Instant::now();
     let mut paid_since: Option<Instant> = None;
 
+    let interrupted = |last: Option<OrderView>| {
+        let order = last.unwrap_or_else(|| OrderView {
+            id: id.to_owned(),
+            status: OrderStatus::Created,
+            locked_cycles: 0,
+            checkout_url: None,
+            expires_at_ns: None,
+            paid: None,
+            expired_by: None,
+            abandoned_reason: None,
+        });
+        InterruptedSnafu {
+            order: Box::new(order),
+        }
+        .fail()
+    };
+
     loop {
-        match get_order(calls, gateway, id).await {
+        let polled = select! {
+            polled = get_order(calls, gateway, id) => polled,
+            _ = &mut interrupt => {
+                phases.finish(TaskOutcome::failed("interrupted"));
+                return interrupted(last);
+            }
+        };
+        match polled {
             Ok(order) => {
                 transient_streak = 0;
-                if last.as_ref().map(|l| l.status) != Some(order.status) {
-                    on_change(&order);
-                }
                 if order.status.is_terminal() {
+                    phases.finish(match order.status {
+                        OrderStatus::Delivered => TaskOutcome::succeeded(),
+                        status => TaskOutcome::failed(format!("order {status}")),
+                    });
                     return Ok(order);
                 }
+                phases.enter(order.status);
                 if order.status == OrderStatus::Paid && paid_since.is_none() {
                     paid_since = Some(Instant::now());
                 }
@@ -666,6 +758,7 @@ pub async fn wait_for_order(
                     (_, None) => started.elapsed() > options.max_without_expiry,
                 };
                 if overdue {
+                    phases.finish(TaskOutcome::failed("gave up waiting"));
                     return WaitTimedOutSnafu {
                         order: Box::new(order),
                     }
@@ -676,6 +769,7 @@ pub async fn wait_for_order(
             Err(CyclesPurchaseError::GetOrder { source, .. }) if is_transient(&source) => {
                 transient_streak += 1;
                 if transient_streak > options.max_consecutive_transient {
+                    phases.finish(TaskOutcome::failed("lost contact with the gateway"));
                     return Err(CyclesPurchaseError::WaitUnanswered {
                         gateway,
                         id: id.to_owned(),
@@ -683,23 +777,17 @@ pub async fn wait_for_order(
                     });
                 }
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                phases.finish(TaskOutcome::failed(error.to_string()));
+                return Err(error);
+            }
         }
 
         select! {
             _ = sleep(options.poll_interval) => {}
             _ = &mut interrupt => {
-                let order = last.unwrap_or_else(|| OrderView {
-                    id: id.to_owned(),
-                    status: OrderStatus::Created,
-                    locked_cycles: 0,
-                    checkout_url: None,
-                    expires_at_ns: None,
-                    paid: None,
-                    expired_by: None,
-                    abandoned_reason: None,
-                });
-                return InterruptedSnafu { order: Box::new(order) }.fail();
+                phases.finish(TaskOutcome::failed("interrupted"));
+                return interrupted(last);
             }
         }
     }

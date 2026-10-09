@@ -11,7 +11,9 @@ use icp_canister_interfaces::cycles_gateway::{
     LIST_ORDERS_METHOD, ListOrdersResult, Order, OrderStatus, QUOTE_PREVIEWS_METHOD, QuotePreview,
     QuotePreviews, Reason,
 };
+use icp_events::EventKind;
 use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
+use icp_project::operations::task::{PurchasePhase, Reporter};
 
 use super::*;
 
@@ -41,10 +43,6 @@ fn order(id: &str, status: OrderStatus) -> Order {
         paid_usd_cents: None,
         expired_by: None,
         abandoned_reason: None,
-        destination: Destination::CyclesLedgerAccount(Account {
-            owner: principal(BUYER),
-            subaccount: None,
-        }),
     }
 }
 
@@ -123,6 +121,8 @@ struct FakeGateway {
     calls_seen: Mutex<Vec<(String, Vec<u8>)>>,
     /// Rejects every call as if the canister did not exist.
     absent: bool,
+    /// Never answers `get_order`, as a gateway behind a stalled connection.
+    stall_polls: bool,
 }
 
 impl FakeGateway {
@@ -226,6 +226,9 @@ impl CanisterCalls for FakeGateway {
                 Ok(Encode!(&QuotePreviews { quotes }).unwrap())
             }
             GET_ORDER_METHOD => {
+                if self.stall_polls {
+                    pending::<()>().await;
+                }
                 let reply = self
                     .get_order
                     .lock()
@@ -686,12 +689,16 @@ async fn cancel_order_maps_refusal() {
 
 // --- wait_for_order --------------------------------------------------------
 
+/// A reported phase and how it ended: `Err` carries the failure message.
+type Phase = (PurchasePhase, Result<(), String>);
+
+/// Run the wait and collect the phases it reported, each with its outcome.
 async fn wait(
     fake: &FakeGateway,
     initial: Option<OrderView>,
     options: &WaitOptions,
-) -> (Result<OrderView, CyclesPurchaseError>, Vec<OrderStatus>) {
-    let mut seen = Vec::new();
+) -> (Result<OrderView, CyclesPurchaseError>, Vec<Phase>) {
+    let (reporter, mut events) = icp_events::channel();
     let result = wait_for_order(
         fake,
         gateway(),
@@ -699,10 +706,43 @@ async fn wait(
         initial,
         options,
         pending(),
-        &mut |o| seen.push(o.status),
+        &reporter,
     )
     .await;
-    (result, seen)
+    drop(reporter);
+    let mut phases = Vec::new();
+    while let Some(event) = events.recv().await {
+        match event.kind {
+            EventKind::TaskStarted {
+                task: Task::CyclesPurchase(task),
+                ..
+            } => phases.push((task.phase, None)),
+            EventKind::TaskCompleted { outcome } => {
+                let (_, slot) = phases.last_mut().expect("completed before started");
+                *slot = Some(match outcome {
+                    TaskOutcome::Succeeded { .. } => Ok(()),
+                    TaskOutcome::Failed { message, .. } => Err(message),
+                    TaskOutcome::Skipped { reason } => Err(reason),
+                });
+            }
+            other => panic!("unexpected event {other:?}"),
+        }
+    }
+    (
+        result,
+        phases
+            .into_iter()
+            .map(|(phase, outcome)| (phase, outcome.expect("phase never finished")))
+            .collect(),
+    )
+}
+
+fn succeeded(phase: PurchasePhase) -> Phase {
+    (phase, Ok(()))
+}
+
+fn failed(phase: PurchasePhase, message: &str) -> Phase {
+    (phase, Err(message.to_owned()))
 }
 
 #[tokio::test]
@@ -713,29 +753,29 @@ async fn wait_happy_path_created_paid_delivered() {
         Ok(Some(order("o1", OrderStatus::Paid))),
         Ok(Some(order("o1", OrderStatus::Delivered))),
     ]);
-    let (result, seen) = wait(&fake, None, &fast()).await;
+    let (result, phases) = wait(&fake, None, &fast()).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
     assert_eq!(
-        seen,
+        phases,
         vec![
-            OrderStatus::Created,
-            OrderStatus::Paid,
-            OrderStatus::Delivered
+            succeeded(PurchasePhase::AwaitingPayment),
+            succeeded(PurchasePhase::Delivering),
         ]
     );
     assert_eq!(fake.count_of(GET_ORDER_METHOD), 4);
 }
 
 #[tokio::test]
-async fn wait_does_not_report_the_initial_status_again() {
+async fn wait_starts_in_the_initial_orders_phase() {
     let fake = FakeGateway::default().polls(vec![
-        Ok(Some(order("o1", OrderStatus::Created))),
+        Ok(Some(order("o1", OrderStatus::Paid))),
         Ok(Some(order("o1", OrderStatus::Delivered))),
     ]);
-    let initial: OrderView = order("o1", OrderStatus::Created).try_into().unwrap();
-    let (result, seen) = wait(&fake, Some(initial), &fast()).await;
+    let initial: OrderView = order("o1", OrderStatus::Paid).try_into().unwrap();
+    let (result, phases) = wait(&fake, Some(initial), &fast()).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
-    assert_eq!(seen, vec![OrderStatus::Delivered]);
+    // Already paid: no "awaiting payment" leg is reported.
+    assert_eq!(phases, vec![succeeded(PurchasePhase::Delivering)]);
 }
 
 #[tokio::test]
@@ -747,9 +787,16 @@ async fn wait_returns_every_terminal_status_as_ok() {
         OrderStatus::NeedsReview,
     ] {
         let fake = FakeGateway::default().polls(vec![Ok(Some(order("o1", status)))]);
-        let (result, seen) = wait(&fake, None, &fast()).await;
+        let (result, phases) = wait(&fake, None, &fast()).await;
         assert_eq!(result.unwrap().status, status);
-        assert_eq!(seen, vec![status]);
+        // An answer, but not the one hoped for: the leg is shown as failed.
+        assert_eq!(
+            phases,
+            vec![failed(
+                PurchasePhase::AwaitingPayment,
+                &format!("order {status}")
+            )]
+        );
     }
 }
 
@@ -819,15 +866,18 @@ async fn wait_times_out_after_expiry_grace() {
         expiry_grace: Duration::ZERO,
         ..fast()
     };
-    let (result, seen) = wait(&fake, None, &options).await;
+    let (result, phases) = wait(&fake, None, &options).await;
     match result.unwrap_err() {
         CyclesPurchaseError::WaitTimedOut { order } => {
             assert_eq!(order.status, OrderStatus::Created);
         }
         other => panic!("unexpected {other:?}"),
     }
-    // The status was still reported before giving up.
-    assert_eq!(seen, vec![OrderStatus::Created]);
+    // The leg was closed out before giving up.
+    assert_eq!(
+        phases,
+        vec![failed(PurchasePhase::AwaitingPayment, "gave up waiting")]
+    );
 }
 
 #[tokio::test]
@@ -865,15 +915,18 @@ async fn wait_times_out_on_a_stuck_paid_order() {
 
 #[tokio::test]
 async fn wait_interrupted_returns_last_order() {
+    // The interrupt is ready from the start, so whether it or the first poll
+    // wins the race, the order handed back is the last one known.
     let fake = FakeGateway::default().polls(vec![Ok(Some(order("o1", OrderStatus::Paid)))]);
+    let initial: OrderView = order("o1", OrderStatus::Paid).try_into().unwrap();
     let result = wait_for_order(
         &fake,
         gateway(),
         "o1",
-        None,
+        Some(initial),
         &WaitOptions::default(),
         ready(()),
-        &mut |_| {},
+        &Reporter::null(),
     )
     .await;
     match result.unwrap_err() {
@@ -883,4 +936,70 @@ async fn wait_interrupted_returns_last_order() {
         }
         other => panic!("unexpected {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn wait_interrupt_lands_during_a_stalled_poll() {
+    // The gateway never answers; the interrupt must still get through, with
+    // the phase closed out so a renderer does not spin on.
+    let fake = FakeGateway {
+        stall_polls: true,
+        ..FakeGateway::default()
+    };
+    let (reporter, mut events) = icp_events::channel();
+    let result = wait_for_order(
+        &fake,
+        gateway(),
+        "o1",
+        None,
+        &WaitOptions::default(),
+        ready(()),
+        &reporter,
+    )
+    .await;
+    drop(reporter);
+    assert!(matches!(
+        result.unwrap_err(),
+        CyclesPurchaseError::Interrupted { .. }
+    ));
+    let mut completed = 0;
+    while let Some(event) = events.recv().await {
+        if let EventKind::TaskCompleted {
+            outcome: TaskOutcome::Failed { message, .. },
+        } = event.kind
+        {
+            assert_eq!(message, "interrupted");
+            completed += 1;
+        }
+    }
+    assert_eq!(completed, 1);
+}
+
+#[test]
+fn quote_tolerates_only_small_moves() {
+    let shown = Quote {
+        amount: usd(1000),
+        fee: usd(59),
+        cycles: 7_238_000_000_000,
+        minimum_cycles: 6_876_100_000_000,
+    };
+    // Same price, slightly fewer cycles but above the floor: fine.
+    assert!(shown.tolerates(&Quote {
+        cycles: 7_000_000_000_000,
+        ..shown.clone()
+    }));
+    // Below the floor: the buyer was promised more.
+    assert!(!shown.tolerates(&Quote {
+        cycles: 6_000_000_000_000,
+        ..shown.clone()
+    }));
+    // Up to 5 % dearer for the same cycles: fine; beyond it: not.
+    assert!(shown.tolerates(&Quote {
+        amount: usd(1050),
+        ..shown.clone()
+    }));
+    assert!(!shown.tolerates(&Quote {
+        amount: usd(1051),
+        ..shown.clone()
+    }));
 }

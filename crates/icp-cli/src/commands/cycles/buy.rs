@@ -8,7 +8,8 @@ use icp_app::context::Context;
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::cycles_purchase::{
-    self as purchase, Currency, CyclesPurchaseError, Money, OrderView, Quote, Target, WaitOptions,
+    self as purchase, Currency, CyclesPurchaseError, Money, OrderView, QUOTE_SLIPPAGE_PERCENT,
+    Quote, Target, WaitOptions,
 };
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_app::operations::token::format_cycles;
@@ -17,6 +18,7 @@ use icp_canister_interfaces::cycles_gateway::{
 };
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_project::calls::CanisterCalls;
+use icp_project::operations::task::Reporter;
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
@@ -25,7 +27,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
 use crate::commands::args::TokenCommandArgs;
-use crate::render::{ProgressManager, ProgressManagerSettings};
+use crate::render::rendered;
 
 /// Buy cycles with a card.
 ///
@@ -161,42 +163,47 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
 
     if let Some(id) = &args.cancel {
         let order = purchase::cancel_order(calls, gateway, id).await?;
-        match output {
-            Output::Json => print_json(&JsonOrderFinal {
-                order_id: &order.id,
-                status: order.status.tag(),
-                cycles_delivered: None,
-                balance: None,
-            })?,
-            Output::Quiet => println!("{}", order.status.tag()),
-            Output::Human => println!("Order {} {}", order.id, order.status),
-        }
+        print_final(&order, None, output)?;
         return Ok(());
     }
 
-    let order = match &args.resume {
+    // Whether the checkout URL was handed out: an order that is payable right
+    // now. Anything else has nothing to pay, and `--no-wait` must still say
+    // where it stands.
+    let (order, payable) = match &args.resume {
         Some(id) => {
             let order = purchase::get_order(calls, gateway, id).await?;
-            if order.status == OrderStatus::Created {
-                announce_payable(&order, output, args.no_open);
+            let payable = order.status == OrderStatus::Created && !past_deadline(&order);
+            if payable {
+                announce_payable(&order, None, output, args.no_open);
             } else if output == Output::Human {
-                info!("Order {} is {}", order.id, order.status);
+                match order.status {
+                    OrderStatus::Created => info!(
+                        "Order {} passed its payment deadline at {}; the gateway has not expired it yet.",
+                        order.id,
+                        order.expires_at_ns.map(format_ns).unwrap_or_default()
+                    ),
+                    status => info!("Order {} is {status}", order.id),
+                }
             }
-            order
+            (order, payable)
         }
         None => {
             let target = target
                 .expect("clap requires --amount or --cycles unless --resume or --cancel is given");
             let identity = identity_name(ctx, &selections.identity).await;
-            let order =
+            let (order, quote) =
                 create_order(calls, gateway, buyer, identity.as_deref(), target, args).await?;
-            announce_payable(&order, output, args.no_open);
-            order
+            announce_payable(&order, Some(&quote), output, args.no_open);
+            (order, true)
         }
     };
 
     if args.no_wait {
-        if output == Output::Human {
+        if !payable {
+            print_final(&order, None, output)?;
+        }
+        if output == Output::Human && !order.status.is_terminal() {
             info!(
                 "Not waiting. Run `icp cycles buy --resume {}` to wait for delivery.",
                 order.id
@@ -205,11 +212,26 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         return Ok(());
     }
 
-    wait_and_report(calls, &agent, gateway, buyer, order, output).await
+    wait_and_report(calls, &agent, gateway, buyer, order, output, ctx.debug).await
 }
 
-/// Quote, confirm, create. Re-quotes and re-confirms once if the rate moved
-/// against the buyer in between.
+/// Whether an order's payment deadline has passed on this machine's clock.
+/// The gateway expires such an order on its own timer, so it may still read
+/// as payable for a while.
+fn past_deadline(order: &OrderView) -> bool {
+    let now_ns: i64 = OffsetDateTime::now_utc()
+        .unix_timestamp_nanos()
+        .try_into()
+        .unwrap_or(i64::MAX);
+    order
+        .expires_at_ns
+        .is_some_and(|deadline| deadline < now_ns)
+}
+
+/// Quote, confirm, create. If the rate moves against the buyer in between,
+/// re-quotes once: a person is asked again, while `--yes` stands only for
+/// the quote it was given, so the new one must be within tolerance of it or
+/// the command stops. Returns the order with the quote it was placed on.
 async fn create_order(
     calls: &dyn CanisterCalls,
     gateway: Principal,
@@ -217,27 +239,41 @@ async fn create_order(
     identity: Option<&str>,
     target: Target,
     args: &BuyArgs,
-) -> Result<OrderView, anyhow::Error> {
+) -> Result<(OrderView, Quote), anyhow::Error> {
     let mut quote = purchase::quote_target(calls, gateway, target).await?;
     confirm(&quote, target, gateway, buyer, identity, args.yes)?;
+    let mut requoted = false;
 
-    for attempt in 0..2 {
+    loop {
         match purchase::place_order(calls, gateway, &quote).await {
-            Ok(order) => return Ok(order),
+            Ok(order) => return Ok((order, quote)),
             Err(CyclesPurchaseError::OrderRefused {
                 error: CreateOrderError::QuoteChanged { .. },
-            }) if attempt == 0 => {
-                quote = purchase::quote_target(calls, gateway, target).await?;
+            }) if !requoted => {
+                requoted = true;
+                let fresh = purchase::quote_target(calls, gateway, target).await?;
                 if args.yes {
+                    if !quote.tolerates(&fresh) {
+                        bail!(
+                            "the exchange rate moved more than {QUOTE_SLIPPAGE_PERCENT}% since the \
+                             quote ({} is now {}); no order was created. Run the command again to \
+                             be quoted at the new rate",
+                            quote_figures(&quote),
+                            quote_figures(&fresh)
+                        );
+                    }
                     info!(
-                        "The exchange rate moved. New quote: {}. Retrying once.",
-                        quote_line(&quote)
+                        "The exchange rate moved within tolerance. New quote: {}. Retrying once.",
+                        quote_line(&fresh)
                     );
                 } else {
                     warn!("The exchange rate moved since the quote.");
-                    confirm(&quote, target, gateway, buyer, identity, false)?;
+                    confirm(&fresh, target, gateway, buyer, identity, false)?;
                 }
+                quote = fresh;
             }
+            // A second `QuoteChanged` lands here and reads as "moving too
+            // quickly", which is what it is.
             Err(CyclesPurchaseError::OrderRefused { error }) => {
                 bail!("{}", refusal_message(&error, buyer))
             }
@@ -247,7 +283,6 @@ async fn create_order(
             Err(error) => return Err(error.into()),
         }
     }
-    bail!("the exchange rate is moving too quickly to lock a quote; try again in a minute")
 }
 
 /// Show what is about to happen and ask. Without a terminal there is nobody
@@ -292,17 +327,21 @@ fn confirm(
 
 fn quote_line(quote: &Quote) -> String {
     format!(
-        "{} -> {} (includes a {} card fee; rate locked at order creation)",
-        quote.amount,
-        format_cycles(quote.cycles),
+        "{} (includes a {} card fee; rate locked at order creation)",
+        quote_figures(quote),
         quote.fee
     )
+}
+
+/// Just the exchange: `10.00 USD -> 7.238T cycles`.
+fn quote_figures(quote: &Quote) -> String {
+    format!("{} -> {}", quote.amount, format_cycles(quote.cycles))
 }
 
 /// Print the checkout URL, and open it where that makes sense: a person at a
 /// terminal, who did not ask otherwise. `--json` and `--quiet` are for
 /// scripts, which have no browser to open.
-fn announce_payable(order: &OrderView, output: Output, no_open: bool) {
+fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no_open: bool) {
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
             "Order {} is {} but the gateway reported no checkout URL",
@@ -315,6 +354,8 @@ fn announce_payable(order: &OrderView, output: Output, no_open: bool) {
             if let Err(e) = print_json(&JsonOrderCreated {
                 order_id: &order.id,
                 checkout_url: url,
+                amount: quote.map(|q| q.amount),
+                fee: quote.map(|q| q.fee),
                 locked_cycles: order.locked_cycles.to_string(),
                 expires_at: order.expires_at_ns.map(format_ns),
             }) {
@@ -353,25 +394,27 @@ async fn wait_and_report(
     buyer: Principal,
     order: OrderView,
     output: Output,
+    debug: bool,
 ) -> Result<(), anyhow::Error> {
-    let progress = ProgressManager::new(ProgressManagerSettings {
-        hidden: output != Output::Human,
-    });
-    let spinner = progress.create_independent_progress_bar();
-    spinner.set_message(waiting_message(order.status));
-
     let id = order.id.clone();
-    let result = purchase::wait_for_order(
-        calls,
-        gateway,
-        &id,
-        Some(order),
-        &WaitOptions::default(),
-        stop_signal(),
-        &mut |order| spinner.set_message(waiting_message(order.status)),
-    )
-    .await;
-    spinner.finish_and_clear();
+    let options = WaitOptions::default();
+    let wait = async |reporter: &Reporter| {
+        purchase::wait_for_order(
+            calls,
+            gateway,
+            &id,
+            Some(order),
+            &options,
+            stop_signal(),
+            reporter,
+        )
+        .await
+    };
+    // The live view is for a person; a script gets its answer on stdout.
+    let result = match output {
+        Output::Human => rendered(debug, wait).await,
+        Output::Quiet | Output::Json => wait(&Reporter::null()).await,
+    };
 
     let order = match result {
         Ok(order) => order,
@@ -389,7 +432,16 @@ async fn wait_and_report(
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
             if output == Output::Human {
-                info!("Keep waiting:  icp cycles buy --resume {}", order.id);
+                if order.status == OrderStatus::Created && past_deadline(&order) {
+                    info!(
+                        "Order {} passed its payment deadline and the gateway has not expired it yet.",
+                        order.id
+                    );
+                    info!("Check later:   icp cycles buy --resume {}", order.id);
+                    info!("Cancel it:     icp cycles buy --cancel {}", order.id);
+                } else {
+                    info!("Keep waiting:  icp cycles buy --resume {}", order.id);
+                }
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
@@ -408,17 +460,7 @@ async fn wait_and_report(
         None
     };
 
-    match output {
-        Output::Json => print_json(&JsonOrderFinal {
-            order_id: &order.id,
-            status: order.status.tag(),
-            cycles_delivered: (order.status == OrderStatus::Delivered)
-                .then(|| order.locked_cycles.to_string()),
-            balance: balance.map(|b| b.to_string()),
-        })?,
-        Output::Quiet => println!("{}", order.status.tag()),
-        Output::Human => {}
-    }
+    print_final(&order, balance, output)?;
 
     match order.status {
         OrderStatus::Delivered => {
@@ -475,10 +517,26 @@ fn render_qr(url: &str) -> Option<String> {
     )
 }
 
-fn waiting_message(status: OrderStatus) -> String {
-    match status {
-        OrderStatus::Paid => "Payment received, delivering cycles...".to_owned(),
-        _ => "Waiting for payment...".to_owned(),
+/// Where the order stands, for a script: one JSON object, or the status tag
+/// alone. A person is told in prose by the caller.
+fn print_final(
+    order: &OrderView,
+    balance: Option<u128>,
+    output: Output,
+) -> Result<(), anyhow::Error> {
+    match output {
+        Output::Json => print_json(&JsonOrderFinal {
+            order_id: &order.id,
+            status: order.status.tag(),
+            cycles_delivered: (order.status == OrderStatus::Delivered)
+                .then(|| order.locked_cycles.to_string()),
+            balance: balance.map(|b| b.to_string()),
+        }),
+        Output::Quiet => {
+            println!("{}", order.status.tag());
+            Ok(())
+        }
+        Output::Human => Ok(()),
     }
 }
 
@@ -608,6 +666,11 @@ fn print_json<T: Serialize>(value: &T) -> Result<(), anyhow::Error> {
 struct JsonOrderCreated<'a> {
     order_id: &'a str,
     checkout_url: &'a str,
+    /// What the card will be charged, as quoted. Known only when the order
+    /// was created by this run; a resumed order's quote is not kept.
+    amount: Option<Money>,
+    /// The card fee included in `amount`, likewise.
+    fee: Option<Money>,
     /// Exact cycles promised, as a decimal string.
     locked_cycles: String,
     /// RFC 3339.
@@ -726,6 +789,23 @@ mod tests {
         );
         // Far beyond a QR code's capacity.
         assert!(render_qr(&"x".repeat(10_000)).is_none());
+    }
+
+    #[test]
+    fn past_deadline_reads_the_orders_expiry() {
+        let order = |expires_at_ns| OrderView {
+            id: "o1".into(),
+            status: OrderStatus::Created,
+            locked_cycles: 1,
+            checkout_url: None,
+            expires_at_ns,
+            paid: None,
+            expired_by: None,
+            abandoned_reason: None,
+        };
+        assert!(past_deadline(&order(Some(1_700_000_000_000_000_000))));
+        assert!(!past_deadline(&order(Some(i64::MAX))));
+        assert!(!past_deadline(&order(None)));
     }
 
     #[test]

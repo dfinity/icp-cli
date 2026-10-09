@@ -204,7 +204,8 @@ pub struct Order {
     pub expired_by: Option<ExpiredBy>,
     #[serde(rename = "abandonedReason")]
     pub abandoned_reason: Option<String>,
-    pub destination: Destination,
+    // `destination` is deliberately not read back: it is a variant, and a
+    // case this CLI does not know would stop every order decoding.
 }
 
 /// The price of one amount, as [`QUOTE_PREVIEWS_METHOD`] reports it.
@@ -563,13 +564,7 @@ mod tests {
             order.stripe_session_url.as_deref(),
             Some("https://checkout.example/pay")
         );
-        assert_eq!(
-            order.destination,
-            Destination::CyclesLedgerAccount(Account {
-                owner,
-                subaccount: None
-            })
-        );
+        assert_eq!(order.paid_usd_cents, Some(Nat::from(1000u32)));
     }
 
     #[test]

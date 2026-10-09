@@ -67,8 +67,8 @@ pub fn format_cycles(cycles: u128) -> String {
 
 /// `cycles / unit` to three decimals, trailing zeros and a bare point dropped.
 fn scaled(cycles: u128, unit: u128) -> String {
-    let thousandths = cycles * 1000 / unit;
-    let s = format!("{}.{:03}", thousandths / 1000, thousandths % 1000);
+    // Split before scaling so the remainder, not the whole, is multiplied.
+    let s = format!("{}.{:03}", cycles / unit, cycles % unit * 1000 / unit);
     s.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
@@ -87,5 +87,7 @@ mod tests {
         assert_eq!(format_cycles(999_999_999), "999_999_999 cycles");
         assert_eq!(format_cycles(42), "42 cycles");
         assert_eq!(format_cycles(0), "0 cycles");
+        // A gateway-supplied figure may be anything; no size may panic.
+        assert!(format_cycles(u128::MAX).ends_with("T cycles"));
     }
 }

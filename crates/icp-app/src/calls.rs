@@ -21,7 +21,7 @@ use ic_agent::{
 };
 use ic_management_canister_types::{CanisterMetadataArgs, CanisterMetadataResult};
 use icp_canister_interfaces::proxy::{ProxyArgs, ProxyResult};
-use icp_project::calls::{Authority, Call, CallError, CanisterCalls, RouteTo};
+use icp_project::calls::{Authority, CANISTER_NOT_FOUND, Call, CallError, CanisterCalls, RouteTo};
 
 /// [`CanisterCalls`] over an `ic-agent`, optionally forwarding through a proxy
 /// canister.
@@ -413,10 +413,6 @@ impl CanisterCalls for AgentCalls {
         Ok(matches!(info.subnet_type(), Some(SubnetType::CloudEngine)))
     }
 }
-
-/// The replica's error code for a call addressed to a canister that does not
-/// exist, which [`CallError::is_canister_not_found`] recognizes.
-const CANISTER_NOT_FOUND: &str = "IC0301";
 
 /// Whether an HTTP gateway's error says the canister it was asked to route to
 /// does not exist: a 4xx whose body is the gateway's `canister_not_found`.

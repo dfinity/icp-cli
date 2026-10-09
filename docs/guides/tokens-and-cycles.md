@@ -144,7 +144,7 @@ Useful flags:
 - `--no-open` prints the URL without opening a browser, for SSH sessions and containers. You can pay from any device.
 - `--no-wait` returns right after printing the URL. `--resume <order-id>` waits on an order later, and prints its URL again while it is still payable.
 - `--cancel <order-id>` cancels an open order. An unpaid order also expires on its own at the deadline the command prints.
-- `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created and one when it settles; `-q` prints only the URL, then the final status.
+- `--yes` skips the confirmation, which is required when there is no terminal to ask. It stands for the quote it was shown: if the rate moves more than 5% between the quote and the order, the command stops without creating one, and you run it again to be quoted afresh. `--json` prints one object after the order is created (with the quoted amount and fee) and one when it settles; `-q` prints only the URL, then the final status.
 - `--gateway <canister-id>` buys through another gateway canister. The `ICP_CYCLES_GATEWAY_CANISTER_ID` environment variable does the same.
 
 Pressing Ctrl-C while waiting leaves the order payable; the command prints how to resume or cancel it. If the order ends up needing review, your card was charged and the gateway operator resolves delivery; keep the order id.

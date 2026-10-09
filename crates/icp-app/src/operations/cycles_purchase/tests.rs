@@ -7,9 +7,10 @@ use async_trait::async_trait;
 use candid::{Decode, Encode, Int, Nat, Principal};
 use icp_canister_interfaces::cycles_gateway::{
     Account, Amount, CANCEL_ORDER_METHOD, CREATE_ORDER_METHOD, CancelOrderError, CancelOrderResult,
-    CreateOrderError, CreateOrderResult, CreatedOrder, Destination, GET_ORDER_METHOD,
-    LIST_ORDERS_METHOD, ListOrdersResult, Order, OrderStatus, QUOTE_PREVIEWS_METHOD, QuotePreview,
-    QuotePreviews, Reason,
+    CreateOrderError, CreateOrderResult, CreatedOrder, CyclesQuote, CyclesQuoteOutcome,
+    CyclesQuotes, Destination, GET_ORDER_METHOD, LIST_ORDERS_METHOD, ListOrdersResult, Order,
+    OrderStatus, QUOTE_FOR_CYCLES_METHOD, QUOTE_PREVIEWS_METHOD, QuotePreview, QuotePreviews,
+    Reason, Unpriceable,
 };
 use icp_events::EventKind;
 use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
@@ -99,6 +100,39 @@ impl Pricing {
             .map(|c| c.0.try_into().unwrap())
             .unwrap_or(0)
     }
+
+    /// The least amount that buys `cycles`, as the gateway inverts its own
+    /// pricing: an estimate from the fee formula, then walked to the exact
+    /// cent. `None` when no `u64` amount does.
+    fn least_cents_for(&self, cycles: u128) -> Option<u64> {
+        let net_needed = u64::try_from(cycles.div_ceil(self.rate).max(1)).ok()?;
+        let mut cents = net_needed
+            .checked_add(self.fee_fixed)?
+            .checked_mul(10_000)?
+            .div_ceil(10_000 - self.fee_bps);
+        while cents > 1 && self.cycles_for(cents - 1) >= cycles {
+            cents -= 1;
+        }
+        while self.cycles_for(cents) < cycles {
+            cents = cents.checked_add(1)?;
+        }
+        Some(cents)
+    }
+
+    fn cycles_quote(&self, cycles: u128) -> CyclesQuoteOutcome {
+        match self.least_cents_for(cycles) {
+            Some(cents) => {
+                let preview = self.preview(cents);
+                CyclesQuoteOutcome::Ok {
+                    cycles_quoted: preview.cycles.unwrap(),
+                    fee_cents: preview.fee_cents,
+                    net_cents: preview.net_cents.unwrap(),
+                    usd_cents: preview.usd_cents,
+                }
+            }
+            None => CyclesQuoteOutcome::Unpriceable(Unpriceable::StripeFee),
+        }
+    }
 }
 
 /// A cycles gateway whose replies are scripted per method.
@@ -107,8 +141,12 @@ struct FakeGateway {
     /// The one preview `quote_previews` answers with, whatever was asked;
     /// `None` answers with no previews at all.
     quote: Option<QuotePreview>,
-    /// When set, `quote_previews` prices each amount asked for instead.
+    /// When set, `quote_previews` prices each amount asked for instead, and
+    /// `quote_for_cycles` inverts the same pricing.
     pricing: Option<Pricing>,
+    /// The one outcome `quote_for_cycles` answers with for every target,
+    /// overriding `pricing`. Without either it answers `stale`.
+    cycles_quote: Option<CyclesQuoteOutcome>,
     /// One reply per `create_order` call, in order.
     create: Mutex<VecDeque<CreateOrderResult>>,
     /// One reply per `get_order` poll, in order. An `Err` is the network
@@ -224,6 +262,22 @@ impl CanisterCalls for FakeGateway {
                     (None, None) => vec![],
                 };
                 Ok(Encode!(&QuotePreviews { quotes }).unwrap())
+            }
+            QUOTE_FOR_CYCLES_METHOD => {
+                let asked = Decode!(&call.arg, Vec<Nat>).unwrap();
+                let quotes = asked
+                    .into_iter()
+                    .map(|cycles| {
+                        let target: u128 = cycles.0.clone().try_into().unwrap();
+                        let outcome = match (&self.cycles_quote, self.pricing) {
+                            (Some(outcome), _) => outcome.clone(),
+                            (None, Some(pricing)) => pricing.cycles_quote(target),
+                            (None, None) => CyclesQuoteOutcome::Stale,
+                        };
+                        CyclesQuote { cycles, outcome }
+                    })
+                    .collect();
+                Ok(Encode!(&CyclesQuotes { quotes }).unwrap())
             }
             GET_ORDER_METHOD => {
                 if self.stall_polls {
@@ -368,8 +422,15 @@ fn assert_cheapest(pricing: Pricing, cycles: u128, cents: u64) {
     );
 }
 
+fn answering(outcome: CyclesQuoteOutcome) -> FakeGateway {
+    FakeGateway {
+        cycles_quote: Some(outcome),
+        ..FakeGateway::default()
+    }
+}
+
 #[tokio::test]
-async fn quote_for_cycles_finds_the_least_amount_that_clears() {
+async fn quote_for_cycles_takes_the_gateways_least_amount() {
     let fake = priced(STRIPE_LIKE);
     let target = 5_000_000_000_000;
     let q = quote_for_cycles(&fake, gateway(), target, Currency::Usd)
@@ -381,10 +442,16 @@ async fn quote_for_cycles_finds_the_least_amount_that_clears() {
     assert_eq!(q.cycles, STRIPE_LIKE.cycles_for(702));
     assert!(q.cycles >= target);
     assert_eq!(q.minimum_cycles, target);
-    // One batch of anchors, one batch of candidates.
-    assert_eq!(fake.count_of(QUOTE_PREVIEWS_METHOD), 2);
+    // One query, for the one target.
+    assert_eq!(fake.count_of(QUOTE_FOR_CYCLES_METHOD), 1);
+    assert_eq!(fake.count_of(QUOTE_PREVIEWS_METHOD), 0);
+    let asked = Decode!(&fake.arg_of(QUOTE_FOR_CYCLES_METHOD), Vec<Nat>).unwrap();
+    assert_eq!(asked, vec![Nat::from(target)]);
 }
 
+/// The fake inverts its own pricing the way the gateway does; this pins
+/// that the figures handed back are the cheapest cent across fee shapes,
+/// so a mapping slip would show as an amount that does not clear.
 #[tokio::test]
 async fn quote_for_cycles_is_cheapest_across_fee_shapes() {
     let shapes = [
@@ -418,14 +485,15 @@ async fn quote_for_cycles_is_cheapest_across_fee_shapes() {
                 .await
                 .unwrap_or_else(|e| panic!("{pricing:?} x {target}: {e}"));
             assert_cheapest(pricing, target, q.amount.minor_units);
-            assert!(fake.count_of(QUOTE_PREVIEWS_METHOD) <= 1 + CYCLES_SEARCH_ROUNDS);
+            assert_eq!(q.cycles, pricing.cycles_for(q.amount.minor_units));
+            assert_eq!(q.minimum_cycles, target);
         }
     }
 }
 
 #[tokio::test]
-async fn quote_for_cycles_without_rate_is_rate_unavailable() {
-    let fake = FakeGateway::with_quote(1000, 59, None);
+async fn quote_for_cycles_stale_is_rate_unavailable() {
+    let fake = answering(CyclesQuoteOutcome::Stale);
     let err = quote_for_cycles(&fake, gateway(), 1, Currency::Usd)
         .await
         .unwrap_err();
@@ -442,7 +510,68 @@ async fn quote_for_cycles_beyond_any_amount_is_unpriceable() {
         .await
         .unwrap_err();
     assert!(
-        matches!(err, CyclesPurchaseError::CyclesUnpriceable { .. }),
+        matches!(
+            &err,
+            CyclesPurchaseError::CyclesUnpriceable {
+                reason: Unpriceable::StripeFee,
+                ..
+            }
+        ),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .ends_with("the card fee leaves no amount that buys them")
+    );
+}
+
+#[tokio::test]
+async fn quote_for_cycles_below_minimum_names_both_figures() {
+    let fake = answering(CyclesQuoteOutcome::AmountBelowMin {
+        min_usd_cents: Nat::from(500u32),
+        usd_cents: Nat::from(131u32),
+    });
+    let err = quote_for_cycles(&fake, gateway(), 7_690_000_000, Currency::Usd)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::CyclesBelowMinimum { cycles: 7_690_000_000, amount, min }
+            if *amount == usd(131) && *min == usd(500)),
+        "{err}"
+    );
+    assert_eq!(
+        err.to_string(),
+        "7690000000 cycles cost 1.31 USD, below the gateway minimum of 5.00 USD; ask for more"
+    );
+}
+
+#[tokio::test]
+async fn quote_for_cycles_above_maximum_names_both_figures() {
+    let fake = answering(CyclesQuoteOutcome::AmountAboveMax {
+        max_usd_cents: Nat::from(10_000u32),
+        usd_cents: Nat::from(139_733u32),
+    });
+    let err = quote_for_cycles(&fake, gateway(), 1_000_000_000_000, Currency::Usd)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::CyclesAboveMaximum { amount, max, .. }
+            if *amount == usd(139_733) && *max == usd(10_000)),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn quote_for_cycles_on_missing_gateway_is_gateway_not_found() {
+    let fake = FakeGateway {
+        absent: true,
+        ..FakeGateway::default()
+    };
+    let err = quote_for_cycles(&fake, gateway(), 1, Currency::Usd)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
 }

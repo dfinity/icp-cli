@@ -137,7 +137,7 @@ Create this order? [y/N]
 
 It then creates the order as your identity, prints the hosted checkout URL together with a QR code to scan with a phone (and opens the URL in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on the payment processor's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency the gateway accepts today.
 
-With `--cycles`, the CLI asks the gateway for quotes and picks the smallest amount, to the cent, whose quote delivers at least that many cycles once the card fee is taken out. The confirmation then shows what you asked for above the quote, and the order is created with that figure as its floor: if the rate moves before the order is created so that the amount would deliver less, the gateway refuses it and the CLI re-quotes once rather than delivering fewer cycles than you asked for. (With `--amount` the floor is 5% below the quote instead.)
+With `--cycles`, the gateway names the smallest amount, to the cent, whose quote delivers at least that many cycles once the card fee is taken out. The confirmation then shows what you asked for above the quote, and the order is created with that figure as its floor: if the rate moves before the order is created so that the amount would deliver less, the gateway refuses it and the CLI re-quotes once rather than delivering fewer cycles than you asked for. (With `--amount` the floor is 5% below the quote instead.)
 
 Useful flags:
 

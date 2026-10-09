@@ -32,6 +32,13 @@ pub const CYCLES_GATEWAY_CANISTER_ID_ENV: &str = "ICP_CYCLES_GATEWAY_CANISTER_ID
 /// Amounts are USD cents. Computed by the same function that prices an order.
 pub const QUOTE_PREVIEWS_METHOD: &str = "quote_previews";
 
+/// Public query pricing a list of cycle targets: `(vec nat) -> (CyclesQuotes)`.
+/// For each target, the least amount (USD cents) whose quote delivers at
+/// least that many cycles, run through the same function that prices an
+/// order, so `create_order` for that amount with the target as `minCycles`
+/// is admitted at the figures quoted.
+pub const QUOTE_FOR_CYCLES_METHOD: &str = "quote_for_cycles";
+
 /// Update creating an order for the caller:
 /// `(Amount, Destination, opt nat) -> (CreateOrderResult)`.
 pub const CREATE_ORDER_METHOD: &str = "create_order";
@@ -228,6 +235,94 @@ pub struct QuotePreview {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct QuotePreviews {
     pub quotes: Vec<QuotePreview>,
+}
+
+/// Why no amount delivers a number of cycles.
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum Unpriceable {
+    /// In simulation mode the cycles are scaled down before delivery, and
+    /// the scaled figure would not cover the cycles-ledger fee.
+    #[serde(rename = "simulationScale")]
+    SimulationScale {
+        #[serde(rename = "ledgerFee")]
+        ledger_fee: Nat,
+        #[serde(rename = "scaledCycles")]
+        scaled_cycles: Nat,
+    },
+    /// The card fee leaves nothing of any amount that would buy them.
+    #[serde(rename = "stripeFee")]
+    StripeFee,
+}
+
+impl fmt::Display for Unpriceable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SimulationScale {
+                ledger_fee,
+                scaled_cycles,
+            } => write!(
+                f,
+                "the gateway is in simulation mode and would deliver {scaled_cycles} cycles, \
+                 which does not cover the ledger fee of {ledger_fee}"
+            ),
+            Self::StripeFee => write!(f, "the card fee leaves no amount that buys them"),
+        }
+    }
+}
+
+/// What [`QUOTE_FOR_CYCLES_METHOD`] found for one cycle target.
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum CyclesQuoteOutcome {
+    /// The least amount that buys the target is above the gateway's maximum.
+    #[serde(rename = "amountAboveMax")]
+    AmountAboveMax {
+        #[serde(rename = "maxUsdCents")]
+        max_usd_cents: Nat,
+        #[serde(rename = "usdCents")]
+        usd_cents: Nat,
+    },
+    /// The least amount that buys the target is below the gateway's minimum.
+    #[serde(rename = "amountBelowMin")]
+    AmountBelowMin {
+        #[serde(rename = "minUsdCents")]
+        min_usd_cents: Nat,
+        #[serde(rename = "usdCents")]
+        usd_cents: Nat,
+    },
+    #[serde(rename = "ok")]
+    Ok {
+        /// What `usd_cents` actually buys: at least the target.
+        #[serde(rename = "cyclesQuoted")]
+        cycles_quoted: Nat,
+        /// Card-processing fee, in USD cents.
+        #[serde(rename = "feeCents")]
+        fee_cents: Nat,
+        /// `usd_cents` net of fees, in USD cents.
+        #[serde(rename = "netCents")]
+        net_cents: Nat,
+        /// The least amount that buys the target, in USD cents.
+        #[serde(rename = "usdCents")]
+        usd_cents: Nat,
+    },
+    /// The gateway has no current exchange rate.
+    #[serde(rename = "stale")]
+    Stale,
+    #[serde(rename = "unpriceable")]
+    Unpriceable(Unpriceable),
+}
+
+/// One answer of [`QUOTE_FOR_CYCLES_METHOD`], keyed by the target asked for.
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub struct CyclesQuote {
+    pub cycles: Nat,
+    pub outcome: CyclesQuoteOutcome,
+}
+
+/// Result of [`QUOTE_FOR_CYCLES_METHOD`]: one answer per target asked for.
+/// The `rates` the gateway also reports are deliberately not read back.
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub struct CyclesQuotes {
+    pub quotes: Vec<CyclesQuote>,
 }
 
 /// Why the gateway would not admit an order.
@@ -586,5 +681,56 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    /// `quote_for_cycles` answers a record with a `rates` field this crate
+    /// does not model, and its outcome tags are lowercase.
+    #[test]
+    fn cycles_quotes_decode_from_full_wire_record() {
+        #[derive(CandidType)]
+        struct WireRates {
+            fetched_at_ns: Int,
+        }
+        #[derive(CandidType)]
+        struct WireCyclesQuotes {
+            quotes: Vec<CyclesQuote>,
+            rates: Option<WireRates>,
+        }
+        let bytes = Encode!(&WireCyclesQuotes {
+            quotes: vec![
+                CyclesQuote {
+                    cycles: Nat::from(5u8),
+                    outcome: CyclesQuoteOutcome::Ok {
+                        cycles_quoted: Nat::from(6u8),
+                        fee_cents: Nat::from(51u8),
+                        net_cents: Nat::from(651u16),
+                        usd_cents: Nat::from(702u16),
+                    },
+                },
+                CyclesQuote {
+                    cycles: Nat::from(1u8),
+                    outcome: CyclesQuoteOutcome::Unpriceable(Unpriceable::StripeFee),
+                },
+                CyclesQuote {
+                    cycles: Nat::from(2u8),
+                    outcome: CyclesQuoteOutcome::Stale,
+                },
+            ],
+            rates: Some(WireRates {
+                fetched_at_ns: Int::from(7),
+            }),
+        })
+        .unwrap();
+        let decoded = Decode!(&bytes, CyclesQuotes).unwrap();
+        assert_eq!(decoded.quotes.len(), 3);
+        let CyclesQuoteOutcome::Ok { usd_cents, .. } = &decoded.quotes[0].outcome else {
+            panic!("unexpected {:?}", decoded.quotes[0].outcome);
+        };
+        assert_eq!(*usd_cents, Nat::from(702u16));
+        assert_eq!(
+            decoded.quotes[1].outcome,
+            CyclesQuoteOutcome::Unpriceable(Unpriceable::StripeFee)
+        );
+        assert_eq!(decoded.quotes[2].outcome, CyclesQuoteOutcome::Stale);
     }
 }

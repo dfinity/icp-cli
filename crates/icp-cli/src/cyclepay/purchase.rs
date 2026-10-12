@@ -1,0 +1,756 @@
+//! The purchase itself: quote, create, read back, wait.
+//!
+//! The buyer is whoever makes the calls: the order is created as the caller,
+//! the cycles go to the caller's own Cycles Ledger account, and only the
+//! caller can read the order back. The flow is quote at the backend's
+//! published rate, create the order, pay on the Payment Link the order's
+//! reference is attached to, then wait for the backend to report the order
+//! delivered.
+//!
+//! Nothing here prints. [`wait_for_order`] reports its progress as
+//! [`icp_events`] tasks, one per [`PurchasePhase`], and hands the last order
+//! it saw back inside its error when it is interrupted, so the caller can say
+//! how to resume.
+
+use std::future::Future;
+use std::pin::pin;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use candid::Principal;
+use icp_events::TaskOutcome;
+use icp_project::calls::{CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed};
+use icp_project::operations::task::{PurchasePhase, Reporter, Task, TaskReporter};
+use snafu::{OptionExt, Snafu};
+use std::fmt;
+use tokio::{select, time::sleep};
+use url::Url;
+
+use super::interface::{
+    CREATE_ORDER_METHOD, CYCLES_GATEWAY_CANISTER_ID_ENV, CardOrderStatus, CreateOrderArgs,
+    CreateOrderResult, CreatedOrder, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD,
+    OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    checkout_url, order_reference,
+};
+use super::money::{Currency, Money};
+use super::pricing::{card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
+
+/// How often [`wait_for_order`] asks the backend for the order.
+pub const POLL_INTERVAL: Duration = Duration::from_secs(3);
+
+/// Where orders go: the backend canister that owns them, and the Payment
+/// Link they are paid on.
+#[derive(Clone, Debug)]
+pub struct Gateway {
+    pub canister: Principal,
+    pub payment_link: Url,
+}
+
+#[derive(Debug, Snafu)]
+pub enum CyclesPurchaseError {
+    #[snafu(display(
+        "the cycles gateway canister {gateway} does not exist on this network. \
+         The default gateway is deployed on mainnet (`-n ic`); \
+         --gateway or {CYCLES_GATEWAY_CANISTER_ID_ENV} chooses another"
+    ))]
+    GatewayNotFound { gateway: Principal },
+
+    #[snafu(display("failed to read the exchange rate from cycles gateway {gateway}"))]
+    ReadRate {
+        gateway: Principal,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
+    },
+
+    #[snafu(display(
+        "cycles gateway {gateway} is not pricing orders right now (it has no \
+         exchange rate); try again in a few minutes"
+    ))]
+    RateUnavailable { gateway: Principal },
+
+    #[snafu(display("amount {amount} is outside the gateway's range of {min} to {max} per order"))]
+    AmountOutOfRange {
+        amount: Money,
+        min: Money,
+        max: Money,
+    },
+
+    #[snafu(display(
+        "{} cost more than the gateway maximum of {max} per order, which buys about {}; \
+         ask for fewer", super::format_cycles(*cycles), super::format_cycles(*buys)
+    ))]
+    CyclesAboveMaximum {
+        cycles: u128,
+        max: Money,
+        buys: u128,
+    },
+
+    #[snafu(display("failed to create an order on cycles gateway {gateway}"))]
+    CreateOrder {
+        gateway: Principal,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
+    },
+
+    #[snafu(display("the cycles gateway refused the order: {error}"))]
+    OrderRefused { error: OrderError },
+
+    #[snafu(display("failed to read order {id} from cycles gateway {gateway}"))]
+    GetOrder {
+        gateway: Principal,
+        id: String,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
+    },
+
+    #[snafu(display(
+        "order {id} was not found on cycles gateway {gateway} for {caller}; \
+         an order is visible only to the identity that created it, and an unpaid \
+         one is forgotten once it expires"
+    ))]
+    OrderNotFound {
+        gateway: Principal,
+        id: String,
+        caller: Principal,
+    },
+
+    #[snafu(display("interrupted while waiting for order {}", order.id))]
+    Interrupted { order: Box<OrderView> },
+
+    #[snafu(display(
+        "gave up waiting for order {} (last status: {})", order.id, order.status
+    ))]
+    WaitTimedOut { order: Box<OrderView> },
+
+    #[snafu(display("lost contact with cycles gateway {gateway} while waiting for order {id}"))]
+    WaitUnanswered {
+        gateway: Principal,
+        id: String,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
+    },
+}
+
+/// What the buyer asked for: a sum to spend, or cycles to receive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// Spend exactly this much; take whatever cycles it buys.
+    Spend(Money),
+    /// Receive at least this many cycles; spend the least `currency` that
+    /// buys them.
+    Receive { cycles: u128, currency: Currency },
+}
+
+/// The backend's XDR/USD rate, as read for a quote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rate {
+    /// US dollars per XDR (one trillion cycles), times 10,000.
+    pub xdr_usd_x10000: u64,
+    /// The backend has not refreshed it for longer than it tolerates. Every
+    /// order is still priced with it.
+    pub stale: bool,
+    /// How long ago the backend set it, when it says.
+    pub age: Option<Duration>,
+}
+
+impl Rate {
+    /// The price of one trillion cycles: `1.3520 USD`.
+    pub fn usd_per_trillion(&self) -> String {
+        format!(
+            "{}.{:04} USD",
+            self.xdr_usd_x10000 / 10_000,
+            self.xdr_usd_x10000 % 10_000
+        )
+    }
+}
+
+/// What an amount buys, at the rate the backend published when asked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Quote {
+    /// What the card is charged.
+    pub amount: Money,
+    /// The card-processing fee included in `amount`.
+    pub fee: Money,
+    /// What funds the cycles: `amount` less `fee`.
+    pub net: Money,
+    /// About what lands on the buyer's Cycles Ledger account: the cycles the
+    /// net mints at `rate`, less the delivery's ledger fees. The cycles
+    /// minted follow the rate when the payment lands.
+    pub cycles: u128,
+    pub rate: Rate,
+}
+
+/// An order's state as the CLI tells it.
+///
+/// The backend's own states, plus [`OrderStatus::Expired`] for an unpaid
+/// order past its deadline: the backend reports such an order as still
+/// awaiting payment until it forgets it, but a payment for it is refunded
+/// rather than delivered, so it is over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderStatus {
+    /// Made, not paid.
+    AwaitingPayment,
+    /// Paid with a delayed method; not settled yet.
+    PaymentPending,
+    /// Paid; the cycles are on their way.
+    Processing,
+    Delivered,
+    /// Stopped for an operator; not refunded meanwhile.
+    NeedsReview,
+    /// Not delivered; the refund is being made.
+    Refunding,
+    Refunded,
+    /// Not delivered; an operator refunds it by hand.
+    RefundOwed,
+    /// Unpaid past its deadline.
+    Expired,
+}
+
+impl OrderStatus {
+    /// Whether the order can still change in a way worth waiting for. A
+    /// refund in progress is settled as far as the buyer is concerned.
+    pub fn is_terminal(self) -> bool {
+        !matches!(
+            self,
+            Self::AwaitingPayment | Self::PaymentPending | Self::Processing
+        )
+    }
+
+    /// Whether a payment has been made.
+    pub fn is_paid(self) -> bool {
+        !matches!(self, Self::AwaitingPayment | Self::Expired)
+    }
+
+    /// The status for output meant to be parsed, e.g. `refund_owed`.
+    /// [`fmt::Display`] is for people.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Self::AwaitingPayment => "awaiting_payment",
+            Self::PaymentPending => "payment_pending",
+            Self::Processing => "processing",
+            Self::Delivered => "delivered",
+            Self::NeedsReview => "needs_review",
+            Self::Refunding => "refunding",
+            Self::Refunded => "refunded",
+            Self::RefundOwed => "refund_owed",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+impl fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::AwaitingPayment => "awaiting payment",
+            Self::PaymentPending => "paid, payment pending",
+            Self::Processing => "paid, delivering",
+            Self::Delivered => "delivered",
+            Self::NeedsReview => "needs review",
+            Self::Refunding => "being refunded",
+            Self::Refunded => "refunded",
+            Self::RefundOwed => "owed a refund",
+            Self::Expired => "expired",
+        })
+    }
+}
+
+impl From<CardOrderStatus> for OrderStatus {
+    fn from(status: CardOrderStatus) -> Self {
+        match status {
+            CardOrderStatus::AwaitingPayment => Self::AwaitingPayment,
+            CardOrderStatus::PaymentPending => Self::PaymentPending,
+            CardOrderStatus::Processing => Self::Processing,
+            CardOrderStatus::Delivered => Self::Delivered,
+            CardOrderStatus::NeedsReview => Self::NeedsReview,
+            CardOrderStatus::Refunding => Self::Refunding,
+            CardOrderStatus::Refunded => Self::Refunded,
+            CardOrderStatus::RefundOwed => Self::RefundOwed,
+        }
+    }
+}
+
+/// An order, as the CLI holds it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrderView {
+    pub id: String,
+    pub status: OrderStatus,
+    /// What the order asked for.
+    pub amount: Money,
+    /// What funds the cycles after the card fee: the order's amount until
+    /// paid, then the amount paid.
+    pub net: Money,
+    /// The page to pay on, while the order is payable.
+    pub checkout_url: Option<String>,
+    /// When the order stops being payable, in seconds since the Unix epoch.
+    /// `None` once paid.
+    pub expires_at: Option<u64>,
+    /// What the card was charged, once paid.
+    pub paid: Option<Money>,
+    /// Exact cycles, once delivered.
+    pub cycles_delivered: Option<u128>,
+    /// What was refunded, once anything was.
+    pub refunded: Option<Money>,
+    /// Why delivery waits or stopped, or why a refund is owed.
+    pub detail: Option<String>,
+}
+
+impl OrderView {
+    fn created(created: CreatedOrder, gateway: &Gateway) -> Self {
+        let url = checkout_url(
+            &gateway.payment_link,
+            &created.client_reference_id,
+            created.amount_usd_cents,
+        );
+        Self {
+            id: created.order_id,
+            status: OrderStatus::AwaitingPayment,
+            amount: Money::from_minor_units(created.amount_usd_cents, Currency::Usd),
+            net: Money::from_minor_units(created.net_usd_cents, Currency::Usd),
+            checkout_url: Some(url.into()),
+            expires_at: Some(created.expires_at),
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+        }
+    }
+
+    /// The view the backend gives the owner. The reference its Payment Link
+    /// carries is not in it, but it is a function of the order id, so the
+    /// page to pay on is rebuilt for an order still awaiting payment.
+    fn read(view: OrderStatusView, gateway: &Gateway) -> Self {
+        let status = OrderStatus::from(view.status);
+        let checkout_url = (status == OrderStatus::AwaitingPayment).then(|| {
+            checkout_url(
+                &gateway.payment_link,
+                &order_reference(&view.order_id),
+                view.amount_usd_cents,
+            )
+            .into()
+        });
+        Self {
+            id: view.order_id,
+            status,
+            amount: Money::from_minor_units(view.amount_usd_cents, Currency::Usd),
+            net: Money::from_minor_units(view.net_usd_cents, Currency::Usd),
+            checkout_url,
+            expires_at: view.expires_at,
+            paid: view
+                .paid_usd_cents
+                .map(|cents| Money::from_minor_units(cents, Currency::Usd)),
+            cycles_delivered: view.cycles_delivered.map(u128::from),
+            refunded: (view.amount_refunded_usd_cents > 0)
+                .then(|| Money::from_minor_units(view.amount_refunded_usd_cents, Currency::Usd)),
+            detail: view.detail,
+        }
+    }
+
+    /// The same order, over: unpaid past its deadline.
+    fn expired(mut self) -> Self {
+        self.status = OrderStatus::Expired;
+        self.checkout_url = None;
+        self
+    }
+
+    /// Whether the order is unpaid and `now` (seconds since the Unix epoch)
+    /// is more than `grace` past its deadline.
+    fn is_past_deadline(&self, now: u64, grace: Duration) -> bool {
+        self.status == OrderStatus::AwaitingPayment
+            && self
+                .expires_at
+                .is_some_and(|deadline| now > deadline.saturating_add(grace.as_secs()))
+    }
+}
+
+/// Read the rate the backend prices orders with right now.
+pub async fn read_rate(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+) -> Result<Rate, CyclesPurchaseError> {
+    let canister = gateway.canister;
+    let (status,): (XdrRateStatus,) = query_typed(calls, canister, XDR_RATE_STATUS_METHOD, ())
+        .await
+        .map_err(|source| {
+            map_absent(source, canister, |source| CyclesPurchaseError::ReadRate {
+                gateway: canister,
+                source: Box::new(source),
+            })
+        })?;
+    if status.xdr_usd_x10000 == 0 {
+        return RateUnavailableSnafu { gateway: canister }.fail();
+    }
+    Ok(Rate {
+        xdr_usd_x10000: status.xdr_usd_x10000,
+        stale: status.stale,
+        age: status.age_seconds.map(Duration::from_secs),
+    })
+}
+
+/// Price a [`Target`] at `rate`, within the backend's per-order range.
+///
+/// A sum outside the range is refused here rather than by the backend so the
+/// buyer is told before being shown a quote for it. A number of cycles the
+/// minimum already buys is quoted at the minimum: that is the least a buyer
+/// can pay, and the extra is theirs.
+pub fn quote_at(rate: Rate, target: Target) -> Result<Quote, CyclesPurchaseError> {
+    let amount = match target {
+        Target::Spend(amount) => {
+            let Currency::Usd = amount.currency;
+            let min = Money::from_minor_units(MIN_ORDER_USD_CENTS, amount.currency);
+            let max = Money::from_minor_units(MAX_ORDER_USD_CENTS, amount.currency);
+            if amount.minor_units < min.minor_units || amount.minor_units > max.minor_units {
+                return AmountOutOfRangeSnafu { amount, min, max }.fail();
+            }
+            amount
+        }
+        Target::Receive { cycles, currency } => {
+            let Currency::Usd = currency;
+            let cents = least_gross_for(
+                cycles,
+                rate.xdr_usd_x10000,
+                MIN_ORDER_USD_CENTS,
+                MAX_ORDER_USD_CENTS,
+            )
+            .context(CyclesAboveMaximumSnafu {
+                cycles,
+                max: Money::from_minor_units(MAX_ORDER_USD_CENTS, currency),
+                buys: ledger_cycles(MAX_ORDER_USD_CENTS, rate.xdr_usd_x10000),
+            })?;
+            Money::from_minor_units(cents, currency)
+        }
+    };
+    Ok(Quote {
+        amount,
+        fee: Money::from_minor_units(card_fee_cents(amount.minor_units), amount.currency),
+        net: Money::from_minor_units(net_usd_cents(amount.minor_units), amount.currency),
+        cycles: ledger_cycles(amount.minor_units, rate.xdr_usd_x10000),
+        rate,
+    })
+}
+
+/// Read the backend's rate and price a [`Target`] at it.
+pub async fn quote_target(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+    target: Target,
+) -> Result<Quote, CyclesPurchaseError> {
+    let rate = read_rate(calls, gateway).await?;
+    quote_at(rate, target)
+}
+
+/// Create an order for `amount`, delivering to the caller's own Cycles
+/// Ledger account.
+///
+/// The backend answers an open order of the caller's for the same amount and
+/// destination again rather than making a second one, so repeating a run
+/// resumes it.
+pub async fn place_order(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+    amount: Money,
+) -> Result<OrderView, CyclesPurchaseError> {
+    let Currency::Usd = amount.currency;
+    let args = CreateOrderArgs {
+        destination: OrderDestination::Ledger,
+        beneficiary: None,
+        project_id: None,
+        amount_usd_cents: amount.minor_units,
+        confirm_system_canister: None,
+    };
+    let canister = gateway.canister;
+    let (result,): (CreateOrderResult,) = update_typed(
+        calls,
+        canister,
+        CREATE_ORDER_METHOD,
+        (args,),
+        RouteTo::Callee,
+        0,
+    )
+    .await
+    .map_err(|source| {
+        map_absent(source, canister, |source| {
+            CyclesPurchaseError::CreateOrder {
+                gateway: canister,
+                source: Box::new(source),
+            }
+        })
+    })?;
+    match result {
+        CreateOrderResult::Ok(created) => Ok(OrderView::created(created, gateway)),
+        CreateOrderResult::Err(error) => OrderRefusedSnafu { error }.fail(),
+    }
+}
+
+/// Read one of the caller's orders, or `None` where the backend answers
+/// `null`: an order the caller does not own, one that never existed, or one
+/// forgotten after expiring unpaid.
+async fn fetch_order(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+    id: &str,
+) -> Result<Option<OrderView>, CyclesPurchaseError> {
+    let canister = gateway.canister;
+    let (view,): (Option<OrderStatusView>,) =
+        query_typed(calls, canister, ORDER_STATUS_METHOD, (id.to_owned(),))
+            .await
+            .map_err(|source| {
+                map_absent(source, canister, |source| CyclesPurchaseError::GetOrder {
+                    gateway: canister,
+                    id: id.to_owned(),
+                    source: Box::new(source),
+                })
+            })?;
+    Ok(view.map(|view| OrderView::read(view, gateway)))
+}
+
+/// Read one of the caller's orders. The backend's `null` is
+/// [`CyclesPurchaseError::OrderNotFound`] whatever its cause.
+pub async fn get_order(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+    id: &str,
+) -> Result<OrderView, CyclesPurchaseError> {
+    fetch_order(calls, gateway, id)
+        .await?
+        .context(OrderNotFoundSnafu {
+            gateway: gateway.canister,
+            id,
+            caller: calls.caller(),
+        })
+}
+
+/// Bounds on [`wait_for_order`].
+#[derive(Clone, Debug)]
+pub struct WaitOptions {
+    /// Time between polls.
+    pub poll_interval: Duration,
+    /// How far past its deadline an unpaid order is still read as payable.
+    /// Clocks differ, and the backend expires it on its own.
+    pub expiry_grace: Duration,
+    /// How long an unpaid order is waited on in one run. Its deadline is a
+    /// day away; a buyer who has not paid by now is told how to resume.
+    pub max_unpaid_wait: Duration,
+    /// How long a paid order is given to be delivered.
+    pub max_paid_wait: Duration,
+    /// Consecutive unanswered polls tolerated before giving up.
+    pub max_consecutive_transient: u32,
+}
+
+impl Default for WaitOptions {
+    fn default() -> Self {
+        Self {
+            poll_interval: POLL_INTERVAL,
+            expiry_grace: Duration::from_secs(60),
+            max_unpaid_wait: Duration::from_secs(60 * 60),
+            max_paid_wait: Duration::from_secs(15 * 60),
+            max_consecutive_transient: 20,
+        }
+    }
+}
+
+/// The legs of a wait, reported as one [`Task`] each so a consumer can tick
+/// off "payment received" before "delivered".
+struct Phases<'a> {
+    reporter: &'a Reporter,
+    id: &'a str,
+    current: Option<(PurchasePhase, TaskReporter)>,
+}
+
+impl Phases<'_> {
+    fn of(status: OrderStatus) -> PurchasePhase {
+        match status {
+            OrderStatus::PaymentPending | OrderStatus::Processing => PurchasePhase::Delivering,
+            _ => PurchasePhase::AwaitingPayment,
+        }
+    }
+
+    /// Move to the phase `status` is in, finishing the one before it.
+    fn enter(&mut self, status: OrderStatus) {
+        let phase = Self::of(status);
+        if self.current.as_ref().is_some_and(|(p, _)| *p == phase) {
+            return;
+        }
+        self.finish(TaskOutcome::succeeded());
+        let task = self.reporter.task(Task::cycles_purchase(self.id, phase));
+        self.current = Some((phase, task));
+    }
+
+    fn finish(&mut self, outcome: TaskOutcome) {
+        if let Some((_, task)) = self.current.take() {
+            task.finish(outcome);
+        }
+    }
+}
+
+/// Poll the backend until the order reaches a terminal status.
+///
+/// `initial` is the order as last seen, if the caller has it: it names the
+/// phase the wait starts in, and it is what
+/// [`CyclesPurchaseError::Interrupted`] carries if `interrupt` resolves before
+/// the first poll answers. Each [`PurchasePhase`] the order passes through is
+/// reported as a task on `reporter`, finished when the next begins or the
+/// wait ends.
+///
+/// `interrupt` is raced against every poll as well as the sleep between
+/// them, so an interrupt lands even while a call is stalled.
+///
+/// A poll the network never answered is retried; any other failure returns at
+/// once. An unpaid order past its deadline comes back as
+/// [`OrderStatus::Expired`], whether the backend still reports it or has
+/// forgotten it. A terminal status is a success here whatever it is — a
+/// refund is an answer — and the caller decides what each one means.
+pub async fn wait_for_order(
+    calls: &dyn CanisterCalls,
+    gateway: &Gateway,
+    id: &str,
+    initial: Option<OrderView>,
+    options: &WaitOptions,
+    interrupt: impl Future<Output = ()>,
+    reporter: &Reporter,
+) -> Result<OrderView, CyclesPurchaseError> {
+    let mut interrupt = pin!(interrupt);
+    let mut phases = Phases {
+        reporter,
+        id,
+        current: None,
+    };
+    phases.enter(
+        initial
+            .as_ref()
+            .map_or(OrderStatus::AwaitingPayment, |o| o.status),
+    );
+    let mut last = initial;
+    let mut transient_streak = 0u32;
+    let started = Instant::now();
+    let mut paid_since: Option<Instant> = None;
+
+    let interrupted = |last: Option<OrderView>| {
+        let order = last.unwrap_or_else(|| OrderView {
+            id: id.to_owned(),
+            status: OrderStatus::AwaitingPayment,
+            amount: Money::from_minor_units(0, Currency::Usd),
+            net: Money::from_minor_units(0, Currency::Usd),
+            checkout_url: None,
+            expires_at: None,
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+        });
+        InterruptedSnafu {
+            order: Box::new(order),
+        }
+        .fail()
+    };
+
+    loop {
+        let polled = select! {
+            polled = fetch_order(calls, gateway, id) => polled,
+            _ = &mut interrupt => {
+                phases.finish(TaskOutcome::failed("interrupted"));
+                return interrupted(last);
+            }
+        };
+        match polled {
+            Ok(Some(order)) => {
+                transient_streak = 0;
+                let order = if order.is_past_deadline(now_secs(), options.expiry_grace) {
+                    order.expired()
+                } else {
+                    order
+                };
+                if order.status.is_terminal() {
+                    phases.finish(match order.status {
+                        OrderStatus::Delivered => TaskOutcome::succeeded(),
+                        status => TaskOutcome::failed(format!("order {status}")),
+                    });
+                    return Ok(order);
+                }
+                phases.enter(order.status);
+                if order.status.is_paid() && paid_since.is_none() {
+                    paid_since = Some(Instant::now());
+                }
+                let overdue = match paid_since {
+                    Some(since) => since.elapsed() > options.max_paid_wait,
+                    None => started.elapsed() > options.max_unpaid_wait,
+                };
+                if overdue {
+                    phases.finish(TaskOutcome::failed("gave up waiting"));
+                    return WaitTimedOutSnafu {
+                        order: Box::new(order),
+                    }
+                    .fail();
+                }
+                last = Some(order);
+            }
+            // The backend forgets an unpaid order once it expires. One that
+            // was awaiting payment and is now gone past its deadline expired;
+            // one gone for any other reason was never the caller's to wait on.
+            Ok(None) => match last.take() {
+                Some(order) if order.is_past_deadline(now_secs(), Duration::ZERO) => {
+                    let order = order.expired();
+                    phases.finish(TaskOutcome::failed(format!("order {}", order.status)));
+                    return Ok(order);
+                }
+                _ => {
+                    phases.finish(TaskOutcome::failed("order not found"));
+                    return OrderNotFoundSnafu {
+                        gateway: gateway.canister,
+                        id,
+                        caller: calls.caller(),
+                    }
+                    .fail();
+                }
+            },
+            Err(CyclesPurchaseError::GetOrder { source, .. }) if is_transient(&source) => {
+                transient_streak += 1;
+                if transient_streak > options.max_consecutive_transient {
+                    phases.finish(TaskOutcome::failed("lost contact with the gateway"));
+                    return Err(CyclesPurchaseError::WaitUnanswered {
+                        gateway: gateway.canister,
+                        id: id.to_owned(),
+                        source,
+                    });
+                }
+            }
+            Err(error) => {
+                phases.finish(TaskOutcome::failed(error.to_string()));
+                return Err(error);
+            }
+        }
+
+        select! {
+            _ = sleep(options.poll_interval) => {}
+            _ = &mut interrupt => {
+                phases.finish(TaskOutcome::failed("interrupted"));
+                return interrupted(last);
+            }
+        }
+    }
+}
+
+/// A rejection saying the gateway canister does not exist becomes
+/// [`CyclesPurchaseError::GatewayNotFound`]; anything else goes to `wrap`.
+fn map_absent(
+    source: TypedCallError,
+    gateway: Principal,
+    wrap: impl FnOnce(TypedCallError) -> CyclesPurchaseError,
+) -> CyclesPurchaseError {
+    match &source {
+        TypedCallError::Call { source: call } if call.is_canister_not_found() => {
+            CyclesPurchaseError::GatewayNotFound { gateway }
+        }
+        _ => wrap(source),
+    }
+}
+
+fn is_transient(error: &TypedCallError) -> bool {
+    matches!(error, TypedCallError::Call { source } if source.is_transient())
+}
+
+/// Seconds since the Unix epoch, on this machine's clock.
+pub fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}

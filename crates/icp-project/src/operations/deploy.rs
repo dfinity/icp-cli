@@ -801,11 +801,13 @@ async fn wait_until_serving_queries(
 /// A rejection means the replica processed the request to a verdict (e.g. "no
 /// such query method"), so the canister is up — unless the rejection says it is
 /// stopped/stopping (IC0508/IC0509, with a message-substring fallback), which is
-/// a replica still lagging behind the restart. A call that reached no verdict at
-/// all is inconclusive — not evidence the canister is serving — and returns
-/// false so the caller retries rather than proceeding.
+/// a replica still lagging behind the restart, or that it does not exist at
+/// all (IC0301), which right after creation is routing that has not caught up
+/// yet. A call that reached no verdict at all is inconclusive — not evidence
+/// the canister is serving — and returns false so the caller retries rather
+/// than proceeding.
 fn is_serving_reject(err: &CallError) -> bool {
-    if !err.is_rejection() {
+    if !err.is_rejection() || err.is_canister_not_found() {
         return false;
     }
     let message = err.message().unwrap_or_default();
@@ -839,6 +841,18 @@ mod tests {
             None,
             "Canister abc is stopping"
         )));
+    }
+
+    #[test]
+    fn not_found_rejects_are_not_a_readiness_signal() {
+        // Routing that has not caught up with the creation yet — whether a
+        // replica says so, or an HTTP gateway did and the call layer reported
+        // it as the same verdict.
+        assert!(!is_serving_reject(&reject(
+            Some("IC0301"),
+            "Canister abc not found"
+        )));
+        assert!(!is_serving_reject(&reject(None, "Canister abc not found")));
     }
 
     #[test]

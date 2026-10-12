@@ -242,8 +242,8 @@ impl CallError {
 }
 
 /// The replica's error code for a call addressed to a canister that does not
-/// exist.
-const CANISTER_NOT_FOUND: &str = "IC0301";
+/// exist, which [`CallError::is_canister_not_found`] recognizes.
+pub const CANISTER_NOT_FOUND: &str = "IC0301";
 
 /// How this crate reaches canisters.
 ///

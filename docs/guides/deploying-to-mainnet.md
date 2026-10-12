@@ -72,7 +72,13 @@ Save this principal — you'll need it to receive ICP tokens.
 
 ## Acquiring Cycles
 
-Now you need to get ICP tokens and convert them to cycles.
+Now you need cycles. The quickest route is to buy them with a card for your identity:
+
+```bash
+icp cycles buy --amount 10 -n ic
+```
+
+See [Buying Cycles with a Card](tokens-and-cycles.md#buying-cycles-with-a-card). Otherwise, get ICP tokens and convert them to cycles.
 
 ### Getting ICP
 

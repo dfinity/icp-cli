@@ -402,10 +402,21 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
             println!("{url}");
             // A phone camera is the usual way to reach a card from a terminal;
             // the code is for eyes, so it only goes where there are some.
+            let color = std::env::var_os("NO_COLOR").is_none();
             if stderr().is_terminal()
-                && let Some(qr) = render_qr(url)
+                && let Some(qr) = render_qr(url, color)
             {
-                eprintln!("{qr}");
+                // A code wrapped across lines cannot be scanned.
+                let (_, columns) = dialoguer::console::Term::stderr().size();
+                let width = qr
+                    .lines()
+                    .next()
+                    .map_or(0, |row| row.chars().filter(|c| "█▀▄ ".contains(*c)).count());
+                if width > usize::from(columns) {
+                    info!("(Widen the terminal to {width} columns to see the QR code.)");
+                } else {
+                    eprintln!("{qr}");
+                }
             }
             if !no_open && stderr().is_terminal() {
                 match open::that(url) {
@@ -444,7 +455,15 @@ async fn wait_and_report(
     };
     // The live view is for a person; a script gets its answer on stdout.
     let result = match output {
-        Output::Human => rendered(debug, wait).await,
+        Output::Human => {
+            let result = rendered(debug, wait).await;
+            // On a terminal the live view leaves its last line open (as it
+            // does for `icp deploy`), so what follows would run on from it.
+            if !debug && stderr().is_terminal() {
+                eprintln!();
+            }
+            result
+        }
         Output::Quiet | Output::Json => wait(&Reporter::null()).await,
     };
 
@@ -556,18 +575,42 @@ fn until(order: &OrderView) -> String {
 }
 
 /// The URL as a QR code drawn with half-block characters, two modules per
-/// row, for scanning off the terminal. Inverted (light modules on the
-/// terminal's dark background) because that is what most terminals are and
-/// scanners read either way. `None` only if the URL is too long to encode.
-fn render_qr(url: &str) -> Option<String> {
-    use qrcode::render::unicode::Dense1x2;
-    let code = qrcode::QrCode::new(url.as_bytes()).ok()?;
-    Some(
-        code.render::<Dense1x2>()
-            .dark_color(Dense1x2::Light)
-            .light_color(Dense1x2::Dark)
-            .build(),
-    )
+/// row, for scanning off the terminal. It takes the lowest error correction
+/// (a screen does not smudge) and a two-module quiet zone, the least a
+/// scanner needs, so that the Payment Link's code is 41x21 and fits an 80x24
+/// terminal. Light modules are the blocks; with `color`, the code is set
+/// white on black so that it reads the same on a light theme as on a dark
+/// one. `None` only if the URL is too long to encode.
+fn render_qr(url: &str, color: bool) -> Option<String> {
+    use itertools::Itertools;
+    use qrcode::{Color, EcLevel, QrCode};
+    const QUIET: usize = 2;
+    let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).ok()?;
+    let width = code.width();
+    let modules = code.to_colors();
+    let size = width + 2 * QUIET;
+    // The quiet zone, and the half row below an odd height, are light.
+    let light = |x: usize, y: usize| {
+        let inside = (QUIET..QUIET + width).contains(&x) && (QUIET..QUIET + width).contains(&y);
+        !inside || modules[(y - QUIET) * width + (x - QUIET)] == Color::Light
+    };
+    let (on, off) = if color {
+        ("\x1b[97;40m", "\x1b[0m")
+    } else {
+        ("", "")
+    };
+    let mut rows = (0..size).step_by(2).map(|y| {
+        let row: String = (0..size)
+            .map(|x| match (light(x, y), light(x, y + 1)) {
+                (true, true) => '█',
+                (true, false) => '▀',
+                (false, true) => '▄',
+                (false, false) => ' ',
+            })
+            .collect();
+        format!("{on}{row}{off}")
+    });
+    Some(rows.join("\n"))
 }
 
 /// Where the order stands, for a script: one JSON object, or the status tag
@@ -777,23 +820,61 @@ mod tests {
 
     #[test]
     fn qr_renders_a_payment_link() {
-        let qr = render_qr(
-            "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-1&prefilled_amount=1000",
-        )
-        .unwrap();
+        let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-1-0000abcd&prefilled_amount=1000";
+        let qr = render_qr(url, false).unwrap();
         let lines: Vec<&str> = qr.lines().collect();
         // Square-ish: every row is the same width and the block characters
         // are the only ink.
         let width = lines[0].chars().count();
-        assert!(width > 20, "{width}");
+        assert!(width > 20 && width <= 45, "{width}");
+        assert!(lines.len() <= 23, "{}", lines.len());
         assert!(lines.iter().all(|l| l.chars().count() == width));
         assert!(
             qr.chars()
                 .all(|c| matches!(c, '█' | '▀' | '▄' | ' ' | '\n')),
             "{qr}"
         );
+        // In colour, every row is set white on black and reset after.
+        let colored = render_qr(url, true).unwrap();
+        assert!(
+            colored
+                .lines()
+                .all(|l| l.starts_with("\x1b[97;40m") && l.ends_with("\x1b[0m")),
+            "{colored}"
+        );
         // Far beyond a QR code's capacity.
-        assert!(render_qr(&"x".repeat(10_000)).is_none());
+        assert!(render_qr(&"x".repeat(10_000), false).is_none());
+    }
+
+    /// Read back, the drawing is the code's own modules inside a light
+    /// quiet zone two modules wide, with the half row below its odd height
+    /// light too: a dark stripe there would leave a scanner no edge to find.
+    #[test]
+    fn qr_draws_every_module_where_it_is() {
+        use qrcode::{Color, EcLevel, QrCode};
+        let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-4-77fd4ac0&prefilled_amount=100";
+        let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).unwrap();
+        let (width, modules) = (code.width(), code.to_colors());
+        let rows: Vec<Vec<char>> = render_qr(url, false)
+            .unwrap()
+            .lines()
+            .map(|l| l.chars().collect())
+            .collect();
+        let size = width + 4;
+        assert_eq!(rows.len(), size.div_ceil(2));
+        assert!(rows.iter().all(|row| row.len() == size));
+        for y in 0..rows.len() * 2 {
+            for x in 0..size {
+                let drawn_light = match (rows[y / 2][x], y % 2) {
+                    ('█', _) | ('▀', 0) | ('▄', 1) => true,
+                    (' ', _) | ('▀', 1) | ('▄', 0) => false,
+                    (c, _) => panic!("unexpected {c:?}"),
+                };
+                let inside = (2..2 + width).contains(&x) && (2..2 + width).contains(&y);
+                let light = !inside || modules[(y - 2) * width + (x - 2)] == Color::Light;
+                assert_eq!(drawn_light, light, "module ({x}, {y})");
+            }
+        }
     }
 
     #[test]

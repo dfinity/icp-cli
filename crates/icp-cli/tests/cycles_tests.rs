@@ -739,3 +739,81 @@ async fn cycles_buy_ctrl_c_stops_the_wait_and_exits_130() {
     assert!(said.contains("--resume co-1-0000test"), "{said}");
     assert!(!said.contains("Error"), "{said}");
 }
+
+/// A wait through payment to delivery: once the stand-in gateway is paid
+/// (its `pay` update), the next poll finds the order delivered, and the
+/// command reports CyclePay's delivery to where the order says it went and
+/// succeeds.
+#[tokio::test]
+async fn cycles_buy_waits_through_payment_to_delivery() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ctx = TestContext::new();
+    // A stand-in gateway whose order is delivered once `pay` is called; see
+    // its `.wat`.
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "paid_on_call_canister.wasm").await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .env(
+            "ICP_CYCLES_PAYMENT_LINK_URL",
+            "https://buy.stripe.com/test_standin",
+        )
+        .args([
+            "cycles",
+            "buy",
+            "--resume",
+            "co-1-0000test",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            &gateway,
+            "pay",
+            "()",
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .assert()
+        .success();
+
+    stderr.read_to_string(&mut said).unwrap();
+    let status = child.wait().unwrap();
+    let mut printed = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut printed)
+        .unwrap();
+    assert!(status.success(), "{said}");
+    assert!(
+        printed.contains(
+            "CyclePay reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
+        ),
+        "{printed}"
+    );
+    // Not the buyer's account, so no balance of the buyer's is read.
+    assert!(!printed.contains("Balance"), "{printed}");
+}

@@ -15,9 +15,7 @@ use icp_events::EventKind;
 use icp_project::calls::CanisterCalls;
 use icp_project::host::EnvironmentSelection;
 use icp_project::network::RootKeySpec;
-use icp_project::operations::task::{
-    CyclesPurchaseTask, Presentation, PurchasePhase, Reporter, Task,
-};
+use icp_project::operations::task::{CyclesPurchaseTask, PurchasePhase, Reporter, Task};
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
@@ -700,9 +698,13 @@ async fn with_heartbeat<T>(
                         task: Task::CyclesPurchase(task),
                         ..
                     }) => {
-                        if let Some(message) = task.running_message() {
-                            say(format!("[order {}] {message}", task.order_id));
-                        }
+                        // Not the live view's line, whose Ctrl-C hint is
+                        // for a person at the terminal.
+                        let begun = match task.phase {
+                            PurchasePhase::AwaitingPayment => "Waiting for payment...",
+                            PurchasePhase::Delivering => "Payment received; delivering cycles...",
+                        };
+                        say(format!("[order {}] {begun}", task.order_id));
                         phase = Some(task);
                     }
                     Some(_) => {}

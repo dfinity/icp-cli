@@ -622,6 +622,25 @@ async fn wait_starts_in_the_initial_orders_phase() {
     assert_eq!(phases, vec![succeeded(PurchasePhase::Delivering)]);
 }
 
+/// Delivered between two polls, the order is never seen paying; its wait
+/// still ends with both legs ticked off.
+#[tokio::test]
+async fn wait_ticks_off_both_legs_of_a_delivery_seen_only_at_its_end() {
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, phases) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(
+        phases,
+        vec![
+            succeeded(PurchasePhase::AwaitingPayment),
+            succeeded(PurchasePhase::Delivering),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn wait_returns_every_settled_status_as_ok() {
     for (status, expected) in [

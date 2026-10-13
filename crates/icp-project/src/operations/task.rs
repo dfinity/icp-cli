@@ -516,7 +516,10 @@ impl Presentation for CyclesPurchaseTask {
 
     fn running_message(&self) -> Option<&'static str> {
         Some(match self.phase {
-            PurchasePhase::AwaitingPayment => "Waiting for payment...",
+            // Within 80 columns with its `[order <id>] ✷ ` label.
+            PurchasePhase::AwaitingPayment => {
+                "Waiting for payment; Ctrl-C leaves the order payable"
+            }
             PurchasePhase::Delivering => "Payment received; delivering cycles...",
         })
     }

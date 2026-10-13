@@ -728,6 +728,11 @@ pub async fn wait_for_order(
                     order
                 };
                 if order.status.is_terminal() {
+                    // A delivery first seen at its end still went through
+                    // payment: both legs are ticked off, as for any other.
+                    if order.status == OrderStatus::Delivered {
+                        phases.enter(OrderStatus::Processing);
+                    }
                     phases.finish(match order.status {
                         OrderStatus::Delivered => TaskOutcome::succeeded(),
                         status => TaskOutcome::failed(format!("order {status}")),

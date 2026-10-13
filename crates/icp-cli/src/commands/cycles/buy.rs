@@ -524,7 +524,9 @@ async fn wait_and_report(
                     .cycles_delivered
                     .map(format_cycles)
                     .unwrap_or_else(|| "cycles".to_owned());
-                println!("Delivered {cycles} to {buyer}");
+                // The status is read by query, so it is CyclePay's report as
+                // one replica gives it, and is said to be.
+                println!("CyclePay reports {cycles} delivered to {buyer}");
                 if let Some(balance) = balance {
                     println!("Balance: {}", format_cycles(balance));
                 }

@@ -533,6 +533,32 @@ async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
         .failure();
 }
 
+/// A gateway other than CyclePay's is not paid on CyclePay's Payment Link: a
+/// payment there would go to CyclePay, for an order CyclePay does not have.
+/// Refused before any identity is used or any network reached.
+#[test]
+fn cycles_buy_refuses_a_custom_gateway_without_its_payment_link() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .env_remove("ICP_CYCLES_PAYMENT_LINK_URL")
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            "rrkah-fqaaa-aaaaa-aaaaq-cai",
+            "-n",
+            "ic",
+        ])
+        .assert()
+        .stdout("")
+        .stderr(contains("set ICP_CYCLES_PAYMENT_LINK_URL"))
+        .failure();
+}
+
 /// An order resumed already settled ends as a wait for it would: a refund is
 /// an error with or without --no-wait, and --json still prints the order.
 #[tokio::test]

@@ -4,12 +4,14 @@ use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
-use icp_app::context::Context;
+use icp_app::context::{Context, NetworkSelection};
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_project::calls::CanisterCalls;
+use icp_project::host::EnvironmentSelection;
+use icp_project::network::RootKeySpec;
 use icp_project::operations::task::Reporter;
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
@@ -18,7 +20,7 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
-use crate::commands::args::TokenCommandArgs;
+use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
     ORDER_TTL_SECS, OrderError, OrderErrorKind, cycles_gateway_canister_id, payment_link_url,
@@ -193,20 +195,76 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         }
     };
 
+    // Only the identity that made an order can read it, on the network its
+    // gateway is on: the command that resumes it says both.
+    let resume = |id: &str| {
+        format!(
+            "icp cycles buy --resume {}{}",
+            shell_word(id),
+            selection_flags(&selections, args.gateway)
+        )
+    };
+
     if args.no_wait {
         if !payable {
             print_final(&order, None, output)?;
         }
         if output == Output::Human && !order.status.is_terminal() {
             info!(
-                "Not waiting. Run `icp cycles buy --resume {}` to wait for delivery.",
-                order.id
+                "Not waiting. Run `{}` to wait for delivery.",
+                resume(&order.id)
             );
         }
         return Ok(());
     }
 
-    wait_and_report(calls, &agent, &gateway, buyer, order, output, ctx.debug).await
+    let resume = resume(&order.id);
+    wait_and_report(
+        calls, &agent, &gateway, buyer, order, output, ctx.debug, &resume,
+    )
+    .await
+}
+
+/// The selections a run was given, as flags for the command that resumes
+/// its order.
+fn selection_flags(selections: &TokenCommandSelections, gateway: Option<Principal>) -> String {
+    let mut flags = String::new();
+    match &selections.network {
+        NetworkSelection::Named(name) => flags.push_str(&format!(" -n {}", shell_word(name))),
+        NetworkSelection::Url(url, root_key) => {
+            flags.push_str(&format!(" -n {}", shell_word(url.as_str())));
+            let root_key = match root_key {
+                RootKeySpec::Mainnet => "mainnet".to_owned(),
+                RootKeySpec::Fetch => "fetch".to_owned(),
+                RootKeySpec::Explicit(key) => hex::encode(key),
+            };
+            flags.push_str(&format!(" -k {root_key}"));
+        }
+        NetworkSelection::Default => {}
+    }
+    if let EnvironmentSelection::Named(name) = &selections.environment {
+        flags.push_str(&format!(" -e {}", shell_word(name)));
+    }
+    if let IdentitySelection::Named(name) = &selections.identity {
+        flags.push_str(&format!(" --identity {}", shell_word(name)));
+    }
+    if let Some(gateway) = gateway {
+        flags.push_str(&format!(" --gateway {gateway}"));
+    }
+    flags
+}
+
+/// `value` as one shell word: as it is when nothing in it needs quoting.
+fn shell_word(value: &str) -> String {
+    let plain = !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./:@=+".contains(c));
+    if plain {
+        value.to_owned()
+    } else {
+        icp_project::operations::create::shell_quote(value)
+    }
 }
 
 /// Whether an order's payment deadline has passed on this machine's clock.
@@ -349,6 +407,7 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn wait_and_report(
     calls: &dyn CanisterCalls,
     agent: &ic_agent::Agent,
@@ -357,6 +416,7 @@ async fn wait_and_report(
     order: OrderView,
     output: Output,
     debug: bool,
+    resume: &str,
 ) -> Result<(), anyhow::Error> {
     let id = order.id.clone();
     let options = WaitOptions::default();
@@ -387,7 +447,7 @@ async fn wait_and_report(
                 } else {
                     info!("Order {} stays payable{}.", order.id, until(&order));
                 }
-                info!("Keep waiting:  icp cycles buy --resume {}", order.id);
+                info!("Keep waiting:  {resume}");
             }
             bail!("interrupted while waiting for order {}", order.id);
         }
@@ -402,7 +462,7 @@ async fn wait_and_report(
                         until(&order)
                     );
                 }
-                info!("Keep waiting:  icp cycles buy --resume {}", order.id);
+                info!("Keep waiting:  {resume}");
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
@@ -724,6 +784,31 @@ mod tests {
         assert!(past_deadline(&order(Some(1_700_000_000))));
         assert!(!past_deadline(&order(Some(u64::MAX / 2))));
         assert!(!past_deadline(&order(None)));
+    }
+
+    #[test]
+    fn the_resume_command_carries_the_selections() {
+        let selections = TokenCommandSelections {
+            environment: EnvironmentSelection::Default,
+            network: NetworkSelection::Named("ic".into()),
+            identity: IdentitySelection::Named("my id".into()),
+        };
+        assert_eq!(
+            selection_flags(&selections, None),
+            " -n ic --identity 'my id'"
+        );
+        let selections = TokenCommandSelections {
+            environment: EnvironmentSelection::Named("staging".into()),
+            network: NetworkSelection::Default,
+            identity: IdentitySelection::Default,
+        };
+        let gateway = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+        assert_eq!(
+            selection_flags(&selections, Some(gateway)),
+            " -e staging --gateway ryjl3-tyaaa-aaaaa-aaaba-cai"
+        );
+        assert_eq!(shell_word("co-1-0000abcd"), "co-1-0000abcd");
+        assert_eq!(shell_word(""), "''");
     }
 
     #[test]

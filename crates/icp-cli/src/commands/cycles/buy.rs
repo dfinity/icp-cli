@@ -550,11 +550,11 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
         }
         Output::Quiet => println!("{url}"),
         Output::Human => {
-            let until = order
-                .expires_at
-                .map(|secs| format!(", payable until {}", format_secs(secs)))
-                .unwrap_or_default();
-            info!("Order {}{until}. Pay here:", order.id);
+            info!(
+                "Order {} is payable{}:",
+                order.id,
+                payable_for(order, now_secs())
+            );
             println!("{url}");
             if !no_open && browser_is_at_hand() {
                 match open::that(url) {
@@ -650,7 +650,7 @@ async fn wait_and_report(
         // Stopped, not failed: the order carries on without the command.
         Err(CyclesPurchaseError::Interrupted { order }) => {
             if output != Output::Quiet {
-                info!("{}", standing(&order, false));
+                info!("{}", standing(&order, false, now_secs()));
                 info!("Keep waiting with:");
                 info!("  {resume}");
             }
@@ -658,7 +658,7 @@ async fn wait_and_report(
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
             if output != Output::Quiet {
-                info!("{}", standing(&order, true));
+                info!("{}", standing(&order, true, now_secs()));
                 info!("Keep waiting with:");
                 info!("  {resume}");
             }
@@ -826,29 +826,69 @@ fn ending(order: &OrderView, resume: &str) -> Result<(), anyhow::Error> {
     }
 }
 
-/// Where an order the wait left unsettled stands, when it was stopped or
-/// (`timed_out`) gave up. Only an order known to be unpaid is payable.
-fn standing(order: &OrderView, timed_out: bool) -> String {
+/// Where an order the wait left unsettled stands at `now` (seconds since
+/// the Unix epoch), when it was stopped or (`timed_out`) gave up. Only an
+/// order known to be unpaid is payable.
+fn standing(order: &OrderView, timed_out: bool, now: u64) -> String {
     match order.status {
         OrderStatus::AwaitingPayment if timed_out => format!(
             "No payment arrived. Order {} stays payable{}.",
             order.id,
-            until(order)
+            payable_for(order, now)
         ),
-        OrderStatus::AwaitingPayment => {
-            format!("Order {} stays payable{}.", order.id, until(order))
-        }
+        OrderStatus::AwaitingPayment => format!(
+            "Order {} stays payable{}.",
+            order.id,
+            payable_for(order, now)
+        ),
         status if timed_out => format!("Order {} is still {status}.", order.id),
         status => format!("Order {} is {status}.", order.id),
     }
 }
 
-/// ` until 2026-10-13T09:00:00Z`, or nothing when the order has no deadline.
-fn until(order: &OrderView) -> String {
-    order
-        .expires_at
-        .map(|secs| format!(" until {}", format_secs(secs)))
-        .unwrap_or_default()
+/// ` for 25 hours (until 2026-10-14 03:33 UTC)`: how much longer an unpaid
+/// order can be paid, from `now` (seconds since the Unix epoch), and until
+/// when, in UTC to the minute. Nothing when the order has no deadline.
+fn payable_for(order: &OrderView, now: u64) -> String {
+    let Some(deadline) = order.expires_at else {
+        return String::new();
+    };
+    let until = format_utc(deadline);
+    match deadline.checked_sub(now).filter(|left| *left > 0) {
+        Some(left) => format!(" for {} (until {until})", format_left(left)),
+        None => format!(" until {until}"),
+    }
+}
+
+/// `25 hours`, `40 minutes`: a time left, to the nearest hour from an hour
+/// and a half, and to the nearest minute below.
+fn format_left(secs: u64) -> String {
+    let (count, unit) = if secs >= 90 * 60 {
+        ((secs + 1_800) / 3_600, "hour")
+    } else {
+        (((secs + 30) / 60).max(1), "minute")
+    };
+    if count == 1 {
+        format!("1 {unit}")
+    } else {
+        format!("{count} {unit}s")
+    }
+}
+
+/// Seconds since the Unix epoch as `2026-10-14 03:33 UTC`, for prose.
+fn format_utc(timestamp: u64) -> String {
+    OffsetDateTime::from_unix_timestamp(timestamp as i64)
+        .map(|dt| {
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+                dt.year(),
+                u8::from(dt.month()),
+                dt.day(),
+                dt.hour(),
+                dt.minute()
+            )
+        })
+        .unwrap_or_else(|_| timestamp.to_string())
 }
 
 /// The URL as a QR code drawn with half-block characters, two modules per
@@ -1273,20 +1313,27 @@ mod tests {
             detail: None,
             destination: None,
         };
+        let now = 1_700_000_000 - 25 * 3_600 + 10;
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), false),
-            "Order co-1 stays payable until 2023-11-14T22:13:20Z."
+            standing(&order(OrderStatus::AwaitingPayment), false, now),
+            "Order co-1 stays payable for 25 hours (until 2023-11-14 22:13 UTC)."
         );
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), true),
-            "No payment arrived. Order co-1 stays payable until 2023-11-14T22:13:20Z."
+            standing(&order(OrderStatus::AwaitingPayment), true, now),
+            "No payment arrived. Order co-1 stays payable for 25 hours (until 2023-11-14 22:13 \
+             UTC)."
+        );
+        // Within the grace a wait allows past the deadline.
+        assert_eq!(
+            standing(&order(OrderStatus::AwaitingPayment), false, 1_700_000_030),
+            "Order co-1 stays payable until 2023-11-14 22:13 UTC."
         );
         assert_eq!(
-            standing(&order(OrderStatus::Processing), true),
+            standing(&order(OrderStatus::Processing), true, now),
             "Order co-1 is still paid, delivering."
         );
         for timed_out in [false, true] {
-            let said = standing(&order(OrderStatus::Unknown), timed_out);
+            let said = standing(&order(OrderStatus::Unknown), timed_out, now);
             assert!(said.contains("does not know"), "{said}");
             assert!(
                 !said.contains("payable") && !said.contains("No payment"),
@@ -1407,6 +1454,12 @@ mod tests {
     #[test]
     fn timestamps_and_ages_read_well() {
         assert_eq!(format_secs(1_700_000_000), "2023-11-14T22:13:20Z");
+        assert_eq!(format_utc(1_700_000_000), "2023-11-14 22:13 UTC");
+        assert_eq!(format_left(25 * 3_600 - 15), "25 hours");
+        assert_eq!(format_left(90 * 60), "2 hours");
+        assert_eq!(format_left(89 * 60), "89 minutes");
+        assert_eq!(format_left(61), "1 minute");
+        assert_eq!(format_left(5), "1 minute");
         assert_eq!(format_age(Duration::from_secs(90)), "1 minute");
         assert_eq!(format_age(Duration::from_secs(5 * 3600)), "5 hours");
         assert_eq!(format_age(Duration::from_secs(3 * 86_400)), "3 days");

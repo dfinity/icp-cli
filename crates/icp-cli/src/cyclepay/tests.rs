@@ -429,6 +429,23 @@ async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
     );
 }
 
+/// The link carries `o_<order id>`, as CyclePay's site builds it; an order
+/// made with any other reference is not handed out to be paid.
+#[tokio::test]
+async fn place_order_refuses_an_order_with_another_reference() {
+    let CreateOrderResult::Ok(mut order) = created("co-1", 2500) else {
+        unreachable!()
+    };
+    order.client_reference_id = "o_co-2".to_owned();
+    let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
+    let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::UnexpectedReference { id, reference, .. }
+            if id == "co-1" && reference == "o_co-2"),
+        "{err}"
+    );
+}
+
 #[tokio::test]
 async fn place_order_maps_a_refusal() {
     let fake = FakeBackend::default().creates(vec![refused("RATE_LIMITED")]);

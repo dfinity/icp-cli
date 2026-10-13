@@ -155,8 +155,9 @@ pub fn checkout_url(payment_link: &Url, client_reference_id: &str, amount_usd_ce
 }
 
 /// The reference the backend attaches to an order's Payment Link session:
-/// `o_<order id>`, as `CreatedOrder::client_reference_id` reports it. Rebuilt
-/// here for an order read back later, whose view does not carry it.
+/// `o_<order id>`, as `CreatedOrder::client_reference_id` reports it. Every
+/// link is built with this, a new order's own reference checked against it,
+/// and an order read back later, whose view does not carry it, gets the same.
 pub fn order_reference(order_id: &str) -> String {
     format!("o_{order_id}")
 }

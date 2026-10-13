@@ -97,6 +97,16 @@ pub enum CyclesPurchaseError {
     #[snafu(display("the cycles gateway refused the order: {error}"))]
     OrderRefused { error: OrderError },
 
+    #[snafu(display(
+        "cycles gateway {gateway} made order {id} with the payment reference {reference}, \
+         not o_{id}; a payment on the link this version of icp builds would not reach it"
+    ))]
+    UnexpectedReference {
+        gateway: Principal,
+        id: String,
+        reference: String,
+    },
+
     #[snafu(display("failed to read order {id} from cycles gateway {gateway}"))]
     GetOrder {
         gateway: Principal,
@@ -308,7 +318,7 @@ impl OrderView {
     fn created(created: CreatedOrder, gateway: &Gateway, buyer: Principal) -> Self {
         let url = checkout_url(
             &gateway.payment_link,
-            &created.client_reference_id,
+            &order_reference(&created.order_id),
             created.amount_usd_cents,
         );
         Self {
@@ -499,6 +509,19 @@ pub async fn place_order(
         })
     })?;
     match result {
+        // The link is built from the pinned Payment Link and the order id
+        // alone, as CyclePay's own site builds it, so an order whose
+        // reference is anything else could not be paid on it.
+        CreateOrderResult::Ok(created)
+            if created.client_reference_id != order_reference(&created.order_id) =>
+        {
+            UnexpectedReferenceSnafu {
+                gateway: canister,
+                id: created.order_id,
+                reference: created.client_reference_id,
+            }
+            .fail()
+        }
         CreateOrderResult::Ok(created) => Ok(OrderView::created(created, gateway, calls.caller())),
         CreateOrderResult::Err(error) => OrderRefusedSnafu { error }.fail(),
     }

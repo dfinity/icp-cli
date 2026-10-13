@@ -291,9 +291,17 @@ pub enum CardOrderStatus {
     RefundOwed,
 }
 
+/// Where an order's cycles go, as the backend records it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum Destination {
+    /// Top up this canister.
+    Canister(Principal),
+    /// Credit this principal's Cycles Ledger account.
+    Ledger(Principal),
+}
+
 /// An order as its owner sees it: the reply of [`ORDER_STATUS_METHOD`]. Only
-/// the fields the CLI reads; the owner, destination and Stripe identifiers
-/// are left out.
+/// the fields the CLI reads; the owner and Stripe identifiers are left out.
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct OrderStatusView {
     pub order_id: String,
@@ -317,6 +325,10 @@ pub struct OrderStatusView {
     /// Until paid: when the order is forgotten, in seconds since the Unix
     /// epoch.
     pub expires_at: Option<u64>,
+    /// Where the cycles go. Optional on this side only, as `status` is: an
+    /// order made on CyclePay's site can be a canister top-up, or for
+    /// another principal, and a kind added later reads as `None`.
+    pub destination: Option<Destination>,
 }
 
 /// The reply of [`XDR_RATE_STATUS_METHOD`]. Only the fields the CLI reads;
@@ -498,6 +510,7 @@ mod tests {
         }))
         .unwrap();
         let view = Decode!(&bytes, Option<OrderStatusView>).unwrap().unwrap();
+        assert_eq!(view.destination, Some(Destination::Ledger(owner)));
         assert_eq!(view.status, Some(CardOrderStatus::Delivered));
         assert_eq!(view.cycles_delivered, Some(17_730_000_000_000));
         assert_eq!(view.paid_usd_cents, Some(2500));

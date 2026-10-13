@@ -29,7 +29,8 @@ use crate::Stopped;
 use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    CYCLES_GATEWAY_CID, OrderError, OrderErrorKind, cycles_gateway_canister_id, payment_link_url,
+    CYCLES_GATEWAY_CID, Destination, OrderError, OrderErrorKind, cycles_gateway_canister_id,
+    payment_link_url,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -683,7 +684,11 @@ async fn report_end(
     output: Output,
     resume: &str,
 ) -> Result<(), anyhow::Error> {
-    let balance = if order.status == OrderStatus::Delivered {
+    // The buyer's balance says something only when the cycles went there:
+    // an order made on CyclePay's site can top up a canister, or credit
+    // another principal.
+    let to_buyer = order.destination == Some(Destination::Ledger(buyer));
+    let balance = if order.status == OrderStatus::Delivered && to_buyer {
         match get_raw_balance(agent, CYCLES_LEDGER_PRINCIPAL, buyer, None).await {
             Ok(balance) => balance.0.to_u128(),
             Err(e) => {
@@ -704,12 +709,22 @@ async fn report_end(
             .unwrap_or_else(|| "cycles".to_owned());
         // The status is read by query, so it is CyclePay's report as one
         // replica gives it, and is said to be.
-        println!("CyclePay reports {cycles} delivered to {buyer}");
+        println!("CyclePay reports {cycles} delivered{}", delivered_to(order));
         if let Some(balance) = balance {
             println!("Balance: {}", format_cycles(balance));
         }
     }
     ending(order, resume)
+}
+
+/// ` to <principal>`, ` to canister <id>`: where the order says its cycles
+/// went, or nothing if it says in a way this CLI does not know.
+fn delivered_to(order: &OrderView) -> String {
+    match order.destination {
+        Some(Destination::Ledger(owner)) => format!(" to {owner}"),
+        Some(Destination::Canister(canister)) => format!(" to canister {canister}"),
+        None => String::new(),
+    }
 }
 
 /// How a settled order ended, as the command's result: `Ok` for a delivery,
@@ -1105,6 +1120,7 @@ mod tests {
             cycles_delivered: None,
             refunded: Some(Money::from_minor_units(1000, Currency::Usd)),
             detail: None,
+            destination: None,
         };
         let resume = "icp cycles buy --resume co-1 -n ic";
         assert!(ending(&order(OrderStatus::Delivered), resume).is_ok());
@@ -1135,6 +1151,7 @@ mod tests {
             cycles_delivered: None,
             refunded: None,
             detail: None,
+            destination: None,
         };
         assert_eq!(
             standing(&order(OrderStatus::AwaitingPayment), false),
@@ -1216,6 +1233,36 @@ mod tests {
             "{said:?}"
         );
         assert!(first("still delivering cycles (") > delivering, "{said:?}");
+    }
+
+    /// A delivery is told against the place the order says, whichever it is.
+    #[test]
+    fn a_delivery_names_where_the_cycles_went() {
+        let principal = |text| Principal::from_text(text).unwrap();
+        let order = |destination| OrderView {
+            id: "co-1".into(),
+            status: OrderStatus::Delivered,
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            checkout_url: None,
+            expires_at: None,
+            paid: Some(Money::from_minor_units(1000, Currency::Usd)),
+            cycles_delivered: Some(6_959_866_863_905),
+            refunded: None,
+            detail: None,
+            destination,
+        };
+        let buyer = principal("rrkah-fqaaa-aaaaa-aaaaq-cai");
+        let canister = principal("ryjl3-tyaaa-aaaaa-aaaba-cai");
+        assert_eq!(
+            delivered_to(&order(Some(Destination::Ledger(buyer)))),
+            " to rrkah-fqaaa-aaaaa-aaaaq-cai"
+        );
+        assert_eq!(
+            delivered_to(&order(Some(Destination::Canister(canister)))),
+            " to canister ryjl3-tyaaa-aaaaa-aaaba-cai"
+        );
+        assert_eq!(delivered_to(&order(None)), "");
     }
 
     #[test]

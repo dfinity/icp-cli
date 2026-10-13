@@ -30,9 +30,9 @@ use url::Url;
 
 use super::interface::{
     CREATE_ORDER_METHOD, CYCLES_GATEWAY_CANISTER_ID_ENV, CardOrderStatus, CreateOrderArgs,
-    CreateOrderResult, CreatedOrder, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD,
-    OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
-    checkout_url, order_reference,
+    CreateOrderResult, CreatedOrder, Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS,
+    ORDER_STATUS_METHOD, OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD,
+    XdrRateStatus, checkout_url, order_reference,
 };
 use super::money::{Currency, Money};
 use super::pricing::{card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
@@ -299,10 +299,13 @@ pub struct OrderView {
     pub refunded: Option<Money>,
     /// Why delivery waits or stopped, or why a refund is owed.
     pub detail: Option<String>,
+    /// Where the cycles go, when the backend says in a way this CLI knows.
+    pub destination: Option<Destination>,
 }
 
 impl OrderView {
-    fn created(created: CreatedOrder, gateway: &Gateway) -> Self {
+    /// An order just made by `buyer`, for its own Cycles Ledger account.
+    fn created(created: CreatedOrder, gateway: &Gateway, buyer: Principal) -> Self {
         let url = checkout_url(
             &gateway.payment_link,
             &created.client_reference_id,
@@ -319,6 +322,7 @@ impl OrderView {
             cycles_delivered: None,
             refunded: None,
             detail: None,
+            destination: Some(Destination::Ledger(buyer)),
         }
     }
 
@@ -349,6 +353,7 @@ impl OrderView {
             refunded: (view.amount_refunded_usd_cents > 0)
                 .then(|| Money::from_minor_units(view.amount_refunded_usd_cents, Currency::Usd)),
             detail: view.detail,
+            destination: view.destination,
         }
     }
 
@@ -494,7 +499,7 @@ pub async fn place_order(
         })
     })?;
     match result {
-        CreateOrderResult::Ok(created) => Ok(OrderView::created(created, gateway)),
+        CreateOrderResult::Ok(created) => Ok(OrderView::created(created, gateway, calls.caller())),
         CreateOrderResult::Err(error) => OrderRefusedSnafu { error }.fail(),
     }
 }
@@ -672,6 +677,7 @@ pub async fn wait_for_order(
             cycles_delivered: None,
             refunded: None,
             detail: None,
+            destination: None,
         });
         InterruptedSnafu {
             order: Box::new(order),

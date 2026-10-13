@@ -12,8 +12,9 @@ use url::Url;
 
 use super::interface::{
     CREATE_ORDER_METHOD, CardOrderStatus, CreateOrderArgs, CreateOrderResult, CreatedOrder,
-    MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD, OrderDestination, OrderError,
-    OrderErrorKind, OrderStatusView, PAYMENT_LINK_URL, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD, OrderDestination,
+    OrderError, OrderErrorKind, OrderStatusView, PAYMENT_LINK_URL, XDR_RATE_STATUS_METHOD,
+    XdrRateStatus,
 };
 use super::money::{Currency, Money};
 use super::pricing::ledger_cycles;
@@ -83,6 +84,7 @@ fn view(id: &str, status: CardOrderStatus) -> OrderStatusView {
         },
         detail: None,
         expires_at: (!paid).then_some(FAR_FUTURE),
+        destination: Some(Destination::Ledger(principal(BUYER))),
     }
 }
 

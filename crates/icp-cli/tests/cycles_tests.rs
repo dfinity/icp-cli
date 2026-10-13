@@ -734,6 +734,10 @@ async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
     std::io::Read::read_to_string(&mut stderr, &mut said).unwrap();
 
     assert_eq!(status.code(), Some(1), "{said}");
+    assert!(
+        said.contains("[order co-1-0000test] stopped waiting"),
+        "{said}"
+    );
     assert!(said.contains("stays payable"), "{said}");
     assert!(said.contains("--resume co-1-0000test"), "{said}");
     assert!(!said.contains("Error"), "{said}");

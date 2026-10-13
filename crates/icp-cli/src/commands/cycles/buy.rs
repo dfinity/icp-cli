@@ -11,7 +11,7 @@ use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
-use icp_events::EventKind;
+use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::CanisterCalls;
 use icp_project::host::EnvironmentSelection;
 use icp_project::network::RootKeySpec;
@@ -744,6 +744,14 @@ async fn with_heartbeat<T>(
                         say(format!("[order {}] {begun}", task.order_id));
                         phase = Some(task);
                     }
+                    // A stop is said as the live view says it; any other end
+                    // is told by the command once the wait returns.
+                    Some(EventKind::TaskCompleted { outcome }) => {
+                        if let (Some(task), TaskOutcome::Stopped { message }) = (phase.take(), outcome)
+                        {
+                            say(format!("[order {}] {message}", task.order_id));
+                        }
+                    }
                     Some(_) => {}
                 },
                 _ = ticks.tick() => {
@@ -1111,8 +1119,6 @@ struct JsonOrderFinal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use icp_events::TaskOutcome;
-
     use super::*;
 
     fn error(code: &str, message: &str) -> OrderError {
@@ -1490,6 +1496,35 @@ mod tests {
         assert_eq!(stale_rate_warning(&rate(false)), None);
         let warning = stale_rate_warning(&rate(true)).unwrap();
         assert!(warning.contains("for 5 hours"), "{warning}");
+    }
+
+    /// Off a terminal, a stopped wait says so, as the live view does.
+    #[tokio::test(start_paused = true)]
+    async fn a_wait_with_nothing_drawn_says_it_was_stopped() {
+        let said = std::sync::Mutex::new(Vec::new());
+        with_heartbeat(
+            HEARTBEAT,
+            |line| said.lock().unwrap().push(line),
+            async |reporter: &Reporter| {
+                let task = reporter.task(Task::cycles_purchase(
+                    "co-1",
+                    PurchasePhase::AwaitingPayment,
+                ));
+                tokio::time::sleep(Duration::from_secs(70)).await;
+                task.finish(TaskOutcome::Stopped {
+                    message: "stopped waiting".to_owned(),
+                });
+            },
+        )
+        .await;
+        assert_eq!(
+            said.into_inner().unwrap(),
+            [
+                "[order co-1] Waiting for payment...",
+                "[order co-1] Still waiting for payment (1 minute so far)",
+                "[order co-1] stopped waiting",
+            ]
+        );
     }
 
     #[test]

@@ -422,17 +422,11 @@ async fn cycles_mint_to_subaccount() {
         .success();
 }
 
-/// The three ways into `cycles buy` are exclusive, and so are its two
+/// The two ways into `cycles buy` are exclusive, and so are its two
 /// machine-readable outputs; none of this needs a network.
 #[test]
 fn cycles_buy_rejects_conflicting_arguments() {
     let ctx = TestContext::new();
-
-    ctx.icp()
-        .args(["cycles", "buy", "--amount", "10", "--resume", "o1"])
-        .assert()
-        .stderr(contains("cannot be used with"))
-        .failure();
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10", "--json", "--quiet"])
@@ -460,12 +454,6 @@ fn cycles_buy_rejects_conflicting_arguments() {
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10", "--cycles", "5t"])
-        .assert()
-        .stderr(contains("cannot be used with"))
-        .failure();
-
-    ctx.icp()
-        .args(["cycles", "buy", "--cycles", "5t", "--resume", "o1"])
         .assert()
         .stderr(contains("cannot be used with"))
         .failure();
@@ -561,32 +549,6 @@ fn cycles_buy_with_no_network_named_points_at_mainnet() {
         .failure();
 }
 
-/// A gateway other than CyclePay's is not paid on CyclePay's Payment Link: a
-/// payment there would go to CyclePay, for an order CyclePay does not have.
-/// Refused before any identity is used or any network reached.
-#[test]
-fn cycles_buy_refuses_a_custom_gateway_without_its_payment_link() {
-    let ctx = TestContext::new();
-
-    ctx.icp()
-        .env_remove("ICP_CYCLES_PAYMENT_LINK_URL")
-        .args([
-            "cycles",
-            "buy",
-            "--amount",
-            "10",
-            "--yes",
-            "--gateway",
-            "rrkah-fqaaa-aaaaa-aaaaq-cai",
-            "-n",
-            "ic",
-        ])
-        .assert()
-        .stdout("")
-        .stderr(contains("set ICP_CYCLES_PAYMENT_LINK_URL"))
-        .failure();
-}
-
 /// A local network running a stand-in for CyclePay's backend, built from
 /// `wasm` in the test assets, and a fresh identity to buy as. Returns the
 /// project and the stand-in's canister id; the guard keeps the network up.
@@ -638,26 +600,24 @@ async fn stand_in_gateway(ctx: &TestContext, wasm: &str) -> (PathBuf, String, Ch
     (project_dir, gateway, guard)
 }
 
-/// An order resumed already settled ends as a wait for it would: a refund is
-/// an error with or without --no-wait, and --json still prints the order.
+/// An order the gateway cannot deliver is refunded: the command says so and
+/// fails, and --json prints the order as made, then its end.
 #[tokio::test]
-async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
+async fn cycles_buy_reports_a_refunded_order() {
     let ctx = TestContext::new();
     // A stand-in gateway whose every order is refunded; see its `.wat`.
     let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "refunded_order_canister.wasm").await;
 
-    let resume = |args: &[&str]| {
+    let buy = |args: &[&str]| {
         let mut cmd = ctx.icp();
         cmd.current_dir(&project_dir)
-            .env(
-                "ICP_CYCLES_PAYMENT_LINK_URL",
-                "https://buy.stripe.com/test_standin",
-            )
             .args([
                 "cycles",
                 "buy",
-                "--resume",
-                "co-1-0000test",
+                "--amount",
+                "10",
+                "--yes",
+                "--no-open",
                 "--gateway",
                 &gateway,
                 "-n",
@@ -667,25 +627,43 @@ async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
         cmd
     };
 
-    for args in [&["--no-wait"][..], &[]] {
-        resume(args)
-            .assert()
-            .stderr(contains("10.00 USD was refunded to your card"))
-            .stderr(contains("the cycles could not be delivered"))
-            .failure();
-    }
+    buy(&[])
+        .assert()
+        .stdout(contains(
+            "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
+        ))
+        .stderr(contains("10.00 USD was refunded to your card"))
+        .stderr(contains("the cycles could not be delivered"))
+        .failure();
 
-    let output = resume(&["--no-wait", "--json"]).output().unwrap();
+    let output = buy(&["--json"]).output().unwrap();
     assert!(!output.status.success(), "{output:?}");
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["order_id"], "co-1-0000test");
-    assert_eq!(json["status"], "refunded");
-    assert_eq!(json["refunded"]["value"], "10.00");
+    let printed = String::from_utf8(output.stdout).unwrap();
+    let objects: Vec<serde_json::Value> = printed
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(objects.len(), 2, "{printed}");
+    assert_eq!(objects[0]["order_id"], "co-1-0000test");
+    assert_eq!(objects[0]["amount"]["value"], "10.00");
+    assert_eq!(objects[0]["fee"]["value"], "0.59");
+    assert!(
+        objects[0]["checkout_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://buy.stripe.com/test_standin?"),
+        "{printed}"
+    );
+    assert_eq!(objects[1]["order_id"], "co-1-0000test");
+    assert_eq!(objects[1]["status"], "refunded");
+    assert_eq!(objects[1]["refunded"]["value"], "10.00");
 }
 
-/// Ctrl-C while waiting stops the wait, not the order: the command says how
-/// to keep waiting and exits 1, as icp-cli's other interrupted waits do,
+/// Ctrl-C while waiting stops the wait, not the order: the command says the
+/// order stays payable and exits 1, as icp-cli's other interrupted waits do,
 /// with no error line. Off a terminal, as here, the wait is told in lines.
+/// The link handed out is the stand-in's own: nothing of CyclePay's is built
+/// in.
 #[cfg(unix)]
 #[tokio::test]
 async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
@@ -702,44 +680,49 @@ async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
     let mut child = ctx
         .icp_std()
         .current_dir(&project_dir)
-        .env(
-            "ICP_CYCLES_PAYMENT_LINK_URL",
-            "https://buy.stripe.com/test_standin",
-        )
         .args([
             "cycles",
             "buy",
-            "--resume",
-            "co-1-0000test",
+            "--amount",
+            "10",
+            "--yes",
             "--gateway",
             &gateway,
             "-n",
             "random-network",
             "--no-open",
         ])
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("failed to spawn icp cycles buy");
     let mut stderr = BufReader::new(child.stderr.take().unwrap());
     let mut said = String::new();
-    // Off a terminal the wait says it has begun, and how to pick it up again.
+    // Off a terminal the wait says it has begun, and that the order does not
+    // need it.
     while !said.contains("Waiting for payment") {
         assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
     }
-    assert!(said.contains("keep waiting with"), "{said}");
+    assert!(said.contains("carries on without it"), "{said}");
     std::thread::sleep(std::time::Duration::from_secs(1));
     kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
     let status = child.wait().unwrap();
     std::io::Read::read_to_string(&mut stderr, &mut said).unwrap();
 
+    let mut printed = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take().unwrap(), &mut printed).unwrap();
+
     assert_eq!(status.code(), Some(1), "{said}");
+    assert_eq!(
+        printed.trim(),
+        "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
+    );
     assert!(
         said.contains("[order co-1-0000test] stopped waiting"),
         "{said}"
     );
     assert!(said.contains("stays payable"), "{said}");
-    assert!(said.contains("--resume co-1-0000test"), "{said}");
+    assert!(said.contains("icp cycles balance"), "{said}");
     assert!(!said.contains("Error"), "{said}");
 }
 
@@ -760,15 +743,12 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
     let mut child = ctx
         .icp_std()
         .current_dir(&project_dir)
-        .env(
-            "ICP_CYCLES_PAYMENT_LINK_URL",
-            "https://buy.stripe.com/test_standin",
-        )
         .args([
             "cycles",
             "buy",
-            "--resume",
-            "co-1-0000test",
+            "--amount",
+            "10",
+            "--yes",
             "--gateway",
             &gateway,
             "-n",

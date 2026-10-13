@@ -196,11 +196,7 @@ icp deploy -e staging --engine my-engine
 
 ### `ICP_CYCLES_GATEWAY_CANISTER_ID`
 
-The cycles gateway canister that `icp cycles buy` [buys cycles with a card](../guides/tokens-and-cycles.md#buying-cycles-with-a-card) through. Defaults to CyclePay's backend canister on mainnet (`2bwus-iiaaa-aaaac-bee3a-cai`). `icp cycles buy --gateway` takes precedence. An empty value is ignored; an invalid one is an error, so a typo never sends an order to the default gateway.
-
-### `ICP_CYCLES_PAYMENT_LINK_URL`
-
-The Stripe Payment Link `icp cycles buy` sends you to, with the order's reference and amount added as `?client_reference_id=o_<order id>&prefilled_amount=<US cents>`. For CyclePay's own gateway it defaults to CyclePay's Payment Link for signed-in orders (`https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00`). Any other gateway needs it set, since a payment on CyclePay's link goes to CyclePay. It must be a Payment Link: `https://buy.stripe.com/<link>`, with no credentials, port, query or fragment. An empty value is ignored; an invalid one is an error.
+The cycles gateway canister that `icp cycles buy` [buys cycles with a card](../guides/tokens-and-cycles.md#buying-cycles-with-a-card) through: CyclePay's backend, or any canister serving its order interface. Defaults to CyclePay's backend canister on mainnet (`2bwus-iiaaa-aaaac-bee3a-cai`). `icp cycles buy --gateway` takes precedence. An empty value is ignored; an invalid one is an error, so a typo never sends an order to the default gateway. Everything else about the gateway, its Payment Link, its per-order range and its fees, is read from the gateway itself.
 
 ### `NO_COLOR`
 

@@ -4,24 +4,25 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
 use icp_project::operations::task::{PurchasePhase, Reporter, Task};
-use url::Url;
 
 use super::interface::{
-    CREATE_ORDER_METHOD, CardOrderStatus, CreateOrderArgs, CreateOrderResult, CreatedOrder,
-    Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD, OrderDestination,
-    OrderError, OrderErrorKind, OrderStatusView, PAYMENT_LINK_URL, XDR_RATE_STATUS_METHOD,
-    XdrRateStatus,
+    CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CardOrderStatus, CardTerms, CreateOrderArgs,
+    CreateOrderResult, CreatedOrder, Destination, ORDER_STATUS_METHOD, OrderDestination,
+    OrderError, OrderErrorKind, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
 };
 use super::money::{Currency, Money};
-use super::pricing::ledger_cycles;
+use super::pricing::{Terms, ledger_cycles};
 use super::purchase::*;
 
 const BACKEND: &str = "2bwus-iiaaa-aaaac-bee3a-cai";
 const BUYER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+
+/// The Payment Link the fake backend publishes.
+const PAYMENT_LINK: &str = "https://buy.stripe.com/test_link";
 
 /// $1.3520 an XDR.
 const RATE: u64 = 13_520;
@@ -30,11 +31,26 @@ fn principal(text: &str) -> Principal {
     Principal::from_text(text).unwrap()
 }
 
-fn gateway() -> Gateway {
-    Gateway {
-        canister: principal(BACKEND),
-        payment_link: Url::parse(PAYMENT_LINK_URL).unwrap(),
+/// CyclePay's published terms: $1 to $200, Stripe's 2.9% + $0.30, two Cycles
+/// Ledger fees on a delivery.
+fn card_terms() -> CardTerms {
+    CardTerms {
+        deliveries_paused: false,
+        min_order_usd_cents: 100,
+        max_order_usd_cents: 20_000,
+        fee_bps: 290,
+        fee_fixed_usd_cents: 30,
+        ledger_delivery_fee_cycles: Nat::from(200_000_000u64),
     }
+}
+
+/// The gateway as [`connect`] builds it on [`card_terms`].
+fn gateway() -> Gateway {
+    Gateway::new(principal(BACKEND), card_terms()).unwrap()
+}
+
+fn terms() -> Terms {
+    gateway().terms
 }
 
 fn usd(cents: u64) -> Money {
@@ -55,9 +71,9 @@ const FAR_FUTURE: u64 = u64::MAX / 2;
 fn created(id: &str, cents: u64) -> CreateOrderResult {
     CreateOrderResult::Ok(CreatedOrder {
         order_id: id.to_owned(),
-        client_reference_id: format!("o_{id}"),
         amount_usd_cents: cents,
-        net_usd_cents: super::pricing::net_usd_cents(cents),
+        net_usd_cents: super::pricing::net_usd_cents(cents, &terms()),
+        payment_url: format!("{PAYMENT_LINK}?client_reference_id=o_{id}&prefilled_amount={cents}"),
         expires_at: FAR_FUTURE,
     })
 }
@@ -108,6 +124,8 @@ fn rejected(message: &str) -> CallError {
 /// A CyclePay backend whose replies are scripted per method.
 #[derive(Default)]
 struct FakeBackend {
+    /// What `get_card_terms` answers; `None` answers [`card_terms`].
+    terms: Option<CardTerms>,
     /// What `get_xdr_rate_status` answers; `None` answers a rate of zero.
     rate: Option<XdrRateStatus>,
     /// One reply per `create_order` call, in order.
@@ -203,6 +221,10 @@ impl CanisterCalls for FakeBackend {
     async fn query(&self, call: Call) -> Result<Vec<u8>, CallError> {
         self.record(&call)?;
         match call.method.as_str() {
+            CARD_TERMS_METHOD => {
+                let terms = self.terms.clone().unwrap_or_else(card_terms);
+                Ok(Encode!(&terms).unwrap())
+            }
             XDR_RATE_STATUS_METHOD => {
                 let status = self.rate.clone().unwrap_or(XdrRateStatus {
                     xdr_usd_x10000: 0,
@@ -260,6 +282,84 @@ fn fast() -> WaitOptions {
     }
 }
 
+// --- connect ---------------------------------------------------------------
+
+#[tokio::test]
+async fn connect_reads_the_terms_the_gateway_publishes() {
+    let fake = FakeBackend::default();
+    let gateway = connect(&fake, principal(BACKEND)).await.unwrap();
+    assert_eq!(gateway.canister, principal(BACKEND));
+    assert!(!gateway.paused);
+    assert_eq!(
+        gateway.terms,
+        Terms {
+            min_order_usd_cents: 100,
+            max_order_usd_cents: 20_000,
+            fee_bps: 290,
+            fee_fixed_usd_cents: 30,
+            ledger_delivery_fee_cycles: 200_000_000,
+        }
+    );
+    assert_eq!(fake.count_of(CARD_TERMS_METHOD), 1);
+}
+
+#[tokio::test]
+async fn connect_on_missing_gateway_is_gateway_not_found() {
+    let fake = FakeBackend {
+        absent: true,
+        ..FakeBackend::default()
+    };
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
+        "{err}"
+    );
+    // CyclePay's own gateway is on mainnet only, and the error says so as
+    // a run with no network named does; another gateway could be anywhere.
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "the cycles gateway canister {BACKEND} does not exist on this network. CyclePay \
+             sells cycles on mainnet: add `-n ic`"
+        )
+    );
+    let other = CyclesPurchaseError::GatewayNotFound {
+        gateway: principal("ryjl3-tyaaa-aaaaa-aaaba-cai"),
+    };
+    assert_eq!(
+        other.to_string(),
+        "the cycles gateway canister ryjl3-tyaaa-aaaaa-aaaba-cai does not exist on this network"
+    );
+}
+
+/// Terms the CLI could not quote on are refused at once, before any quote.
+#[tokio::test]
+async fn connect_refuses_terms_it_cannot_act_on() {
+    let fake = FakeBackend {
+        terms: Some(CardTerms {
+            min_order_usd_cents: 200,
+            max_order_usd_cents: 100,
+            ..card_terms()
+        }),
+        ..FakeBackend::default()
+    };
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::InvalidTerms { .. })
+            && err.to_string().contains("allows no order"),
+        "{err}"
+    );
+    let fake = FakeBackend {
+        terms: Some(CardTerms {
+            ledger_delivery_fee_cycles: Nat::from(u128::MAX) + Nat::from(1u8),
+            ..card_terms()
+        }),
+        ..FakeBackend::default()
+    };
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(err.to_string().contains("ledger delivery fee"), "{err}");
+}
+
 // --- quote -----------------------------------------------------------------
 
 #[tokio::test]
@@ -271,7 +371,7 @@ async fn quote_spend_reads_the_rate_and_prices_at_it() {
     assert_eq!(q.amount, usd(2500));
     assert_eq!(q.fee, usd(102));
     assert_eq!(q.net, usd(2398));
-    assert_eq!(q.cycles, ledger_cycles(2500, RATE));
+    assert_eq!(q.cycles, ledger_cycles(2500, RATE, &terms()));
     assert_eq!(q.rate.xdr_usd_x10000, RATE);
     assert!(!q.rate.stale);
     assert_eq!(q.rate.age, Some(Duration::from_secs(120)));
@@ -282,7 +382,7 @@ async fn quote_spend_reads_the_rate_and_prices_at_it() {
 #[tokio::test]
 async fn quote_outside_the_range_is_refused_before_any_order() {
     let fake = FakeBackend::priced();
-    for cents in [MIN_ORDER_USD_CENTS - 1, MAX_ORDER_USD_CENTS + 1] {
+    for cents in [100 - 1, 20_000 + 1] {
         let err = quote_target(&fake, &gateway(), Target::Spend(usd(cents)))
             .await
             .unwrap_err();
@@ -294,6 +394,7 @@ async fn quote_outside_the_range_is_refused_before_any_order() {
     }
     assert_eq!(
         quote_at(
+            &gateway(),
             Rate {
                 xdr_usd_x10000: RATE,
                 stale: false,
@@ -305,6 +406,68 @@ async fn quote_outside_the_range_is_refused_before_any_order() {
         .to_string(),
         "amount 0.50 USD is outside the gateway's range of 1.00 USD to 200.00 USD per order"
     );
+}
+
+/// The range, the fee and the delivery fee are the gateway's: a quote on
+/// another gateway's terms is made on them, with nothing of CyclePay's
+/// left in.
+#[tokio::test]
+async fn quote_is_made_on_the_gateways_own_terms() {
+    let fake = FakeBackend {
+        rate: Some(rate()),
+        terms: Some(CardTerms {
+            min_order_usd_cents: 500,
+            max_order_usd_cents: 50_000,
+            fee_bps: 0,
+            fee_fixed_usd_cents: 0,
+            ledger_delivery_fee_cycles: Nat::from(0u8),
+            ..card_terms()
+        }),
+        ..FakeBackend::default()
+    };
+    let gateway = connect(&fake, principal(BACKEND)).await.unwrap();
+    // $1 is under this gateway's minimum, and $300 within its maximum.
+    let err = quote_target(&fake, &gateway, Target::Spend(usd(100)))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::AmountOutOfRange { min, max, .. }
+            if *min == usd(500) && *max == usd(50_000)),
+        "{err}"
+    );
+    let q = quote_target(&fake, &gateway, Target::Spend(usd(30_000)))
+        .await
+        .unwrap();
+    assert_eq!(q.fee, usd(0));
+    assert_eq!(q.net, usd(30_000));
+    assert_eq!(q.cycles, super::pricing::cycles_for_net(30_000, RATE));
+    // The least that buys a sum is found within this range.
+    let q = quote_target(&fake, &gateway, receive(1)).await.unwrap();
+    assert_eq!(q.amount, usd(500));
+}
+
+/// A paused gateway refuses every quote, so no order is tried on it.
+#[tokio::test]
+async fn quote_is_refused_while_the_gateway_is_paused() {
+    let fake = FakeBackend {
+        rate: Some(rate()),
+        terms: Some(CardTerms {
+            deliveries_paused: true,
+            ..card_terms()
+        }),
+        ..FakeBackend::default()
+    };
+    let gateway = connect(&fake, principal(BACKEND)).await.unwrap();
+    assert!(gateway.paused);
+    let err = quote_target(&fake, &gateway, Target::Spend(usd(1000)))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::CardsPaused { .. }),
+        "{err}"
+    );
+    assert!(err.to_string().contains("not taking card orders"), "{err}");
+    assert_eq!(fake.count_of(CREATE_ORDER_METHOD), 0);
 }
 
 #[tokio::test]
@@ -349,22 +512,6 @@ async fn quote_on_missing_gateway_is_gateway_not_found() {
         matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
-    // CyclePay's own gateway is on mainnet only, and the error says so as
-    // a run with no network named does; another gateway could be anywhere.
-    assert_eq!(
-        err.to_string(),
-        format!(
-            "the cycles gateway canister {BACKEND} does not exist on this network. CyclePay \
-             sells cycles on mainnet: add `-n ic`"
-        )
-    );
-    let other = CyclesPurchaseError::GatewayNotFound {
-        gateway: principal("ryjl3-tyaaa-aaaaa-aaaba-cai"),
-    };
-    assert_eq!(
-        other.to_string(),
-        "the cycles gateway canister ryjl3-tyaaa-aaaaa-aaaba-cai does not exist on this network"
-    );
 }
 
 // --- quote for cycles ------------------------------------------------------
@@ -384,8 +531,11 @@ async fn quote_receive_pays_the_least_that_buys_them() {
         .await
         .unwrap();
     assert!(q.cycles >= target);
-    assert!(ledger_cycles(q.amount.minor_units - 1, RATE) < target);
-    assert_eq!(q.cycles, ledger_cycles(q.amount.minor_units, RATE));
+    assert!(ledger_cycles(q.amount.minor_units - 1, RATE, &terms()) < target);
+    assert_eq!(
+        q.cycles,
+        ledger_cycles(q.amount.minor_units, RATE, &terms())
+    );
     assert_eq!(q.fee.minor_units + q.net.minor_units, q.amount.minor_units);
 }
 
@@ -393,14 +543,14 @@ async fn quote_receive_pays_the_least_that_buys_them() {
 async fn quote_receive_below_the_minimum_pays_the_minimum() {
     let fake = FakeBackend::priced();
     let q = quote_target(&fake, &gateway(), receive(1)).await.unwrap();
-    assert_eq!(q.amount, usd(MIN_ORDER_USD_CENTS));
-    assert_eq!(q.cycles, ledger_cycles(MIN_ORDER_USD_CENTS, RATE));
+    assert_eq!(q.amount, usd(100));
+    assert_eq!(q.cycles, ledger_cycles(100, RATE, &terms()));
 }
 
 #[tokio::test]
 async fn quote_receive_beyond_the_maximum_names_what_it_buys() {
     let fake = FakeBackend::priced();
-    let most = ledger_cycles(MAX_ORDER_USD_CENTS, RATE);
+    let most = ledger_cycles(20_000, RATE, &terms());
     let err = quote_target(&fake, &gateway(), receive(most + 1))
         .await
         .unwrap_err();
@@ -425,9 +575,7 @@ async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
     assert_eq!(order.expires_at, Some(FAR_FUTURE));
     assert_eq!(
         order.checkout_url.as_deref(),
-        Some(
-            format!("{PAYMENT_LINK_URL}?client_reference_id=o_co-1&prefilled_amount=2500").as_str()
-        )
+        Some(format!("{PAYMENT_LINK}?client_reference_id=o_co-1&prefilled_amount=2500").as_str())
     );
     assert_eq!(order.paid, None);
     assert_eq!(order.cycles_delivered, None);
@@ -445,21 +593,38 @@ async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
     );
 }
 
-/// The link carries `o_<order id>`, as CyclePay's site builds it; an order
-/// made with any other reference is not handed out to be paid.
+/// The page to pay on is the gateway's to hand out: it is opened as it is,
+/// whatever the CLI would have built from the link and the order id.
 #[tokio::test]
-async fn place_order_refuses_an_order_with_another_reference() {
+async fn place_order_hands_out_the_gateways_payment_page_as_it_is() {
     let CreateOrderResult::Ok(mut order) = created("co-1", 2500) else {
         unreachable!()
     };
-    order.client_reference_id = "o_co-2".to_owned();
+    order.payment_url = "https://pay.example/checkout/abc?ref=xyz".to_owned();
     let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
-    let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
-    assert!(
-        matches!(&err, CyclesPurchaseError::UnexpectedReference { id, reference, .. }
-            if id == "co-1" && reference == "o_co-2"),
-        "{err}"
+    let order = place_order(&fake, &gateway(), usd(2500)).await.unwrap();
+    assert_eq!(
+        order.checkout_url.as_deref(),
+        Some("https://pay.example/checkout/abc?ref=xyz")
     );
+}
+
+/// A card is typed on the page, so anything but an https URL is refused.
+#[tokio::test]
+async fn place_order_refuses_a_payment_page_that_is_not_https() {
+    for bad in ["http://pay.example/abc", "javascript:alert(1)", "not a url"] {
+        let CreateOrderResult::Ok(mut order) = created("co-1", 2500) else {
+            unreachable!()
+        };
+        order.payment_url = bad.to_owned();
+        let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
+        let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+        assert!(
+            matches!(&err, CyclesPurchaseError::InvalidPaymentUrl { id, url, .. }
+                if id == "co-1" && url == bad),
+            "{bad}: {err}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -486,55 +651,6 @@ async fn place_order_on_missing_gateway_is_gateway_not_found() {
         matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
-}
-
-// --- get_order -------------------------------------------------------------
-
-#[tokio::test]
-async fn get_order_rebuilds_the_checkout_url_while_payable() {
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
-        Ok(Some(view("co-1", CardOrderStatus::Processing))),
-    ]);
-    let order = get_order(&fake, &gateway(), "co-1").await.unwrap();
-    assert_eq!(
-        order.checkout_url.as_deref(),
-        Some(
-            format!("{PAYMENT_LINK_URL}?client_reference_id=o_co-1&prefilled_amount=2500").as_str()
-        )
-    );
-    let id = Decode!(&fake.arg_of(ORDER_STATUS_METHOD), String).unwrap();
-    assert_eq!(id, "co-1");
-
-    let order = get_order(&fake, &gateway(), "co-1").await.unwrap();
-    assert_eq!(order.status, OrderStatus::Processing);
-    assert_eq!(order.checkout_url, None);
-    assert_eq!(order.paid, Some(usd(2500)));
-    assert_eq!(order.expires_at, None);
-}
-
-#[tokio::test]
-async fn get_order_none_is_order_not_found() {
-    let fake = FakeBackend::default().polls(vec![Ok(None)]);
-    let err = get_order(&fake, &gateway(), "ghost").await.unwrap_err();
-    match err {
-        CyclesPurchaseError::OrderNotFound { id, caller, .. } => {
-            assert_eq!(id, "ghost");
-            assert_eq!(caller, principal(BUYER));
-        }
-        other => panic!("unexpected {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn get_order_reads_a_refund() {
-    let mut refunded = view("co-1", CardOrderStatus::Refunded);
-    refunded.detail = Some("OVER_CAP".into());
-    let fake = FakeBackend::default().polls(vec![Ok(Some(refunded))]);
-    let order = get_order(&fake, &gateway(), "co-1").await.unwrap();
-    assert_eq!(order.status, OrderStatus::Refunded);
-    assert_eq!(order.refunded, Some(usd(2500)));
-    assert_eq!(order.detail.as_deref(), Some("OVER_CAP"));
 }
 
 // --- wait_for_order --------------------------------------------------------
@@ -596,9 +712,9 @@ fn failed(phase: PurchasePhase, message: &str) -> Phase {
     (phase, Err(message.to_owned()))
 }
 
-async fn initial(status: CardOrderStatus) -> OrderView {
-    let fake = FakeBackend::default().polls(vec![Ok(Some(view("co-1", status)))]);
-    get_order(&fake, &gateway(), "co-1").await.unwrap()
+/// An order as the wait last saw it.
+fn initial(status: CardOrderStatus) -> OrderView {
+    OrderView::read(view("co-1", status))
 }
 
 #[tokio::test]
@@ -631,7 +747,7 @@ async fn wait_starts_in_the_initial_orders_phase() {
         Ok(Some(view("co-1", CardOrderStatus::Processing))),
         Ok(Some(view("co-1", CardOrderStatus::Delivered))),
     ]);
-    let paid = initial(CardOrderStatus::Processing).await;
+    let paid = initial(CardOrderStatus::Processing);
     let (result, phases) = wait(&fake, Some(paid), &fast()).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
     // Already paid: no "awaiting payment" leg is reported.
@@ -655,6 +771,24 @@ async fn wait_ticks_off_both_legs_of_a_delivery_seen_only_at_its_end() {
             succeeded(PurchasePhase::Delivering),
         ]
     );
+}
+
+/// A refund is read with what was refunded and why.
+#[tokio::test]
+async fn wait_reads_a_refund() {
+    let mut refunded = view("co-1", CardOrderStatus::Refunded);
+    refunded.detail = Some("OVER_CAP".into());
+    let fake = FakeBackend::default().polls(vec![Ok(Some(refunded))]);
+    let (result, _) = wait(&fake, None, &fast()).await;
+    let order = result.unwrap();
+    assert_eq!(order.status, OrderStatus::Refunded);
+    assert_eq!(order.refunded, Some(usd(2500)));
+    assert_eq!(order.paid, Some(usd(2500)));
+    assert_eq!(order.detail.as_deref(), Some("OVER_CAP"));
+    assert_eq!(order.checkout_url, None);
+    assert_eq!(order.expires_at, None);
+    let id = Decode!(&fake.arg_of(ORDER_STATUS_METHOD), String).unwrap();
+    assert_eq!(id, "co-1");
 }
 
 #[tokio::test]
@@ -809,7 +943,7 @@ async fn wait_takes_a_known_orders_null_for_a_replica_behind() {
         Ok(None),
         Ok(Some(view("co-1", CardOrderStatus::Delivered))),
     ]);
-    let initial = initial(CardOrderStatus::AwaitingPayment).await;
+    let initial = initial(CardOrderStatus::AwaitingPayment);
     let (result, _) = wait(&fake, Some(initial), &fast()).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
 }
@@ -835,7 +969,7 @@ async fn wait_goes_on_through_a_state_it_does_not_know() {
     );
 }
 
-/// Resumed already settled, an order is returned as it is: no phase is
+/// Given an order already settled, it is returned as it is: no phase is
 /// shown, and no call is made that a transient failure could turn into an
 /// error.
 #[tokio::test]
@@ -846,7 +980,7 @@ async fn wait_on_a_settled_order_returns_it_without_a_call() {
         CardOrderStatus::RefundOwed,
         CardOrderStatus::NeedsReview,
     ] {
-        let settled = initial(status).await;
+        let settled = initial(status);
         // No poll is scripted: any call would panic the fake.
         let fake = FakeBackend::default();
         let (result, phases) = wait(&fake, Some(settled.clone()), &fast()).await;
@@ -854,25 +988,6 @@ async fn wait_on_a_settled_order_returns_it_without_a_call() {
         assert!(phases.is_empty(), "{phases:?}");
         assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 0);
     }
-}
-
-#[tokio::test]
-async fn an_unpaid_order_past_its_deadline_is_read_as_expired() {
-    let overdue = {
-        let fake = FakeBackend::default().polls(vec![Ok(Some(past_deadline()))]);
-        get_order(&fake, &gateway(), "co-1").await.unwrap()
-    };
-    assert_eq!(overdue.status, OrderStatus::AwaitingPayment);
-    let expired = overdue.at(now_secs());
-    assert_eq!(expired.status, OrderStatus::Expired);
-    assert!(expired.status.is_terminal());
-    assert_eq!(expired.checkout_url, None);
-
-    // One still payable, and one paid, are left as they are.
-    let payable = initial(CardOrderStatus::AwaitingPayment).await;
-    assert_eq!(payable.clone().at(now_secs()), payable);
-    let paid = initial(CardOrderStatus::Processing).await;
-    assert_eq!(paid.clone().at(now_secs()), paid);
 }
 
 fn past_deadline() -> OrderStatusView {
@@ -921,7 +1036,6 @@ async fn wait_times_out_on_an_unpaid_order() {
     match result.unwrap_err() {
         CyclesPurchaseError::WaitTimedOut { order } => {
             assert_eq!(order.status, OrderStatus::AwaitingPayment);
-            assert!(order.checkout_url.is_some());
         }
         other => panic!("unexpected {other:?}"),
     }
@@ -959,7 +1073,7 @@ async fn wait_interrupted_returns_last_order() {
     // wins the race, the order handed back is the last one known.
     let fake =
         FakeBackend::default().polls(vec![Ok(Some(view("co-1", CardOrderStatus::Processing)))]);
-    let paid = initial(CardOrderStatus::Processing).await;
+    let paid = initial(CardOrderStatus::Processing);
     let result = wait_for_order(
         &fake,
         &gateway(),

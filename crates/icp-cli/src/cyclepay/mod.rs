@@ -1,11 +1,15 @@
 //! Buying cycles with a card through CyclePay.
 //!
 //! A vendor integration, kept to this crate: everything about CyclePay's
-//! canisters, its pricing and its Payment Link lives under this module, and
-//! nothing outside the `cycles buy` command reaches into it.
+//! canisters and their order interface lives under this module, and nothing
+//! outside the `cycles buy` command reaches into it. The CLI carries nothing
+//! of CyclePay's but its backend's canister id: the Payment Link, the order
+//! limits and the fees are read from the gateway, so any canister serving the
+//! same interface can stand in for it.
 //!
 //! - [`interface`]: the backend canister's Candid, as far as the CLI uses it.
-//! - [`pricing`]: the published arithmetic, for quoting before an order exists.
+//! - [`pricing`]: the gateway's arithmetic, applied for quoting before an
+//!   order exists.
 //! - [`purchase`]: the operation — quote, create, read back, wait. It never
 //!   prints; progress goes out as [`icp_events`] tasks.
 //! - [`money`]: a sum in a fiat currency, in minor units.

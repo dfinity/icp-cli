@@ -910,9 +910,9 @@ Display the cycles balance
 
 Buy cycles with a card.
 
-Creates an order on the CyclePay backend canister as the current identity, prints the Payment Link to pay on (and opens it in a browser when run from a terminal, but not over SSH or on CI), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter pays the least amount that buys them once the card fee is taken out. CyclePay accepts USD only, from 1 to 200 per order.
+Creates an order on the CyclePay backend canister as the current identity, prints the Payment Link to pay on (and opens it in a browser when run from a terminal, but not over SSH or on CI), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter pays the least amount that buys them once the card fee is taken out. The gateway publishes its per-order range and its fees, and the quote shows them. CyclePay accepts USD only, from 1 to 200 per order.
 
-Exactly one of --amount, --cycles or --resume must be given.
+Exactly one of --amount or --cycles must be given.
 
 **Usage:** `icp cycles buy [OPTIONS]`
 
@@ -923,8 +923,7 @@ Exactly one of --amount, --cycles or --resume must be given.
 * `--currency <CODE>` — ISO 4217 code of the currency to pay in. CyclePay accepts USD only
 
   Default value: `USD`
-* `--resume <ORDER_ID>` — Continue waiting on an existing order instead of creating a new one
-* `--gateway <CANISTER_ID>` — Canister id of the cycles gateway to buy through: the CyclePay backend. Defaults to the mainnet backend, or to ICP_CYCLES_GATEWAY_CANISTER_ID when set
+* `--gateway <CANISTER_ID>` — Canister id of the cycles gateway to buy through: the CyclePay backend, or any canister serving its order interface. Defaults to CyclePay's mainnet backend, or to ICP_CYCLES_GATEWAY_CANISTER_ID when set
 * `-n`, `--network <NETWORK>` — Name or URL of the network to target, conflicts with environment argument
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used

@@ -14,7 +14,6 @@ use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::CanisterCalls;
 use icp_project::host::EnvironmentSelection;
-use icp_project::network::RootKeySpec;
 use icp_project::operations::task::{CyclesPurchaseTask, PurchasePhase, Reporter, Task};
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
@@ -24,11 +23,10 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
 use crate::Stopped;
-use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
+use crate::commands::args::TokenCommandArgs;
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
     CYCLES_GATEWAY_CID, Destination, OrderError, OrderErrorKind, cycles_gateway_canister_id,
-    payment_link_url,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -46,35 +44,33 @@ use crate::render::rendered;
 /// with `icp canister top-up`. Say either how much to spend (--amount, in the
 /// currency given by --currency) or how many cycles to receive (--cycles); the
 /// latter pays the least amount that buys them once the card fee is taken
-/// out. CyclePay accepts USD only, from 1 to 200 per order.
+/// out. The gateway publishes its per-order range and its fees, and the quote
+/// shows them. CyclePay accepts USD only, from 1 to 200 per order.
 ///
-/// Exactly one of --amount, --cycles or --resume must be given.
+/// Exactly one of --amount or --cycles must be given.
 #[derive(Debug, Args)]
 pub(crate) struct BuyArgs {
     /// Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
     #[arg(
         long,
         value_name = "AMOUNT",
-        required_unless_present_any = ["cycles", "resume"],
-        conflicts_with_all = ["cycles", "resume"]
+        required_unless_present = "cycles",
+        conflicts_with = "cycles"
     )]
     pub(crate) amount: Option<String>,
 
     /// Cycles to receive; the amount to pay is worked out from the current rate, card fee included.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_name = "CYCLES", conflicts_with = "resume")]
+    #[arg(long, value_name = "CYCLES")]
     pub(crate) cycles: Option<CyclesAmount>,
 
     /// ISO 4217 code of the currency to pay in. CyclePay accepts USD only.
     #[arg(long, value_name = "CODE", default_value = "USD")]
     pub(crate) currency: Currency,
 
-    /// Continue waiting on an existing order instead of creating a new one
-    #[arg(long, value_name = "ORDER_ID")]
-    pub(crate) resume: Option<String>,
-
-    /// Canister id of the cycles gateway to buy through: the CyclePay backend.
-    /// Defaults to the mainnet backend, or to ICP_CYCLES_GATEWAY_CANISTER_ID when set.
+    /// Canister id of the cycles gateway to buy through: the CyclePay backend, or any canister
+    /// serving its order interface. Defaults to CyclePay's mainnet backend, or to
+    /// ICP_CYCLES_GATEWAY_CANISTER_ID when set.
     #[arg(long, value_name = "CANISTER_ID")]
     pub(crate) gateway: Option<Principal>,
 
@@ -125,17 +121,17 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     // A malformed amount should fail before any identity is unlocked or any
     // network reached.
     let target = match (args.amount.as_deref(), args.cycles.as_ref()) {
-        (Some(amount), _) => Some(Target::Spend(Money::parse_decimal(amount, args.currency)?)),
+        (Some(amount), _) => Target::Spend(Money::parse_decimal(amount, args.currency)?),
         (None, Some(cycles)) => {
             if cycles.get() == 0 {
                 bail!("--cycles must be greater than zero");
             }
-            Some(Target::Receive {
+            Target::Receive {
                 cycles: cycles.get(),
                 currency: args.currency,
-            })
+            }
         }
-        (None, None) => None,
+        (None, None) => bail!("one of --amount or --cycles is required"),
     };
 
     let selections = args.token_command_args.selections();
@@ -148,10 +144,6 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
     };
     let cyclepay = canister.to_text() == CYCLES_GATEWAY_CID;
-    let gateway = Gateway {
-        canister,
-        payment_link: payment_link_url(cyclepay).map_err(|message| anyhow!(message))?,
-    };
 
     let agent = match ctx
         .get_agent(
@@ -185,132 +177,47 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     }
     let calls = icp_app::calls::calls(agent.clone(), None)?;
     let calls = calls.as_ref();
+    // How the gateway sells: the terms every quote and every link below are
+    // made on. A gateway that is not on this network says so here.
+    let gateway = purchase::connect(calls, canister).await?;
     let output = Output::of(args);
 
-    // Only the identity that made an order can read it, on the network its
-    // gateway is on: the command that resumes it says both, the identity by
-    // name even when it was the default, which can change in the meantime.
     let identity = identity_name(ctx, &selections.identity).await;
-    let resume = |id: &str| {
-        format!(
-            "icp cycles buy --resume {}{}",
-            shell_word(id),
-            selection_flags(&selections, identity.as_deref(), args.gateway)
-        )
-    };
-
-    // Whether the Payment Link was handed out: an order that is payable right
-    // now. Anything else has nothing to pay, and `--no-wait` must still say
-    // where it stands.
-    let (order, payable, interrupt) = match &args.resume {
-        Some(id) => {
-            let order = purchase::get_order(calls, &gateway, id)
-                .await?
-                .at(now_secs());
-            // A settled order, an expired one included, is told as a wait
-            // that ended so: the same output and exit status, with or
-            // without --no-wait.
-            if order.status.is_terminal() {
-                return report_end(&agent, buyer, &order, output, &resume(&order.id)).await;
-            }
-            let payable = order.status == OrderStatus::AwaitingPayment;
-            if payable {
-                announce_payable(&order, None, output, args.no_open);
-            } else if output == Output::Human {
-                info!("Order {} is {}", order.id, order.status);
-            }
-            (order, payable, Interrupt::later())
+    let (order, quote, mut interrupt) =
+        create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
+    // Ctrl-C while the order was being made: it exists now, so say where it
+    // is, but open nothing and wait for nothing.
+    if interrupt.pressed() {
+        // The terminal echoed it as `^C` with no line ending.
+        if stderr().is_terminal() {
+            eprintln!();
         }
-        None => {
-            let target =
-                target.expect("clap requires --amount or --cycles unless --resume is given");
-            let (order, quote, mut interrupt) =
-                create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
-            // Ctrl-C while the order was being made: it exists now, so say
-            // where it is and how to pick it up, but open nothing and wait
-            // for nothing.
-            if interrupt.pressed() {
-                // The terminal echoed it as `^C` with no line ending.
-                if stderr().is_terminal() {
-                    eprintln!();
-                }
-                announce_payable(&order, Some(&quote), output, true);
-                if output != Output::Quiet {
-                    info!("Stopped before waiting. Keep waiting with:");
-                    info!("  {}", resume(&order.id));
-                }
-                return Err(Stopped::INTERRUPTED.into());
-            }
-            announce_payable(&order, Some(&quote), output, args.no_open);
-            (order, true, interrupt)
+        announce_payable(&order, &quote, output, true);
+        if output != Output::Quiet {
+            info!("Stopped before waiting. {AFTER_HINT}");
         }
-    };
+        return Err(Stopped::INTERRUPTED.into());
+    }
+    announce_payable(&order, &quote, output, args.no_open);
 
     if args.no_wait {
-        if !payable {
-            print_final(&order, None, output)?;
-        }
-        if output == Output::Human && !order.status.is_terminal() {
-            info!("Not waiting. Wait for delivery later with:");
-            info!("  {}", resume(&order.id));
+        if output == Output::Human {
+            info!("Not waiting. {AFTER_HINT}");
         }
         return Ok(());
     }
 
-    let resume = resume(&order.id);
     wait_and_report(
-        calls, &agent, &gateway, buyer, order, interrupt, output, ctx.debug, &resume,
+        calls, &agent, &gateway, buyer, order, interrupt, output, ctx.debug,
     )
     .await
 }
 
-/// The selections a run was given, as flags for the command that resumes
-/// its order. `identity` is the name of the identity used, when known.
-fn selection_flags(
-    selections: &TokenCommandSelections,
-    identity: Option<&str>,
-    gateway: Option<Principal>,
-) -> String {
-    let mut flags = String::new();
-    match &selections.network {
-        NetworkSelection::Named(name) => flags.push_str(&format!(" -n {}", shell_word(name))),
-        NetworkSelection::Url(url, root_key) => {
-            flags.push_str(&format!(" -n {}", shell_word(url.as_str())));
-            let root_key = match root_key {
-                RootKeySpec::Mainnet => "mainnet".to_owned(),
-                RootKeySpec::Fetch => "fetch".to_owned(),
-                RootKeySpec::Explicit(key) => hex::encode(key),
-            };
-            flags.push_str(&format!(" -k {root_key}"));
-        }
-        NetworkSelection::Default => {}
-    }
-    if let EnvironmentSelection::Named(name) = &selections.environment {
-        flags.push_str(&format!(" -e {}", shell_word(name)));
-    }
-    if let Some(name) = identity {
-        flags.push_str(&format!(" --identity {}", shell_word(name)));
-    }
-    if let Some(gateway) = gateway {
-        flags.push_str(&format!(" --gateway {gateway}"));
-    }
-    flags
-}
-
-/// `value` as one shell word: as it is when nothing in it needs quoting.
-/// A leading `=` does, in zsh, which reads `=word` as the path of `word`.
-fn shell_word(value: &str) -> String {
-    let plain = !value.is_empty()
-        && !value.starts_with('=')
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "-_./:@=+".contains(c));
-    if plain {
-        value.to_owned()
-    } else {
-        icp_project::operations::create::shell_quote(value)
-    }
-}
+/// What becomes of an order the command is no longer waiting on. The order
+/// needs nothing from the command: the gateway delivers once the payment
+/// lands, so the buyer is told where the cycles will show.
+const AFTER_HINT: &str = "Once the order is paid, the cycles land on your identity's \
+                          cycles-ledger account; `icp cycles balance` shows them.";
 
 /// Quote, confirm, create. Returns the order with the quote it was placed on,
 /// and what its wait is to stop on.
@@ -561,7 +468,7 @@ fn quote_block(
 /// at a terminal who did not ask otherwise, and not over SSH or on CI, where
 /// the browser would not be theirs. Agents, containers and scripts (`--json`,
 /// `--quiet`) have no browser; they get the link to hand on.
-fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no_open: bool) {
+fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: bool) {
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
             "Order {} is {} but has no Payment Link",
@@ -576,8 +483,8 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
                 checkout_url: url,
                 amount: order.amount,
                 net: order.net,
-                fee: quote.map(|q| q.fee),
-                estimated_cycles: quote.map(|q| q.cycles.to_string()),
+                fee: quote.fee,
+                estimated_cycles: quote.cycles.to_string(),
                 expires_at: order.expires_at.map(format_secs),
             }) {
                 warn!("failed to write JSON: {e}");
@@ -648,7 +555,6 @@ async fn wait_and_report(
     interrupt: Interrupt,
     output: Output,
     debug: bool,
-    resume: &str,
 ) -> Result<(), anyhow::Error> {
     let id = order.id.clone();
     let options = WaitOptions::default();
@@ -673,8 +579,7 @@ async fn wait_and_report(
             rendered(debug, wait).await
         }
         Output::Human | Output::Json => {
-            info!("If this command is stopped, keep waiting with:");
-            info!("  {resume}");
+            info!("If this command is stopped, the order carries on without it.");
             with_heartbeat(HEARTBEAT, |line| info!("{line}"), wait).await
         }
         Output::Quiet => wait(&Reporter::null()).await,
@@ -685,24 +590,20 @@ async fn wait_and_report(
         // Stopped, not failed: the order carries on without the command.
         Err(CyclesPurchaseError::Interrupted { order }) => {
             if output != Output::Quiet {
-                info!("{}", standing(&order, false, now_secs()));
-                info!("Keep waiting with:");
-                info!("  {resume}");
+                info!("{} {AFTER_HINT}", standing(&order, false, now_secs()));
             }
             return Err(Stopped::INTERRUPTED.into());
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
             if output != Output::Quiet {
-                info!("{}", standing(&order, true, now_secs()));
-                info!("Keep waiting with:");
-                info!("  {resume}");
+                info!("{} {AFTER_HINT}", standing(&order, true, now_secs()));
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
         Err(error) => return Err(error.into()),
     };
 
-    report_end(agent, buyer, &order, output, resume).await
+    report_end(agent, buyer, &order, output).await
 }
 
 /// How often a wait with nothing drawn says it is still going.
@@ -774,14 +675,12 @@ async fn with_heartbeat<T>(
     result
 }
 
-/// Tell how a settled order ended, and fail unless it was delivered. Said
-/// the same way after a wait and for an order resumed already settled.
+/// Tell how a settled order ended, and fail unless it was delivered.
 async fn report_end(
     agent: &ic_agent::Agent,
     buyer: Principal,
     order: &OrderView,
     output: Output,
-    resume: &str,
 ) -> Result<(), anyhow::Error> {
     // The buyer's balance says something only when the cycles went there:
     // an order made on CyclePay's site can top up a canister, or credit
@@ -813,7 +712,7 @@ async fn report_end(
             println!("Balance: {}", format_cycles(balance));
         }
     }
-    ending(order, resume)
+    ending(order)
 }
 
 /// ` to <principal>`, ` to canister <id>`: where the order says its cycles
@@ -828,7 +727,7 @@ fn delivered_to(order: &OrderView) -> String {
 
 /// How a settled order ended, as the command's result: `Ok` for a delivery,
 /// and an error that says what happened otherwise.
-fn ending(order: &OrderView, resume: &str) -> Result<(), anyhow::Error> {
+fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
     let detail = order
         .detail
         .as_deref()
@@ -862,8 +761,8 @@ fn ending(order: &OrderView, resume: &str) -> Result<(), anyhow::Error> {
         // also needs review, and the dispute settles it.
         OrderStatus::NeedsReview => bail!(
             "order {} needs review{detail}: your card was charged, and CyclePay checks the \
-             order by hand (a disputed payment is settled by the dispute). Keep the order id, \
-             and run `{resume}` later to see the outcome",
+             order by hand (a disputed payment is settled by the dispute). Keep the order id; \
+             CyclePay's site shows the outcome under My purchases",
             order.id
         ),
         OrderStatus::AwaitingPayment
@@ -1108,12 +1007,10 @@ struct JsonOrderCreated<'a> {
     amount: Money,
     /// What funds the cycles after the card fee, as the backend set it.
     net: Money,
-    /// The card fee included in `amount`. Known only when the order was
-    /// created by this run; a resumed order's quote is not kept.
-    fee: Option<Money>,
-    /// About the cycles `net` buys at the rate quoted, as a decimal string;
-    /// likewise only when created by this run.
-    estimated_cycles: Option<String>,
+    /// The card fee included in `amount`.
+    fee: Money,
+    /// About the cycles `net` buys at the rate quoted, as a decimal string.
+    estimated_cycles: String,
     /// RFC 3339.
     expires_at: Option<String>,
 }
@@ -1185,7 +1082,14 @@ mod tests {
     fn gateway_at(canister: &str) -> Gateway {
         Gateway {
             canister: Principal::from_text(canister).unwrap(),
-            payment_link: url::Url::parse("https://buy.stripe.com/test_link").unwrap(),
+            paused: false,
+            terms: crate::cyclepay::pricing::Terms {
+                min_order_usd_cents: 100,
+                max_order_usd_cents: 20_000,
+                fee_bps: 290,
+                fee_fixed_usd_cents: 30,
+                ledger_delivery_fee_cycles: 200_000_000,
+            },
         }
     }
 
@@ -1375,8 +1279,7 @@ mod tests {
     }
 
     /// Only a delivery succeeds; every other end is an error that says what
-    /// happened, whether it is reported after a wait or for an order resumed
-    /// already settled.
+    /// happened.
     #[test]
     fn only_a_delivery_ends_well() {
         let order = |status| OrderView {
@@ -1392,16 +1295,15 @@ mod tests {
             detail: None,
             destination: None,
         };
-        let resume = "icp cycles buy --resume co-1 -n ic";
-        assert!(ending(&order(OrderStatus::Delivered), resume).is_ok());
+        assert!(ending(&order(OrderStatus::Delivered)).is_ok());
         for (status, says) in [
             (OrderStatus::Refunded, "10.00 USD was refunded"),
             (OrderStatus::Refunding, "is being refunded"),
             (OrderStatus::RefundOwed, "owes you a refund"),
-            (OrderStatus::NeedsReview, resume),
+            (OrderStatus::NeedsReview, "Keep the order id"),
             (OrderStatus::Expired, "expired unpaid"),
         ] {
-            let err = ending(&order(status), resume).unwrap_err().to_string();
+            let err = ending(&order(status)).unwrap_err().to_string();
             assert!(err.contains(says), "{status:?}: {err}");
         }
     }
@@ -1450,38 +1352,6 @@ mod tests {
                 "{said}"
             );
         }
-    }
-
-    #[test]
-    fn the_resume_command_carries_the_selections() {
-        let selections = TokenCommandSelections {
-            environment: EnvironmentSelection::Default,
-            network: NetworkSelection::Named("ic".into()),
-            identity: IdentitySelection::Named("my id".into()),
-        };
-        assert_eq!(
-            selection_flags(&selections, Some("my id"), None),
-            " -n ic --identity 'my id'"
-        );
-        let selections = TokenCommandSelections {
-            environment: EnvironmentSelection::Named("staging".into()),
-            network: NetworkSelection::Default,
-            identity: IdentitySelection::Default,
-        };
-        let gateway = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-        assert_eq!(
-            selection_flags(&selections, None, Some(gateway)),
-            " -e staging --gateway ryjl3-tyaaa-aaaaa-aaaba-cai"
-        );
-        // The default identity is named, as it may not be the default later.
-        assert_eq!(
-            selection_flags(&selections, Some("default"), None),
-            " -e staging --identity default"
-        );
-        assert_eq!(shell_word("co-1-0000abcd"), "co-1-0000abcd");
-        assert_eq!(shell_word(""), "''");
-        assert_eq!(shell_word("=ls"), "'=ls'");
-        assert_eq!(shell_word("a=b"), "a=b");
     }
 
     /// Off a terminal, a wait says when each phase begins and, every

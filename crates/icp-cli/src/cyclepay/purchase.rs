@@ -2,15 +2,15 @@
 //!
 //! The buyer is whoever makes the calls: the order is created as the caller,
 //! the cycles go to the caller's own Cycles Ledger account, and only the
-//! caller can read the order back. The flow is quote at the backend's
-//! published rate, create the order, pay on the Payment Link the order's
-//! reference is attached to, then wait for the backend to report the order
-//! delivered.
+//! caller can read the order back. The flow is [`connect`] to the gateway,
+//! which reads the terms it publishes, quote at its published rate, create
+//! the order, pay on the page the gateway hands out for it, then wait for the
+//! gateway to report the order delivered.
 //!
 //! Nothing here prints. [`wait_for_order`] reports its progress as
 //! [`icp_events`] tasks, one per [`PurchasePhase`], and hands the last order
 //! it saw back inside its error when it is interrupted, so the caller can say
-//! how to resume.
+//! where it stands.
 
 use std::future::Future;
 use std::pin::pin;
@@ -23,29 +23,73 @@ use icp_project::calls::{
     CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
 };
 use icp_project::operations::task::{PurchasePhase, Reporter, Task, TaskReporter};
+use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
 use std::fmt;
 use tokio::{select, time::sleep};
 use url::Url;
 
 use super::interface::{
-    CREATE_ORDER_METHOD, CYCLES_GATEWAY_CID, CardOrderStatus, CreateOrderArgs, CreateOrderResult,
-    CreatedOrder, Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD,
+    CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CYCLES_GATEWAY_CID, CardOrderStatus, CardTerms,
+    CreateOrderArgs, CreateOrderResult, CreatedOrder, Destination, ORDER_STATUS_METHOD,
     OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
-    checkout_url, order_reference,
 };
 use super::money::{Currency, Money};
-use super::pricing::{card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
+use super::pricing::{Terms, card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
 
 /// How often [`wait_for_order`] asks the backend for the order.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(3);
 
-/// Where orders go: the backend canister that owns them, and the Payment
-/// Link they are paid on.
+/// Where orders go, and on what terms: the gateway canister that owns them,
+/// with the card terms it published when [`connect`] read them. Nothing
+/// about how the gateway sells is the CLI's own.
 #[derive(Clone, Debug)]
 pub struct Gateway {
     pub canister: Principal,
-    pub payment_link: Url,
+    /// The gateway is taking no new card orders right now.
+    pub paused: bool,
+    /// The range and the arithmetic every quote is made with.
+    pub terms: Terms,
+}
+
+impl Gateway {
+    /// `canister`, on the terms it published. Terms this CLI could not act
+    /// on are refused here, before a quote is made on them: a range with no
+    /// amount in it, or a delivery fee beyond any count of cycles.
+    pub fn new(canister: Principal, terms: CardTerms) -> Result<Self, CyclesPurchaseError> {
+        let invalid = |why: String| CyclesPurchaseError::InvalidTerms {
+            gateway: canister,
+            why,
+        };
+        if terms.min_order_usd_cents > terms.max_order_usd_cents {
+            return Err(invalid(format!(
+                "its order range of {} to {} US cents allows no order",
+                terms.min_order_usd_cents, terms.max_order_usd_cents
+            )));
+        }
+        let ledger_delivery_fee_cycles =
+            terms
+                .ledger_delivery_fee_cycles
+                .0
+                .to_u128()
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "its ledger delivery fee of {} cycles",
+                        terms.ledger_delivery_fee_cycles
+                    ))
+                })?;
+        Ok(Self {
+            canister,
+            paused: terms.deliveries_paused,
+            terms: Terms {
+                min_order_usd_cents: terms.min_order_usd_cents,
+                max_order_usd_cents: terms.max_order_usd_cents,
+                fee_bps: terms.fee_bps,
+                fee_fixed_usd_cents: terms.fee_fixed_usd_cents,
+                ledger_delivery_fee_cycles,
+            },
+        })
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -55,6 +99,23 @@ pub enum CyclesPurchaseError {
         mainnet_hint(*gateway)
     ))]
     GatewayNotFound { gateway: Principal },
+
+    #[snafu(display("failed to read the card terms from cycles gateway {gateway}"))]
+    ReadTerms {
+        gateway: Principal,
+        #[snafu(source(from(TypedCallError, Box::new)))]
+        source: Box<TypedCallError>,
+    },
+
+    #[snafu(display(
+        "cycles gateway {gateway} published terms this version of icp cannot act on: {why}"
+    ))]
+    InvalidTerms { gateway: Principal, why: String },
+
+    #[snafu(display(
+        "cycles gateway {gateway} is not taking card orders right now; try again later"
+    ))]
+    CardsPaused { gateway: Principal },
 
     #[snafu(display("failed to read the exchange rate from cycles gateway {gateway}"))]
     ReadRate {
@@ -97,13 +158,13 @@ pub enum CyclesPurchaseError {
     OrderRefused { error: OrderError },
 
     #[snafu(display(
-        "cycles gateway {gateway} made order {id} with the payment reference {reference}, \
-         not o_{id}; a payment on the link this version of icp builds would not reach it"
+        "cycles gateway {gateway} made order {id} with a payment page that is not an https \
+         URL: {url}"
     ))]
-    UnexpectedReference {
+    InvalidPaymentUrl {
         gateway: Principal,
         id: String,
-        reference: String,
+        url: String,
     },
 
     #[snafu(display("failed to read order {id} from cycles gateway {gateway}"))]
@@ -313,19 +374,15 @@ pub struct OrderView {
 }
 
 impl OrderView {
-    /// An order just made by `buyer`, for its own Cycles Ledger account.
-    fn created(created: CreatedOrder, gateway: &Gateway, buyer: Principal) -> Self {
-        let url = checkout_url(
-            &gateway.payment_link,
-            &order_reference(&created.order_id),
-            created.amount_usd_cents,
-        );
+    /// An order just made by `buyer`, for its own Cycles Ledger account, to
+    /// be paid on the page the gateway handed out with it.
+    fn created(created: CreatedOrder, buyer: Principal) -> Self {
         Self {
             id: created.order_id,
             status: OrderStatus::AwaitingPayment,
             amount: Money::from_minor_units(created.amount_usd_cents, Currency::Usd),
             net: Money::from_minor_units(created.net_usd_cents, Currency::Usd),
-            checkout_url: Some(url.into()),
+            checkout_url: Some(created.payment_url),
             expires_at: Some(created.expires_at),
             paid: None,
             cycles_delivered: None,
@@ -335,25 +392,15 @@ impl OrderView {
         }
     }
 
-    /// The view the backend gives the owner. The reference its Payment Link
-    /// carries is not in it, but it is a function of the order id, so the
-    /// page to pay on is rebuilt for an order still awaiting payment.
-    fn read(view: OrderStatusView, gateway: &Gateway) -> Self {
-        let status = view.status.map_or(OrderStatus::Unknown, OrderStatus::from);
-        let checkout_url = (status == OrderStatus::AwaitingPayment).then(|| {
-            checkout_url(
-                &gateway.payment_link,
-                &order_reference(&view.order_id),
-                view.amount_usd_cents,
-            )
-            .into()
-        });
+    /// The view the backend gives the owner. The page to pay on is not in
+    /// it: an order comes with its page once, when it is made.
+    pub(super) fn read(view: OrderStatusView) -> Self {
         Self {
             id: view.order_id,
-            status,
+            status: view.status.map_or(OrderStatus::Unknown, OrderStatus::from),
             amount: Money::from_minor_units(view.amount_usd_cents, Currency::Usd),
             net: Money::from_minor_units(view.net_usd_cents, Currency::Usd),
-            checkout_url,
+            checkout_url: None,
             expires_at: view.expires_at,
             paid: view
                 .paid_usd_cents
@@ -373,17 +420,6 @@ impl OrderView {
         self
     }
 
-    /// The order as of `now` (seconds since the Unix epoch): an unpaid one
-    /// past its deadline is expired, and no longer payable, though the
-    /// backend reports it as awaiting payment until it forgets it.
-    pub fn at(self, now: u64) -> Self {
-        if self.is_past_deadline(now, Duration::ZERO) {
-            self.expired()
-        } else {
-            self
-        }
-    }
-
     /// Whether the order is unpaid and `now` (seconds since the Unix epoch)
     /// is more than `grace` past its deadline.
     fn is_past_deadline(&self, now: u64, grace: Duration) -> bool {
@@ -392,6 +428,25 @@ impl OrderView {
                 .expires_at
                 .is_some_and(|deadline| now > deadline.saturating_add(grace.as_secs()))
     }
+}
+
+/// Reach `canister` as a cycles gateway: read the card terms it publishes,
+/// and hold them for every call after. A canister that is not there is
+/// [`CyclesPurchaseError::GatewayNotFound`], said here before anything else
+/// is asked of it.
+pub async fn connect(
+    calls: &dyn CanisterCalls,
+    canister: Principal,
+) -> Result<Gateway, CyclesPurchaseError> {
+    let (terms,): (CardTerms,) = query_typed(calls, canister, CARD_TERMS_METHOD, ())
+        .await
+        .map_err(|source| {
+            map_absent(source, canister, |source| CyclesPurchaseError::ReadTerms {
+                gateway: canister,
+                source: Box::new(source),
+            })
+        })?;
+    Gateway::new(canister, terms)
 }
 
 /// Read the rate the backend prices orders with right now.
@@ -418,18 +473,31 @@ pub async fn read_rate(
     })
 }
 
-/// Price a [`Target`] at `rate`, within the backend's per-order range.
+/// Price a [`Target`] at `rate`, on the gateway's terms and within its
+/// per-order range.
 ///
-/// A sum outside the range is refused here rather than by the backend so the
-/// buyer is told before being shown a quote for it. A number of cycles the
-/// minimum already buys is quoted at the minimum: that is the least a buyer
-/// can pay, and the extra is theirs.
-pub fn quote_at(rate: Rate, target: Target) -> Result<Quote, CyclesPurchaseError> {
+/// A sum outside the range, or any order while the gateway is paused, is
+/// refused here rather than by the gateway so the buyer is told before being
+/// shown a quote for it. A number of cycles the minimum already buys is
+/// quoted at the minimum: that is the least a buyer can pay, and the extra is
+/// theirs.
+pub fn quote_at(
+    gateway: &Gateway,
+    rate: Rate,
+    target: Target,
+) -> Result<Quote, CyclesPurchaseError> {
+    if gateway.paused {
+        return CardsPausedSnafu {
+            gateway: gateway.canister,
+        }
+        .fail();
+    }
+    let terms = &gateway.terms;
     let amount = match target {
         Target::Spend(amount) => {
             let Currency::Usd = amount.currency;
-            let min = Money::from_minor_units(MIN_ORDER_USD_CENTS, amount.currency);
-            let max = Money::from_minor_units(MAX_ORDER_USD_CENTS, amount.currency);
+            let min = Money::from_minor_units(terms.min_order_usd_cents, amount.currency);
+            let max = Money::from_minor_units(terms.max_order_usd_cents, amount.currency);
             if amount.minor_units < min.minor_units || amount.minor_units > max.minor_units {
                 return AmountOutOfRangeSnafu { amount, min, max }.fail();
             }
@@ -437,25 +505,21 @@ pub fn quote_at(rate: Rate, target: Target) -> Result<Quote, CyclesPurchaseError
         }
         Target::Receive { cycles, currency } => {
             let Currency::Usd = currency;
-            let cents = least_gross_for(
-                cycles,
-                rate.xdr_usd_x10000,
-                MIN_ORDER_USD_CENTS,
-                MAX_ORDER_USD_CENTS,
-            )
-            .context(CyclesAboveMaximumSnafu {
-                cycles,
-                max: Money::from_minor_units(MAX_ORDER_USD_CENTS, currency),
-                buys: ledger_cycles(MAX_ORDER_USD_CENTS, rate.xdr_usd_x10000),
-            })?;
+            let cents = least_gross_for(cycles, rate.xdr_usd_x10000, terms).context(
+                CyclesAboveMaximumSnafu {
+                    cycles,
+                    max: Money::from_minor_units(terms.max_order_usd_cents, currency),
+                    buys: ledger_cycles(terms.max_order_usd_cents, rate.xdr_usd_x10000, terms),
+                },
+            )?;
             Money::from_minor_units(cents, currency)
         }
     };
     Ok(Quote {
         amount,
-        fee: Money::from_minor_units(card_fee_cents(amount.minor_units), amount.currency),
-        net: Money::from_minor_units(net_usd_cents(amount.minor_units), amount.currency),
-        cycles: ledger_cycles(amount.minor_units, rate.xdr_usd_x10000),
+        fee: Money::from_minor_units(card_fee_cents(amount.minor_units, terms), amount.currency),
+        net: Money::from_minor_units(net_usd_cents(amount.minor_units, terms), amount.currency),
+        cycles: ledger_cycles(amount.minor_units, rate.xdr_usd_x10000, terms),
         rate,
     })
 }
@@ -467,7 +531,7 @@ pub async fn quote_target(
     target: Target,
 ) -> Result<Quote, CyclesPurchaseError> {
     let rate = read_rate(calls, gateway).await?;
-    quote_at(rate, target)
+    quote_at(gateway, rate, target)
 }
 
 /// Create an order for `amount`, delivering to the caller's own Cycles
@@ -508,20 +572,19 @@ pub async fn place_order(
         })
     })?;
     match result {
-        // The link is built from the pinned Payment Link and the order id
-        // alone, as CyclePay's own site builds it, so an order whose
-        // reference is anything else could not be paid on it.
+        // The page is the gateway's to hand out, and is opened as it is;
+        // a card is typed on it, so it must at least be an https URL.
         CreateOrderResult::Ok(created)
-            if created.client_reference_id != order_reference(&created.order_id) =>
+            if !Url::parse(&created.payment_url).is_ok_and(|url| url.scheme() == "https") =>
         {
-            UnexpectedReferenceSnafu {
+            InvalidPaymentUrlSnafu {
                 gateway: canister,
                 id: created.order_id,
-                reference: created.client_reference_id,
+                url: created.payment_url,
             }
             .fail()
         }
-        CreateOrderResult::Ok(created) => Ok(OrderView::created(created, gateway, calls.caller())),
+        CreateOrderResult::Ok(created) => Ok(OrderView::created(created, calls.caller())),
         CreateOrderResult::Err(error) => OrderRefusedSnafu { error }.fail(),
     }
 }
@@ -545,23 +608,7 @@ async fn fetch_order(
                     source: Box::new(source),
                 })
             })?;
-    Ok(view.map(|view| OrderView::read(view, gateway)))
-}
-
-/// Read one of the caller's orders. The backend's `null` is
-/// [`CyclesPurchaseError::OrderNotFound`] whatever its cause.
-pub async fn get_order(
-    calls: &dyn CanisterCalls,
-    gateway: &Gateway,
-    id: &str,
-) -> Result<OrderView, CyclesPurchaseError> {
-    fetch_order(calls, gateway, id)
-        .await?
-        .context(OrderNotFoundSnafu {
-            gateway: gateway.canister,
-            id,
-            caller: calls.caller(),
-        })
+    Ok(view.map(OrderView::read))
 }
 
 /// Bounds on [`wait_for_order`].
@@ -573,7 +620,7 @@ pub struct WaitOptions {
     /// Clocks differ, and the backend expires it on its own.
     pub expiry_grace: Duration,
     /// How long an unpaid order is waited on in one run. Its deadline is a
-    /// day away; a buyer who has not paid by now is told how to resume.
+    /// day away; a buyer who has not paid by now is told where it stands.
     pub max_unpaid_wait: Duration,
     /// How long a paid order is given to be delivered.
     pub max_paid_wait: Duration,

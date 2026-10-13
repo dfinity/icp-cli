@@ -40,10 +40,10 @@ use crate::render::rendered;
 /// Buy cycles with a card.
 ///
 /// Creates an order on the CyclePay backend canister as the current identity,
-/// prints the Payment Link to pay on (and opens it in a browser, except on CI
-/// or over SSH), then waits for the cycles to land on the identity's own
-/// cycles-ledger account. Fund a canister from there with `icp canister
-/// top-up`. Say either how much to spend (--amount, in the currency given by
+/// prints the Payment Link to pay on (and opens it in a browser when run from
+/// a terminal, but not over SSH), then waits for the cycles to land on the
+/// identity's own cycles-ledger account. Fund a canister from there with `icp
+/// canister top-up`. Say either how much to spend (--amount, in the currency given by
 /// --currency) or how many cycles to receive (--cycles); the latter pays the
 /// least amount that buys them once the card fee is taken out. CyclePay
 /// accepts USD only, from 1 to 200 per order.
@@ -521,9 +521,9 @@ fn quote_block(
 }
 
 /// Print the Payment Link, and open it where that makes sense: for a person
-/// who did not ask otherwise, on a machine they are at (an agent running the
-/// command for them included). `--json` and `--quiet` are for scripts, which
-/// have no browser to open.
+/// at a terminal who did not ask otherwise, and not over SSH or on CI, where
+/// the browser would not be theirs. Agents, containers and scripts (`--json`,
+/// `--quiet`) have no browser; they get the link to hand on.
 fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no_open: bool) {
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
@@ -554,7 +554,7 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
                 payable_for(order, now_secs())
             );
             println!("{url}");
-            if !no_open && browser_is_at_hand() {
+            if !no_open && stderr().is_terminal() && browser_is_at_hand() {
                 match open::that(url) {
                     Ok(()) => info!("Opened the Payment Link in your browser."),
                     Err(e) => warn!("Could not open a browser ({e}); open the URL above yourself."),

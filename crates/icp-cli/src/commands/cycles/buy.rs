@@ -33,7 +33,7 @@ use crate::cyclepay::interface::{
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
-    self as purchase, CyclesPurchaseError, Gateway, OrderStatus, OrderView, Quote, Target,
+    self as purchase, CyclesPurchaseError, Gateway, OrderStatus, OrderView, Quote, Rate, Target,
     WaitOptions, now_secs,
 };
 use crate::render::rendered;
@@ -310,28 +310,24 @@ fn confirm(
     yes: bool,
     speak: bool,
 ) -> Result<Interrupt, anyhow::Error> {
+    if speak {
+        let identity = identity
+            .map(|name| format!(" (identity '{name}')"))
+            .unwrap_or_default();
+        info!("Buyer:    {buyer}{identity}");
+        info!("Gateway:  {} (CyclePay backend canister)", gateway.canister);
+        if let Target::Receive { cycles, .. } = target {
+            info!("Wanted:   at least {}", format_cycles(cycles));
+        }
+        info!("Quote:    {}", quote_line(quote));
+    }
+    // Said even when the quote is not: a script that reads the figures off
+    // --json, or -q's, would otherwise never hear they may be off.
+    if let Some(warning) = stale_rate_warning(&quote.rate) {
+        warn!("{warning}");
+    }
     if !speak {
         return Ok(Interrupt::later());
-    }
-    let identity = identity
-        .map(|name| format!(" (identity '{name}')"))
-        .unwrap_or_default();
-    info!("Buyer:    {buyer}{identity}");
-    info!("Gateway:  {} (CyclePay backend canister)", gateway.canister);
-    if let Target::Receive { cycles, .. } = target {
-        info!("Wanted:   at least {}", format_cycles(cycles));
-    }
-    info!("Quote:    {}", quote_line(quote));
-    if quote.rate.stale {
-        let age = quote
-            .rate
-            .age
-            .map(|age| format!(" for {}", format_age(age)))
-            .unwrap_or_default();
-        warn!(
-            "CyclePay has not refreshed its exchange rate{age}; the quote may be off, and the \
-             cycles delivered follow the rate when the payment lands."
-        );
     }
 
     if yes {
@@ -449,6 +445,21 @@ impl Drop for QuietCtrlC {
             let _ = tcsetattr(stderr(), SetArg::TCSANOW, saved);
         }
     }
+}
+
+/// What to say of a rate CyclePay has not refreshed for longer than it
+/// tolerates, if it has not.
+fn stale_rate_warning(rate: &Rate) -> Option<String> {
+    let age = rate
+        .age
+        .map(|age| format!(" for {}", format_age(age)))
+        .unwrap_or_default();
+    rate.stale.then(|| {
+        format!(
+            "CyclePay has not refreshed its exchange rate{age}; the quote may be off, and the \
+             cycles delivered follow the rate when the payment lands."
+        )
+    })
 }
 
 /// `10.00 USD -> about 6.818T cycles (9.41 USD after a 0.59 USD card fee, at 1.3520 USD per 1T cycles)`.
@@ -955,7 +966,6 @@ mod tests {
     use icp_events::TaskOutcome;
 
     use super::*;
-    use crate::cyclepay::purchase::Rate;
 
     fn error(code: &str, message: &str) -> OrderError {
         OrderError {
@@ -1206,6 +1216,18 @@ mod tests {
             "{said:?}"
         );
         assert!(first("still delivering cycles (") > delivering, "{said:?}");
+    }
+
+    #[test]
+    fn only_a_stale_rate_is_warned_of() {
+        let rate = |stale| Rate {
+            xdr_usd_x10000: 13_520,
+            stale,
+            age: Some(Duration::from_secs(5 * 3600)),
+        };
+        assert_eq!(stale_rate_warning(&rate(false)), None);
+        let warning = stale_rate_warning(&rate(true)).unwrap();
+        assert!(warning.contains("for 5 hours"), "{warning}");
     }
 
     #[test]

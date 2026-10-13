@@ -676,7 +676,9 @@ pub async fn wait_for_order(
         let polled = select! {
             polled = fetch_order(calls, gateway, id) => polled,
             _ = &mut interrupt => {
-                phases.finish(TaskOutcome::failed("interrupted"));
+                phases.finish(TaskOutcome::Stopped {
+                    message: "stopped waiting".to_owned(),
+                });
                 return interrupted(last);
             }
         };
@@ -759,7 +761,9 @@ pub async fn wait_for_order(
         select! {
             _ = sleep(options.poll_interval) => {}
             _ = &mut interrupt => {
-                phases.finish(TaskOutcome::failed("interrupted"));
+                phases.finish(TaskOutcome::Stopped {
+                    message: "stopped waiting".to_owned(),
+                });
                 return interrupted(last);
             }
         }

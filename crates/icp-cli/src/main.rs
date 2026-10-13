@@ -57,6 +57,27 @@ mod heading {
     pub const GLOBAL_PARAMETERS: &str = "Common Parameters";
 }
 
+/// A command stopped at the user's request, which it has already said: the
+/// process exits with `code` (130 for Ctrl-C, as a shell reports a command
+/// it interrupted) and prints nothing more.
+#[derive(Debug)]
+pub(crate) struct Stopped {
+    pub(crate) code: i32,
+}
+
+impl Stopped {
+    /// Ctrl-C, as a shell numbers it: 128 + SIGINT.
+    pub(crate) const INTERRUPTED: Stopped = Stopped { code: 130 };
+}
+
+impl std::fmt::Display for Stopped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "stopped (exit status {})", self.code)
+    }
+}
+
+impl std::error::Error for Stopped {}
+
 #[derive(Parser)]
 #[command(
     name = "icp",
@@ -216,6 +237,14 @@ async fn run() -> Result<(), Error> {
             "A newer version of icp-cli is available: {latest} (current: {current}). {suggestion}",
             current = icp_cli_version_str(),
         );
+    }
+
+    // A command that has already told the user why it stopped ends with its
+    // own exit status, and no `Error:` line restating it.
+    if let Err(error) = &result
+        && let Some(stopped) = error.downcast_ref::<Stopped>()
+    {
+        std::process::exit(stopped.code);
     }
 
     result?;

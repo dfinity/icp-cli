@@ -1,9 +1,10 @@
-use std::io::{IsTerminal, stderr, stdin, stdout};
+use std::io::{self, IsTerminal, stderr, stdin, stdout};
 
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
+use dialoguer::console::Term;
 use icp_app::context::{Context, NetworkSelection};
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
@@ -20,6 +21,7 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
+use crate::Stopped;
 use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
@@ -178,7 +180,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     // Whether the Payment Link was handed out: an order that is payable right
     // now. Anything else has nothing to pay, and `--no-wait` must still say
     // where it stands.
-    let (order, payable) = match &args.resume {
+    let (order, payable, interrupt) = match &args.resume {
         Some(id) => {
             let order = purchase::get_order(calls, &gateway, id)
                 .await?
@@ -195,16 +197,16 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             } else if output == Output::Human {
                 info!("Order {} is {}", order.id, order.status);
             }
-            (order, payable)
+            (order, payable, Interrupt::later())
         }
         None => {
             let target =
                 target.expect("clap requires --amount or --cycles unless --resume is given");
             let identity = identity_name(ctx, &selections.identity).await;
-            let (order, quote) =
+            let (order, quote, interrupt) =
                 create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
             announce_payable(&order, Some(&quote), output, args.no_open);
-            (order, true)
+            (order, true, interrupt)
         }
     };
 
@@ -223,7 +225,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
 
     let resume = resume(&order.id);
     wait_and_report(
-        calls, &agent, &gateway, buyer, order, output, ctx.debug, &resume,
+        calls, &agent, &gateway, buyer, order, interrupt, output, ctx.debug, &resume,
     )
     .await
 }
@@ -270,7 +272,8 @@ fn shell_word(value: &str) -> String {
     }
 }
 
-/// Quote, confirm, create. Returns the order with the quote it was placed on.
+/// Quote, confirm, create. Returns the order with the quote it was placed on,
+/// and what its wait is to stop on.
 async fn create_order(
     calls: &dyn CanisterCalls,
     gateway: &Gateway,
@@ -278,14 +281,14 @@ async fn create_order(
     identity: Option<&str>,
     target: Target,
     args: &BuyArgs,
-) -> Result<(OrderView, Quote), anyhow::Error> {
+) -> Result<(OrderView, Quote, Interrupt), anyhow::Error> {
     let quote = purchase::quote_target(calls, gateway, target).await?;
     // A script that said --yes reads the figures off --json; -q asks for
     // nothing but the link.
     let speak = !args.yes || !(args.quiet || args.json);
-    confirm(&quote, target, gateway, buyer, identity, args.yes, speak)?;
+    let interrupt = confirm(&quote, target, gateway, buyer, identity, args.yes, speak)?;
     match purchase::place_order(calls, gateway, quote.amount).await {
-        Ok(order) => Ok((order, quote)),
+        Ok(order) => Ok((order, quote, interrupt)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
             bail!("{}", refusal_message(&error))
         }
@@ -294,7 +297,7 @@ async fn create_order(
 }
 
 /// Show what is about to happen and ask. Without a terminal there is nobody
-/// to ask, so `--yes` is required.
+/// to ask, so `--yes` is required. Returns what the wait is to stop on.
 #[allow(clippy::too_many_arguments)]
 fn confirm(
     quote: &Quote,
@@ -304,9 +307,9 @@ fn confirm(
     identity: Option<&str>,
     yes: bool,
     speak: bool,
-) -> Result<(), anyhow::Error> {
+) -> Result<Interrupt, anyhow::Error> {
     if !speak {
-        return Ok(());
+        return Ok(Interrupt::later());
     }
     let identity = identity
         .map(|name| format!(" (identity '{name}')"))
@@ -331,7 +334,7 @@ fn confirm(
 
     if yes {
         info!("Proceeding without confirmation (--yes).");
-        return Ok(());
+        return Ok(Interrupt::later());
     }
     if !stdin().is_terminal() {
         bail!(
@@ -339,14 +342,111 @@ fn confirm(
              Use --yes to proceed."
         );
     }
+    let interrupt = Interrupt::catch_at_prompt()?;
     let confirmed = Confirm::new()
         .with_prompt("Create this order?")
         .default(false)
-        .interact()?;
-    if !confirmed {
-        bail!("Operation cancelled by user");
+        .interact();
+    match confirmed {
+        Ok(true) => Ok(interrupt),
+        Ok(false) => bail!("Operation cancelled by user"),
+        // Ctrl-C, read as an answer: the prompt leaves its cursor hidden
+        // and its line open.
+        Err(dialoguer::Error::IO(e)) if e.kind() == io::ErrorKind::Interrupted => {
+            let _ = Term::stderr().show_cursor();
+            eprintln!();
+            info!("No order created.");
+            Err(Stopped::INTERRUPTED.into())
+        }
+        Err(e) => Err(e.into()),
     }
-    Ok(())
+}
+
+/// Ctrl-C, or a stop signal, for the wait to stop on.
+///
+/// Catching Ctrl-C is what lets the prompt read it as an answer (left alone,
+/// it ends the process with the prompt's cursor hidden), and once caught it
+/// stays caught for the life of the process. So a prompt that catches it
+/// hands the same listener on to the wait, which then stops at once for a
+/// Ctrl-C pressed while the order was being made, rather than it being lost.
+struct Interrupt {
+    #[cfg(unix)]
+    sigint: Option<tokio::signal::unix::Signal>,
+}
+
+impl Interrupt {
+    /// Nothing caught yet: the wait catches its own.
+    fn later() -> Self {
+        Self {
+            #[cfg(unix)]
+            sigint: None,
+        }
+    }
+
+    /// Catch Ctrl-C from now on, for the prompt to read it. Only on Unix:
+    /// Windows hands a caught Ctrl-C to no reader, so the prompt there is
+    /// left as it is.
+    fn catch_at_prompt() -> io::Result<Self> {
+        Ok(Self {
+            #[cfg(unix)]
+            sigint: Some(tokio::signal::unix::signal(
+                tokio::signal::unix::SignalKind::interrupt(),
+            )?),
+        })
+    }
+
+    async fn received(self) {
+        #[cfg(unix)]
+        if let Some(mut sigint) = self.sigint {
+            tokio::select! {
+                _ = sigint.recv() => {}
+                _ = stop_signal() => {}
+            }
+            return;
+        }
+        stop_signal().await
+    }
+}
+
+/// While it lives, the terminal does not echo Ctrl-C as `^C`. The echo lands
+/// after the live view's line, and a line that fills the width wraps it onto
+/// a row the view does not know about, which then keeps a stale copy of the
+/// line when the view is cleared.
+struct QuietCtrlC {
+    #[cfg(unix)]
+    saved: Option<nix::sys::termios::Termios>,
+}
+
+impl QuietCtrlC {
+    fn new() -> Self {
+        #[cfg(unix)]
+        {
+            use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
+            let saved = tcgetattr(stderr())
+                .ok()
+                .filter(|termios| termios.local_flags.contains(LocalFlags::ECHOCTL));
+            let quieted = saved.as_ref().is_some_and(|saved| {
+                let mut quiet = saved.clone();
+                quiet.local_flags.remove(LocalFlags::ECHOCTL);
+                tcsetattr(stderr(), SetArg::TCSANOW, &quiet).is_ok()
+            });
+            Self {
+                saved: saved.filter(|_| quieted),
+            }
+        }
+        #[cfg(not(unix))]
+        Self {}
+    }
+}
+
+impl Drop for QuietCtrlC {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(saved) = &self.saved {
+            use nix::sys::termios::{SetArg, tcsetattr};
+            let _ = tcsetattr(stderr(), SetArg::TCSANOW, saved);
+        }
+    }
 }
 
 /// `10.00 USD -> about 6.818T cycles (9.41 USD after a 0.59 USD card fee, at 1.3520 USD per 1T cycles)`.
@@ -429,6 +529,7 @@ async fn wait_and_report(
     gateway: &Gateway,
     buyer: Principal,
     order: OrderView,
+    interrupt: Interrupt,
     output: Output,
     debug: bool,
     resume: &str,
@@ -442,7 +543,7 @@ async fn wait_and_report(
             &id,
             Some(order),
             &options,
-            stop_signal(),
+            interrupt.received(),
             reporter,
         )
         .await
@@ -450,7 +551,9 @@ async fn wait_and_report(
     // The live view is for a person; a script gets its answer on stdout.
     let result = match output {
         Output::Human => {
+            let quiet = stderr().is_terminal().then(QuietCtrlC::new);
             let result = rendered(debug, wait).await;
+            drop(quiet);
             // On a terminal the live view leaves its last line open (as it
             // does for `icp deploy`), so what follows would run on from it.
             if !debug && stderr().is_terminal() {
@@ -463,6 +566,7 @@ async fn wait_and_report(
 
     let order = match result {
         Ok(order) => order,
+        // Stopped, not failed: the order carries on without the command.
         Err(CyclesPurchaseError::Interrupted { order }) => {
             if output == Output::Human {
                 if order.status.is_paid() {
@@ -472,7 +576,7 @@ async fn wait_and_report(
                 }
                 info!("Keep waiting:  {resume}");
             }
-            bail!("interrupted while waiting for order {}", order.id);
+            return Err(Stopped::INTERRUPTED.into());
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
             if output == Output::Human {

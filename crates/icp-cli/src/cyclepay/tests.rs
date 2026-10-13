@@ -538,6 +538,7 @@ async fn wait(
                     TaskOutcome::Succeeded { .. } => Ok(()),
                     TaskOutcome::Failed { message, .. } => Err(message),
                     TaskOutcome::Skipped { reason } => Err(reason),
+                    TaskOutcome::Stopped { message } => Err(message),
                 });
             }
             other => panic!("unexpected event {other:?}"),
@@ -952,11 +953,12 @@ async fn wait_interrupt_lands_during_a_stalled_poll() {
     ));
     let mut completed = 0;
     while let Some(event) = events.recv().await {
+        // Stopped, not failed: the order carries on without the command.
         if let EventKind::TaskCompleted {
-            outcome: TaskOutcome::Failed { message, .. },
+            outcome: TaskOutcome::Stopped { message },
         } = event.kind
         {
-            assert_eq!(message, "interrupted");
+            assert_eq!(message, "stopped waiting");
             completed += 1;
         }
     }

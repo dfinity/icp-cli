@@ -12,7 +12,8 @@ use itertools::Itertools;
 use tracing::{debug, info};
 
 use super::style::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_STOPPED, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE,
+    TICK_STOPPED, TICK_SUCCESS, make_style,
 };
 use icp_project::operations::task::{Event, Widget};
 
@@ -244,6 +245,13 @@ impl InteractiveRenderer {
                     TaskOutcome::Skipped { reason } => {
                         if let Some(bar) = &view.bar {
                             bar.finish_with_message(format!("Skipped ({reason})"));
+                        }
+                    }
+                    // Stopped at the user's request: a warning, not a failure.
+                    TaskOutcome::Stopped { message } => {
+                        if let Some(bar) = &view.bar {
+                            bar.set_style(make_style(TICK_STOPPED, COLOR_STOPPED));
+                            bar.finish_with_message(message);
                         }
                     }
                 }

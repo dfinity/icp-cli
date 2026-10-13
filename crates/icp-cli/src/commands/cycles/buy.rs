@@ -1534,6 +1534,30 @@ mod tests {
         );
     }
 
+    /// A Ctrl-C caught at the prompt is kept until asked for, once; without
+    /// one, asking does not wait. SIGINT is raised at this test process,
+    /// whose handler the prompt's listener has just installed.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_ctrl_c_caught_at_the_prompt_is_kept_for_after_the_order() {
+        use nix::sys::signal::{Signal, raise};
+
+        assert!(!Interrupt::later().pressed());
+        let mut interrupt = Interrupt::catch_at_prompt().unwrap();
+        assert!(!interrupt.pressed());
+        raise(Signal::SIGINT).unwrap();
+        let mut pressed = false;
+        for _ in 0..100 {
+            if interrupt.pressed() {
+                pressed = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(pressed, "the Ctrl-C was not seen");
+        assert!(!interrupt.pressed(), "one Ctrl-C was seen twice");
+    }
+
     #[test]
     fn timestamps_and_ages_read_well() {
         assert_eq!(format_secs(1_700_000_000), "2023-11-14T22:13:20Z");

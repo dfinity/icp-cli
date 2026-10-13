@@ -10,6 +10,7 @@ air-gapped signing
 
 * feat: `icp deploy` and `icp canister create` take `--engine <name>` to target a cloud engine by name. The name is resolved to the engine's subnet through the engine canister, among the engines visible to the identity in use, and then behaves as `--subnet` would with that subnet; a subnet id passed as the engine is used as-is. `name/slug` or the engine's id picks one of several engines sharing a name.
 * fix: reject path-like network and environment names
+* fix: on a terminal that does not report its size, each phase heading of `icp deploy` (and any output following a progress view) ran on from the bar above it; the progress view now ends its last line before anything is printed after it
 
 # v1.6.0
 

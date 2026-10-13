@@ -22,8 +22,34 @@ use super::{INDENT, RollingLines, TaskLog, dump_failures};
 const LIVE_WINDOW_LINES: usize = 4;
 
 pub(crate) struct InteractiveRenderer {
+    screen: Box<dyn Screen>,
     multi_progress: MultiProgress,
     tasks: BTreeMap<TaskId, TaskView>,
+    /// Whether the live view holds bars it has drawn. On a terminal indicatif
+    /// leaves the cursor at the end of the last one, so whatever is printed
+    /// once the view is let go of would run on from it.
+    drawn: bool,
+}
+
+/// Where the live view is drawn, and its last line ended.
+trait Screen: Send {
+    /// A fresh live view.
+    fn view(&self) -> MultiProgress;
+    /// End the line a view left the cursor on.
+    fn end_line(&self);
+}
+
+/// The process's stderr, where nothing is drawn unless it is a terminal.
+struct Stderr;
+
+impl Screen for Stderr {
+    fn view(&self) -> MultiProgress {
+        MultiProgress::new()
+    }
+
+    fn end_line(&self) {
+        eprintln!();
+    }
 }
 
 struct TaskView {
@@ -44,9 +70,15 @@ struct TaskView {
 
 impl InteractiveRenderer {
     pub(crate) fn new() -> Self {
+        Self::on(Box::new(Stderr))
+    }
+
+    fn on(screen: Box<dyn Screen>) -> Self {
         Self {
-            multi_progress: MultiProgress::new(),
+            multi_progress: screen.view(),
+            screen,
             tasks: BTreeMap::new(),
+            drawn: false,
         }
     }
 
@@ -75,7 +107,7 @@ impl InteractiveRenderer {
     fn heading(&mut self, depth: usize, title: &str) {
         let line = format!("{}{title}", INDENT.repeat(depth));
         if depth == 0 {
-            self.multi_progress = MultiProgress::new();
+            self.release();
             info!("{line}");
         } else {
             self.multi_progress.suspend(|| info!("{line}"));
@@ -122,6 +154,7 @@ impl InteractiveRenderer {
                         Some(bar)
                     }
                 };
+                self.drawn |= bar.is_some();
 
                 self.tasks.insert(
                     event.task_id,
@@ -251,9 +284,21 @@ impl InteractiveRenderer {
         }
     }
 
+    /// Let go of the live view. Its last frame stays on the terminal as
+    /// scrollback, and its last line is ended, so that what is printed next
+    /// starts on a line of its own.
+    fn release(&mut self) {
+        if self.drawn && !self.multi_progress.is_hidden() {
+            self.screen.end_line();
+        }
+        self.drawn = false;
+        self.multi_progress = self.screen.view();
+    }
+
     /// Replay the captured output of failed tasks. Only the failing step is
     /// shown; `--debug` runs use the plain renderer, which dumps every step.
-    pub(crate) fn flush(self) {
+    pub(crate) fn flush(mut self) {
+        self.release();
         let logs = self
             .tasks
             .into_iter()
@@ -269,4 +314,130 @@ fn transfer_style() -> ProgressStyle {
         .template("{prefix} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
         .expect("invalid progress bar template")
         .progress_chars("#>-")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::sync::{Arc, Mutex};
+
+    use icp_project::operations::task::Task;
+    use indicatif::{ProgressDrawTarget, TermLike};
+
+    use super::*;
+
+    /// A terminal that keeps what is written to it, cursor movements and
+    /// all, or that is hidden, as stderr is when piped.
+    #[derive(Clone, Debug, Default)]
+    struct Recorded {
+        written: Arc<Mutex<String>>,
+        hidden: bool,
+    }
+
+    impl Recorded {
+        fn written(&self) -> String {
+            self.written.lock().unwrap().clone()
+        }
+
+        fn write(&self, s: &str) -> io::Result<()> {
+            self.written.lock().unwrap().push_str(s);
+            Ok(())
+        }
+    }
+
+    impl TermLike for Recorded {
+        fn width(&self) -> u16 {
+            80
+        }
+        fn move_cursor_up(&self, n: usize) -> io::Result<()> {
+            self.write(&format!("<up {n}>"))
+        }
+        fn move_cursor_down(&self, n: usize) -> io::Result<()> {
+            self.write(&format!("<down {n}>"))
+        }
+        fn move_cursor_right(&self, n: usize) -> io::Result<()> {
+            self.write(&format!("<right {n}>"))
+        }
+        fn move_cursor_left(&self, n: usize) -> io::Result<()> {
+            self.write(&format!("<left {n}>"))
+        }
+        fn write_line(&self, s: &str) -> io::Result<()> {
+            self.write(&format!("{s}\n"))
+        }
+        fn write_str(&self, s: &str) -> io::Result<()> {
+            self.write(s)
+        }
+        fn clear_line(&self) -> io::Result<()> {
+            self.write("<clear>")
+        }
+        fn flush(&self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Screen for Recorded {
+        fn view(&self) -> MultiProgress {
+            MultiProgress::with_draw_target(if self.hidden {
+                ProgressDrawTarget::hidden()
+            } else {
+                ProgressDrawTarget::term_like(Box::new(self.clone()))
+            })
+        }
+
+        fn end_line(&self) {
+            self.write("\n").unwrap();
+        }
+    }
+
+    /// Feed a renderer the events of a build that succeeds, then a phase
+    /// heading.
+    fn build_then_heading(renderer: &mut InteractiveRenderer) {
+        let (reporter, mut events) = icp_events::channel();
+        reporter
+            .task(Task::build("probe"))
+            .finish(TaskOutcome::succeeded());
+        while let Ok(event) = events.try_recv() {
+            renderer.handle(event);
+        }
+        let _heading = reporter.task(Task::phase("Creating canisters:"));
+        while let Ok(event) = events.try_recv() {
+            renderer.handle(event);
+        }
+    }
+
+    /// Indicatif leaves the cursor at the end of the last bar it drew; the
+    /// renderer ends that line when it lets go of the view, at a top-level
+    /// heading and at the end of the stream, so what follows starts on a
+    /// line of its own. Once, and only where a bar was drawn.
+    #[test]
+    fn letting_go_of_a_drawn_view_ends_its_last_line() {
+        let screen = Recorded::default();
+        let mut renderer = InteractiveRenderer::on(Box::new(screen.clone()));
+        build_then_heading(&mut renderer);
+        let written = screen.written();
+        assert!(written.contains("Built successfully"), "{written:?}");
+        // The last frame ends on the bar itself; the line is ended after it,
+        // once.
+        assert!(written.ends_with('\n'), "{written:?}");
+        assert_eq!(written.matches('\n').count(), 1, "{written:?}");
+
+        // The heading's view has drawn nothing, so the end of the stream
+        // ends no line.
+        renderer.flush();
+        assert_eq!(screen.written(), written);
+    }
+
+    /// Piped, no bar is drawn, so no line is ended: the output stays as it
+    /// was.
+    #[test]
+    fn a_hidden_view_ends_no_line() {
+        let screen = Recorded {
+            hidden: true,
+            ..Recorded::default()
+        };
+        let mut renderer = InteractiveRenderer::on(Box::new(screen.clone()));
+        build_then_heading(&mut renderer);
+        renderer.flush();
+        assert_eq!(screen.written(), "");
+    }
 }

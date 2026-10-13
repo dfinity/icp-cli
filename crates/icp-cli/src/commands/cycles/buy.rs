@@ -23,7 +23,8 @@ use tracing::{info, warn};
 use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    ORDER_TTL_SECS, OrderError, OrderErrorKind, cycles_gateway_canister_id, payment_link_url,
+    CYCLES_GATEWAY_CID, ORDER_TTL_SECS, OrderError, OrderErrorKind, cycles_gateway_canister_id,
+    payment_link_url,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -138,12 +139,14 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         bail!("cycles cannot be bought as the anonymous identity; choose one with --identity");
     }
 
+    let canister = match args.gateway {
+        Some(gateway) => gateway,
+        None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
+    };
     let gateway = Gateway {
-        canister: match args.gateway {
-            Some(gateway) => gateway,
-            None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
-        },
-        payment_link: payment_link_url().map_err(|message| anyhow!(message))?,
+        canister,
+        payment_link: payment_link_url(canister.to_text() == CYCLES_GATEWAY_CID)
+            .map_err(|message| anyhow!(message))?,
     };
 
     let agent = ctx

@@ -93,32 +93,58 @@ fn resolve_cycles_gateway_canister_id(env: Result<String, VarError>) -> Result<P
     }
 }
 
-/// Resolve the Payment Link orders are paid on.
+/// The host every Stripe Payment Link is served from, test-mode ones
+/// included.
+pub const PAYMENT_LINK_HOST: &str = "buy.stripe.com";
+
+/// Resolve the Payment Link orders are paid on, for the gateway at hand.
 ///
-/// [`PAYMENT_LINK_URL_ENV`] when set and non-empty, otherwise
-/// [`PAYMENT_LINK_URL`]. An override must be an `https` URL: a card is typed
-/// on this page, and a configured-but-invalid value must never fall back to
-/// the built-in link, which belongs to the built-in gateway.
-pub fn payment_link_url() -> Result<Url, String> {
-    resolve_payment_link_url(env::var(PAYMENT_LINK_URL_ENV))
+/// [`PAYMENT_LINK_URL_ENV`] when set and non-empty; otherwise
+/// [`PAYMENT_LINK_URL`] for CyclePay's own gateway (`cyclepay`), and an
+/// error for any other, since a payment on CyclePay's link goes to CyclePay,
+/// which would refund it as an order it does not have.
+///
+/// A card is typed on this page, so an override must be a Payment Link and
+/// nothing else: `https://buy.stripe.com/<link>`, with no credentials, port,
+/// query or fragment, so that what is checked here is what the browser opens
+/// once the order's reference and amount are added. A configured-but-invalid
+/// value must never fall back to the built-in link.
+pub fn payment_link_url(cyclepay: bool) -> Result<Url, String> {
+    resolve_payment_link_url(env::var(PAYMENT_LINK_URL_ENV), cyclepay)
 }
 
-fn resolve_payment_link_url(env: Result<String, VarError>) -> Result<Url, String> {
+fn resolve_payment_link_url(env: Result<String, VarError>, cyclepay: bool) -> Result<Url, String> {
     match env {
         Ok(value) if !value.trim().is_empty() => {
-            let url = Url::parse(value.trim())
-                .map_err(|e| format!("invalid {PAYMENT_LINK_URL_ENV}: {e}"))?;
+            let invalid = |why: &str| format!("invalid {PAYMENT_LINK_URL_ENV}: {why}");
+            let url = Url::parse(value.trim()).map_err(|e| invalid(&e.to_string()))?;
             if url.scheme() != "https" {
-                return Err(format!("invalid {PAYMENT_LINK_URL_ENV}: not an https URL"));
+                return Err(invalid("not an https URL"));
+            }
+            let is_payment_link = url.host_str() == Some(PAYMENT_LINK_HOST)
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path().len() > 1;
+            if !is_payment_link {
+                return Err(invalid(&format!(
+                    "not a Stripe Payment Link (https://{PAYMENT_LINK_HOST}/<link>)"
+                )));
             }
             Ok(url)
         }
         Err(VarError::NotUnicode(_)) => {
             Err(format!("invalid {PAYMENT_LINK_URL_ENV}: not valid Unicode"))
         }
-        Ok(_) | Err(VarError::NotPresent) => {
+        Ok(_) | Err(VarError::NotPresent) if cyclepay => {
             Ok(Url::parse(PAYMENT_LINK_URL).expect("PAYMENT_LINK_URL is a valid URL"))
         }
+        Ok(_) | Err(VarError::NotPresent) => Err(format!(
+            "the gateway is not CyclePay's, so its orders are not paid on CyclePay's Payment \
+             Link; set {PAYMENT_LINK_URL_ENV} to the one they are paid on"
+        )),
     }
 }
 
@@ -345,22 +371,50 @@ mod tests {
     #[test]
     fn payment_link_defaults_and_overrides() {
         assert_eq!(
-            resolve_payment_link_url(Err(VarError::NotPresent))
+            resolve_payment_link_url(Err(VarError::NotPresent), true)
                 .unwrap()
                 .as_str(),
             PAYMENT_LINK_URL
         );
-        assert_eq!(
-            resolve_payment_link_url(Ok(" https://buy.stripe.test/abc ".to_string()))
+        for cyclepay in [true, false] {
+            assert_eq!(
+                resolve_payment_link_url(
+                    Ok(" https://buy.stripe.com/test_abc ".to_string()),
+                    cyclepay
+                )
                 .unwrap()
                 .as_str(),
-            "https://buy.stripe.test/abc"
-        );
-        let err =
-            resolve_payment_link_url(Ok("http://buy.stripe.test/abc".to_string())).unwrap_err();
-        assert!(err.contains("https"), "{err}");
-        let err = resolve_payment_link_url(Ok("not a url".to_string())).unwrap_err();
+                "https://buy.stripe.com/test_abc"
+            );
+        }
+        // Another gateway has no default: CyclePay's link pays CyclePay.
+        let err = resolve_payment_link_url(Err(VarError::NotPresent), false).unwrap_err();
         assert!(err.contains(PAYMENT_LINK_URL_ENV), "{err}");
+        let err = resolve_payment_link_url(Ok("http://buy.stripe.com/abc".to_string()), true)
+            .unwrap_err();
+        assert!(err.contains("https"), "{err}");
+        let err = resolve_payment_link_url(Ok("not a url".to_string()), true).unwrap_err();
+        assert!(err.contains(PAYMENT_LINK_URL_ENV), "{err}");
+    }
+
+    /// Only a Payment Link is a page to send a card to, checked as the
+    /// browser will read it: the host after any credentials, and no query of
+    /// its own to sit beside, or ahead of, the order's reference.
+    #[test]
+    fn a_payment_link_override_is_a_payment_link() {
+        for bad in [
+            "https://evil.example/pay",
+            "https://buy.stripe.com@evil.example/abc",
+            "https://user:pass@buy.stripe.com/abc",
+            "https://buy.stripe.com.evil.example/abc",
+            "https://buy.stripe.com:8443/abc",
+            "https://buy.stripe.com/abc?client_reference_id=o_someone-else",
+            "https://buy.stripe.com/abc#x",
+            "https://buy.stripe.com/",
+        ] {
+            let err = resolve_payment_link_url(Ok(bad.to_string()), true).unwrap_err();
+            assert!(err.contains("not a Stripe Payment Link"), "{bad}: {err}");
+        }
     }
 
     #[test]

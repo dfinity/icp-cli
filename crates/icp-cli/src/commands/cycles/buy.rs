@@ -1408,19 +1408,22 @@ mod tests {
         assert_eq!(shell_word("a=b"), "a=b");
     }
 
-    /// Off a terminal, a wait says when each phase begins and keeps saying
-    /// that it goes on, in the order things happen, until it ends.
-    #[tokio::test]
+    /// Off a terminal, a wait says when each phase begins and, every
+    /// minute, that it goes on, until it ends. On a paused clock: 150 s
+    /// awaiting payment, then 130 s delivering, so no beat falls on a change.
+    #[tokio::test(start_paused = true)]
     async fn a_wait_with_nothing_drawn_keeps_saying_it_goes_on() {
         let said = std::sync::Mutex::new(Vec::new());
-        let period = Duration::from_millis(20);
         let ended = with_heartbeat(
-            period,
+            HEARTBEAT,
             |line| said.lock().unwrap().push(line),
             async |reporter: &Reporter| {
-                for phase in [PurchasePhase::AwaitingPayment, PurchasePhase::Delivering] {
+                for (phase, secs) in [
+                    (PurchasePhase::AwaitingPayment, 150),
+                    (PurchasePhase::Delivering, 130),
+                ] {
                     let task = reporter.task(Task::cycles_purchase("co-1", phase));
-                    tokio::time::sleep(period * 5).await;
+                    tokio::time::sleep(Duration::from_secs(secs)).await;
                     task.finish(TaskOutcome::succeeded());
                 }
                 "delivered"
@@ -1428,19 +1431,17 @@ mod tests {
         )
         .await;
         assert_eq!(ended, "delivered");
-        let said = said.into_inner().unwrap();
-        let first = |text: &str| {
-            said.iter()
-                .position(|line| line.contains(text))
-                .unwrap_or_else(|| panic!("no {text:?} in {said:?}"))
-        };
-        assert_eq!(said[0], "[order co-1] Waiting for payment...");
-        let delivering = first("[order co-1] Payment received; delivering cycles...");
-        assert!(
-            first("Still waiting for payment (") < delivering,
-            "{said:?}"
+        assert_eq!(
+            said.into_inner().unwrap(),
+            [
+                "[order co-1] Waiting for payment...",
+                "[order co-1] Still waiting for payment (1 minute so far)",
+                "[order co-1] Still waiting for payment (2 minutes so far)",
+                "[order co-1] Payment received; delivering cycles...",
+                "[order co-1] Payment received; still delivering cycles (3 minutes so far)",
+                "[order co-1] Payment received; still delivering cycles (4 minutes so far)",
+            ]
         );
-        assert!(first("still delivering cycles (") > delivering, "{said:?}");
     }
 
     /// A delivery is told against the place the order says, whichever it is.

@@ -93,6 +93,7 @@ serial_test.workspace = true
 sha2.workspace = true
 tar.workspace = true
 test-tag.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 uuid.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]

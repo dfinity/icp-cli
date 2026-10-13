@@ -585,8 +585,15 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
         }
         Output::Quiet => println!("{url}"),
         Output::Human => {
+            // The link goes to stdout. Only when both are on the terminal does
+            // it follow this line where a colon can introduce it.
+            let leads = if stdout().is_terminal() && stderr().is_terminal() {
+                ":"
+            } else {
+                "."
+            };
             info!(
-                "Order {} is payable{}:",
+                "Order {} is payable{}{leads}",
                 order.id,
                 payable_for(order, now_secs())
             );

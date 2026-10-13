@@ -540,9 +540,10 @@ async fn wait_and_report(
              `{resume}` later to see the outcome",
             order.id
         ),
-        OrderStatus::AwaitingPayment | OrderStatus::PaymentPending | OrderStatus::Processing => {
-            bail!("order {} is still {}", order.id, order.status)
-        }
+        OrderStatus::AwaitingPayment
+        | OrderStatus::PaymentPending
+        | OrderStatus::Processing
+        | OrderStatus::Unknown => bail!("order {} is still {}", order.id, order.status),
     }
 }
 

@@ -297,7 +297,10 @@ pub enum CardOrderStatus {
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct OrderStatusView {
     pub order_id: String,
-    pub status: CardOrderStatus,
+    /// Optional on this side only: a state added to the backend after this
+    /// CLI was built reads as `None` (Candid's opt rule) rather than failing
+    /// every reply, so CyclePay can add one without breaking shipped CLIs.
+    pub status: Option<CardOrderStatus>,
     /// What the order asked for, in US cents.
     pub amount_usd_cents: u64,
     /// What the payment funds after the card fee, in US cents: the order's
@@ -495,9 +498,43 @@ mod tests {
         }))
         .unwrap();
         let view = Decode!(&bytes, Option<OrderStatusView>).unwrap().unwrap();
-        assert_eq!(view.status, CardOrderStatus::Delivered);
+        assert_eq!(view.status, Some(CardOrderStatus::Delivered));
         assert_eq!(view.cycles_delivered, Some(17_730_000_000_000));
         assert_eq!(view.paid_usd_cents, Some(2500));
+
+        // A state the backend adds later reads as no status, not as a reply
+        // that cannot be decoded.
+        #[derive(CandidType)]
+        enum FutureStatus {
+            Disputed,
+        }
+        #[derive(CandidType)]
+        struct FutureView {
+            status: FutureStatus,
+            order_id: String,
+            amount_usd_cents: u64,
+            net_usd_cents: u64,
+            paid_usd_cents: Option<u64>,
+            cycles_delivered: Option<u64>,
+            amount_refunded_usd_cents: u64,
+            detail: Option<String>,
+            expires_at: Option<u64>,
+        }
+        let bytes = Encode!(&Some(FutureView {
+            status: FutureStatus::Disputed,
+            order_id: "co-1".into(),
+            amount_usd_cents: 2500,
+            net_usd_cents: 2398,
+            paid_usd_cents: Some(2500),
+            cycles_delivered: None,
+            amount_refunded_usd_cents: 0,
+            detail: None,
+            expires_at: None,
+        }))
+        .unwrap();
+        let view = Decode!(&bytes, Option<OrderStatusView>).unwrap().unwrap();
+        assert_eq!(view.status, None);
+        assert_eq!(view.order_id, "co-1");
 
         #[derive(CandidType)]
         enum WireSource {

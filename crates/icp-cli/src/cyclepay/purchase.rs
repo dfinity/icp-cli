@@ -206,6 +206,9 @@ pub enum OrderStatus {
     RefundOwed,
     /// Unpaid past its deadline.
     Expired,
+    /// A state the backend reports that this CLI does not know. Not an end:
+    /// the wait goes on.
+    Unknown,
 }
 
 impl OrderStatus {
@@ -214,13 +217,13 @@ impl OrderStatus {
     pub fn is_terminal(self) -> bool {
         !matches!(
             self,
-            Self::AwaitingPayment | Self::PaymentPending | Self::Processing
+            Self::AwaitingPayment | Self::PaymentPending | Self::Processing | Self::Unknown
         )
     }
 
     /// Whether a payment has been made.
     pub fn is_paid(self) -> bool {
-        !matches!(self, Self::AwaitingPayment | Self::Expired)
+        !matches!(self, Self::AwaitingPayment | Self::Expired | Self::Unknown)
     }
 
     /// The status for output meant to be parsed, e.g. `refund_owed`.
@@ -236,6 +239,7 @@ impl OrderStatus {
             Self::Refunded => "refunded",
             Self::RefundOwed => "refund_owed",
             Self::Expired => "expired",
+            Self::Unknown => "unknown",
         }
     }
 }
@@ -252,6 +256,7 @@ impl fmt::Display for OrderStatus {
             Self::Refunded => "refunded",
             Self::RefundOwed => "owed a refund",
             Self::Expired => "expired",
+            Self::Unknown => "in a state this version of icp does not know",
         })
     }
 }
@@ -321,7 +326,7 @@ impl OrderView {
     /// carries is not in it, but it is a function of the order id, so the
     /// page to pay on is rebuilt for an order still awaiting payment.
     fn read(view: OrderStatusView, gateway: &Gateway) -> Self {
-        let status = OrderStatus::from(view.status);
+        let status = view.status.map_or(OrderStatus::Unknown, OrderStatus::from);
         let checkout_url = (status == OrderStatus::AwaitingPayment).then(|| {
             checkout_url(
                 &gateway.payment_link,
@@ -568,8 +573,12 @@ impl Phases<'_> {
         }
     }
 
-    /// Move to the phase `status` is in, finishing the one before it.
+    /// Move to the phase `status` is in, finishing the one before it. A
+    /// state this CLI cannot place leaves the phase as it is.
     fn enter(&mut self, status: OrderStatus) {
+        if status == OrderStatus::Unknown && self.current.is_some() {
+            return;
+        }
         let phase = Self::of(status);
         if self.current.as_ref().is_some_and(|(p, _)| *p == phase) {
             return;
@@ -695,6 +704,14 @@ pub async fn wait_for_order(
                     let order = order.expired();
                     phases.finish(TaskOutcome::failed(format!("order {}", order.status)));
                     return Ok(order);
+                }
+                // The backend forgets an order only once it expires, so a
+                // null before then is a replica that has not caught up with
+                // it (a poll right after `create_order` can reach one): tried
+                // again, as an unanswered poll is.
+                Some(order) if transient_streak < options.max_consecutive_transient => {
+                    transient_streak += 1;
+                    last = Some(order);
                 }
                 _ => {
                     phases.finish(TaskOutcome::failed("order not found"));

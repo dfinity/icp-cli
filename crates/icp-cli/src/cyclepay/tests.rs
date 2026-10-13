@@ -72,7 +72,7 @@ fn view(id: &str, status: CardOrderStatus) -> OrderStatusView {
     let paid = !matches!(status, CardOrderStatus::AwaitingPayment);
     OrderStatusView {
         order_id: id.to_owned(),
-        status,
+        status: Some(status),
         amount_usd_cents: 2500,
         net_usd_cents: 2398,
         paid_usd_cents: paid.then_some(2500),
@@ -729,16 +729,57 @@ async fn wait_not_found_before_the_deadline_is_order_not_found() {
         vec![failed(PurchasePhase::AwaitingPayment, "order not found")]
     );
 
-    // Known and payable, then gone: not an expiry, so not the caller's.
+    // Known and payable, then gone for longer than a replica lags: not an
+    // expiry, so not the caller's.
     let fake = FakeBackend::default().polls(vec![
         Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
         Ok(None),
+        Ok(None),
+        Ok(None),
     ]);
-    let (result, _) = wait(&fake, None, &fast()).await;
+    let options = WaitOptions {
+        max_consecutive_transient: 2,
+        ..fast()
+    };
+    let (result, _) = wait(&fake, None, &options).await;
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::OrderNotFound { .. }
     ));
+}
+
+/// Right after `create_order` a poll can reach a replica that has not seen
+/// the order yet; the wait goes on rather than calling the order not found.
+#[tokio::test]
+async fn wait_takes_a_known_orders_null_for_a_replica_behind() {
+    let fake = FakeBackend::default().polls(vec![
+        Ok(None),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let initial = initial(CardOrderStatus::AwaitingPayment).await;
+    let (result, _) = wait(&fake, Some(initial), &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+}
+
+/// A state CyclePay adds after this CLI was built does not stop the wait.
+#[tokio::test]
+async fn wait_goes_on_through_a_state_it_does_not_know() {
+    let mut unknown = view("co-1", CardOrderStatus::Processing);
+    unknown.status = None;
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::Processing))),
+        Ok(Some(unknown)),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, phases) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(
+        phases,
+        vec![
+            succeeded(PurchasePhase::AwaitingPayment),
+            succeeded(PurchasePhase::Delivering),
+        ]
+    );
 }
 
 fn past_deadline() -> OrderStatusView {

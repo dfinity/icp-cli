@@ -510,15 +510,14 @@ impl Presentation for CyclesPurchaseTask {
 
     fn widget(&self) -> Widget {
         Widget::Indeterminate {
-            label: format!("order {}", self.order_id),
+            label: format!("order {}", order_number(&self.order_id)),
         }
     }
 
     fn running_message(&self) -> Option<&'static str> {
         Some(match self.phase {
-            // With its `[order <id>] ✷ ` label this is 63 columns plus the
-            // order id, so within 80 for ids up to 17 characters: CyclePay's
-            // `co-<n>-<8 hex>` up to order 99999.
+            // With its `[order co-<n>] ✷ ` label this is 66 columns plus the
+            // digits of the order's number, so within 80 up to 14 of them.
             PurchasePhase::AwaitingPayment => {
                 "Waiting for payment; Ctrl-C leaves the order payable"
             }
@@ -538,6 +537,18 @@ impl Presentation for CyclesPurchaseTask {
 
     fn failure_message(&self, message: &str) -> Option<String> {
         Some(message.to_owned())
+    }
+}
+
+/// `co-1234` for CyclePay's `co-1234-<32 hex>`: the order's number, which
+/// no other order shares, without the random part, which only paying the
+/// order needs. It keeps the live line within 80 columns whatever the id's
+/// length; the whole id is printed with the link and in the command that
+/// resumes the order. An id of any other shape is shown whole.
+fn order_number(order_id: &str) -> &str {
+    match order_id.match_indices('-').nth(1) {
+        Some((at, _)) => &order_id[..at],
+        None => order_id,
     }
 }
 
@@ -666,6 +677,40 @@ impl Task {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CyclePay's ids are `co-<n>-<32 hex>`, 37 to 41 characters today: the
+    /// live line names the order by its number, and fits 80 columns.
+    #[test]
+    fn a_purchase_is_labelled_by_its_order_number() {
+        let label = |id: &str| match Task::cycles_purchase(id, PurchasePhase::AwaitingPayment)
+            .presentation()
+            .widget()
+        {
+            Widget::Indeterminate { label } => label,
+            _ => panic!("a purchase is an indeterminate task"),
+        };
+        let id = "co-1234-0123456789abcdef0123456789abcdef";
+        assert_eq!(label(id), "order co-1234");
+        assert_eq!(label("co-6-5e64b574"), "order co-6");
+        assert_eq!(label("o1"), "order o1");
+
+        let task = Task::cycles_purchase(id, PurchasePhase::AwaitingPayment);
+        let line = format!(
+            "[{}] ✷ {}",
+            label(id),
+            task.presentation().running_message().unwrap()
+        );
+        assert!(
+            line.chars().count() <= 80,
+            "{} columns: {line}",
+            line.chars().count()
+        );
+        // The event still carries the whole id.
+        assert_eq!(
+            serde_json::to_value(&task).unwrap()["order_id"],
+            serde_json::json!(id)
+        );
+    }
 
     #[test]
     fn cycles_purchase_wire_format_is_stable() {

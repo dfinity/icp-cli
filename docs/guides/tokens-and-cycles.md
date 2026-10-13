@@ -126,29 +126,31 @@ icp cycles buy --amount 10 -n ic
 icp cycles buy --cycles 5t -n ic
 ```
 
-The command quotes what the amount buys at CyclePay's current rate, shows who is paying and which canister the order goes to, and asks you to confirm:
+The command quotes what the amount buys at CyclePay's current rate, shows who is paying and which backend canister takes the order, and asks you to confirm:
 
 ```
-Buyer:    rv4ez-fgjbj-...-vae (identity 'default')
-Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay backend canister)
-Quote:    10.00 USD -> about 6.959T cycles (9.41 USD after a 0.59 USD card fee, at 1.3520 USD per 1T cycles)
-Create this order? [y/N]
+Identity: default
+Buyer:    7k7px-dcypq-wulnh-byzgd-6sib2-udn6c-lfo6e-6oujd-veifp-62woo-5ae
+Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
+Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
+Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
+Create this order? Nothing is charged until you pay on Stripe. [y/N]
 ```
 
-It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order.
+It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser when run from a terminal, but not over SSH or on CI), and waits until the cycles land on your identity's own cycles-ledger account. The QR code is drawn in black and white whatever your terminal's theme; with `NO_COLOR` set it is drawn in the terminal's own colours, light on dark, which scans best on a dark theme. The link is always printed above it. Off a terminal, as when an agent runs it, the wait is told in lines instead: when it begins, every minute that it goes on, and the command that picks it up again if it is stopped. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order.
 
 The quote is an estimate. CyclePay takes Stripe's card fee of 2.9% plus 0.30 USD from the amount, and mints cycles for the rest at its XDR/USD rate when the payment lands, so the cycles delivered can differ slightly from the figure quoted. The exact figure is reported once they arrive. With `--cycles`, the command pays the smallest amount, to the cent, that buys at least that many cycles at the rate quoted; if that is less than the minimum order, it pays the minimum and you get the more.
 
 Useful flags:
 
-- `--no-open` prints the Payment Link without opening a browser, for SSH sessions and containers. You can pay from any device.
+- `--no-open` prints the Payment Link without opening a browser. You can pay from any device.
 - `--no-wait` returns right after printing the link. `--resume <order-id>` waits on an order later, and prints its link again while it is still payable. An unpaid order expires 25 hours after it was made; running the same command again within an hour returns the same open order rather than making another.
 - `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created (with the amount, net and fee) and one when it settles; `-q` prints only the link, then the final status.
-- `--gateway <canister-id>` buys through another CyclePay backend canister. The `ICP_CYCLES_GATEWAY_CANISTER_ID` environment variable does the same, and `ICP_CYCLES_PAYMENT_LINK_URL` sets the Payment Link that goes with it.
+- `--gateway <canister-id>` buys through another CyclePay backend canister. The [`ICP_CYCLES_GATEWAY_CANISTER_ID`](../reference/environment-variables.md#icp_cycles_gateway_canister_id) environment variable does the same, and [`ICP_CYCLES_PAYMENT_LINK_URL`](../reference/environment-variables.md#icp_cycles_payment_link_url) sets the Payment Link that goes with it, which another gateway needs.
 
-Pressing Ctrl-C while waiting leaves the order payable; the command prints how to resume it. If the cycles cannot be delivered, CyclePay refunds the card and the command says so. If the order ends up needing review, your card was charged and a CyclePay operator resolves delivery; keep the order id.
+Pressing Ctrl-C while waiting stops the wait, not the order: an unpaid order stays payable, and the command prints how to keep waiting on it and exits with status 1. Ctrl-C at the confirmation prompt creates no order. While it waits on a terminal, the command turns off the echo of what you type and turns it back on when it ends; if it is killed outright (`kill -9`), `stty sane` restores the terminal. If the cycles cannot be delivered, CyclePay refunds the card (by hand, when the order ends owed a refund) and the command says so; a payment made after an order expired is refunded the same way. If the order ends up needing review, your card was charged and CyclePay checks the order by hand; a disputed payment is settled by the dispute. Keep the order id, as `--resume` later shows the outcome.
 
-The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from. Purchases made from the terminal appear under "My purchases" on cyclepay.org when the identity is the one you sign in there with: `icp identity link web cyclepay --app 4w3yu-fyaaa-aaaac-beeoa-cai.icp0.io` makes one.
+The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from. Purchases made from the terminal appear under "My purchases" on www.cyclepay.org when the identity is the one you sign in there with: `icp identity link web cyclepay --app 4w3yu-fyaaa-aaaac-beeoa-cai.icp0.io` makes one.
 
 ## Transferring ICP Tokens
 

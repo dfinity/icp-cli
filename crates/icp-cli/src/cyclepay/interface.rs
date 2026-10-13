@@ -62,11 +62,6 @@ pub const MIN_ORDER_USD_CENTS: u64 = 100;
 /// `max_order_usd_cents`, likewise.
 pub const MAX_ORDER_USD_CENTS: u64 = 20_000;
 
-/// How long an unpaid order stays payable, in seconds: the backend's
-/// `ORDER_TTL_SECS`. `CreatedOrder::expires_at` is authoritative; this is
-/// only for prose.
-pub const ORDER_TTL_SECS: u64 = 25 * 3_600;
-
 /// Resolve the cycles gateway canister id to talk to.
 ///
 /// Uses the value of the [`CYCLES_GATEWAY_CANISTER_ID_ENV`] variable when set
@@ -93,32 +88,58 @@ fn resolve_cycles_gateway_canister_id(env: Result<String, VarError>) -> Result<P
     }
 }
 
-/// Resolve the Payment Link orders are paid on.
+/// The host every Stripe Payment Link is served from, test-mode ones
+/// included.
+pub const PAYMENT_LINK_HOST: &str = "buy.stripe.com";
+
+/// Resolve the Payment Link orders are paid on, for the gateway at hand.
 ///
-/// [`PAYMENT_LINK_URL_ENV`] when set and non-empty, otherwise
-/// [`PAYMENT_LINK_URL`]. An override must be an `https` URL: a card is typed
-/// on this page, and a configured-but-invalid value must never fall back to
-/// the built-in link, which belongs to the built-in gateway.
-pub fn payment_link_url() -> Result<Url, String> {
-    resolve_payment_link_url(env::var(PAYMENT_LINK_URL_ENV))
+/// [`PAYMENT_LINK_URL_ENV`] when set and non-empty; otherwise
+/// [`PAYMENT_LINK_URL`] for CyclePay's own gateway (`cyclepay`), and an
+/// error for any other, since a payment on CyclePay's link goes to CyclePay,
+/// which would refund it as an order it does not have.
+///
+/// A card is typed on this page, so an override must be a Payment Link and
+/// nothing else: `https://buy.stripe.com/<link>`, with no credentials, port,
+/// query or fragment, so that what is checked here is what the browser opens
+/// once the order's reference and amount are added. A configured-but-invalid
+/// value must never fall back to the built-in link.
+pub fn payment_link_url(cyclepay: bool) -> Result<Url, String> {
+    resolve_payment_link_url(env::var(PAYMENT_LINK_URL_ENV), cyclepay)
 }
 
-fn resolve_payment_link_url(env: Result<String, VarError>) -> Result<Url, String> {
+fn resolve_payment_link_url(env: Result<String, VarError>, cyclepay: bool) -> Result<Url, String> {
     match env {
         Ok(value) if !value.trim().is_empty() => {
-            let url = Url::parse(value.trim())
-                .map_err(|e| format!("invalid {PAYMENT_LINK_URL_ENV}: {e}"))?;
+            let invalid = |why: &str| format!("invalid {PAYMENT_LINK_URL_ENV}: {why}");
+            let url = Url::parse(value.trim()).map_err(|e| invalid(&e.to_string()))?;
             if url.scheme() != "https" {
-                return Err(format!("invalid {PAYMENT_LINK_URL_ENV}: not an https URL"));
+                return Err(invalid("not an https URL"));
+            }
+            let is_payment_link = url.host_str() == Some(PAYMENT_LINK_HOST)
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path().len() > 1;
+            if !is_payment_link {
+                return Err(invalid(&format!(
+                    "not a Stripe Payment Link (https://{PAYMENT_LINK_HOST}/<link>)"
+                )));
             }
             Ok(url)
         }
         Err(VarError::NotUnicode(_)) => {
             Err(format!("invalid {PAYMENT_LINK_URL_ENV}: not valid Unicode"))
         }
-        Ok(_) | Err(VarError::NotPresent) => {
+        Ok(_) | Err(VarError::NotPresent) if cyclepay => {
             Ok(Url::parse(PAYMENT_LINK_URL).expect("PAYMENT_LINK_URL is a valid URL"))
         }
+        Ok(_) | Err(VarError::NotPresent) => Err(format!(
+            "the gateway is not CyclePay's, so its orders are not paid on CyclePay's Payment \
+             Link; set {PAYMENT_LINK_URL_ENV} to the one they are paid on"
+        )),
     }
 }
 
@@ -134,8 +155,9 @@ pub fn checkout_url(payment_link: &Url, client_reference_id: &str, amount_usd_ce
 }
 
 /// The reference the backend attaches to an order's Payment Link session:
-/// `o_<order id>`, as `CreatedOrder::client_reference_id` reports it. Rebuilt
-/// here for an order read back later, whose view does not carry it.
+/// `o_<order id>`, as `CreatedOrder::client_reference_id` reports it. Every
+/// link is built with this, a new order's own reference checked against it,
+/// and an order read back later, whose view does not carry it, gets the same.
 pub fn order_reference(order_id: &str) -> String {
     format!("o_{order_id}")
 }
@@ -270,13 +292,24 @@ pub enum CardOrderStatus {
     RefundOwed,
 }
 
+/// Where an order's cycles go, as the backend records it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum Destination {
+    /// Top up this canister.
+    Canister(Principal),
+    /// Credit this principal's Cycles Ledger account.
+    Ledger(Principal),
+}
+
 /// An order as its owner sees it: the reply of [`ORDER_STATUS_METHOD`]. Only
-/// the fields the CLI reads; the owner, destination and Stripe identifiers
-/// are left out.
+/// the fields the CLI reads; the owner and Stripe identifiers are left out.
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct OrderStatusView {
     pub order_id: String,
-    pub status: CardOrderStatus,
+    /// Optional on this side only: a state added to the backend after this
+    /// CLI was built reads as `None` (Candid's opt rule) rather than failing
+    /// every reply, so CyclePay can add one without breaking shipped CLIs.
+    pub status: Option<CardOrderStatus>,
     /// What the order asked for, in US cents.
     pub amount_usd_cents: u64,
     /// What the payment funds after the card fee, in US cents: the order's
@@ -293,6 +326,10 @@ pub struct OrderStatusView {
     /// Until paid: when the order is forgotten, in seconds since the Unix
     /// epoch.
     pub expires_at: Option<u64>,
+    /// Where the cycles go. Optional on this side only, as `status` is: an
+    /// order made on CyclePay's site can be a canister top-up, or for
+    /// another principal, and a kind added later reads as `None`.
+    pub destination: Option<Destination>,
 }
 
 /// The reply of [`XDR_RATE_STATUS_METHOD`]. Only the fields the CLI reads;
@@ -345,22 +382,50 @@ mod tests {
     #[test]
     fn payment_link_defaults_and_overrides() {
         assert_eq!(
-            resolve_payment_link_url(Err(VarError::NotPresent))
+            resolve_payment_link_url(Err(VarError::NotPresent), true)
                 .unwrap()
                 .as_str(),
             PAYMENT_LINK_URL
         );
-        assert_eq!(
-            resolve_payment_link_url(Ok(" https://buy.stripe.test/abc ".to_string()))
+        for cyclepay in [true, false] {
+            assert_eq!(
+                resolve_payment_link_url(
+                    Ok(" https://buy.stripe.com/test_abc ".to_string()),
+                    cyclepay
+                )
                 .unwrap()
                 .as_str(),
-            "https://buy.stripe.test/abc"
-        );
-        let err =
-            resolve_payment_link_url(Ok("http://buy.stripe.test/abc".to_string())).unwrap_err();
-        assert!(err.contains("https"), "{err}");
-        let err = resolve_payment_link_url(Ok("not a url".to_string())).unwrap_err();
+                "https://buy.stripe.com/test_abc"
+            );
+        }
+        // Another gateway has no default: CyclePay's link pays CyclePay.
+        let err = resolve_payment_link_url(Err(VarError::NotPresent), false).unwrap_err();
         assert!(err.contains(PAYMENT_LINK_URL_ENV), "{err}");
+        let err = resolve_payment_link_url(Ok("http://buy.stripe.com/abc".to_string()), true)
+            .unwrap_err();
+        assert!(err.contains("https"), "{err}");
+        let err = resolve_payment_link_url(Ok("not a url".to_string()), true).unwrap_err();
+        assert!(err.contains(PAYMENT_LINK_URL_ENV), "{err}");
+    }
+
+    /// Only a Payment Link is a page to send a card to, checked as the
+    /// browser will read it: the host after any credentials, and no query of
+    /// its own to sit beside, or ahead of, the order's reference.
+    #[test]
+    fn a_payment_link_override_is_a_payment_link() {
+        for bad in [
+            "https://evil.example/pay",
+            "https://buy.stripe.com@evil.example/abc",
+            "https://user:pass@buy.stripe.com/abc",
+            "https://buy.stripe.com.evil.example/abc",
+            "https://buy.stripe.com:8443/abc",
+            "https://buy.stripe.com/abc?client_reference_id=o_someone-else",
+            "https://buy.stripe.com/abc#x",
+            "https://buy.stripe.com/",
+        ] {
+            let err = resolve_payment_link_url(Ok(bad.to_string()), true).unwrap_err();
+            assert!(err.contains("not a Stripe Payment Link"), "{bad}: {err}");
+        }
     }
 
     #[test]
@@ -446,9 +511,44 @@ mod tests {
         }))
         .unwrap();
         let view = Decode!(&bytes, Option<OrderStatusView>).unwrap().unwrap();
-        assert_eq!(view.status, CardOrderStatus::Delivered);
+        assert_eq!(view.destination, Some(Destination::Ledger(owner)));
+        assert_eq!(view.status, Some(CardOrderStatus::Delivered));
         assert_eq!(view.cycles_delivered, Some(17_730_000_000_000));
         assert_eq!(view.paid_usd_cents, Some(2500));
+
+        // A state the backend adds later reads as no status, not as a reply
+        // that cannot be decoded.
+        #[derive(CandidType)]
+        enum FutureStatus {
+            Disputed,
+        }
+        #[derive(CandidType)]
+        struct FutureView {
+            status: FutureStatus,
+            order_id: String,
+            amount_usd_cents: u64,
+            net_usd_cents: u64,
+            paid_usd_cents: Option<u64>,
+            cycles_delivered: Option<u64>,
+            amount_refunded_usd_cents: u64,
+            detail: Option<String>,
+            expires_at: Option<u64>,
+        }
+        let bytes = Encode!(&Some(FutureView {
+            status: FutureStatus::Disputed,
+            order_id: "co-1".into(),
+            amount_usd_cents: 2500,
+            net_usd_cents: 2398,
+            paid_usd_cents: Some(2500),
+            cycles_delivered: None,
+            amount_refunded_usd_cents: 0,
+            detail: None,
+            expires_at: None,
+        }))
+        .unwrap();
+        let view = Decode!(&bytes, Option<OrderStatusView>).unwrap().unwrap();
+        assert_eq!(view.status, None);
+        assert_eq!(view.order_id, "co-1");
 
         #[derive(CandidType)]
         enum WireSource {

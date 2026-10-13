@@ -1,8 +1,11 @@
 use indoc::formatdoc;
 use predicates::str::contains;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ChildGuard, ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients,
+};
 use icp_project::fs::write_string;
+use icp_project::prelude::PathBuf;
 
 mod common;
 
@@ -531,4 +534,289 @@ async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
         .stderr(contains("does not exist on this network"))
         .stderr(contains("-n ic"))
         .failure();
+}
+
+/// With no network or environment named, the command would use a project's
+/// own local network, or none outside a project, and CyclePay is on mainnet
+/// only: either way it points at `-n ic`.
+#[test]
+fn cycles_buy_with_no_network_named_points_at_mainnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    write_string(&project_dir.join("icp.yaml"), "").expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "buy", "--amount", "10", "--yes"])
+        .assert()
+        .stderr(contains("is not running"))
+        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--yes"])
+        .assert()
+        .stderr(contains("No project found"))
+        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .failure();
+}
+
+/// A gateway other than CyclePay's is not paid on CyclePay's Payment Link: a
+/// payment there would go to CyclePay, for an order CyclePay does not have.
+/// Refused before any identity is used or any network reached.
+#[test]
+fn cycles_buy_refuses_a_custom_gateway_without_its_payment_link() {
+    let ctx = TestContext::new();
+
+    ctx.icp()
+        .env_remove("ICP_CYCLES_PAYMENT_LINK_URL")
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            "rrkah-fqaaa-aaaaa-aaaaq-cai",
+            "-n",
+            "ic",
+        ])
+        .assert()
+        .stdout("")
+        .stderr(contains("set ICP_CYCLES_PAYMENT_LINK_URL"))
+        .failure();
+}
+
+/// A local network running a stand-in for CyclePay's backend, built from
+/// `wasm` in the test assets, and a fresh identity to buy as. Returns the
+/// project and the stand-in's canister id; the guard keeps the network up.
+async fn stand_in_gateway(ctx: &TestContext, wasm: &str) -> (PathBuf, String, ChildGuard) {
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let guard = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    let wasm = ctx.make_asset(wasm);
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--quiet",
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .output()
+        .expect("failed to run icp canister create");
+    assert!(output.status.success(), "{output:?}");
+    let gateway = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            &gateway,
+            "--wasm",
+            wasm.as_str(),
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .assert()
+        .success();
+    clients::icp(ctx, &project_dir, None).use_new_random_identity();
+    (project_dir, gateway, guard)
+}
+
+/// An order resumed already settled ends as a wait for it would: a refund is
+/// an error with or without --no-wait, and --json still prints the order.
+#[tokio::test]
+async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
+    let ctx = TestContext::new();
+    // A stand-in gateway whose every order is refunded; see its `.wat`.
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "refunded_order_canister.wasm").await;
+
+    let resume = |args: &[&str]| {
+        let mut cmd = ctx.icp();
+        cmd.current_dir(&project_dir)
+            .env(
+                "ICP_CYCLES_PAYMENT_LINK_URL",
+                "https://buy.stripe.com/test_standin",
+            )
+            .args([
+                "cycles",
+                "buy",
+                "--resume",
+                "co-1-0000test",
+                "--gateway",
+                &gateway,
+                "-n",
+                "random-network",
+            ])
+            .args(args);
+        cmd
+    };
+
+    for args in [&["--no-wait"][..], &[]] {
+        resume(args)
+            .assert()
+            .stderr(contains("10.00 USD was refunded to your card"))
+            .stderr(contains("the cycles could not be delivered"))
+            .failure();
+    }
+
+    let output = resume(&["--no-wait", "--json"]).output().unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["order_id"], "co-1-0000test");
+    assert_eq!(json["status"], "refunded");
+    assert_eq!(json["refunded"]["value"], "10.00");
+}
+
+/// Ctrl-C while waiting stops the wait, not the order: the command says how
+/// to keep waiting and exits 1, as icp-cli's other interrupted waits do,
+/// with no error line. Off a terminal, as here, the wait is told in lines.
+#[cfg(unix)]
+#[tokio::test]
+async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+
+    let ctx = TestContext::new();
+    // A stand-in gateway whose every order awaits payment; see its `.wat`.
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "awaiting_order_canister.wasm").await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .env(
+            "ICP_CYCLES_PAYMENT_LINK_URL",
+            "https://buy.stripe.com/test_standin",
+        )
+        .args([
+            "cycles",
+            "buy",
+            "--resume",
+            "co-1-0000test",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    // Off a terminal the wait says it has begun, and how to pick it up again.
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    assert!(said.contains("keep waiting with"), "{said}");
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
+    let status = child.wait().unwrap();
+    std::io::Read::read_to_string(&mut stderr, &mut said).unwrap();
+
+    assert_eq!(status.code(), Some(1), "{said}");
+    assert!(
+        said.contains("[order co-1-0000test] stopped waiting"),
+        "{said}"
+    );
+    assert!(said.contains("stays payable"), "{said}");
+    assert!(said.contains("--resume co-1-0000test"), "{said}");
+    assert!(!said.contains("Error"), "{said}");
+}
+
+/// A wait through payment to delivery: once the stand-in gateway is paid
+/// (its `pay` update), the next poll finds the order delivered, and the
+/// command reports CyclePay's delivery to where the order says it went and
+/// succeeds.
+#[tokio::test]
+async fn cycles_buy_waits_through_payment_to_delivery() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ctx = TestContext::new();
+    // A stand-in gateway whose order is delivered once `pay` is called; see
+    // its `.wat`.
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "paid_on_call_canister.wasm").await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .env(
+            "ICP_CYCLES_PAYMENT_LINK_URL",
+            "https://buy.stripe.com/test_standin",
+        )
+        .args([
+            "cycles",
+            "buy",
+            "--resume",
+            "co-1-0000test",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "call",
+            &gateway,
+            "pay",
+            "()",
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .assert()
+        .success();
+
+    stderr.read_to_string(&mut said).unwrap();
+    let status = child.wait().unwrap();
+    let mut printed = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut printed)
+        .unwrap();
+    assert!(status.success(), "{said}");
+    assert!(
+        printed.contains(
+            "CyclePay reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
+        ),
+        "{printed}"
+    );
+    // Not the buyer's account, so no balance of the buyer's is read.
+    assert!(!printed.contains("Balance"), "{printed}");
 }

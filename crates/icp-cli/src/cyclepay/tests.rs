@@ -12,8 +12,9 @@ use url::Url;
 
 use super::interface::{
     CREATE_ORDER_METHOD, CardOrderStatus, CreateOrderArgs, CreateOrderResult, CreatedOrder,
-    MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD, OrderDestination, OrderError,
-    OrderErrorKind, OrderStatusView, PAYMENT_LINK_URL, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD, OrderDestination,
+    OrderError, OrderErrorKind, OrderStatusView, PAYMENT_LINK_URL, XDR_RATE_STATUS_METHOD,
+    XdrRateStatus,
 };
 use super::money::{Currency, Money};
 use super::pricing::ledger_cycles;
@@ -72,7 +73,7 @@ fn view(id: &str, status: CardOrderStatus) -> OrderStatusView {
     let paid = !matches!(status, CardOrderStatus::AwaitingPayment);
     OrderStatusView {
         order_id: id.to_owned(),
-        status,
+        status: Some(status),
         amount_usd_cents: 2500,
         net_usd_cents: 2398,
         paid_usd_cents: paid.then_some(2500),
@@ -83,6 +84,7 @@ fn view(id: &str, status: CardOrderStatus) -> OrderStatusView {
         },
         detail: None,
         expires_at: (!paid).then_some(FAR_FUTURE),
+        destination: Some(Destination::Ledger(principal(BUYER))),
     }
 }
 
@@ -347,6 +349,22 @@ async fn quote_on_missing_gateway_is_gateway_not_found() {
         matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
+    // CyclePay's own gateway is on mainnet only, and the error says so as
+    // a run with no network named does; another gateway could be anywhere.
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "the cycles gateway canister {BACKEND} does not exist on this network. CyclePay \
+             sells cycles on mainnet: add `-n ic`"
+        )
+    );
+    let other = CyclesPurchaseError::GatewayNotFound {
+        gateway: principal("ryjl3-tyaaa-aaaaa-aaaba-cai"),
+    };
+    assert_eq!(
+        other.to_string(),
+        "the cycles gateway canister ryjl3-tyaaa-aaaaa-aaaba-cai does not exist on this network"
+    );
 }
 
 // --- quote for cycles ------------------------------------------------------
@@ -424,6 +442,23 @@ async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
             amount_usd_cents: 2500,
             confirm_system_canister: None,
         }
+    );
+}
+
+/// The link carries `o_<order id>`, as CyclePay's site builds it; an order
+/// made with any other reference is not handed out to be paid.
+#[tokio::test]
+async fn place_order_refuses_an_order_with_another_reference() {
+    let CreateOrderResult::Ok(mut order) = created("co-1", 2500) else {
+        unreachable!()
+    };
+    order.client_reference_id = "o_co-2".to_owned();
+    let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
+    let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+    assert!(
+        matches!(&err, CyclesPurchaseError::UnexpectedReference { id, reference, .. }
+            if id == "co-1" && reference == "o_co-2"),
+        "{err}"
     );
 }
 
@@ -538,6 +573,7 @@ async fn wait(
                     TaskOutcome::Succeeded { .. } => Ok(()),
                     TaskOutcome::Failed { message, .. } => Err(message),
                     TaskOutcome::Skipped { reason } => Err(reason),
+                    TaskOutcome::Stopped { message } => Err(message),
                 });
             }
             other => panic!("unexpected event {other:?}"),
@@ -602,6 +638,25 @@ async fn wait_starts_in_the_initial_orders_phase() {
     assert_eq!(phases, vec![succeeded(PurchasePhase::Delivering)]);
 }
 
+/// Delivered between two polls, the order is never seen paying; its wait
+/// still ends with both legs ticked off.
+#[tokio::test]
+async fn wait_ticks_off_both_legs_of_a_delivery_seen_only_at_its_end() {
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, phases) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(
+        phases,
+        vec![
+            succeeded(PurchasePhase::AwaitingPayment),
+            succeeded(PurchasePhase::Delivering),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn wait_returns_every_settled_status_as_ok() {
     for (status, expected) in [
@@ -640,6 +695,51 @@ async fn wait_tolerates_transient_errors() {
     };
     let (result, _) = wait(&fake, None, &options).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+}
+
+/// While CyclePay upgrades its backend, every call is refused as stopped
+/// (IC0509 while it stops, IC0508 once stopped) for a few minutes, and a
+/// boundary node may answer 429 or 5xx. Nothing about the order changed.
+#[tokio::test]
+async fn wait_rides_out_a_backend_upgrade_and_a_busy_boundary_node() {
+    use ic_agent::AgentError;
+    use ic_agent::agent::agent_error::HttpErrorPayload;
+    let stopped = |code: &str| CallError::Rejected {
+        canister: principal(BACKEND),
+        method: ORDER_STATUS_METHOD.to_owned(),
+        code: Some(code.to_owned()),
+        message: "Canister is stopped".to_owned(),
+    };
+    let http = |status| {
+        CallError::failed(
+            principal(BACKEND),
+            ORDER_STATUS_METHOD,
+            AgentError::HttpError(HttpErrorPayload {
+                status,
+                content_type: None,
+                content: b"try again".to_vec(),
+            }),
+        )
+    };
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Err(stopped("IC0509")),
+        Err(stopped("IC0508")),
+        Err(http(503)),
+        Err(http(429)),
+        Err(http(502)),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, _) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+
+    // A 4xx other than those is an answer, and ends the wait.
+    let fake = FakeBackend::default().polls(vec![Err(http(403))]);
+    let (result, _) = wait(&fake, None, &fast()).await;
+    assert!(matches!(
+        result.unwrap_err(),
+        CyclesPurchaseError::GetOrder { .. }
+    ));
 }
 
 #[tokio::test]
@@ -684,16 +784,95 @@ async fn wait_not_found_before_the_deadline_is_order_not_found() {
         vec![failed(PurchasePhase::AwaitingPayment, "order not found")]
     );
 
-    // Known and payable, then gone: not an expiry, so not the caller's.
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
-        Ok(None),
-    ]);
+    // Known and payable, then gone for longer than a replica lags: not an
+    // expiry, so not the caller's. That takes its own, short budget, not
+    // the ten minutes an unanswered network is given.
+    let mut polls = vec![Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment)))];
+    polls.extend((0..=WaitOptions::default().max_consecutive_missing).map(|_| Ok(None)));
+    let fake = FakeBackend::default().polls(polls);
     let (result, _) = wait(&fake, None, &fast()).await;
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::OrderNotFound { .. }
     ));
+    assert_eq!(
+        fake.count_of(ORDER_STATUS_METHOD),
+        2 + WaitOptions::default().max_consecutive_missing as usize
+    );
+}
+
+/// Right after `create_order` a poll can reach a replica that has not seen
+/// the order yet; the wait goes on rather than calling the order not found.
+#[tokio::test]
+async fn wait_takes_a_known_orders_null_for_a_replica_behind() {
+    let fake = FakeBackend::default().polls(vec![
+        Ok(None),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let initial = initial(CardOrderStatus::AwaitingPayment).await;
+    let (result, _) = wait(&fake, Some(initial), &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+}
+
+/// A state CyclePay adds after this CLI was built does not stop the wait.
+#[tokio::test]
+async fn wait_goes_on_through_a_state_it_does_not_know() {
+    let mut unknown = view("co-1", CardOrderStatus::Processing);
+    unknown.status = None;
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::Processing))),
+        Ok(Some(unknown)),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, phases) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(
+        phases,
+        vec![
+            succeeded(PurchasePhase::AwaitingPayment),
+            succeeded(PurchasePhase::Delivering),
+        ]
+    );
+}
+
+/// Resumed already settled, an order is returned as it is: no phase is
+/// shown, and no call is made that a transient failure could turn into an
+/// error.
+#[tokio::test]
+async fn wait_on_a_settled_order_returns_it_without_a_call() {
+    for status in [
+        CardOrderStatus::Delivered,
+        CardOrderStatus::Refunded,
+        CardOrderStatus::RefundOwed,
+        CardOrderStatus::NeedsReview,
+    ] {
+        let settled = initial(status).await;
+        // No poll is scripted: any call would panic the fake.
+        let fake = FakeBackend::default();
+        let (result, phases) = wait(&fake, Some(settled.clone()), &fast()).await;
+        assert_eq!(result.unwrap(), settled);
+        assert!(phases.is_empty(), "{phases:?}");
+        assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 0);
+    }
+}
+
+#[tokio::test]
+async fn an_unpaid_order_past_its_deadline_is_read_as_expired() {
+    let overdue = {
+        let fake = FakeBackend::default().polls(vec![Ok(Some(past_deadline()))]);
+        get_order(&fake, &gateway(), "co-1").await.unwrap()
+    };
+    assert_eq!(overdue.status, OrderStatus::AwaitingPayment);
+    let expired = overdue.at(now_secs());
+    assert_eq!(expired.status, OrderStatus::Expired);
+    assert!(expired.status.is_terminal());
+    assert_eq!(expired.checkout_url, None);
+
+    // One still payable, and one paid, are left as they are.
+    let payable = initial(CardOrderStatus::AwaitingPayment).await;
+    assert_eq!(payable.clone().at(now_secs()), payable);
+    let paid = initial(CardOrderStatus::Processing).await;
+    assert_eq!(paid.clone().at(now_secs()), paid);
 }
 
 fn past_deadline() -> OrderStatusView {
@@ -826,11 +1005,12 @@ async fn wait_interrupt_lands_during_a_stalled_poll() {
     ));
     let mut completed = 0;
     while let Some(event) = events.recv().await {
+        // Stopped, not failed: the order carries on without the command.
         if let EventKind::TaskCompleted {
-            outcome: TaskOutcome::Failed { message, .. },
+            outcome: TaskOutcome::Stopped { message },
         } = event.kind
         {
-            assert_eq!(message, "interrupted");
+            assert_eq!(message, "stopped waiting");
             completed += 1;
         }
     }

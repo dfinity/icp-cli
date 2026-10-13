@@ -130,7 +130,7 @@ The command quotes what the amount buys at CyclePay's current rate, shows who is
 
 ```
 Identity: default
-Buyer:    rv4ez-fgjbj-...-vae
+Buyer:    7k7px-dcypq-wulnh-byzgd-6sib2-udn6c-lfo6e-6oujd-veifp-62woo-5ae
 Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles

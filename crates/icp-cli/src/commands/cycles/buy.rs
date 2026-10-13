@@ -450,26 +450,28 @@ impl Interrupt {
     }
 }
 
-/// While it lives, the terminal does not echo Ctrl-C as `^C`. The echo lands
-/// after the live view's line, and a line that fills the width wraps it onto
-/// a row the view does not know about, which then keeps a stale copy of the
-/// line when the view is cleared.
-struct QuietCtrlC {
+/// While it lives, the terminal echoes nothing typed: not Ctrl-C (as `^C`,
+/// or the bare control character some terminals show), nor any other key.
+/// An echo lands after the live view's line, and a line that fills the
+/// width wraps it onto a row the view does not know about, which then keeps
+/// a stale copy of the line when the view is cleared.
+struct NoEcho {
     #[cfg(unix)]
     saved: Option<nix::sys::termios::Termios>,
 }
 
-impl QuietCtrlC {
+impl NoEcho {
     fn new() -> Self {
         #[cfg(unix)]
         {
             use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
+            let echoes = LocalFlags::ECHO | LocalFlags::ECHOCTL;
             let saved = tcgetattr(stderr())
                 .ok()
-                .filter(|termios| termios.local_flags.contains(LocalFlags::ECHOCTL));
+                .filter(|termios| termios.local_flags.intersects(echoes));
             let quieted = saved.as_ref().is_some_and(|saved| {
                 let mut quiet = saved.clone();
-                quiet.local_flags.remove(LocalFlags::ECHOCTL);
+                quiet.local_flags.remove(echoes);
                 tcsetattr(stderr(), SetArg::TCSANOW, &quiet).is_ok()
             });
             Self {
@@ -481,7 +483,7 @@ impl QuietCtrlC {
     }
 }
 
-impl Drop for QuietCtrlC {
+impl Drop for NoEcho {
     fn drop(&mut self) {
         #[cfg(unix)]
         if let Some(saved) = &self.saved {
@@ -656,7 +658,7 @@ async fn wait_and_report(
     // asks for nothing but the link and the end.
     let result = match output {
         Output::Human if stderr().is_terminal() => {
-            let quiet = QuietCtrlC::new();
+            let quiet = NoEcho::new();
             let result = rendered(debug, wait).await;
             drop(quiet);
             // On a terminal the live view leaves its last line open (as it

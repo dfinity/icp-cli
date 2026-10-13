@@ -29,10 +29,10 @@ use tokio::{select, time::sleep};
 use url::Url;
 
 use super::interface::{
-    CREATE_ORDER_METHOD, CYCLES_GATEWAY_CANISTER_ID_ENV, CardOrderStatus, CreateOrderArgs,
-    CreateOrderResult, CreatedOrder, Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS,
-    ORDER_STATUS_METHOD, OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD,
-    XdrRateStatus, checkout_url, order_reference,
+    CREATE_ORDER_METHOD, CYCLES_GATEWAY_CID, CardOrderStatus, CreateOrderArgs, CreateOrderResult,
+    CreatedOrder, Destination, MAX_ORDER_USD_CENTS, MIN_ORDER_USD_CENTS, ORDER_STATUS_METHOD,
+    OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    checkout_url, order_reference,
 };
 use super::money::{Currency, Money};
 use super::pricing::{card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
@@ -51,9 +51,8 @@ pub struct Gateway {
 #[derive(Debug, Snafu)]
 pub enum CyclesPurchaseError {
     #[snafu(display(
-        "the cycles gateway canister {gateway} does not exist on this network. \
-         The default gateway is deployed on mainnet (`-n ic`); \
-         --gateway or {CYCLES_GATEWAY_CANISTER_ID_ENV} chooses another"
+        "the cycles gateway canister {gateway} does not exist on this network{}",
+        mainnet_hint(*gateway)
     ))]
     GatewayNotFound { gateway: Principal },
 
@@ -809,6 +808,20 @@ pub async fn wait_for_order(
                 return interrupted(last);
             }
         }
+    }
+}
+
+/// Where to buy instead, said whenever CyclePay's own gateway cannot be
+/// reached on the network chosen.
+pub const MAINNET_HINT: &str = "CyclePay sells cycles on mainnet: add `-n ic`";
+
+/// `. <MAINNET_HINT>` for CyclePay's own gateway, which is on mainnet only;
+/// nothing for another, which could be anywhere.
+fn mainnet_hint(gateway: Principal) -> String {
+    if gateway.to_text() == CYCLES_GATEWAY_CID {
+        format!(". {MAINNET_HINT}")
+    } else {
+        String::new()
     }
 }
 

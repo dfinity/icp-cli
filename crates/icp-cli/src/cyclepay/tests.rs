@@ -349,6 +349,22 @@ async fn quote_on_missing_gateway_is_gateway_not_found() {
         matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
+    // CyclePay's own gateway is on mainnet only, and the error says so as
+    // a run with no network named does; another gateway could be anywhere.
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "the cycles gateway canister {BACKEND} does not exist on this network. CyclePay \
+             sells cycles on mainnet: add `-n ic`"
+        )
+    );
+    let other = CyclesPurchaseError::GatewayNotFound {
+        gateway: principal("ryjl3-tyaaa-aaaaa-aaaba-cai"),
+    };
+    assert_eq!(
+        other.to_string(),
+        "the cycles gateway canister ryjl3-tyaaa-aaaaa-aaaba-cai does not exist on this network"
+    );
 }
 
 // --- quote for cycles ------------------------------------------------------

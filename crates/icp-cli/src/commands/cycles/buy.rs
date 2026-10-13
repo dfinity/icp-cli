@@ -32,8 +32,8 @@ use crate::cyclepay::interface::{
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
-    self as purchase, CyclesPurchaseError, Gateway, OrderStatus, OrderView, Quote, Rate, Target,
-    WaitOptions, now_secs,
+    self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView, Quote,
+    Rate, Target, WaitOptions, now_secs,
 };
 use crate::render::rendered;
 
@@ -173,7 +173,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             && matches!(selections.network, NetworkSelection::Default)
             && matches!(selections.environment, EnvironmentSelection::Default) =>
         {
-            bail!("{error}. CyclePay sells cycles on mainnet: add `-n ic`")
+            bail!("{error}. {MAINNET_HINT}")
         }
         Err(error) => return Err(error.into()),
     };

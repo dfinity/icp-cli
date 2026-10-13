@@ -31,12 +31,15 @@ pub(crate) struct InteractiveRenderer {
     drawn: bool,
 }
 
-/// Where the live view is drawn, and its last line ended.
+/// Where the live view is drawn, its last line ended, and lines printed
+/// past it.
 trait Screen: Send {
     /// A fresh live view.
     fn view(&self) -> MultiProgress;
     /// End the line a view left the cursor on.
     fn end_line(&self);
+    /// Print one line of output, with the view out of the way.
+    fn print_line(&self, line: &str);
 }
 
 /// The process's stderr, where nothing is drawn unless it is a terminal.
@@ -49,6 +52,10 @@ impl Screen for Stderr {
 
     fn end_line(&self) {
         eprintln!();
+    }
+
+    fn print_line(&self, line: &str) {
+        eprintln!("{line}");
     }
 }
 
@@ -258,7 +265,20 @@ impl InteractiveRenderer {
                             }
                             bar.finish();
                         }
-                        super::print_retained(view.log.task(), &retained_output);
+                        // Above the live view, which is cleared for it and
+                        // drawn again below, siblings still running included.
+                        // Printed past the view's cursor instead, the lines
+                        // would run on from the last bar, and the line ending
+                        // that `release` adds later would follow them as a
+                        // blank line.
+                        if !retained_output.is_empty() {
+                            let (task, screen) = (view.log.task(), &self.screen);
+                            self.multi_progress.suspend(|| {
+                                for line in &retained_output {
+                                    screen.print_line(&super::attributed(task, line));
+                                }
+                            });
+                        }
                     }
                     TaskOutcome::Failed { message, causes } => {
                         if let Some(bar) = &view.bar {
@@ -387,6 +407,10 @@ mod tests {
         fn end_line(&self) {
             self.write("\n").unwrap();
         }
+
+        fn print_line(&self, line: &str) {
+            self.write(&format!("{line}\n")).unwrap();
+        }
     }
 
     /// Feed a renderer the events of a build that succeeds, then a phase
@@ -425,6 +449,52 @@ mod tests {
         // ends no line.
         renderer.flush();
         assert_eq!(screen.written(), written);
+    }
+
+    /// A task's retained output (a sync plugin's stderr, say) goes above the
+    /// live view, each line on its own, and the view is drawn again below
+    /// it: the line ending the view at the next heading then ends the bar's
+    /// line, and leaves no blank line after the output.
+    #[test]
+    fn retained_output_prints_above_the_view_on_lines_of_its_own() {
+        let screen = Recorded::default();
+        let mut renderer = InteractiveRenderer::on(Box::new(screen.clone()));
+        let (reporter, mut events) = icp_events::channel();
+        reporter
+            .task(Task::build("probe"))
+            .finish(TaskOutcome::Succeeded {
+                retained_output: vec!["plugin said hi".into(), "and bye".into()],
+            });
+        let _heading = reporter.task(Task::phase("Creating canisters:"));
+        while let Ok(event) = events.try_recv() {
+            renderer.handle(event);
+        }
+        let written = screen.written();
+        let said = written
+            .find("[probe] plugin said hi\n[probe] and bye\n")
+            .unwrap_or_else(|| panic!("{written:?}"));
+        // The lines start where the view was cleared, with nothing of it
+        // left on their row; the bar is drawn again after them, and its line
+        // is ended once, with no blank line anywhere.
+        let before = &written[..said];
+        let since_clear = &before[before.rfind("<clear>").expect("the view is cleared")..];
+        let mut text = String::new();
+        let mut in_marker = false;
+        for c in since_clear.chars() {
+            match c {
+                '<' => in_marker = true,
+                '>' => in_marker = false,
+                c if !in_marker => text.push(c),
+                _ => {}
+            }
+        }
+        assert_eq!(text, "", "{written:?}");
+        assert!(
+            written[said..].contains("✔ Built successfully"),
+            "{written:?}"
+        );
+        assert!(written.ends_with('\n'), "{written:?}");
+        assert!(!written.contains("\n\n"), "{written:?}");
     }
 
     /// Piped, no bar is drawn, so no line is ended: the output stays as it

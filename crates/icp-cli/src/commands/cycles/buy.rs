@@ -23,8 +23,7 @@ use tracing::{info, warn};
 use crate::commands::args::{TokenCommandArgs, TokenCommandSelections};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    CYCLES_GATEWAY_CID, ORDER_TTL_SECS, OrderError, OrderErrorKind, cycles_gateway_canister_id,
-    payment_link_url,
+    CYCLES_GATEWAY_CID, OrderError, OrderErrorKind, cycles_gateway_canister_id, payment_link_url,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -287,7 +286,10 @@ async fn create_order(
     args: &BuyArgs,
 ) -> Result<(OrderView, Quote), anyhow::Error> {
     let quote = purchase::quote_target(calls, gateway, target).await?;
-    confirm(&quote, target, gateway, buyer, identity, args.yes)?;
+    // A script that said --yes reads the figures off --json; -q asks for
+    // nothing but the link.
+    let speak = !args.yes || !(args.quiet || args.json);
+    confirm(&quote, target, gateway, buyer, identity, args.yes, speak)?;
     match purchase::place_order(calls, gateway, quote.amount).await {
         Ok(order) => Ok((order, quote)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
@@ -299,6 +301,7 @@ async fn create_order(
 
 /// Show what is about to happen and ask. Without a terminal there is nobody
 /// to ask, so `--yes` is required.
+#[allow(clippy::too_many_arguments)]
 fn confirm(
     quote: &Quote,
     target: Target,
@@ -306,7 +309,11 @@ fn confirm(
     buyer: Principal,
     identity: Option<&str>,
     yes: bool,
+    speak: bool,
 ) -> Result<(), anyhow::Error> {
+    if !speak {
+        return Ok(());
+    }
     let identity = identity
         .map(|name| format!(" (identity '{name}')"))
         .unwrap_or_default();
@@ -505,7 +512,11 @@ async fn wait_and_report(
             }
             Ok(())
         }
-        OrderStatus::Expired => bail!("order {} expired unpaid; no charge was made", order.id),
+        OrderStatus::Expired => bail!(
+            "order {} expired unpaid; a payment made on its page from now on is refunded to \
+             the card",
+            order.id
+        ),
         OrderStatus::Refunding => bail!(
             "order {} could not be delivered and is being refunded to your card{detail}",
             order.id
@@ -524,8 +535,9 @@ async fn wait_and_report(
             order.id
         ),
         OrderStatus::NeedsReview => bail!(
-            "order {} needs review: your card was charged, and a CyclePay operator will \
-             resolve delivery; it is not refunded meanwhile{detail}. Keep the order id",
+            "order {} needs review{detail}: your card was charged, and CyclePay checks the \
+             order by hand, then delivers or refunds it; keep the order id, and run \
+             `{resume}` later to see the outcome",
             order.id
         ),
         OrderStatus::AwaitingPayment | OrderStatus::PaymentPending | OrderStatus::Processing => {
@@ -588,20 +600,22 @@ fn refusal_message(error: &OrderError) -> String {
         OrderErrorKind::AmountOutOfRange => {
             format!("CyclePay refused the amount: {}", error.message)
         }
+        // The backend's own messages say what to do; CyclePay allows 5 orders
+        // a minute and 50 a UTC day per identity, and a share of all buyers'.
         OrderErrorKind::RateLimited => format!(
-            "CyclePay is rate limiting this identity's orders ({}); wait a minute and try again",
+            "CyclePay is limiting new orders ({}); it takes 5 a minute and 50 a UTC day from one \
+             identity",
             error.message
         ),
-        OrderErrorKind::TooManyOpenOrders => format!(
-            "this identity has too many unpaid orders ({}); pay one, or wait for them to expire \
-             {} hours after they were made",
-            error.message,
-            ORDER_TTL_SECS / 3600
-        ),
-        OrderErrorKind::Paused | OrderErrorKind::CardsUnavailable => format!(
-            "CyclePay is not taking card orders right now ({}); try again later",
-            error.message
-        ),
+        OrderErrorKind::TooManyOpenOrders => {
+            format!(
+                "this identity has too many unpaid orders: {}",
+                error.message
+            )
+        }
+        OrderErrorKind::Paused | OrderErrorKind::CardsUnavailable => {
+            format!("CyclePay is not taking card orders: {}", error.message)
+        }
         OrderErrorKind::Anonymous => {
             "CyclePay refused the order: the caller is anonymous; choose an identity with \
              --identity"
@@ -652,7 +666,10 @@ fn format_age(age: std::time::Duration) -> String {
     } else {
         (secs / 60, "minutes")
     };
-    format!("{count} {unit}")
+    match (count, unit) {
+        (1, "minutes") => "1 minute".to_owned(),
+        (count, unit) => format!("{count} {unit}"),
+    }
 }
 
 fn print_json<T: Serialize>(value: &T) -> Result<(), anyhow::Error> {
@@ -711,17 +728,25 @@ mod tests {
 
     #[test]
     fn refusal_messages_say_what_to_do() {
-        let msg = refusal_message(&error("RATE_LIMITED", "5 orders a minute"));
-        assert!(msg.contains("wait a minute"), "{msg}");
-        assert!(msg.contains("5 orders a minute"), "{msg}");
+        // The backend's own messages, as orders_v2.rs words them: nothing
+        // they already say is said twice.
+        let msg = refusal_message(&error("RATE_LIMITED", "too many orders; try again shortly"));
+        assert!(msg.contains("50 a UTC day"), "{msg}");
 
-        let msg = refusal_message(&error("TOO_MANY_OPEN_ORDERS", "10 unpaid"));
-        assert!(msg.contains("25 hours"), "{msg}");
+        let msg = refusal_message(&error(
+            "TOO_MANY_OPEN_ORDERS",
+            "you have 10 unpaid orders; pay one, or wait for it to expire (25 hours after it \
+             was made)",
+        ));
+        assert_eq!(msg.matches("25 hours").count(), 1, "{msg}");
 
-        for code in ["PAUSED", "CARDS_UNAVAILABLE"] {
-            let msg = refusal_message(&error(code, "deliveries paused"));
-            assert!(msg.contains("try again later"), "{msg}");
-        }
+        let msg = refusal_message(&error("PAUSED", "CyclePay is paused; try again later"));
+        assert_eq!(msg.matches("try again later").count(), 1, "{msg}");
+        let msg = refusal_message(&error(
+            "CARDS_UNAVAILABLE",
+            "card payments are not available right now",
+        ));
+        assert_eq!(msg.matches("right now").count(), 1, "{msg}");
 
         let msg = refusal_message(&error("SOMETHING_NEW", "as the backend puts it"));
         assert_eq!(
@@ -817,7 +842,7 @@ mod tests {
     #[test]
     fn timestamps_and_ages_read_well() {
         assert_eq!(format_secs(1_700_000_000), "2023-11-14T22:13:20Z");
-        assert_eq!(format_age(Duration::from_secs(90)), "1 minutes");
+        assert_eq!(format_age(Duration::from_secs(90)), "1 minute");
         assert_eq!(format_age(Duration::from_secs(5 * 3600)), "5 hours");
         assert_eq!(format_age(Duration::from_secs(3 * 86_400)), "3 days");
     }

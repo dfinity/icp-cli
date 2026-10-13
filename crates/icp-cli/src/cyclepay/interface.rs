@@ -62,11 +62,6 @@ pub const MIN_ORDER_USD_CENTS: u64 = 100;
 /// `max_order_usd_cents`, likewise.
 pub const MAX_ORDER_USD_CENTS: u64 = 20_000;
 
-/// How long an unpaid order stays payable, in seconds: the backend's
-/// `ORDER_TTL_SECS`. `CreatedOrder::expires_at` is authoritative; this is
-/// only for prose.
-pub const ORDER_TTL_SECS: u64 = 25 * 3_600;
-
 /// Resolve the cycles gateway canister id to talk to.
 ///
 /// Uses the value of the [`CYCLES_GATEWAY_CANISTER_ID_ENV`] variable when set

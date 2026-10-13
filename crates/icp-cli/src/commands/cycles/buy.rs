@@ -484,12 +484,13 @@ fn stale_rate_warning(rate: &Rate) -> Option<String> {
 /// ```text
 /// Identity: default
 /// Buyer:    rv4ez-fgjbj-...-vae
+/// Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 /// Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 /// Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
 /// ```
 ///
-/// The gateway is shown only when it is not CyclePay's own, as `--gateway`
-/// or `ICP_CYCLES_GATEWAY_CANISTER_ID` can make it.
+/// The gateway is shown so that the buyer confirms where the order goes
+/// (#813's decision), and called CyclePay's only when it is the default.
 fn quote_block(
     quote: &Quote,
     target: Target,
@@ -502,9 +503,12 @@ fn quote_block(
         lines.push(format!("Identity: {name}"));
     }
     lines.push(format!("Buyer:    {buyer}"));
-    if gateway.canister.to_text() != CYCLES_GATEWAY_CID {
-        lines.push(format!("Gateway:  {}", gateway.canister));
-    }
+    let whose = if gateway.canister.to_text() == CYCLES_GATEWAY_CID {
+        " (CyclePay)"
+    } else {
+        ""
+    };
+    lines.push(format!("Gateway:  {}{whose}", gateway.canister));
     if let Target::Receive { cycles, .. } = target {
         lines.push(format!("Wanted:   at least {}", format_cycles(cycles)));
     }
@@ -1155,11 +1159,12 @@ mod tests {
             [
                 "Identity: default",
                 "Buyer:    rrkah-fqaaa-aaaaa-aaaaq-cai",
+                "Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)",
                 "Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)",
                 "Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles",
             ]
         );
-        // Another gateway is named; CyclePay's own is not worth a line.
+        // Another gateway is not said to be CyclePay's.
         let block = quote_block(
             &quote,
             Target::Spend(quote.amount),

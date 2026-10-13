@@ -126,11 +126,12 @@ icp cycles buy --amount 10 -n ic
 icp cycles buy --cycles 5t -n ic
 ```
 
-The command quotes what the amount buys at CyclePay's current rate, shows who is paying (and the backend canister, when `--gateway` picks another), and asks you to confirm:
+The command quotes what the amount buys at CyclePay's current rate, shows who is paying and which backend canister takes the order, and asks you to confirm:
 
 ```
 Identity: default
 Buyer:    rv4ez-fgjbj-...-vae
+Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
 Create this order? Nothing is charged until you pay on Stripe. [y/N]

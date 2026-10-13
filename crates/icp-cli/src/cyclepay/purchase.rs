@@ -359,6 +359,17 @@ impl OrderView {
         self
     }
 
+    /// The order as of `now` (seconds since the Unix epoch): an unpaid one
+    /// past its deadline is expired, and no longer payable, though the
+    /// backend reports it as awaiting payment until it forgets it.
+    pub fn at(self, now: u64) -> Self {
+        if self.is_past_deadline(now, Duration::ZERO) {
+            self.expired()
+        } else {
+            self
+        }
+    }
+
     /// Whether the order is unpaid and `now` (seconds since the Unix epoch)
     /// is more than `grace` past its deadline.
     fn is_past_deadline(&self, now: u64, grace: Duration) -> bool {
@@ -621,6 +632,11 @@ pub async fn wait_for_order(
     interrupt: impl Future<Output = ()>,
     reporter: &Reporter,
 ) -> Result<OrderView, CyclesPurchaseError> {
+    // An order already settled has nothing to wait for: no phase to show,
+    // and no call that could turn a known end into an error.
+    if let Some(order) = initial.as_ref().filter(|order| order.status.is_terminal()) {
+        return Ok(order.clone());
+    }
     let mut interrupt = pin!(interrupt);
     let mut phases = Phases {
         reporter,

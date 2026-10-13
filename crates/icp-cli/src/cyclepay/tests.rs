@@ -782,6 +782,46 @@ async fn wait_goes_on_through_a_state_it_does_not_know() {
     );
 }
 
+/// Resumed already settled, an order is returned as it is: no phase is
+/// shown, and no call is made that a transient failure could turn into an
+/// error.
+#[tokio::test]
+async fn wait_on_a_settled_order_returns_it_without_a_call() {
+    for status in [
+        CardOrderStatus::Delivered,
+        CardOrderStatus::Refunded,
+        CardOrderStatus::RefundOwed,
+        CardOrderStatus::NeedsReview,
+    ] {
+        let settled = initial(status).await;
+        // No poll is scripted: any call would panic the fake.
+        let fake = FakeBackend::default();
+        let (result, phases) = wait(&fake, Some(settled.clone()), &fast()).await;
+        assert_eq!(result.unwrap(), settled);
+        assert!(phases.is_empty(), "{phases:?}");
+        assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 0);
+    }
+}
+
+#[tokio::test]
+async fn an_unpaid_order_past_its_deadline_is_read_as_expired() {
+    let overdue = {
+        let fake = FakeBackend::default().polls(vec![Ok(Some(past_deadline()))]);
+        get_order(&fake, &gateway(), "co-1").await.unwrap()
+    };
+    assert_eq!(overdue.status, OrderStatus::AwaitingPayment);
+    let expired = overdue.at(now_secs());
+    assert_eq!(expired.status, OrderStatus::Expired);
+    assert!(expired.status.is_terminal());
+    assert_eq!(expired.checkout_url, None);
+
+    // One still payable, and one paid, are left as they are.
+    let payable = initial(CardOrderStatus::AwaitingPayment).await;
+    assert_eq!(payable.clone().at(now_secs()), payable);
+    let paid = initial(CardOrderStatus::Processing).await;
+    assert_eq!(paid.clone().at(now_secs()), paid);
+}
+
 fn past_deadline() -> OrderStatusView {
     OrderStatusView {
         expires_at: Some(1_000_000_000),

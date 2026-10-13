@@ -165,24 +165,35 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     let calls = calls.as_ref();
     let output = Output::of(args);
 
+    // Only the identity that made an order can read it, on the network its
+    // gateway is on: the command that resumes it says both.
+    let resume = |id: &str| {
+        format!(
+            "icp cycles buy --resume {}{}",
+            shell_word(id),
+            selection_flags(&selections, args.gateway)
+        )
+    };
+
     // Whether the Payment Link was handed out: an order that is payable right
     // now. Anything else has nothing to pay, and `--no-wait` must still say
     // where it stands.
     let (order, payable) = match &args.resume {
         Some(id) => {
-            let order = purchase::get_order(calls, &gateway, id).await?;
-            let payable = order.status == OrderStatus::AwaitingPayment && !past_deadline(&order);
+            let order = purchase::get_order(calls, &gateway, id)
+                .await?
+                .at(now_secs());
+            // A settled order, an expired one included, is told as a wait
+            // that ended so: the same output and exit status, with or
+            // without --no-wait.
+            if order.status.is_terminal() {
+                return report_end(&agent, buyer, &order, output, &resume(&order.id)).await;
+            }
+            let payable = order.status == OrderStatus::AwaitingPayment;
             if payable {
                 announce_payable(&order, None, output, args.no_open);
             } else if output == Output::Human {
-                match order.status {
-                    OrderStatus::AwaitingPayment => info!(
-                        "Order {} passed its payment deadline at {}; a payment now would be refunded.",
-                        order.id,
-                        order.expires_at.map(format_secs).unwrap_or_default()
-                    ),
-                    status => info!("Order {} is {status}", order.id),
-                }
+                info!("Order {} is {}", order.id, order.status);
             }
             (order, payable)
         }
@@ -195,16 +206,6 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             announce_payable(&order, Some(&quote), output, args.no_open);
             (order, true)
         }
-    };
-
-    // Only the identity that made an order can read it, on the network its
-    // gateway is on: the command that resumes it says both.
-    let resume = |id: &str| {
-        format!(
-            "icp cycles buy --resume {}{}",
-            shell_word(id),
-            selection_flags(&selections, args.gateway)
-        )
     };
 
     if args.no_wait {
@@ -267,13 +268,6 @@ fn shell_word(value: &str) -> String {
     } else {
         icp_project::operations::create::shell_quote(value)
     }
-}
-
-/// Whether an order's payment deadline has passed on this machine's clock.
-fn past_deadline(order: &OrderView) -> bool {
-    order
-        .expires_at
-        .is_some_and(|deadline| deadline < now_secs())
 }
 
 /// Quote, confirm, create. Returns the order with the quote it was placed on.
@@ -498,6 +492,18 @@ async fn wait_and_report(
         Err(error) => return Err(error.into()),
     };
 
+    report_end(agent, buyer, &order, output, resume).await
+}
+
+/// Tell how a settled order ended, and fail unless it was delivered. Said
+/// the same way after a wait and for an order resumed already settled.
+async fn report_end(
+    agent: &ic_agent::Agent,
+    buyer: Principal,
+    order: &OrderView,
+    output: Output,
+    resume: &str,
+) -> Result<(), anyhow::Error> {
     let balance = if order.status == OrderStatus::Delivered {
         match get_raw_balance(agent, CYCLES_LEDGER_PRINCIPAL, buyer, None).await {
             Ok(balance) => balance.0.to_u128(),
@@ -510,29 +516,33 @@ async fn wait_and_report(
         None
     };
 
-    print_final(&order, balance, output)?;
+    print_final(order, balance, output)?;
 
+    if order.status == OrderStatus::Delivered && output == Output::Human {
+        let cycles = order
+            .cycles_delivered
+            .map(format_cycles)
+            .unwrap_or_else(|| "cycles".to_owned());
+        // The status is read by query, so it is CyclePay's report as one
+        // replica gives it, and is said to be.
+        println!("CyclePay reports {cycles} delivered to {buyer}");
+        if let Some(balance) = balance {
+            println!("Balance: {}", format_cycles(balance));
+        }
+    }
+    ending(order, resume)
+}
+
+/// How a settled order ended, as the command's result: `Ok` for a delivery,
+/// and an error that says what happened otherwise.
+fn ending(order: &OrderView, resume: &str) -> Result<(), anyhow::Error> {
     let detail = order
         .detail
         .as_deref()
         .map(|detail| format!(" ({detail})"))
         .unwrap_or_default();
     match order.status {
-        OrderStatus::Delivered => {
-            if output == Output::Human {
-                let cycles = order
-                    .cycles_delivered
-                    .map(format_cycles)
-                    .unwrap_or_else(|| "cycles".to_owned());
-                // The status is read by query, so it is CyclePay's report as
-                // one replica gives it, and is said to be.
-                println!("CyclePay reports {cycles} delivered to {buyer}");
-                if let Some(balance) = balance {
-                    println!("Balance: {}", format_cycles(balance));
-                }
-            }
-            Ok(())
-        }
+        OrderStatus::Delivered => Ok(()),
         OrderStatus::Expired => bail!(
             "order {} expired unpaid; a payment made on its page from now on is refunded to \
              the card",
@@ -879,23 +889,35 @@ mod tests {
         }
     }
 
+    /// Only a delivery succeeds; every other end is an error that says what
+    /// happened, whether it is reported after a wait or for an order resumed
+    /// already settled.
     #[test]
-    fn past_deadline_reads_the_orders_expiry() {
-        let order = |expires_at| OrderView {
+    fn only_a_delivery_ends_well() {
+        let order = |status| OrderView {
             id: "co-1".into(),
-            status: OrderStatus::AwaitingPayment,
+            status,
             amount: Money::from_minor_units(1000, Currency::Usd),
             net: Money::from_minor_units(941, Currency::Usd),
             checkout_url: None,
-            expires_at,
-            paid: None,
+            expires_at: None,
+            paid: Some(Money::from_minor_units(1000, Currency::Usd)),
             cycles_delivered: None,
-            refunded: None,
+            refunded: Some(Money::from_minor_units(1000, Currency::Usd)),
             detail: None,
         };
-        assert!(past_deadline(&order(Some(1_700_000_000))));
-        assert!(!past_deadline(&order(Some(u64::MAX / 2))));
-        assert!(!past_deadline(&order(None)));
+        let resume = "icp cycles buy --resume co-1 -n ic";
+        assert!(ending(&order(OrderStatus::Delivered), resume).is_ok());
+        for (status, says) in [
+            (OrderStatus::Refunded, "10.00 USD was refunded"),
+            (OrderStatus::Refunding, "is being refunded"),
+            (OrderStatus::RefundOwed, "owes you a refund"),
+            (OrderStatus::NeedsReview, resume),
+            (OrderStatus::Expired, "expired unpaid"),
+        ] {
+            let err = ending(&order(status), resume).unwrap_err().to_string();
+            assert!(err.contains(says), "{status:?}: {err}");
+        }
     }
 
     #[test]

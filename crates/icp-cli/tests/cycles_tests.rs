@@ -532,3 +532,91 @@ async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
         .stderr(contains("-n ic"))
         .failure();
 }
+
+/// An order resumed already settled ends as a wait for it would: a refund is
+/// an error with or without --no-wait, and --json still prints the order.
+#[tokio::test]
+async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let pm = formatdoc! {r#"
+        {NETWORK_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    // A stand-in gateway whose every order is refunded; see its `.wat`.
+    let wasm = ctx.make_asset("refunded_order_canister.wasm");
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--quiet",
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .output()
+        .expect("failed to run icp canister create");
+    assert!(output.status.success(), "{output:?}");
+    let gateway = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "install",
+            &gateway,
+            "--wasm",
+            wasm.as_str(),
+            "--identity",
+            "anonymous",
+            "--network",
+            "random-network",
+        ])
+        .assert()
+        .success();
+    clients::icp(&ctx, &project_dir, None).use_new_random_identity();
+
+    let resume = |args: &[&str]| {
+        let mut cmd = ctx.icp();
+        cmd.current_dir(&project_dir)
+            .env(
+                "ICP_CYCLES_PAYMENT_LINK_URL",
+                "https://buy.stripe.com/test_standin",
+            )
+            .args([
+                "cycles",
+                "buy",
+                "--resume",
+                "co-1-0000test",
+                "--gateway",
+                &gateway,
+                "-n",
+                "random-network",
+            ])
+            .args(args);
+        cmd
+    };
+
+    for args in [&["--no-wait"][..], &[]] {
+        resume(args)
+            .assert()
+            .stderr(contains("10.00 USD was refunded to your card"))
+            .stderr(contains("the cycles could not be delivered"))
+            .failure();
+    }
+
+    let output = resume(&["--no-wait", "--json"]).output().unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["order_id"], "co-1-0000test");
+    assert_eq!(json["status"], "refunded");
+    assert_eq!(json["refunded"]["value"], "10.00");
+}

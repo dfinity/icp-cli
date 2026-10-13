@@ -137,6 +137,8 @@ struct FakeBackend {
     calls_seen: Mutex<Vec<(String, Vec<u8>)>>,
     /// Rejects every call as if the canister did not exist.
     absent: bool,
+    /// The next call fails with this, as the network reported it.
+    refusal: Mutex<Option<CallError>>,
     /// Never answers `order_status`, as a backend behind a stalled connection.
     stall_polls: bool,
 }
@@ -184,6 +186,9 @@ impl FakeBackend {
             .lock()
             .unwrap()
             .push((call.method.clone(), call.arg.clone()));
+        if let Some(err) = self.refusal.lock().unwrap().take() {
+            return Err(err);
+        }
         if self.absent {
             return Err(CallError::Rejected {
                 canister: call.canister,
@@ -329,6 +334,47 @@ async fn connect_on_missing_gateway_is_gateway_not_found() {
     assert_eq!(
         other.to_string(),
         "the cycles gateway canister ryjl3-tyaaa-aaaaa-aaaba-cai does not exist on this network"
+    );
+}
+
+/// A local HTTP gateway refuses to route to a canister it has never heard of
+/// before any replica sees the call: an HTTP 400 with no reject code, which
+/// the call layer reports as a failure. The command reads it as the gateway
+/// being absent, as it would a replica's IC0301. Any other HTTP failure stays
+/// what it is.
+#[tokio::test]
+async fn connect_reads_a_gateways_canister_not_found_as_absence() {
+    use ic_agent::AgentError;
+    use ic_agent::agent::agent_error::HttpErrorPayload;
+    let http = |status: u16, body: &[u8]| {
+        CallError::failed(
+            principal(BACKEND),
+            CARD_TERMS_METHOD,
+            AgentError::HttpError(HttpErrorPayload {
+                status,
+                content_type: Some("text/plain; charset=utf-8".to_owned()),
+                content: body.to_vec(),
+            }),
+        )
+    };
+    let fake = FakeBackend {
+        refusal: Mutex::new(Some(http(400, b"error: canister_not_found"))),
+        ..FakeBackend::default()
+    };
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
+        "{err}"
+    );
+
+    let fake = FakeBackend {
+        refusal: Mutex::new(Some(http(502, b"bad gateway"))),
+        ..FakeBackend::default()
+    };
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::ReadTerms { .. }),
+        "{err}"
     );
 }
 

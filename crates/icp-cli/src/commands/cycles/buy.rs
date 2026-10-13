@@ -1,4 +1,5 @@
 use std::io::{self, IsTerminal, stderr, stdin, stdout};
+use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use candid::Principal;
@@ -10,10 +11,13 @@ use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
+use icp_events::EventKind;
 use icp_project::calls::CanisterCalls;
 use icp_project::host::EnvironmentSelection;
 use icp_project::network::RootKeySpec;
-use icp_project::operations::task::Reporter;
+use icp_project::operations::task::{
+    CyclesPurchaseTask, Presentation, PurchasePhase, Reporter, Task,
+};
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
@@ -37,8 +41,8 @@ use crate::render::rendered;
 /// Buy cycles with a card.
 ///
 /// Creates an order on the CyclePay backend canister as the current identity,
-/// prints the Payment Link to pay on (and opens it in a browser when run from
-/// a terminal), then waits for the cycles to land on the identity's own
+/// prints the Payment Link to pay on (and opens it in a browser, except on CI
+/// or over SSH), then waits for the cycles to land on the identity's own
 /// cycles-ledger account. Fund a canister from there with `icp canister
 /// top-up`. Say either how much to spend (--amount, in the currency given by
 /// --currency) or how many cycles to receive (--cycles); the latter pays the
@@ -461,9 +465,10 @@ fn quote_line(quote: &Quote) -> String {
     )
 }
 
-/// Print the Payment Link, and open it where that makes sense: a person at a
-/// terminal, who did not ask otherwise. `--json` and `--quiet` are for
-/// scripts, which have no browser to open.
+/// Print the Payment Link, and open it where that makes sense: for a person
+/// who did not ask otherwise, on a machine they are at (an agent running the
+/// command for them included). `--json` and `--quiet` are for scripts, which
+/// have no browser to open.
 fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no_open: bool) {
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
@@ -512,7 +517,7 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
                     eprintln!("{qr}");
                 }
             }
-            if !no_open && stderr().is_terminal() {
+            if !no_open && browser_is_at_hand() {
                 match open::that(url) {
                     Ok(()) => info!("Opened the Payment Link in your browser."),
                     Err(e) => warn!("Could not open a browser ({e}); open the URL above yourself."),
@@ -520,6 +525,13 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
             }
         }
     }
+}
+
+/// Whether a browser opened here would be in front of the buyer: not on a
+/// CI runner, nor at the far end of an SSH session.
+fn browser_is_at_hand() -> bool {
+    let set = |name| std::env::var(name).is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false"));
+    !(set("CI") || set("SSH_CONNECTION") || set("SSH_CLIENT") || set("SSH_TTY"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -548,20 +560,27 @@ async fn wait_and_report(
         )
         .await
     };
-    // The live view is for a person; a script gets its answer on stdout.
+    // The live view is for a person at a terminal. Anyone else reading
+    // stderr as it comes (an agent, a log) is told in lines instead; -q
+    // asks for nothing but the link and the end.
     let result = match output {
-        Output::Human => {
-            let quiet = stderr().is_terminal().then(QuietCtrlC::new);
+        Output::Human if stderr().is_terminal() => {
+            let quiet = QuietCtrlC::new();
             let result = rendered(debug, wait).await;
             drop(quiet);
             // On a terminal the live view leaves its last line open (as it
             // does for `icp deploy`), so what follows would run on from it.
-            if !debug && stderr().is_terminal() {
+            if !debug {
                 eprintln!();
             }
             result
         }
-        Output::Quiet | Output::Json => wait(&Reporter::null()).await,
+        Output::Human | Output::Json => {
+            info!("If this command is stopped, keep waiting with:");
+            info!("  {resume}");
+            with_heartbeat(HEARTBEAT, |line| info!("{line}"), wait).await
+        }
+        Output::Quiet => wait(&Reporter::null()).await,
     };
 
     let order = match result {
@@ -597,6 +616,63 @@ async fn wait_and_report(
     };
 
     report_end(agent, buyer, &order, output, resume).await
+}
+
+/// How often a wait with nothing drawn says it is still going.
+const HEARTBEAT: Duration = Duration::from_secs(60);
+
+/// Run a wait with no live view, saying when each of its phases begins and,
+/// every `period`, that it is still going: off a terminal nothing is drawn,
+/// and whoever reads the output as it comes would otherwise hear nothing
+/// until the order settles, up to an hour later.
+async fn with_heartbeat<T>(
+    period: Duration,
+    say: impl Fn(String),
+    op: impl AsyncFnOnce(&Reporter) -> T,
+) -> T {
+    let (reporter, mut events) = icp_events::channel();
+    let op = async move {
+        let result = op(&reporter).await;
+        drop(reporter);
+        result
+    };
+    let beat = async {
+        let started = tokio::time::Instant::now();
+        let mut ticks = tokio::time::interval_at(started + period, period);
+        let mut phase: Option<CyclesPurchaseTask> = None;
+        loop {
+            tokio::select! {
+                event = events.recv() => match event.map(|event| event.kind) {
+                    None => break,
+                    Some(EventKind::TaskStarted {
+                        task: Task::CyclesPurchase(task),
+                        ..
+                    }) => {
+                        if let Some(message) = task.running_message() {
+                            say(format!("[order {}] {message}", task.order_id));
+                        }
+                        phase = Some(task);
+                    }
+                    Some(_) => {}
+                },
+                _ = ticks.tick() => {
+                    if let Some(task) = &phase {
+                        let doing = match task.phase {
+                            PurchasePhase::AwaitingPayment => "Still waiting for payment",
+                            PurchasePhase::Delivering => "Payment received; still delivering cycles",
+                        };
+                        say(format!(
+                            "[order {}] {doing} ({} so far)",
+                            task.order_id,
+                            format_age(started.elapsed())
+                        ));
+                    }
+                }
+            }
+        }
+    };
+    let (result, ()) = tokio::join!(op, beat);
+    result
 }
 
 /// Tell how a settled order ended, and fail unless it was delivered. Said
@@ -817,7 +893,7 @@ fn format_secs(timestamp: u64) -> String {
 }
 
 /// `2 hours`, `35 minutes`, `3 days`: enough for a warning.
-fn format_age(age: std::time::Duration) -> String {
+fn format_age(age: Duration) -> String {
     let secs = age.as_secs();
     let (count, unit) = if secs >= 2 * 86_400 {
         (secs / 86_400, "days")
@@ -874,7 +950,7 @@ struct JsonOrderFinal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use icp_events::TaskOutcome;
 
     use super::*;
     use crate::cyclepay::purchase::Rate;
@@ -1047,6 +1123,41 @@ mod tests {
         );
         assert_eq!(shell_word("co-1-0000abcd"), "co-1-0000abcd");
         assert_eq!(shell_word(""), "''");
+    }
+
+    /// Off a terminal, a wait says when each phase begins and keeps saying
+    /// that it goes on, in the order things happen, until it ends.
+    #[tokio::test]
+    async fn a_wait_with_nothing_drawn_keeps_saying_it_goes_on() {
+        let said = std::sync::Mutex::new(Vec::new());
+        let period = Duration::from_millis(20);
+        let ended = with_heartbeat(
+            period,
+            |line| said.lock().unwrap().push(line),
+            async |reporter: &Reporter| {
+                for phase in [PurchasePhase::AwaitingPayment, PurchasePhase::Delivering] {
+                    let task = reporter.task(Task::cycles_purchase("co-1", phase));
+                    tokio::time::sleep(period * 5).await;
+                    task.finish(TaskOutcome::succeeded());
+                }
+                "delivered"
+            },
+        )
+        .await;
+        assert_eq!(ended, "delivered");
+        let said = said.into_inner().unwrap();
+        let first = |text: &str| {
+            said.iter()
+                .position(|line| line.contains(text))
+                .unwrap_or_else(|| panic!("no {text:?} in {said:?}"))
+        };
+        assert_eq!(said[0], "[order co-1] Waiting for payment...");
+        let delivering = first("[order co-1] Payment received; delivering cycles...");
+        assert!(
+            first("Still waiting for payment (") < delivering,
+            "{said:?}"
+        );
+        assert!(first("still delivering cycles (") > delivering, "{said:?}");
     }
 
     #[test]

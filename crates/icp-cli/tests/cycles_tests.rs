@@ -660,7 +660,8 @@ async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
 
 /// Ctrl-C while waiting stops the wait, not the order: the command says how
 /// to keep waiting and exits 130, as a shell reports a command it
-/// interrupted, with no error.
+/// interrupted, with no error. Off a terminal, as here, the wait is told in
+/// lines.
 #[cfg(unix)]
 #[tokio::test]
 async fn cycles_buy_ctrl_c_stops_the_wait_and_exits_130() {
@@ -698,11 +699,12 @@ async fn cycles_buy_ctrl_c_stops_the_wait_and_exits_130() {
         .expect("failed to spawn icp cycles buy");
     let mut stderr = BufReader::new(child.stderr.take().unwrap());
     let mut said = String::new();
-    while !said.contains("Pay here") {
+    // Off a terminal the wait says it has begun, and how to pick it up again.
+    while !said.contains("Waiting for payment") {
         assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
     }
-    // Into the wait, past its first poll.
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    assert!(said.contains("keep waiting with"), "{said}");
+    std::thread::sleep(std::time::Duration::from_secs(1));
     kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
     let status = child.wait().unwrap();
     std::io::Read::read_to_string(&mut stderr, &mut said).unwrap();

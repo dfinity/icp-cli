@@ -135,13 +135,13 @@ Quote:    10.00 USD -> about 6.959T cycles (9.41 USD after a 0.59 USD card fee, 
 Create this order? [y/N]
 ```
 
-It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser when run from a terminal), and waits until the cycles land on your identity's own cycles-ledger account. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order.
+It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser, except on CI or over SSH), and waits until the cycles land on your identity's own cycles-ledger account. Off a terminal, as when an agent runs it, the wait is told in lines instead: when it begins, every minute that it goes on, and the command that picks it up again if it is stopped. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order.
 
 The quote is an estimate. CyclePay takes Stripe's card fee of 2.9% plus 0.30 USD from the amount, and mints cycles for the rest at its XDR/USD rate when the payment lands, so the cycles delivered can differ slightly from the figure quoted. The exact figure is reported once they arrive. With `--cycles`, the command pays the smallest amount, to the cent, that buys at least that many cycles at the rate quoted; if that is less than the minimum order, it pays the minimum and you get the more.
 
 Useful flags:
 
-- `--no-open` prints the Payment Link without opening a browser, for SSH sessions and containers. You can pay from any device.
+- `--no-open` prints the Payment Link without opening a browser. You can pay from any device.
 - `--no-wait` returns right after printing the link. `--resume <order-id>` waits on an order later, and prints its link again while it is still payable. An unpaid order expires 25 hours after it was made; running the same command again within an hour returns the same open order rather than making another.
 - `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created (with the amount, net and fee) and one when it settles; `-q` prints only the link, then the final status.
 - `--gateway <canister-id>` buys through another CyclePay backend canister. The [`ICP_CYCLES_GATEWAY_CANISTER_ID`](../reference/environment-variables.md#icp_cycles_gateway_canister_id) environment variable does the same, and [`ICP_CYCLES_PAYMENT_LINK_URL`](../reference/environment-variables.md#icp_cycles_payment_link_url) sets the Payment Link that goes with it, which another gateway needs.

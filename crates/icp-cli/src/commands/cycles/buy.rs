@@ -6,7 +6,7 @@ use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
 use dialoguer::console::Term;
-use icp_app::context::{Context, NetworkSelection};
+use icp_app::context::{Context, GetAgentError, GetAgentForEnvError, NetworkSelection};
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
@@ -149,19 +149,36 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         Some(gateway) => gateway,
         None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
     };
+    let cyclepay = canister.to_text() == CYCLES_GATEWAY_CID;
     let gateway = Gateway {
         canister,
-        payment_link: payment_link_url(canister.to_text() == CYCLES_GATEWAY_CID)
-            .map_err(|message| anyhow!(message))?,
+        payment_link: payment_link_url(cyclepay).map_err(|message| anyhow!(message))?,
     };
 
-    let agent = ctx
+    let agent = match ctx
         .get_agent(
             &selections.identity,
             &selections.network,
             &selections.environment,
         )
-        .await?;
+        .await
+    {
+        Ok(agent) => agent,
+        // Named neither, the network is a project's own local one, or none
+        // outside a project; CyclePay's gateway is on mainnet only.
+        Err(
+            error @ (GetAgentError::NoProjectOrNetwork
+            | GetAgentError::GetAgentForEnv {
+                source: GetAgentForEnvError::NetworkAccess { .. },
+            }),
+        ) if cyclepay
+            && matches!(selections.network, NetworkSelection::Default)
+            && matches!(selections.environment, EnvironmentSelection::Default) =>
+        {
+            bail!("{error}. CyclePay sells cycles on mainnet: add `-n ic`")
+        }
+        Err(error) => return Err(error.into()),
+    };
     let buyer = agent
         .get_principal()
         .map_err(|message| anyhow!("failed to get the identity's principal: {message}"))?;

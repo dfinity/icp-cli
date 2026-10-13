@@ -536,6 +536,31 @@ async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
         .failure();
 }
 
+/// With no network or environment named, the command would use a project's
+/// own local network, or none outside a project, and CyclePay is on mainnet
+/// only: either way it points at `-n ic`.
+#[test]
+fn cycles_buy_with_no_network_named_points_at_mainnet() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    write_string(&project_dir.join("icp.yaml"), "").expect("failed to write project manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "buy", "--amount", "10", "--yes"])
+        .assert()
+        .stderr(contains("is not running"))
+        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .failure();
+
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--yes"])
+        .assert()
+        .stderr(contains("No project found"))
+        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .failure();
+}
+
 /// A gateway other than CyclePay's is not paid on CyclePay's Payment Link: a
 /// payment there would go to CyclePay, for an order CyclePay does not have.
 /// Refused before any identity is used or any network reached.

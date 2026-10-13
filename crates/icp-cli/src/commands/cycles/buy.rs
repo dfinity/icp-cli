@@ -361,7 +361,7 @@ fn confirm(
     }
     let interrupt = Interrupt::catch_at_prompt()?;
     let confirmed = Confirm::new()
-        .with_prompt("Create this order?")
+        .with_prompt("Create this order? Nothing is charged until you pay on Stripe.")
         .default(false)
         .interact();
     match confirmed {
@@ -481,16 +481,17 @@ fn stale_rate_warning(rate: &Rate) -> Option<String> {
     })
 }
 
-/// Who pays, through what, and the quote, a line each and none wider than
-/// 80 columns:
+/// Who pays and the quote, a line each and none wider than 80 columns:
 ///
 /// ```text
 /// Identity: default
 /// Buyer:    rv4ez-fgjbj-...-vae
-/// Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 /// Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 /// Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
 /// ```
+///
+/// The gateway is shown only when it is not CyclePay's own, as `--gateway`
+/// or `ICP_CYCLES_GATEWAY_CANISTER_ID` can make it.
 fn quote_block(
     quote: &Quote,
     target: Target,
@@ -503,13 +504,9 @@ fn quote_block(
         lines.push(format!("Identity: {name}"));
     }
     lines.push(format!("Buyer:    {buyer}"));
-    // Only the default gateway is known to be CyclePay's.
-    let whose = if gateway.canister.to_text() == CYCLES_GATEWAY_CID {
-        " (CyclePay)"
-    } else {
-        ""
-    };
-    lines.push(format!("Gateway:  {}{whose}", gateway.canister));
+    if gateway.canister.to_text() != CYCLES_GATEWAY_CID {
+        lines.push(format!("Gateway:  {}", gateway.canister));
+    }
     if let Target::Receive { cycles, .. } = target {
         lines.push(format!("Wanted:   at least {}", format_cycles(cycles)));
     }
@@ -1116,12 +1113,11 @@ mod tests {
             [
                 "Identity: default",
                 "Buyer:    rrkah-fqaaa-aaaaa-aaaaq-cai",
-                "Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)",
                 "Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)",
                 "Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles",
             ]
         );
-        // Another gateway is not said to be CyclePay's.
+        // Another gateway is named; CyclePay's own is not worth a line.
         let block = quote_block(
             &quote,
             Target::Spend(quote.amount),

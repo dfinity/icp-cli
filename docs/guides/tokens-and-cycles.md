@@ -126,15 +126,14 @@ icp cycles buy --amount 10 -n ic
 icp cycles buy --cycles 5t -n ic
 ```
 
-The command quotes what the amount buys at CyclePay's current rate, shows who is paying and which backend canister takes the order, and asks you to confirm:
+The command quotes what the amount buys at CyclePay's current rate, shows who is paying (and the backend canister, when `--gateway` picks another), and asks you to confirm:
 
 ```
 Identity: default
 Buyer:    rv4ez-fgjbj-...-vae
-Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
-Create this order? [y/N]
+Create this order? Nothing is charged until you pay on Stripe. [y/N]
 ```
 
 It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser, except on CI or over SSH), and waits until the cycles land on your identity's own cycles-ledger account. Off a terminal, as when an agent runs it, the wait is told in lines instead: when it begins, every minute that it goes on, and the command that picks it up again if it is stopped. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order.

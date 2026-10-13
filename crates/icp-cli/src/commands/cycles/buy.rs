@@ -224,8 +224,23 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         None => {
             let target =
                 target.expect("clap requires --amount or --cycles unless --resume is given");
-            let (order, quote, interrupt) =
+            let (order, quote, mut interrupt) =
                 create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
+            // Ctrl-C while the order was being made: it exists now, so say
+            // where it is and how to pick it up, but open nothing and wait
+            // for nothing.
+            if interrupt.pressed() {
+                // The terminal echoed it as `^C` with no line ending.
+                if stderr().is_terminal() {
+                    eprintln!();
+                }
+                announce_payable(&order, Some(&quote), output, true);
+                if output != Output::Quiet {
+                    info!("Stopped before waiting. Keep waiting with:");
+                    info!("  {}", resume(&order.id));
+                }
+                return Err(Stopped::INTERRUPTED.into());
+            }
             announce_payable(&order, Some(&quote), output, args.no_open);
             (order, true, interrupt)
         }
@@ -382,8 +397,9 @@ fn confirm(
 /// Catching Ctrl-C is what lets the prompt read it as an answer (left alone,
 /// it ends the process with the prompt's cursor hidden), and once caught it
 /// stays caught for the life of the process. So a prompt that catches it
-/// hands the same listener on to the wait, which then stops at once for a
-/// Ctrl-C pressed while the order was being made, rather than it being lost.
+/// keeps the listener, and a Ctrl-C pressed while the order was being made is
+/// not lost: the command stops as soon as the order exists, before opening a
+/// browser or waiting.
 struct Interrupt {
     #[cfg(unix)]
     sigint: Option<tokio::signal::unix::Signal>,
@@ -408,6 +424,17 @@ impl Interrupt {
                 tokio::signal::unix::SignalKind::interrupt(),
             )?),
         })
+    }
+
+    /// Whether Ctrl-C has been pressed since it was caught, without waiting
+    /// for one.
+    fn pressed(&mut self) -> bool {
+        #[cfg(unix)]
+        if let Some(sigint) = &mut self.sigint {
+            let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+            return sigint.poll_recv(&mut cx).is_ready();
+        }
+        false
     }
 
     async fn received(self) {

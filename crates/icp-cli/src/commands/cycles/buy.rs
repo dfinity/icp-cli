@@ -190,12 +190,14 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     let output = Output::of(args);
 
     // Only the identity that made an order can read it, on the network its
-    // gateway is on: the command that resumes it says both.
+    // gateway is on: the command that resumes it says both, the identity by
+    // name even when it was the default, which can change in the meantime.
+    let identity = identity_name(ctx, &selections.identity).await;
     let resume = |id: &str| {
         format!(
             "icp cycles buy --resume {}{}",
             shell_word(id),
-            selection_flags(&selections, args.gateway)
+            selection_flags(&selections, identity.as_deref(), args.gateway)
         )
     };
 
@@ -224,7 +226,6 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         None => {
             let target =
                 target.expect("clap requires --amount or --cycles unless --resume is given");
-            let identity = identity_name(ctx, &selections.identity).await;
             let (order, quote, interrupt) =
                 create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
             announce_payable(&order, Some(&quote), output, args.no_open);
@@ -251,8 +252,12 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
 }
 
 /// The selections a run was given, as flags for the command that resumes
-/// its order.
-fn selection_flags(selections: &TokenCommandSelections, gateway: Option<Principal>) -> String {
+/// its order. `identity` is the name of the identity used, when known.
+fn selection_flags(
+    selections: &TokenCommandSelections,
+    identity: Option<&str>,
+    gateway: Option<Principal>,
+) -> String {
     let mut flags = String::new();
     match &selections.network {
         NetworkSelection::Named(name) => flags.push_str(&format!(" -n {}", shell_word(name))),
@@ -270,7 +275,7 @@ fn selection_flags(selections: &TokenCommandSelections, gateway: Option<Principa
     if let EnvironmentSelection::Named(name) = &selections.environment {
         flags.push_str(&format!(" -e {}", shell_word(name)));
     }
-    if let IdentitySelection::Named(name) = &selections.identity {
+    if let Some(name) = identity {
         flags.push_str(&format!(" --identity {}", shell_word(name)));
     }
     if let Some(gateway) = gateway {
@@ -280,8 +285,10 @@ fn selection_flags(selections: &TokenCommandSelections, gateway: Option<Principa
 }
 
 /// `value` as one shell word: as it is when nothing in it needs quoting.
+/// A leading `=` does, in zsh, which reads `=word` as the path of `word`.
 fn shell_word(value: &str) -> String {
     let plain = !value.is_empty()
+        && !value.starts_with('=')
         && value
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "-_./:@=+".contains(c));
@@ -1300,7 +1307,7 @@ mod tests {
             identity: IdentitySelection::Named("my id".into()),
         };
         assert_eq!(
-            selection_flags(&selections, None),
+            selection_flags(&selections, Some("my id"), None),
             " -n ic --identity 'my id'"
         );
         let selections = TokenCommandSelections {
@@ -1310,11 +1317,18 @@ mod tests {
         };
         let gateway = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
         assert_eq!(
-            selection_flags(&selections, Some(gateway)),
+            selection_flags(&selections, None, Some(gateway)),
             " -e staging --gateway ryjl3-tyaaa-aaaaa-aaaba-cai"
+        );
+        // The default identity is named, as it may not be the default later.
+        assert_eq!(
+            selection_flags(&selections, Some("default"), None),
+            " -e staging --identity default"
         );
         assert_eq!(shell_word("co-1-0000abcd"), "co-1-0000abcd");
         assert_eq!(shell_word(""), "''");
+        assert_eq!(shell_word("=ls"), "'=ls'");
+        assert_eq!(shell_word("a=b"), "a=b");
     }
 
     /// Off a terminal, a wait says when each phase begins and keeps saying

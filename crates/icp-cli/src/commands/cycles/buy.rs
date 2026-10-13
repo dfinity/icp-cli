@@ -312,15 +312,9 @@ fn confirm(
     speak: bool,
 ) -> Result<Interrupt, anyhow::Error> {
     if speak {
-        let identity = identity
-            .map(|name| format!(" (identity '{name}')"))
-            .unwrap_or_default();
-        info!("Buyer:    {buyer}{identity}");
-        info!("Gateway:  {} (CyclePay backend canister)", gateway.canister);
-        if let Target::Receive { cycles, .. } = target {
-            info!("Wanted:   at least {}", format_cycles(cycles));
+        for line in quote_block(quote, target, gateway, buyer, identity) {
+            info!("{line}");
         }
-        info!("Quote:    {}", quote_line(quote));
     }
     // Said even when the quote is not: a script that reads the figures off
     // --json, or -q's, would otherwise never hear they may be off.
@@ -463,16 +457,48 @@ fn stale_rate_warning(rate: &Rate) -> Option<String> {
     })
 }
 
-/// `10.00 USD -> about 6.818T cycles (9.41 USD after a 0.59 USD card fee, at 1.3520 USD per 1T cycles)`.
-fn quote_line(quote: &Quote) -> String {
-    format!(
-        "{} -> about {} ({} after a {} card fee, at {} per 1T cycles)",
-        quote.amount,
+/// Who pays, through what, and the quote, a line each and none wider than
+/// 80 columns:
+///
+/// ```text
+/// Identity: default
+/// Buyer:    rv4ez-fgjbj-...-vae
+/// Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
+/// Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
+/// Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
+/// ```
+fn quote_block(
+    quote: &Quote,
+    target: Target,
+    gateway: &Gateway,
+    buyer: Principal,
+    identity: Option<&str>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(name) = identity {
+        lines.push(format!("Identity: {name}"));
+    }
+    lines.push(format!("Buyer:    {buyer}"));
+    // Only the default gateway is known to be CyclePay's.
+    let whose = if gateway.canister.to_text() == CYCLES_GATEWAY_CID {
+        " (CyclePay)"
+    } else {
+        ""
+    };
+    lines.push(format!("Gateway:  {}{whose}", gateway.canister));
+    if let Target::Receive { cycles, .. } = target {
+        lines.push(format!("Wanted:   at least {}", format_cycles(cycles)));
+    }
+    lines.push(format!(
+        "Price:    {} ({} after a {} card fee)",
+        quote.amount, quote.net, quote.fee
+    ));
+    lines.push(format!(
+        "Estimate: about {}, at {} per 1T cycles",
         format_cycles(quote.cycles),
-        quote.net,
-        quote.fee,
         quote.rate.usd_per_trillion()
-    )
+    ));
+    lines
 }
 
 /// Print the Payment Link, and open it where that makes sense: for a person
@@ -509,28 +535,33 @@ fn announce_payable(order: &OrderView, quote: Option<&Quote>, output: Output, no
                 .unwrap_or_default();
             info!("Order {}{until}. Pay here:", order.id);
             println!("{url}");
+            if !no_open && browser_is_at_hand() {
+                match open::that(url) {
+                    Ok(()) => info!("Opened the Payment Link in your browser."),
+                    Err(e) => warn!("Could not open a browser ({e}); open the URL above yourself."),
+                }
+            }
             // A phone camera is the usual way to reach a card from a terminal;
             // the code is for eyes, so it only goes where there are some.
             let color = std::env::var_os("NO_COLOR").is_none();
             if stderr().is_terminal()
                 && let Some(qr) = render_qr(url, color)
             {
-                // A code wrapped across lines cannot be scanned.
-                let (_, columns) = dialoguer::console::Term::stderr().size();
+                // A code wrapped across lines, or partly scrolled off the
+                // screen by the wait's line below it, cannot be scanned.
+                let (rows, columns) = Term::stderr().size();
                 let width = qr
                     .lines()
                     .next()
                     .map_or(0, |row| row.chars().filter(|c| "█▀▄ ".contains(*c)).count());
-                if width > usize::from(columns) {
-                    info!("(Widen the terminal to {width} columns to see the QR code.)");
+                let height = qr.lines().count() + 1;
+                if width > usize::from(columns) || height > usize::from(rows) {
+                    info!(
+                        "(Make the terminal {width} columns by {height} rows or larger to see the \
+                         QR code.)"
+                    );
                 } else {
                     eprintln!("{qr}");
-                }
-            }
-            if !no_open && browser_is_at_hand() {
-                match open::that(url) {
-                    Ok(()) => info!("Opened the Payment Link in your browser."),
-                    Err(e) => warn!("Could not open a browser ({e}); open the URL above yourself."),
                 }
             }
         }
@@ -802,10 +833,12 @@ fn until(order: &OrderView) -> String {
 /// The URL as a QR code drawn with half-block characters, two modules per
 /// row, for scanning off the terminal. It takes the lowest error correction
 /// (a screen does not smudge) and a two-module quiet zone, the least a
-/// scanner needs, so that the Payment Link's code is 41x21 and fits an 80x24
-/// terminal. Light modules are the blocks; with `color`, the code is set
-/// white on black so that it reads the same on a light theme as on a dark
-/// one. `None` only if the URL is too long to encode.
+/// scanner needs, so that the Payment Link's code fits an 80x24 terminal with
+/// the wait's line below it: 41x21, or 45x23 once the order id and amount
+/// make the URL longer than 106 bytes. Light modules are the blocks; with
+/// `color`, the code is set white on black so that it reads the same on a
+/// light theme as on a dark one. `None` only if the URL is too long to
+/// encode.
 fn render_qr(url: &str, color: bool) -> Option<String> {
     use itertools::Itertools;
     use qrcode::{Color, EcLevel, QrCode};
@@ -1026,9 +1059,16 @@ mod tests {
         );
     }
 
+    fn gateway_at(canister: &str) -> Gateway {
+        Gateway {
+            canister: Principal::from_text(canister).unwrap(),
+            payment_link: url::Url::parse("https://buy.stripe.com/test_link").unwrap(),
+        }
+    }
+
     #[test]
-    fn quote_line_shows_amount_cycles_fee_and_rate() {
-        let line = quote_line(&Quote {
+    fn the_quote_block_shows_amount_cycles_fee_and_rate() {
+        let quote = Quote {
             amount: Money::from_minor_units(1000, Currency::Usd),
             fee: Money::from_minor_units(59, Currency::Usd),
             net: Money::from_minor_units(941, Currency::Usd),
@@ -1038,11 +1078,71 @@ mod tests {
                 stale: false,
                 age: None,
             },
-        });
-        assert_eq!(
-            line,
-            "10.00 USD -> about 6.959T cycles (9.41 USD after a 0.59 USD card fee, at 1.3520 USD per 1T cycles)"
+        };
+        let buyer = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+        let block = quote_block(
+            &quote,
+            Target::Spend(quote.amount),
+            &gateway_at(CYCLES_GATEWAY_CID),
+            buyer,
+            Some("default"),
         );
+        assert_eq!(
+            block,
+            [
+                "Identity: default",
+                "Buyer:    rrkah-fqaaa-aaaaa-aaaaq-cai",
+                "Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)",
+                "Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)",
+                "Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles",
+            ]
+        );
+        // Another gateway is not said to be CyclePay's.
+        let block = quote_block(
+            &quote,
+            Target::Spend(quote.amount),
+            &gateway_at("ryjl3-tyaaa-aaaaa-aaaba-cai"),
+            buyer,
+            None,
+        );
+        assert_eq!(block[1], "Gateway:  ryjl3-tyaaa-aaaaa-aaaba-cai");
+    }
+
+    /// The widest the block can be, a self-authenticating principal (the
+    /// longest there is) buying the most an order allows, fits 80 columns.
+    #[test]
+    fn the_quote_block_fits_80_columns() {
+        let quote = Quote {
+            amount: Money::from_minor_units(20_000, Currency::Usd),
+            fee: Money::from_minor_units(610, Currency::Usd),
+            net: Money::from_minor_units(19_390, Currency::Usd),
+            cycles: 999_999_999_999_999,
+            rate: Rate {
+                xdr_usd_x10000: 13_520,
+                stale: false,
+                age: None,
+            },
+        };
+        let buyer =
+            Principal::from_text("byuwt-rmt75-hwpgm-5yame-rl7mk-p7cau-alsc3-f7wh2-f2nkx-wv3do-tqe")
+                .unwrap();
+        let block = quote_block(
+            &quote,
+            Target::Receive {
+                cycles: 999_999_999_999_999,
+                currency: Currency::Usd,
+            },
+            &gateway_at(CYCLES_GATEWAY_CID),
+            buyer,
+            Some("a-rather-long-identity-name"),
+        );
+        for line in &block {
+            assert!(
+                line.chars().count() <= 80,
+                "{} columns: {line}",
+                line.chars().count()
+            );
+        }
     }
 
     #[test]

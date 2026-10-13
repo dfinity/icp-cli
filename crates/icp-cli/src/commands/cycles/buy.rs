@@ -943,10 +943,16 @@ fn format_utc(timestamp: u64) -> String {
 /// (a screen does not smudge) and a two-module quiet zone, the least a
 /// scanner needs, so that the Payment Link's code fits an 80x24 terminal with
 /// the wait's line below it: 41x21, or 45x23 once the order id and amount
-/// make the URL longer than 106 bytes. Light modules are the blocks; with
-/// `color`, the code is set white on black so that it reads the same on a
-/// light theme as on a dark one. `None` only if the URL is too long to
+/// make the URL longer than 106 bytes. `None` only if the URL is too long to
 /// encode.
+///
+/// With `color`, every cell is an upper half block whose foreground is the
+/// top module's colour and whose background is the bottom module's: bright
+/// white for light, black for dark. The code reads the same on a light theme
+/// as on a dark one, and any spacing a terminal adds between its rows takes
+/// the colour of the module just above it, rather than cutting a dark line
+/// through light ones. Without, light modules are the blocks, in the
+/// terminal's own colours, which scans best light on dark.
 fn render_qr(url: &str, color: bool) -> Option<String> {
     use itertools::Itertools;
     use qrcode::{Color, EcLevel, QrCode};
@@ -960,21 +966,32 @@ fn render_qr(url: &str, color: bool) -> Option<String> {
         let inside = (QUIET..QUIET + width).contains(&x) && (QUIET..QUIET + width).contains(&y);
         !inside || modules[(y - QUIET) * width + (x - QUIET)] == Color::Light
     };
-    let (on, off) = if color {
-        ("\x1b[97;40m", "\x1b[0m")
-    } else {
-        ("", "")
-    };
     let mut rows = (0..size).step_by(2).map(|y| {
-        let row: String = (0..size)
-            .map(|x| match (light(x, y), light(x, y + 1)) {
-                (true, true) => '█',
-                (true, false) => '▀',
-                (false, true) => '▄',
-                (false, false) => ' ',
-            })
-            .collect();
-        format!("{on}{row}{off}")
+        if !color {
+            return (0..size)
+                .map(|x| match (light(x, y), light(x, y + 1)) {
+                    (true, true) => '█',
+                    (true, false) => '▀',
+                    (false, true) => '▄',
+                    (false, false) => ' ',
+                })
+                .collect();
+        }
+        // The colours are set where they change, and reset at the row's end.
+        let mut row = String::new();
+        let mut set = None;
+        for x in 0..size {
+            let cell = (light(x, y), light(x, y + 1));
+            if set != Some(cell) {
+                let fg = if cell.0 { 97 } else { 30 };
+                let bg = if cell.1 { 107 } else { 40 };
+                row.push_str(&format!("\x1b[{fg};{bg}m"));
+                set = Some(cell);
+            }
+            row.push('▀');
+        }
+        row.push_str("\x1b[0m");
+        row
     });
     Some(rows.join("\n"))
 }
@@ -1267,45 +1284,92 @@ mod tests {
                 .all(|c| matches!(c, '█' | '▀' | '▄' | ' ' | '\n')),
             "{qr}"
         );
-        // In colour, every row is set white on black and reset after.
+        // In colour, every cell is an upper half block, and every row sets
+        // its colours first and resets them after.
         let colored = render_qr(url, true).unwrap();
         assert!(
             colored
                 .lines()
-                .all(|l| l.starts_with("\x1b[97;40m") && l.ends_with("\x1b[0m")),
+                .all(|l| l.starts_with("\x1b[") && l.ends_with("\x1b[0m")),
             "{colored}"
         );
+        assert!(
+            colored
+                .lines()
+                .all(|l| l.chars().filter(|c| "█▀▄ ".contains(*c)).count() == width),
+            "{colored}"
+        );
+        assert!(!colored.contains(['█', '▄', ' ']), "{colored}");
         // Far beyond a QR code's capacity.
         assert!(render_qr(&"x".repeat(10_000), false).is_none());
     }
 
-    /// Read back, the drawing is the code's own modules inside a light
-    /// quiet zone two modules wide, with the half row below its odd height
-    /// light too: a dark stripe there would leave a scanner no edge to find.
+    /// Each cell of a drawn code as (top light, bottom light): read off the
+    /// block characters without colour, and off each cell's foreground
+    /// (top) and background (bottom) with it.
+    fn read_back(qr: &str, color: bool) -> Vec<Vec<(bool, bool)>> {
+        qr.lines()
+            .map(|line| {
+                let mut cells = Vec::new();
+                let (mut fg, mut bg) = (None, None);
+                let mut chars = line.chars();
+                while let Some(c) = chars.next() {
+                    if c == '\x1b' {
+                        let sgr: String = chars.by_ref().take_while(|c| *c != 'm').collect();
+                        let codes: Vec<&str> = sgr.trim_start_matches('[').split(';').collect();
+                        match codes[..] {
+                            ["0"] => (fg, bg) = (None, None),
+                            [f, b] => (fg, bg) = (Some(f.to_owned()), Some(b.to_owned())),
+                            _ => panic!("unexpected SGR {sgr:?}"),
+                        }
+                        continue;
+                    }
+                    cells.push(if color {
+                        assert_eq!(c, '▀', "{line:?}");
+                        let light = |code: &Option<String>, on: &str, off: &str| match code {
+                            Some(code) if code == on => true,
+                            Some(code) if code == off => false,
+                            other => panic!("unexpected colour {other:?} in {line:?}"),
+                        };
+                        (light(&fg, "97", "30"), light(&bg, "107", "40"))
+                    } else {
+                        match c {
+                            '█' => (true, true),
+                            '▀' => (true, false),
+                            '▄' => (false, true),
+                            ' ' => (false, false),
+                            c => panic!("unexpected {c:?}"),
+                        }
+                    });
+                }
+                cells
+            })
+            .collect()
+    }
+
+    /// Read back, with colour and without, the drawing is the code's own
+    /// modules inside a light quiet zone two modules wide, with the half row
+    /// below its odd height light too: a dark stripe there would leave a
+    /// scanner no edge to find.
     #[test]
     fn qr_draws_every_module_where_it_is() {
         use qrcode::{Color, EcLevel, QrCode};
         let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-4-77fd4ac0&prefilled_amount=100";
         let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).unwrap();
         let (width, modules) = (code.width(), code.to_colors());
-        let rows: Vec<Vec<char>> = render_qr(url, false)
-            .unwrap()
-            .lines()
-            .map(|l| l.chars().collect())
-            .collect();
         let size = width + 4;
-        assert_eq!(rows.len(), size.div_ceil(2));
-        assert!(rows.iter().all(|row| row.len() == size));
-        for y in 0..rows.len() * 2 {
-            for x in 0..size {
-                let drawn_light = match (rows[y / 2][x], y % 2) {
-                    ('█', _) | ('▀', 0) | ('▄', 1) => true,
-                    (' ', _) | ('▀', 1) | ('▄', 0) => false,
-                    (c, _) => panic!("unexpected {c:?}"),
-                };
-                let inside = (2..2 + width).contains(&x) && (2..2 + width).contains(&y);
-                let light = !inside || modules[(y - 2) * width + (x - 2)] == Color::Light;
-                assert_eq!(drawn_light, light, "module ({x}, {y})");
+        for color in [false, true] {
+            let rows = read_back(&render_qr(url, color).unwrap(), color);
+            assert_eq!(rows.len(), size.div_ceil(2));
+            assert!(rows.iter().all(|row| row.len() == size));
+            for y in 0..rows.len() * 2 {
+                for x in 0..size {
+                    let (top, bottom) = rows[y / 2][x];
+                    let drawn_light = if y % 2 == 0 { top } else { bottom };
+                    let inside = (2..2 + width).contains(&x) && (2..2 + width).contains(&y);
+                    let light = !inside || modules[(y - 2) * width + (x - 2)] == Color::Light;
+                    assert_eq!(drawn_light, light, "module ({x}, {y}), color {color}");
+                }
             }
         }
     }

@@ -379,7 +379,11 @@ fn confirm(
         .interact();
     match confirmed {
         Ok(true) => Ok(interrupt),
-        Ok(false) => bail!("Operation cancelled by user"),
+        // Said as Ctrl-C there is: the same line, and the same status.
+        Ok(false) => {
+            info!("No order created.");
+            Err(Stopped::DECLINED.into())
+        }
         // Ctrl-C, read as an answer: the prompt leaves its cursor hidden
         // and its line open.
         Err(dialoguer::Error::IO(e)) if e.kind() == io::ErrorKind::Interrupted => {

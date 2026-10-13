@@ -69,6 +69,9 @@ impl Stopped {
     /// create` waiting on the CMC, `identity link web`), though without
     /// their `Error:` line.
     pub(crate) const INTERRUPTED: Stopped = Stopped { code: 1 };
+
+    /// A confirmation answered no: as Ctrl-C at the same prompt.
+    pub(crate) const DECLINED: Stopped = Stopped { code: 1 };
 }
 
 impl std::fmt::Display for Stopped {

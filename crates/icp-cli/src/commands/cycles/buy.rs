@@ -219,10 +219,8 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
             print_final(&order, None, output)?;
         }
         if output == Output::Human && !order.status.is_terminal() {
-            info!(
-                "Not waiting. Run `{}` to wait for delivery.",
-                resume(&order.id)
-            );
+            info!("Not waiting. Wait for delivery later with:");
+            info!("  {}", resume(&order.id));
         }
         return Ok(());
     }
@@ -587,28 +585,18 @@ async fn wait_and_report(
         Ok(order) => order,
         // Stopped, not failed: the order carries on without the command.
         Err(CyclesPurchaseError::Interrupted { order }) => {
-            if output == Output::Human {
-                if order.status.is_paid() {
-                    info!("Order {} is {}.", order.id, order.status);
-                } else {
-                    info!("Order {} stays payable{}.", order.id, until(&order));
-                }
-                info!("Keep waiting:  {resume}");
+            if output != Output::Quiet {
+                info!("{}", standing(&order, false));
+                info!("Keep waiting with:");
+                info!("  {resume}");
             }
             return Err(Stopped::INTERRUPTED.into());
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
-            if output == Output::Human {
-                if order.status.is_paid() {
-                    info!("Order {} is still {}.", order.id, order.status);
-                } else {
-                    info!(
-                        "No payment arrived. Order {} stays payable{}.",
-                        order.id,
-                        until(&order)
-                    );
-                }
-                info!("Keep waiting:  {resume}");
+            if output != Output::Quiet {
+                info!("{}", standing(&order, true));
+                info!("Keep waiting with:");
+                info!("  {resume}");
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
@@ -745,16 +733,35 @@ fn ending(order: &OrderView, resume: &str) -> Result<(), anyhow::Error> {
              makes by hand{detail}. Keep the order id",
             order.id
         ),
+        // Not a promise of a refund: a payment disputed before delivery
+        // also needs review, and the dispute settles it.
         OrderStatus::NeedsReview => bail!(
             "order {} needs review{detail}: your card was charged, and CyclePay checks the \
-             order by hand, then delivers or refunds it; keep the order id, and run \
-             `{resume}` later to see the outcome",
+             order by hand (a disputed payment is settled by the dispute). Keep the order id, \
+             and run `{resume}` later to see the outcome",
             order.id
         ),
         OrderStatus::AwaitingPayment
         | OrderStatus::PaymentPending
         | OrderStatus::Processing
         | OrderStatus::Unknown => bail!("order {} is still {}", order.id, order.status),
+    }
+}
+
+/// Where an order the wait left unsettled stands, when it was stopped or
+/// (`timed_out`) gave up. Only an order known to be unpaid is payable.
+fn standing(order: &OrderView, timed_out: bool) -> String {
+    match order.status {
+        OrderStatus::AwaitingPayment if timed_out => format!(
+            "No payment arrived. Order {} stays payable{}.",
+            order.id,
+            until(order)
+        ),
+        OrderStatus::AwaitingPayment => {
+            format!("Order {} stays payable{}.", order.id, until(order))
+        }
+        status if timed_out => format!("Order {} is still {status}.", order.id),
+        status => format!("Order {} is {status}.", order.id),
     }
 }
 
@@ -836,18 +843,13 @@ fn refusal_message(error: &OrderError) -> String {
         OrderErrorKind::AmountOutOfRange => {
             format!("CyclePay refused the amount: {}", error.message)
         }
-        // The backend's own messages say what to do; CyclePay allows 5 orders
-        // a minute and 50 a UTC day per identity, and a share of all buyers'.
-        OrderErrorKind::RateLimited => format!(
-            "CyclePay is limiting new orders ({}); it takes 5 a minute and 50 a UTC day from one \
-             identity",
-            error.message
-        ),
+        // The backend's own messages say what to do, and whether the limit
+        // is the identity's or one on every buyer: both send these codes.
+        OrderErrorKind::RateLimited => {
+            format!("CyclePay is limiting new orders: {}", error.message)
+        }
         OrderErrorKind::TooManyOpenOrders => {
-            format!(
-                "this identity has too many unpaid orders: {}",
-                error.message
-            )
+            format!("CyclePay refused the order: {}", error.message)
         }
         OrderErrorKind::Paused | OrderErrorKind::CardsUnavailable => {
             format!("CyclePay is not taking card orders: {}", error.message)
@@ -966,15 +968,23 @@ mod tests {
     fn refusal_messages_say_what_to_do() {
         // The backend's own messages, as orders_v2.rs words them: nothing
         // they already say is said twice.
-        let msg = refusal_message(&error("RATE_LIMITED", "too many orders; try again shortly"));
-        assert!(msg.contains("50 a UTC day"), "{msg}");
-
-        let msg = refusal_message(&error(
-            "TOO_MANY_OPEN_ORDERS",
-            "you have 10 unpaid orders; pay one, or wait for it to expire (25 hours after it \
-             was made)",
-        ));
-        assert_eq!(msg.matches("25 hours").count(), 1, "{msg}");
+        // Each of these codes is sent both for the identity's own limit and
+        // for one on every buyer, so neither is put down to the identity.
+        for message in [
+            "too many orders; try again shortly",
+            "too many new orders this minute; try again shortly",
+        ] {
+            let msg = refusal_message(&error("RATE_LIMITED", message));
+            assert_eq!(msg, format!("CyclePay is limiting new orders: {message}"));
+        }
+        for message in [
+            "you have 10 unpaid orders; pay one, or wait for it to expire (25 hours after it was \
+             made)",
+            "too many unpaid orders right now; try again later",
+        ] {
+            let msg = refusal_message(&error("TOO_MANY_OPEN_ORDERS", message));
+            assert_eq!(msg, format!("CyclePay refused the order: {message}"));
+        }
 
         let msg = refusal_message(&error("PAUSED", "CyclePay is paused; try again later"));
         assert_eq!(msg.matches("try again later").count(), 1, "{msg}");
@@ -1097,6 +1107,44 @@ mod tests {
         ] {
             let err = ending(&order(status), resume).unwrap_err().to_string();
             assert!(err.contains(says), "{status:?}: {err}");
+        }
+    }
+
+    /// A wait that stops or gives up calls an order payable only when it is
+    /// known to be unpaid.
+    #[test]
+    fn an_unsettled_order_is_payable_only_when_known_unpaid() {
+        let order = |status| OrderView {
+            id: "co-1".into(),
+            status,
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            checkout_url: None,
+            expires_at: Some(1_700_000_000),
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+        };
+        assert_eq!(
+            standing(&order(OrderStatus::AwaitingPayment), false),
+            "Order co-1 stays payable until 2023-11-14T22:13:20Z."
+        );
+        assert_eq!(
+            standing(&order(OrderStatus::AwaitingPayment), true),
+            "No payment arrived. Order co-1 stays payable until 2023-11-14T22:13:20Z."
+        );
+        assert_eq!(
+            standing(&order(OrderStatus::Processing), true),
+            "Order co-1 is still paid, delivering."
+        );
+        for timed_out in [false, true] {
+            let said = standing(&order(OrderStatus::Unknown), timed_out);
+            assert!(said.contains("does not know"), "{said}");
+            assert!(
+                !said.contains("payable") && !said.contains("No payment"),
+                "{said}"
+            );
         }
     }
 

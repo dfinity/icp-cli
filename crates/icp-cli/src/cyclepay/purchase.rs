@@ -554,6 +554,11 @@ pub struct WaitOptions {
     /// up: ten minutes of them at [`POLL_INTERVAL`], longer than the few
     /// minutes CyclePay's backend is stopped for during an upgrade.
     pub max_consecutive_transient: u32,
+    /// Consecutive polls answering `null` for an order already seen, before
+    /// its deadline, tolerated before it is called not found: a minute of
+    /// them at [`POLL_INTERVAL`], where a replica that has not caught up
+    /// needs seconds.
+    pub max_consecutive_missing: u32,
 }
 
 impl Default for WaitOptions {
@@ -564,6 +569,7 @@ impl Default for WaitOptions {
             max_unpaid_wait: Duration::from_secs(60 * 60),
             max_paid_wait: Duration::from_secs(15 * 60),
             max_consecutive_transient: 200,
+            max_consecutive_missing: 20,
         }
     }
 }
@@ -650,6 +656,7 @@ pub async fn wait_for_order(
     );
     let mut last = initial;
     let mut transient_streak = 0u32;
+    let mut missing_streak = 0u32;
     let started = Instant::now();
     let mut paid_since: Option<Instant> = None;
 
@@ -685,6 +692,7 @@ pub async fn wait_for_order(
         match polled {
             Ok(Some(order)) => {
                 transient_streak = 0;
+                missing_streak = 0;
                 let order = if order.is_past_deadline(now_secs(), options.expiry_grace) {
                     order.expired()
                 } else {
@@ -726,9 +734,9 @@ pub async fn wait_for_order(
                 // The backend forgets an order only once it expires, so a
                 // null before then is a replica that has not caught up with
                 // it (a poll right after `create_order` can reach one): tried
-                // again, as an unanswered poll is.
-                Some(order) if transient_streak < options.max_consecutive_transient => {
-                    transient_streak += 1;
+                // again, for as long as a replica lags.
+                Some(order) if missing_streak < options.max_consecutive_missing => {
+                    missing_streak += 1;
                     last = Some(order);
                 }
                 _ => {

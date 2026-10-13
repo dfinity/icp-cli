@@ -731,22 +731,20 @@ async fn wait_not_found_before_the_deadline_is_order_not_found() {
     );
 
     // Known and payable, then gone for longer than a replica lags: not an
-    // expiry, so not the caller's.
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
-        Ok(None),
-        Ok(None),
-        Ok(None),
-    ]);
-    let options = WaitOptions {
-        max_consecutive_transient: 2,
-        ..fast()
-    };
-    let (result, _) = wait(&fake, None, &options).await;
+    // expiry, so not the caller's. That takes its own, short budget, not
+    // the ten minutes an unanswered network is given.
+    let mut polls = vec![Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment)))];
+    polls.extend((0..=WaitOptions::default().max_consecutive_missing).map(|_| Ok(None)));
+    let fake = FakeBackend::default().polls(polls);
+    let (result, _) = wait(&fake, None, &fast()).await;
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::OrderNotFound { .. }
     ));
+    assert_eq!(
+        fake.count_of(ORDER_STATUS_METHOD),
+        2 + WaitOptions::default().max_consecutive_missing as usize
+    );
 }
 
 /// Right after `create_order` a poll can reach a replica that has not seen

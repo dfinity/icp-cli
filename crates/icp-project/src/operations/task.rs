@@ -516,7 +516,9 @@ impl Presentation for CyclesPurchaseTask {
 
     fn running_message(&self) -> Option<&'static str> {
         Some(match self.phase {
-            // Within 80 columns with its `[order <id>] ✷ ` label.
+            // With its `[order <id>] ✷ ` label this is 63 columns plus the
+            // order id, so within 80 for ids up to 17 characters: CyclePay's
+            // `co-<n>-<8 hex>` up to order 99999.
             PurchasePhase::AwaitingPayment => {
                 "Waiting for payment; Ctrl-C leaves the order payable"
             }

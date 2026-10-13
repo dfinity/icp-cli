@@ -910,7 +910,7 @@ Display the cycles balance
 
 Buy cycles with a card.
 
-Creates an order on the CyclePay backend canister as the current identity, prints the Payment Link to pay on (and opens it in a browser when run from a terminal, but not over SSH), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter pays the least amount that buys them once the card fee is taken out. CyclePay accepts USD only, from 1 to 200 per order.
+Creates an order on the CyclePay backend canister as the current identity, prints the Payment Link to pay on (and opens it in a browser when run from a terminal, but not over SSH or on CI), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter pays the least amount that buys them once the card fee is taken out. CyclePay accepts USD only, from 1 to 200 per order.
 
 Exactly one of --amount, --cycles or --resume must be given.
 

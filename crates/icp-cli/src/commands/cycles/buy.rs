@@ -669,15 +669,8 @@ async fn wait_and_report(
     // asks for nothing but the link and the end.
     let result = match output {
         Output::Human if stderr().is_terminal() => {
-            let quiet = NoEcho::new();
-            let result = rendered(debug, wait).await;
-            drop(quiet);
-            // On a terminal the live view leaves its last line open (as it
-            // does for `icp deploy`), so what follows would run on from it.
-            if !debug {
-                eprintln!();
-            }
-            result
+            let _quiet = NoEcho::new();
+            rendered(debug, wait).await
         }
         Output::Human | Output::Json => {
             info!("If this command is stopped, keep waiting with:");

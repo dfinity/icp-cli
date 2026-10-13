@@ -17,8 +17,11 @@ use std::pin::pin;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use candid::Principal;
+use ic_agent::AgentError;
 use icp_events::TaskOutcome;
-use icp_project::calls::{CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed};
+use icp_project::calls::{
+    CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
+};
 use icp_project::operations::task::{PurchasePhase, Reporter, Task, TaskReporter};
 use snafu::{OptionExt, Snafu};
 use std::fmt;
@@ -531,7 +534,9 @@ pub struct WaitOptions {
     pub max_unpaid_wait: Duration,
     /// How long a paid order is given to be delivered.
     pub max_paid_wait: Duration,
-    /// Consecutive unanswered polls tolerated before giving up.
+    /// Consecutive polls that could not be answered tolerated before giving
+    /// up: ten minutes of them at [`POLL_INTERVAL`], longer than the few
+    /// minutes CyclePay's backend is stopped for during an upgrade.
     pub max_consecutive_transient: u32,
 }
 
@@ -542,7 +547,7 @@ impl Default for WaitOptions {
             expiry_grace: Duration::from_secs(60),
             max_unpaid_wait: Duration::from_secs(60 * 60),
             max_paid_wait: Duration::from_secs(15 * 60),
-            max_consecutive_transient: 20,
+            max_consecutive_transient: 200,
         }
     }
 }
@@ -743,8 +748,32 @@ fn map_absent(
     }
 }
 
+/// The replica's error codes for a call to a canister that is stopped or
+/// stopping, as CyclePay's backend is for a few minutes during each upgrade.
+const STOPPED_CODES: [&str; 2] = ["IC0508", "IC0509"];
+
+/// Whether a failed read of an order is worth repeating. Reading changes
+/// nothing, so it always is when the answer could come out differently: the
+/// network did not answer; the backend is stopped for an upgrade; or a
+/// boundary node was overloaded or could not reach the subnet (an HTTP 429
+/// or 5xx, which `icp_app::calls::AgentCalls` reports as a failure carrying
+/// the agent's own error).
 fn is_transient(error: &TypedCallError) -> bool {
-    matches!(error, TypedCallError::Call { source } if source.is_transient())
+    let TypedCallError::Call { source } = error else {
+        return false;
+    };
+    let overloaded = match source.as_ref() {
+        CallError::Failed { source, .. } => matches!(
+            source.downcast_ref::<AgentError>(),
+            Some(AgentError::HttpError(payload)) if payload.status == 429 || payload.status >= 500
+        ),
+        _ => false,
+    };
+    source.is_transient()
+        || source
+            .code()
+            .is_some_and(|code| STOPPED_CODES.contains(&code))
+        || overloaded
 }
 
 /// Seconds since the Unix epoch, on this machine's clock.

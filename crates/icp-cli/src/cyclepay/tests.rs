@@ -642,6 +642,51 @@ async fn wait_tolerates_transient_errors() {
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
 }
 
+/// While CyclePay upgrades its backend, every call is refused as stopped
+/// (IC0509 while it stops, IC0508 once stopped) for a few minutes, and a
+/// boundary node may answer 429 or 5xx. Nothing about the order changed.
+#[tokio::test]
+async fn wait_rides_out_a_backend_upgrade_and_a_busy_boundary_node() {
+    use ic_agent::AgentError;
+    use ic_agent::agent::agent_error::HttpErrorPayload;
+    let stopped = |code: &str| CallError::Rejected {
+        canister: principal(BACKEND),
+        method: ORDER_STATUS_METHOD.to_owned(),
+        code: Some(code.to_owned()),
+        message: "Canister is stopped".to_owned(),
+    };
+    let http = |status| {
+        CallError::failed(
+            principal(BACKEND),
+            ORDER_STATUS_METHOD,
+            AgentError::HttpError(HttpErrorPayload {
+                status,
+                content_type: None,
+                content: b"try again".to_vec(),
+            }),
+        )
+    };
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Err(stopped("IC0509")),
+        Err(stopped("IC0508")),
+        Err(http(503)),
+        Err(http(429)),
+        Err(http(502)),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, _) = wait(&fake, None, &fast()).await;
+    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+
+    // A 4xx other than those is an answer, and ends the wait.
+    let fake = FakeBackend::default().polls(vec![Err(http(403))]);
+    let (result, _) = wait(&fake, None, &fast()).await;
+    assert!(matches!(
+        result.unwrap_err(),
+        CyclesPurchaseError::GetOrder { .. }
+    ));
+}
+
 #[tokio::test]
 async fn wait_gives_up_after_consecutive_transient_errors() {
     let fake = FakeBackend::default().polls(vec![

@@ -684,12 +684,11 @@ async fn cycles_buy_resume_of_a_refunded_order_fails_either_way() {
 }
 
 /// Ctrl-C while waiting stops the wait, not the order: the command says how
-/// to keep waiting and exits 130, as a shell reports a command it
-/// interrupted, with no error. Off a terminal, as here, the wait is told in
-/// lines.
+/// to keep waiting and exits 1, as icp-cli's other interrupted waits do,
+/// with no error line. Off a terminal, as here, the wait is told in lines.
 #[cfg(unix)]
 #[tokio::test]
-async fn cycles_buy_ctrl_c_stops_the_wait_and_exits_130() {
+async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
 
@@ -734,7 +733,7 @@ async fn cycles_buy_ctrl_c_stops_the_wait_and_exits_130() {
     let status = child.wait().unwrap();
     std::io::Read::read_to_string(&mut stderr, &mut said).unwrap();
 
-    assert_eq!(status.code(), Some(130), "{said}");
+    assert_eq!(status.code(), Some(1), "{said}");
     assert!(said.contains("stays payable"), "{said}");
     assert!(said.contains("--resume co-1-0000test"), "{said}");
     assert!(!said.contains("Error"), "{said}");

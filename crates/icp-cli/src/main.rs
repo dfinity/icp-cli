@@ -58,16 +58,17 @@ mod heading {
 }
 
 /// A command stopped at the user's request, which it has already said: the
-/// process exits with `code` (130 for Ctrl-C, as a shell reports a command
-/// it interrupted) and prints nothing more.
+/// process exits with `code` and prints nothing more.
 #[derive(Debug)]
 pub(crate) struct Stopped {
     pub(crate) code: i32,
 }
 
 impl Stopped {
-    /// Ctrl-C, as a shell numbers it: 128 + SIGINT.
-    pub(crate) const INTERRUPTED: Stopped = Stopped { code: 130 };
+    /// Ctrl-C: 1, as icp-cli's other interrupted waits exit (`canister
+    /// create` waiting on the CMC, `identity link web`), though without
+    /// their `Error:` line.
+    pub(crate) const INTERRUPTED: Stopped = Stopped { code: 1 };
 }
 
 impl std::fmt::Display for Stopped {

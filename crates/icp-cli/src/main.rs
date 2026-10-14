@@ -57,31 +57,6 @@ mod heading {
     pub const GLOBAL_PARAMETERS: &str = "Common Parameters";
 }
 
-/// A command stopped at the user's request, which it has already said: the
-/// process exits with `code` and prints nothing more.
-#[derive(Debug)]
-pub(crate) struct Stopped {
-    pub(crate) code: i32,
-}
-
-impl Stopped {
-    /// Ctrl-C: 1, as icp-cli's other interrupted waits exit (`canister
-    /// create` waiting on the CMC, `identity link web`), though without
-    /// their `Error:` line.
-    pub(crate) const INTERRUPTED: Stopped = Stopped { code: 1 };
-
-    /// A confirmation answered no: as Ctrl-C at the same prompt.
-    pub(crate) const DECLINED: Stopped = Stopped { code: 1 };
-}
-
-impl std::fmt::Display for Stopped {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "stopped (exit status {})", self.code)
-    }
-}
-
-impl std::error::Error for Stopped {}
-
 #[derive(Parser)]
 #[command(
     name = "icp",
@@ -241,14 +216,6 @@ async fn run() -> Result<(), Error> {
             "A newer version of icp-cli is available: {latest} (current: {current}). {suggestion}",
             current = icp_cli_version_str(),
         );
-    }
-
-    // A command that has already told the user why it stopped ends with its
-    // own exit status, and no `Error:` line restating it.
-    if let Err(error) = &result
-        && let Some(stopped) = error.downcast_ref::<Stopped>()
-    {
-        std::process::exit(stopped.code);
     }
 
     result?;

@@ -694,13 +694,12 @@ async fn cycles_buy_reports_a_refunded_order() {
 }
 
 /// Ctrl-C while waiting stops the wait, not the order: the command says the
-/// order stays payable and exits 1, as icp-cli's other interrupted waits do,
-/// with no error line. Off a terminal, as here, the wait is told in lines.
-/// The link handed out is the stand-in's own: nothing of CyclePay's is built
-/// in.
+/// order stays payable and exits 1, as icp-cli's other interrupted waits do.
+/// Off a terminal, as here, the wait is told in lines. The link handed out
+/// is the stand-in's own: nothing of CyclePay's is built in.
 #[cfg(unix)] // SIGINT, moc
 #[tokio::test]
-async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
+async fn cycles_buy_ctrl_c_stops_the_wait_not_the_order() {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
 
@@ -751,13 +750,12 @@ async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
         printed.trim(),
         "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
     );
-    assert!(
-        said.contains("[order co-1-0000test] stopped waiting"),
-        "{said}"
-    );
     assert!(said.contains("stays payable"), "{said}");
     assert!(said.contains("icp cycles balance"), "{said}");
-    assert!(!said.contains("Error"), "{said}");
+    assert!(
+        said.contains("interrupted while waiting for order co-1-0000test"),
+        "{said}"
+    );
 }
 
 /// A wait through payment to delivery: once the stand-in gateway is paid

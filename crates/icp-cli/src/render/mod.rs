@@ -8,8 +8,10 @@
 //!
 //! `icp_events` is generic over the task payload and knows nothing about what
 //! is being run; the vocabulary comes from [`icp_project::operations::task`], where
-//! each kind of work describes itself. What lives here is only how those
-//! descriptions are drawn on a terminal.
+//! each kind of work describes itself, and from the few tasks this crate
+//! runs on its own behalf. A renderer is generic over the payload too, and
+//! asks of it only that it be [`Presented`]: what lives here is how a
+//! description is drawn on a terminal, whatever it describes.
 //!
 //! Tasks arrive as a tree — a composite operation forwards the tasks of the
 //! operations it calls as children of its own phase — so a renderer tracks
@@ -17,7 +19,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use icp_events::{TaskId, TaskOutcome};
+use icp_events::{Event, Reporter, TaskId, TaskOutcome, TaskReporter};
 use icp_project::operations::task::{Failure, Presentation, Task};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
@@ -31,7 +33,19 @@ pub(crate) use interactive::InteractiveRenderer;
 pub(crate) use plain::PlainRenderer;
 pub(crate) use spinner::{ProgressManager, ProgressManagerSettings};
 
-use icp_project::operations::task::{Event, Reporter, TaskReporter};
+/// What a renderer asks of a task payload: how it presents itself. The
+/// payload of an operation in `icp-project` is one of [`Task`]'s kinds; a
+/// command of this crate that reports progress of its own implements this
+/// for a task type of its own instead of adding a kind there.
+pub(crate) trait Presented: Send + 'static {
+    fn presentation(&self) -> &dyn Presentation;
+}
+
+impl Presented for Task {
+    fn presentation(&self) -> &dyn Presentation {
+        Task::presentation(self)
+    }
+}
 
 /// The maximum number of lines to display for a step output
 const MAX_LINES_PER_STEP: usize = 10_000;
@@ -39,12 +53,12 @@ const MAX_LINES_PER_STEP: usize = 10_000;
 /// Indentation applied per level of task nesting.
 const INDENT: &str = "  ";
 
-pub(crate) enum Renderer {
-    Interactive(InteractiveRenderer),
-    Plain(PlainRenderer),
+pub(crate) enum Renderer<T: Presented> {
+    Interactive(InteractiveRenderer<T>),
+    Plain(PlainRenderer<T>),
 }
 
-impl Renderer {
+impl<T: Presented> Renderer<T> {
     /// Pick the renderer matching how the CLI was invoked: live progress bars
     /// normally, plain output under `--debug` (where indicatif bars would
     /// interleave with the debug log).
@@ -58,7 +72,7 @@ impl Renderer {
 
     /// Drive the renderer until every reporter handle is dropped, then flush
     /// deferred output (the per-task failure dumps).
-    pub(crate) async fn run(self, mut events: UnboundedReceiver<Event>) {
+    pub(crate) async fn run(self, mut events: UnboundedReceiver<Event<T>>) {
         match self {
             Renderer::Interactive(mut renderer) => {
                 while let Some(event) = events.recv().await {
@@ -80,7 +94,10 @@ impl Renderer {
 /// its display: the reporter is handed to `op`, and once `op` finishes the
 /// stream is closed and the renderer flushes (failure dumps) before the
 /// operation's result is returned.
-pub(crate) async fn rendered<T>(debug: bool, op: impl AsyncFnOnce(&Reporter) -> T) -> T {
+pub(crate) async fn rendered<P: Presented, T>(
+    debug: bool,
+    op: impl AsyncFnOnce(&Reporter<P>) -> T,
+) -> T {
     let (reporter, events) = icp_events::channel();
     let render = tokio::spawn(Renderer::for_ctx(debug).run(events));
 
@@ -95,10 +112,10 @@ pub(crate) async fn rendered<T>(debug: bool, op: impl AsyncFnOnce(&Reporter) -> 
 /// Run a single task under its own renderer: starts `task`, hands its
 /// reporter to `op`, and finishes the task from the result before the
 /// renderer flushes.
-pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
+pub(crate) async fn rendered_task<P: Presented, T, E: std::fmt::Display>(
     debug: bool,
-    task: Task,
-    op: impl AsyncFnOnce(&TaskReporter) -> Result<T, E>,
+    task: P,
+    op: impl AsyncFnOnce(&TaskReporter<P>) -> Result<T, E>,
 ) -> Result<T, E> {
     rendered(debug, async |reporter| {
         let task = reporter.task(task);
@@ -117,7 +134,7 @@ pub(crate) async fn rendered_task<T, E: std::fmt::Display>(
 /// Prefix a line with the canister a task is about, so concurrent tasks stay
 /// attributable. A task that names no canister — a phase heading — is left
 /// undecorated.
-fn attributed(task: &Task, text: &str) -> String {
+fn attributed<T: Presented>(task: &T, text: &str) -> String {
     match task.presentation().canister() {
         Some(name) => format!("[{name}] {text}"),
         None => text.to_owned(),
@@ -126,7 +143,7 @@ fn attributed(task: &Task, text: &str) -> String {
 
 /// Print output lines a task retained past its rolling step view (e.g.
 /// sync-plugin stderr), attributed to the task that produced them.
-fn print_retained(task: &Task, lines: &[String]) {
+fn print_retained<T: Presented>(task: &T, lines: &[String]) {
     for line in lines {
         eprintln!("{}", attributed(task, line));
     }
@@ -134,8 +151,8 @@ fn print_retained(task: &Task, lines: &[String]) {
 
 /// Captured output of one task, kept so a failure can be replayed after the
 /// live view is gone.
-pub(super) struct TaskLog {
-    task: Task,
+pub(super) struct TaskLog<T> {
+    task: T,
     /// Levels of nesting below the root, for indentation.
     depth: usize,
     finished_steps: Vec<StepLog>,
@@ -182,8 +199,8 @@ impl RollingLines {
     }
 }
 
-impl TaskLog {
-    fn new(task: Task, depth: usize) -> Self {
+impl<T: Presented> TaskLog<T> {
+    fn new(task: T, depth: usize) -> Self {
         Self {
             task,
             depth,
@@ -193,7 +210,7 @@ impl TaskLog {
         }
     }
 
-    fn task(&self) -> &Task {
+    fn task(&self) -> &T {
         &self.task
     }
 
@@ -280,7 +297,7 @@ impl TaskLog {
 /// Print the failure dump for every failed task, in task-creation order.
 /// A task whose failure the caller could have proceeded past gets the CLI's
 /// wording for how to do that, once, at the end.
-fn dump_failures(logs: &BTreeMap<TaskId, TaskLog>, all_steps: bool) {
+fn dump_failures<T: Presented>(logs: &BTreeMap<TaskId, TaskLog<T>>, all_steps: bool) {
     let mut bypassable = false;
 
     for log in logs.values() {

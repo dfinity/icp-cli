@@ -483,64 +483,6 @@ impl Presentation for SnapshotTransferTask {
     }
 }
 
-/// Which leg of a card purchase of cycles is in progress.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PurchasePhase {
-    /// The order is payable and the buyer has not paid yet.
-    AwaitingPayment,
-    /// The card was charged; the gateway is sending the cycles.
-    Delivering,
-}
-
-/// One leg of waiting on a cycles-gateway order. Each phase is its own task
-/// so the live view can tick off "payment received" before "delivered".
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename = "cycles_purchase")]
-pub struct CyclesPurchaseTask {
-    pub order_id: String,
-    pub phase: PurchasePhase,
-}
-
-impl Presentation for CyclesPurchaseTask {
-    /// An order is not about a canister; the cycles go to an identity.
-    fn canister(&self) -> Option<&str> {
-        None
-    }
-
-    fn widget(&self) -> Widget {
-        Widget::Indeterminate {
-            label: format!("order {}", self.order_id),
-        }
-    }
-
-    fn running_message(&self) -> Option<&'static str> {
-        Some(match self.phase {
-            // With its `[order <id>] ✷ ` label this is 63 columns plus the
-            // order id, so within 80 for ids up to 17 characters: CyclePay's
-            // `co-<n>-<8 hex>` up to order 99999.
-            PurchasePhase::AwaitingPayment => {
-                "Waiting for payment; Ctrl-C leaves the order payable"
-            }
-            PurchasePhase::Delivering => "Payment received; delivering cycles...",
-        })
-    }
-
-    fn success_message(&self) -> Option<String> {
-        Some(
-            match self.phase {
-                PurchasePhase::AwaitingPayment => "Payment received",
-                PurchasePhase::Delivering => "Cycles delivered",
-            }
-            .to_owned(),
-        )
-    }
-
-    fn failure_message(&self, message: &str) -> Option<String> {
-        Some(message.to_owned())
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Envelope
 // ---------------------------------------------------------------------------
@@ -562,7 +504,6 @@ pub enum Task {
     UpdateEnvironmentVariables(UpdateEnvironmentVariablesTask),
     CandidCheck(CandidCheckTask),
     SnapshotTransfer(SnapshotTransferTask),
-    CyclesPurchase(CyclesPurchaseTask),
 }
 
 impl Task {
@@ -579,7 +520,6 @@ impl Task {
             Task::UpdateEnvironmentVariables(task) => task,
             Task::CandidCheck(task) => task,
             Task::SnapshotTransfer(task) => task,
-            Task::CyclesPurchase(task) => task,
         }
     }
 
@@ -654,26 +594,9 @@ impl Task {
     }
 }
 
-impl Task {
-    pub fn cycles_purchase(order_id: impl Into<String>, phase: PurchasePhase) -> Self {
-        Task::CyclesPurchase(CyclesPurchaseTask {
-            order_id: order_id.into(),
-            phase,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn cycles_purchase_wire_format_is_stable() {
-        assert_eq!(
-            serde_json::to_value(Task::cycles_purchase("o1", PurchasePhase::Delivering)).unwrap(),
-            serde_json::json!({ "kind": "cycles_purchase", "order_id": "o1", "phase": "delivering" })
-        );
-    }
 
     fn cid() -> Principal {
         Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap()

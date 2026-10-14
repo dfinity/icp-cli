@@ -12,12 +12,14 @@
 //!   order exists.
 //! - [`purchase`]: the operation — quote, create, read back, wait. It never
 //!   prints; progress goes out as [`icp_events`] tasks.
+//! - [`task`]: those tasks, one per leg of the wait, and how they are drawn.
 //! - [`money`]: a sum in a fiat currency, in minor units.
 
 pub(crate) mod interface;
 pub(crate) mod money;
 pub(crate) mod pricing;
 pub(crate) mod purchase;
+pub(crate) mod task;
 
 #[cfg(test)]
 mod tests;

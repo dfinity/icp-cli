@@ -22,12 +22,13 @@ use icp_events::TaskOutcome;
 use icp_project::calls::{
     CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
 };
-use icp_project::operations::task::{PurchasePhase, Reporter, Task, TaskReporter};
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
 use std::fmt;
 use tokio::{select, time::sleep};
 use url::Url;
+
+use super::task::{CyclesPurchaseTask, PurchasePhase, Reporter, TaskReporter};
 
 use super::interface::{
     CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CYCLES_GATEWAY_CID, CardOrderStatus, CardTerms,
@@ -648,8 +649,8 @@ impl Default for WaitOptions {
     }
 }
 
-/// The legs of a wait, reported as one [`Task`] each so a consumer can tick
-/// off "payment received" before "delivered".
+/// The legs of a wait, reported as one [`CyclesPurchaseTask`] each so a
+/// consumer can tick off "payment received" before "delivered".
 struct Phases<'a> {
     reporter: &'a Reporter,
     id: &'a str,
@@ -675,7 +676,7 @@ impl Phases<'_> {
             return;
         }
         self.finish(TaskOutcome::succeeded());
-        let task = self.reporter.task(Task::cycles_purchase(self.id, phase));
+        let task = self.reporter.task(CyclesPurchaseTask::new(self.id, phase));
         self.current = Some((phase, task));
     }
 

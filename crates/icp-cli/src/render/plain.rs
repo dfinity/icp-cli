@@ -4,18 +4,18 @@
 
 use std::collections::BTreeMap;
 
-use icp_events::{EventKind, TaskId, TaskOutcome};
+use icp_events::{Event, EventKind, TaskId, TaskOutcome};
 use tracing::{debug, info};
 
-use icp_project::operations::task::{Event, Widget};
+use icp_project::operations::task::Widget;
 
-use super::{INDENT, TaskLog, dump_failures};
+use super::{INDENT, Presented, TaskLog, dump_failures};
 
-pub(crate) struct PlainRenderer {
-    tasks: BTreeMap<TaskId, TaskLog>,
+pub(crate) struct PlainRenderer<T> {
+    tasks: BTreeMap<TaskId, TaskLog<T>>,
 }
 
-impl PlainRenderer {
+impl<T: Presented> PlainRenderer<T> {
     pub(crate) fn new() -> Self {
         Self {
             tasks: BTreeMap::new(),
@@ -31,7 +31,7 @@ impl PlainRenderer {
             .unwrap_or(0)
     }
 
-    pub(crate) fn handle(&mut self, event: Event) {
+    pub(crate) fn handle(&mut self, event: Event<T>) {
         match event.kind {
             EventKind::TaskStarted { parent, task } => {
                 let depth = self.depth_of(parent);

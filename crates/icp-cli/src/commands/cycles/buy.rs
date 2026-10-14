@@ -14,7 +14,6 @@ use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::CanisterCalls;
 use icp_project::host::EnvironmentSelection;
-use icp_project::operations::task::{CyclesPurchaseTask, PurchasePhase, Reporter, Task};
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
@@ -33,6 +32,7 @@ use crate::cyclepay::purchase::{
     self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView, Quote,
     Rate, Target, WaitOptions, now_secs,
 };
+use crate::cyclepay::task::{CyclesPurchaseTask, PurchasePhase, Reporter};
 use crate::render::rendered;
 
 /// Buy cycles with a card.
@@ -632,10 +632,7 @@ async fn with_heartbeat<T>(
             tokio::select! {
                 event = events.recv() => match event.map(|event| event.kind) {
                     None => break,
-                    Some(EventKind::TaskStarted {
-                        task: Task::CyclesPurchase(task),
-                        ..
-                    }) => {
+                    Some(EventKind::TaskStarted { task, .. }) => {
                         // Not the live view's line, whose Ctrl-C hint is
                         // for a person at the terminal.
                         let begun = match task.phase {
@@ -1368,7 +1365,7 @@ mod tests {
                     (PurchasePhase::AwaitingPayment, 150),
                     (PurchasePhase::Delivering, 130),
                 ] {
-                    let task = reporter.task(Task::cycles_purchase("co-1", phase));
+                    let task = reporter.task(CyclesPurchaseTask::new("co-1", phase));
                     tokio::time::sleep(Duration::from_secs(secs)).await;
                     task.finish(TaskOutcome::succeeded());
                 }
@@ -1440,7 +1437,7 @@ mod tests {
             HEARTBEAT,
             |line| said.lock().unwrap().push(line),
             async |reporter: &Reporter| {
-                let task = reporter.task(Task::cycles_purchase(
+                let task = reporter.task(CyclesPurchaseTask::new(
                     "co-1",
                     PurchasePhase::AwaitingPayment,
                 ));

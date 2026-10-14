@@ -6,7 +6,7 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use icp_events::{EventKind, TaskId, TaskOutcome};
+use icp_events::{Event, EventKind, TaskId, TaskOutcome};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tracing::{debug, info};
@@ -15,20 +15,20 @@ use super::style::{
     COLOR_FAILURE, COLOR_REGULAR, COLOR_STOPPED, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE,
     TICK_STOPPED, TICK_SUCCESS, make_style,
 };
-use icp_project::operations::task::{Event, Widget};
+use icp_project::operations::task::Widget;
 
-use super::{INDENT, RollingLines, TaskLog, dump_failures};
+use super::{INDENT, Presented, RollingLines, TaskLog, dump_failures};
 
 /// Number of output lines shown live under a task's progress bar.
 const LIVE_WINDOW_LINES: usize = 4;
 
-pub(crate) struct InteractiveRenderer {
+pub(crate) struct InteractiveRenderer<T> {
     multi_progress: MultiProgress,
-    tasks: BTreeMap<TaskId, TaskView>,
+    tasks: BTreeMap<TaskId, TaskView<T>>,
 }
 
-struct TaskView {
-    log: TaskLog,
+struct TaskView<T> {
+    log: TaskLog<T>,
     /// The live widget, or `None` for a phase — a heading has no live state,
     /// so it is printed once above the bars rather than animated.
     bar: Option<ProgressBar>,
@@ -43,7 +43,7 @@ struct TaskView {
     window: RollingLines,
 }
 
-impl InteractiveRenderer {
+impl<T: Presented> InteractiveRenderer<T> {
     pub(crate) fn new() -> Self {
         Self {
             multi_progress: MultiProgress::new(),
@@ -83,7 +83,7 @@ impl InteractiveRenderer {
         }
     }
 
-    pub(crate) fn handle(&mut self, event: Event) {
+    pub(crate) fn handle(&mut self, event: Event<T>) {
         match event.kind {
             EventKind::TaskStarted { parent, task } => {
                 let depth = self.depth_of(parent);

@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode, Nat, Principal};
 use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
-use icp_project::operations::task::{PurchasePhase, Reporter, Task};
 
 use super::interface::{
     CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CardOrderStatus, CardTerms, CreateOrderArgs,
@@ -17,6 +16,7 @@ use super::interface::{
 use super::money::{Currency, Money};
 use super::pricing::{Terms, ledger_cycles};
 use super::purchase::*;
+use super::task::{PurchasePhase, Reporter};
 
 const BACKEND: &str = "2bwus-iiaaa-aaaac-bee3a-cai";
 const BUYER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -725,10 +725,7 @@ async fn wait(
     let mut phases = Vec::new();
     while let Some(event) = events.recv().await {
         match event.kind {
-            EventKind::TaskStarted {
-                task: Task::CyclesPurchase(task),
-                ..
-            } => phases.push((task.phase, None)),
+            EventKind::TaskStarted { task, .. } => phases.push((task.phase, None)),
             EventKind::TaskCompleted { outcome } => {
                 let (_, slot) = phases.last_mut().expect("completed before started");
                 *slot = Some(match outcome {

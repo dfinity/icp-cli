@@ -6,7 +6,7 @@ use ic_management_canister_types::{
     ListCanisterSnapshotsResult, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotDataResult, ReadCanisterSnapshotMetadataArgs,
     ReadCanisterSnapshotMetadataResult, StartCanisterArgs, StopCanisterArgs,
-    TakeCanisterSnapshotArgs, TakeCanisterSnapshotResult, UpdateSettingsArgs,
+    TakeCanisterSnapshotArgs, TakeCanisterSnapshotResult, UninstallCodeArgs, UpdateSettingsArgs,
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadCanisterSnapshotMetadataResult, UploadChunkArgs, UploadChunkResult,
 };
@@ -111,6 +111,14 @@ pub async fn install_chunked_code(
 ) -> Result<(), TypedCallError> {
     let effective = args.target_canister;
     mgmt::<_, ()>(calls, "install_chunked_code", Some(effective), (args,), 0).await
+}
+
+pub async fn uninstall_code(
+    calls: &dyn CanisterCalls,
+    args: UninstallCodeArgs,
+) -> Result<(), TypedCallError> {
+    let effective = args.canister_id;
+    mgmt::<_, ()>(calls, "uninstall_code", Some(effective), (args,), 0).await
 }
 
 pub async fn upload_chunk(

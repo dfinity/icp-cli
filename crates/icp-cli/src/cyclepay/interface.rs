@@ -160,62 +160,15 @@ pub struct CreatedOrder {
 /// Why [`CREATE_ORDER_METHOD`] refused. Nothing is written for any of them.
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct OrderError {
-    /// A fixed code, matched on rather than `message`: see
-    /// [`OrderErrorKind`].
+    /// A fixed code the backend documents (`AMOUNT_OUT_OF_RANGE`,
+    /// `RATE_LIMITED`, ...); `message` says what to do.
     pub code: String,
     pub message: String,
-}
-
-impl OrderError {
-    pub fn kind(&self) -> OrderErrorKind {
-        OrderErrorKind::parse(&self.code)
-    }
 }
 
 impl fmt::Display for OrderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.code, self.message)
-    }
-}
-
-/// [`OrderError::code`], as the backend documents its values.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OrderErrorKind {
-    Anonymous,
-    /// The backend is paused: nothing is sold.
-    Paused,
-    /// Card payments are off.
-    CardsUnavailable,
-    AmountOutOfRange,
-    CanisterIdInvalid,
-    DestinationBlocked,
-    SystemCanisterWarning,
-    BeneficiaryNotAllowed,
-    RateLimited,
-    TooManyOpenOrders,
-    NotProjectMember,
-    ProjectsUnavailable,
-    /// A code this CLI does not know.
-    Unknown,
-}
-
-impl OrderErrorKind {
-    fn parse(code: &str) -> Self {
-        match code {
-            "ANONYMOUS" => Self::Anonymous,
-            "PAUSED" => Self::Paused,
-            "CARDS_UNAVAILABLE" => Self::CardsUnavailable,
-            "AMOUNT_OUT_OF_RANGE" => Self::AmountOutOfRange,
-            "CANISTER_ID_INVALID" => Self::CanisterIdInvalid,
-            "DESTINATION_BLOCKED" => Self::DestinationBlocked,
-            "SYSTEM_CANISTER_WARNING" => Self::SystemCanisterWarning,
-            "BENEFICIARY_NOT_ALLOWED" => Self::BeneficiaryNotAllowed,
-            "RATE_LIMITED" => Self::RateLimited,
-            "TOO_MANY_OPEN_ORDERS" => Self::TooManyOpenOrders,
-            "NOT_PROJECT_MEMBER" => Self::NotProjectMember,
-            "PROJECTS_UNAVAILABLE" => Self::ProjectsUnavailable,
-            _ => Self::Unknown,
-        }
     }
 }
 
@@ -568,20 +521,11 @@ mod tests {
     }
 
     #[test]
-    fn order_error_codes_are_recognized() {
+    fn an_order_error_is_said_as_code_and_message() {
         let error = OrderError {
             code: "RATE_LIMITED".into(),
             message: "5 a minute".into(),
         };
-        assert_eq!(error.kind(), OrderErrorKind::RateLimited);
         assert_eq!(error.to_string(), "RATE_LIMITED: 5 a minute");
-        assert_eq!(
-            OrderError {
-                code: "SOMETHING_NEW".into(),
-                message: String::new(),
-            }
-            .kind(),
-            OrderErrorKind::Unknown
-        );
     }
 }

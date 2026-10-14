@@ -10,7 +10,7 @@ use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
 use super::interface::{
     CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CardOrderStatus, CardTerms, CreateOrderArgs,
     CreateOrderResult, CreatedOrder, Destination, ORDER_STATUS_METHOD, OrderDestination,
-    OrderError, OrderErrorKind, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
 };
 use super::money::{Currency, Money};
 use super::pricing::{Terms, ledger_cycles};
@@ -604,7 +604,7 @@ async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
     let fake = FakeBackend::default().creates(vec![created("co-1", 2500)]);
     let order = place_order(&fake, &gateway(), usd(2500)).await.unwrap();
     assert_eq!(order.id, "co-1");
-    assert_eq!(order.status, OrderStatus::AwaitingPayment);
+    assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));
     assert_eq!(order.amount, usd(2500));
     assert_eq!(order.net, usd(2398));
     assert_eq!(order.expires_at, Some(FAR_FUTURE));
@@ -668,7 +668,6 @@ async fn place_order_maps_a_refusal() {
     let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
     match err {
         CyclesPurchaseError::OrderRefused { error } => {
-            assert_eq!(error.kind(), OrderErrorKind::RateLimited);
             assert_eq!(error.to_string(), "RATE_LIMITED: as the backend puts it");
         }
         other => panic!("unexpected {other:?}"),
@@ -726,7 +725,7 @@ async fn wait_happy_path_awaiting_processing_delivered() {
     ]);
     let (result, phases) = wait(&fake, None, &fast()).await;
     let order = result.unwrap();
-    assert_eq!(order.status, OrderStatus::Delivered);
+    assert_eq!(order.status, Some(CardOrderStatus::Delivered));
     assert_eq!(order.cycles_delivered, Some(17_736_486_390_532));
     // Pending and processing are one leg: the card has been charged.
     assert_eq!(
@@ -744,7 +743,7 @@ async fn wait_starts_in_the_initial_orders_phase() {
     ]);
     let paid = initial(CardOrderStatus::Processing);
     let (result, phases) = wait(&fake, Some(paid), &fast()).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
     // Already paid: no "awaiting payment" leg is reported.
     assert_eq!(phases, vec![PurchasePhase::Delivering]);
 }
@@ -757,7 +756,7 @@ async fn wait_reads_a_refund() {
     let fake = FakeBackend::default().polls(vec![Ok(Some(refunded))]);
     let (result, _) = wait(&fake, None, &fast()).await;
     let order = result.unwrap();
-    assert_eq!(order.status, OrderStatus::Refunded);
+    assert_eq!(order.status, Some(CardOrderStatus::Refunded));
     assert_eq!(order.refunded, Some(usd(2500)));
     assert_eq!(order.paid, Some(usd(2500)));
     assert_eq!(order.detail.as_deref(), Some("OVER_CAP"));
@@ -769,15 +768,15 @@ async fn wait_reads_a_refund() {
 
 #[tokio::test]
 async fn wait_returns_every_settled_status_as_ok() {
-    for (status, expected) in [
-        (CardOrderStatus::Refunding, OrderStatus::Refunding),
-        (CardOrderStatus::Refunded, OrderStatus::Refunded),
-        (CardOrderStatus::RefundOwed, OrderStatus::RefundOwed),
-        (CardOrderStatus::NeedsReview, OrderStatus::NeedsReview),
+    for status in [
+        CardOrderStatus::Refunding,
+        CardOrderStatus::Refunded,
+        CardOrderStatus::RefundOwed,
+        CardOrderStatus::NeedsReview,
     ] {
         let fake = FakeBackend::default().polls(vec![Ok(Some(view("co-1", status)))]);
         let (result, phases) = wait(&fake, None, &fast()).await;
-        assert_eq!(result.unwrap().status, expected);
+        assert_eq!(result.unwrap().status, Some(status));
         assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
     }
 }
@@ -803,7 +802,7 @@ async fn wait_retries_a_poll_that_said_nothing() {
         ..fast()
     };
     let (result, _) = wait(&fake, None, &options).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
     assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 8);
 }
 
@@ -853,7 +852,7 @@ async fn wait_takes_a_known_orders_null_for_a_replica_behind() {
     ]);
     let initial = initial(CardOrderStatus::AwaitingPayment);
     let (result, _) = wait(&fake, Some(initial), &fast()).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
 }
 
 /// A state CyclePay adds after this CLI was built does not stop the wait.
@@ -867,7 +866,7 @@ async fn wait_goes_on_through_a_state_it_does_not_know() {
         Ok(Some(view("co-1", CardOrderStatus::Delivered))),
     ]);
     let (result, phases) = wait(&fake, None, &fast()).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
+    assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
     assert_eq!(
         phases,
         vec![PurchasePhase::AwaitingPayment, PurchasePhase::Delivering]
@@ -908,7 +907,7 @@ async fn wait_times_out() {
     let (result, phases) = wait(&fake, None, &options).await;
     match result.unwrap_err() {
         CyclesPurchaseError::WaitTimedOut { order } => {
-            assert_eq!(order.status, OrderStatus::AwaitingPayment);
+            assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));
         }
         other => panic!("unexpected {other:?}"),
     }
@@ -935,7 +934,7 @@ async fn wait_interrupted_returns_last_order() {
     match result.unwrap_err() {
         CyclesPurchaseError::Interrupted { order } => {
             assert_eq!(order.id, "co-1");
-            assert_eq!(order.status, OrderStatus::Processing);
+            assert_eq!(order.status, Some(CardOrderStatus::Processing));
         }
         other => panic!("unexpected {other:?}"),
     }
@@ -967,21 +966,27 @@ async fn wait_interrupt_lands_during_a_stalled_poll() {
 #[test]
 fn statuses_tell_settled_apart() {
     for status in [
-        OrderStatus::AwaitingPayment,
-        OrderStatus::PaymentPending,
-        OrderStatus::Processing,
+        CardOrderStatus::AwaitingPayment,
+        CardOrderStatus::PaymentPending,
+        CardOrderStatus::Processing,
     ] {
         assert!(!status.is_terminal(), "{status}");
     }
     for status in [
-        OrderStatus::Delivered,
-        OrderStatus::NeedsReview,
-        OrderStatus::Refunding,
-        OrderStatus::Refunded,
-        OrderStatus::RefundOwed,
+        CardOrderStatus::Delivered,
+        CardOrderStatus::NeedsReview,
+        CardOrderStatus::Refunding,
+        CardOrderStatus::Refunded,
+        CardOrderStatus::RefundOwed,
     ] {
         assert!(status.is_terminal(), "{status}");
     }
-    assert_eq!(OrderStatus::RefundOwed.tag(), "refund_owed");
-    assert_eq!(OrderStatus::RefundOwed.to_string(), "owed a refund");
+    assert_eq!(CardOrderStatus::RefundOwed.tag(), "refund_owed");
+    assert_eq!(CardOrderStatus::RefundOwed.to_string(), "owed a refund");
+    // A state this version does not know is neither settled nor nameless.
+    let mut unknown = OrderView::read(view("co-1", CardOrderStatus::Processing));
+    unknown.status = None;
+    assert!(!unknown.is_settled());
+    assert_eq!(unknown.status_tag(), "unknown");
+    assert!(unknown.status_text().contains("does not know"));
 }

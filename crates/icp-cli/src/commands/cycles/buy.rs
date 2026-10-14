@@ -23,12 +23,12 @@ use crate::Stopped;
 use crate::commands::args::TokenCommandArgs;
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    Destination, OrderError, OrderErrorKind, cycles_gateway_canister_id, is_cyclepay,
+    CardOrderStatus, Destination, cycles_gateway_canister_id, is_cyclepay,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
-    self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView,
-    PurchasePhase, Quote, Rate, Target, WaitOptions,
+    self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderView, PurchasePhase, Quote,
+    Rate, Target, WaitOptions,
 };
 use crate::render::{ProgressManager, ProgressManagerSettings};
 
@@ -239,7 +239,7 @@ async fn create_order(
     match purchase::place_order(calls, gateway, quote.amount).await {
         Ok(order) => Ok((order, quote, interrupt)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
-            bail!("{}", refusal_message(&error))
+            bail!("CyclePay refused the order: {error}")
         }
         Err(error) => Err(error.into()),
     }
@@ -431,7 +431,8 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
             "Order {} is {} but has no Payment Link",
-            order.id, order.status
+            order.id,
+            order.status_text()
         );
         return;
     };
@@ -550,14 +551,14 @@ async fn wait_and_report(
             bar,
             async {
                 match wait.await {
-                    Ok(order) if order.status == OrderStatus::Delivered => Ok(order),
+                    Ok(order) if order.status == Some(CardOrderStatus::Delivered) => Ok(order),
                     Ok(order) => Err(Ended::Order(order)),
                     Err(error) => Err(Ended::Error(error)),
                 }
             },
             || "Cycles delivered".to_owned(),
             |ended| match ended {
-                Ended::Order(order) => format!("order {}", order.status),
+                Ended::Order(order) => format!("order {}", order.status_text()),
                 Ended::Error(CyclesPurchaseError::Interrupted { .. }) => {
                     "stopped waiting".to_owned()
                 }
@@ -647,7 +648,7 @@ async fn report_end(
     // an order made on CyclePay's site can top up a canister, or credit
     // another principal.
     let to_buyer = order.destination == Some(Destination::Ledger(buyer));
-    let balance = if order.status == OrderStatus::Delivered && to_buyer {
+    let balance = if order.status == Some(CardOrderStatus::Delivered) && to_buyer {
         match get_raw_balance(agent, CYCLES_LEDGER_PRINCIPAL, buyer, None).await {
             Ok(balance) => balance.0.to_u128(),
             Err(e) => {
@@ -661,7 +662,7 @@ async fn report_end(
 
     print_final(order, balance, output)?;
 
-    if order.status == OrderStatus::Delivered && output == Output::Human {
+    if order.status == Some(CardOrderStatus::Delivered) && output == Output::Human {
         let cycles = order
             .cycles_delivered
             .map(format_cycles)
@@ -695,12 +696,12 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
         .map(|detail| format!(" ({detail})"))
         .unwrap_or_default();
     match order.status {
-        OrderStatus::Delivered => Ok(()),
-        OrderStatus::Refunding => bail!(
+        Some(CardOrderStatus::Delivered) => Ok(()),
+        Some(CardOrderStatus::Refunding) => bail!(
             "order {} could not be delivered and is being refunded to your card{detail}",
             order.id
         ),
-        OrderStatus::Refunded => bail!(
+        Some(CardOrderStatus::Refunded) => bail!(
             "order {} could not be delivered; {} was refunded to your card{detail}",
             order.id,
             order
@@ -708,23 +709,25 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
                 .map(|m| m.to_string())
                 .unwrap_or_else(|| "the payment".to_owned())
         ),
-        OrderStatus::RefundOwed => bail!(
+        Some(CardOrderStatus::RefundOwed) => bail!(
             "order {} could not be delivered; CyclePay owes you a refund, which an operator \
              makes by hand{detail}. Keep the order id",
             order.id
         ),
         // Not a promise of a refund: a payment disputed before delivery
         // also needs review, and the dispute settles it.
-        OrderStatus::NeedsReview => bail!(
+        Some(CardOrderStatus::NeedsReview) => bail!(
             "order {} needs review{detail}: your card was charged, and CyclePay checks the \
              order by hand (a disputed payment is settled by the dispute). Keep the order id; \
              CyclePay's site shows the outcome under My purchases",
             order.id
         ),
-        OrderStatus::AwaitingPayment
-        | OrderStatus::PaymentPending
-        | OrderStatus::Processing
-        | OrderStatus::Unknown => bail!("order {} is still {}", order.id, order.status),
+        Some(
+            CardOrderStatus::AwaitingPayment
+            | CardOrderStatus::PaymentPending
+            | CardOrderStatus::Processing,
+        )
+        | None => bail!("order {} is still {}", order.id, order.status_text()),
     }
 }
 
@@ -732,16 +735,16 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
 /// (`timed_out`) gave up. Only an order known to be unpaid is payable.
 fn standing(order: &OrderView, timed_out: bool) -> String {
     match order.status {
-        OrderStatus::AwaitingPayment if timed_out => format!(
+        Some(CardOrderStatus::AwaitingPayment) if timed_out => format!(
             "No payment arrived. Order {} stays payable{}.",
             order.id,
             payable_until(order)
         ),
-        OrderStatus::AwaitingPayment => {
+        Some(CardOrderStatus::AwaitingPayment) => {
             format!("Order {} stays payable{}.", order.id, payable_until(order))
         }
-        status if timed_out => format!("Order {} is still {status}.", order.id),
-        status => format!("Order {} is {status}.", order.id),
+        _ if timed_out => format!("Order {} is still {}.", order.id, order.status_text()),
+        _ => format!("Order {} is {}.", order.id, order.status_text()),
     }
 }
 
@@ -805,7 +808,7 @@ fn print_final(
     match output {
         Output::Json => print_json(&JsonOrderFinal {
             order_id: &order.id,
-            status: order.status.tag(),
+            status: order.status_tag(),
             cycles_delivered: order.cycles_delivered.map(|c| c.to_string()),
             paid: order.paid,
             refunded: order.refunded,
@@ -813,42 +816,10 @@ fn print_final(
             balance: balance.map(|b| b.to_string()),
         }),
         Output::Quiet => {
-            println!("{}", order.status.tag());
+            println!("{}", order.status_tag());
             Ok(())
         }
         Output::Human => Ok(()),
-    }
-}
-
-/// What a refusal means for this buyer, with what to do about it.
-fn refusal_message(error: &OrderError) -> String {
-    match error.kind() {
-        OrderErrorKind::AmountOutOfRange => {
-            format!("CyclePay refused the amount: {}", error.message)
-        }
-        // The backend's own messages say what to do, and whether the limit
-        // is the identity's or one on every buyer: both send these codes.
-        OrderErrorKind::RateLimited => {
-            format!("CyclePay is limiting new orders: {}", error.message)
-        }
-        OrderErrorKind::TooManyOpenOrders => {
-            format!("CyclePay refused the order: {}", error.message)
-        }
-        OrderErrorKind::Paused | OrderErrorKind::CardsUnavailable => {
-            format!("CyclePay is not taking card orders: {}", error.message)
-        }
-        OrderErrorKind::Anonymous => {
-            "CyclePay refused the order: the caller is anonymous; choose an identity with \
-             --identity"
-                .to_owned()
-        }
-        OrderErrorKind::CanisterIdInvalid
-        | OrderErrorKind::DestinationBlocked
-        | OrderErrorKind::SystemCanisterWarning
-        | OrderErrorKind::BeneficiaryNotAllowed
-        | OrderErrorKind::NotProjectMember
-        | OrderErrorKind::ProjectsUnavailable
-        | OrderErrorKind::Unknown => format!("CyclePay refused the order: {error}"),
     }
 }
 
@@ -935,50 +906,6 @@ struct JsonOrderFinal<'a> {
 mod tests {
     use super::*;
     use crate::cyclepay::interface::CYCLES_GATEWAY_CID;
-
-    fn error(code: &str, message: &str) -> OrderError {
-        OrderError {
-            code: code.to_owned(),
-            message: message.to_owned(),
-        }
-    }
-
-    #[test]
-    fn refusal_messages_say_what_to_do() {
-        // The backend's own messages, as orders_v2.rs words them: nothing
-        // they already say is said twice.
-        // Each of these codes is sent both for the identity's own limit and
-        // for one on every buyer, so neither is put down to the identity.
-        for message in [
-            "too many orders; try again shortly",
-            "too many new orders this minute; try again shortly",
-        ] {
-            let msg = refusal_message(&error("RATE_LIMITED", message));
-            assert_eq!(msg, format!("CyclePay is limiting new orders: {message}"));
-        }
-        for message in [
-            "you have 10 unpaid orders; pay one, or wait for it to expire (25 hours after it was \
-             made)",
-            "too many unpaid orders right now; try again later",
-        ] {
-            let msg = refusal_message(&error("TOO_MANY_OPEN_ORDERS", message));
-            assert_eq!(msg, format!("CyclePay refused the order: {message}"));
-        }
-
-        let msg = refusal_message(&error("PAUSED", "CyclePay is paused; try again later"));
-        assert_eq!(msg.matches("try again later").count(), 1, "{msg}");
-        let msg = refusal_message(&error(
-            "CARDS_UNAVAILABLE",
-            "card payments are not available right now",
-        ));
-        assert_eq!(msg.matches("right now").count(), 1, "{msg}");
-
-        let msg = refusal_message(&error("SOMETHING_NEW", "as the backend puts it"));
-        assert_eq!(
-            msg,
-            "CyclePay refused the order: SOMETHING_NEW: as the backend puts it"
-        );
-    }
 
     fn gateway_at(canister: &str) -> Gateway {
         Gateway {
@@ -1121,12 +1048,12 @@ mod tests {
             detail: None,
             destination: None,
         };
-        assert!(ending(&order(OrderStatus::Delivered)).is_ok());
+        assert!(ending(&order(Some(CardOrderStatus::Delivered))).is_ok());
         for (status, says) in [
-            (OrderStatus::Refunded, "10.00 USD was refunded"),
-            (OrderStatus::Refunding, "is being refunded"),
-            (OrderStatus::RefundOwed, "owes you a refund"),
-            (OrderStatus::NeedsReview, "Keep the order id"),
+            (Some(CardOrderStatus::Refunded), "10.00 USD was refunded"),
+            (Some(CardOrderStatus::Refunding), "is being refunded"),
+            (Some(CardOrderStatus::RefundOwed), "owes you a refund"),
+            (Some(CardOrderStatus::NeedsReview), "Keep the order id"),
         ] {
             let err = ending(&order(status)).unwrap_err().to_string();
             assert!(err.contains(says), "{status:?}: {err}");
@@ -1151,19 +1078,19 @@ mod tests {
             destination: None,
         };
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), false),
+            standing(&order(Some(CardOrderStatus::AwaitingPayment)), false),
             "Order co-1 stays payable until 2023-11-14T22:13:20Z."
         );
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), true),
+            standing(&order(Some(CardOrderStatus::AwaitingPayment)), true),
             "No payment arrived. Order co-1 stays payable until 2023-11-14T22:13:20Z."
         );
         assert_eq!(
-            standing(&order(OrderStatus::Processing), true),
+            standing(&order(Some(CardOrderStatus::Processing)), true),
             "Order co-1 is still paid, delivering."
         );
         for timed_out in [false, true] {
-            let said = standing(&order(OrderStatus::Unknown), timed_out);
+            let said = standing(&order(None), timed_out);
             assert!(said.contains("does not know"), "{said}");
             assert!(
                 !said.contains("payable") && !said.contains("No payment"),
@@ -1178,7 +1105,7 @@ mod tests {
         let principal = |text| Principal::from_text(text).unwrap();
         let order = |destination| OrderView {
             id: "co-1".into(),
-            status: OrderStatus::Delivered,
+            status: Some(CardOrderStatus::Delivered),
             amount: Money::from_minor_units(1000, Currency::Usd),
             net: Money::from_minor_units(941, Currency::Usd),
             checkout_url: None,

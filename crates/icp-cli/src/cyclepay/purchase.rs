@@ -189,7 +189,7 @@ pub enum CyclesPurchaseError {
     Interrupted { order: Box<OrderView> },
 
     #[snafu(display(
-        "gave up waiting for order {} (last status: {})", order.id, order.status
+        "gave up waiting for order {} (last status: {})", order.id, order.status_text()
     ))]
     WaitTimedOut { order: Box<OrderView> },
 }
@@ -243,36 +243,13 @@ pub struct Quote {
     pub rate: Rate,
 }
 
-/// An order's state as the CLI tells it: the backend's own states, and
-/// [`OrderStatus::Unknown`] for one this version does not know.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OrderStatus {
-    /// Made, not paid.
-    AwaitingPayment,
-    /// Paid with a delayed method; not settled yet.
-    PaymentPending,
-    /// Paid; the cycles are on their way.
-    Processing,
-    Delivered,
-    /// Stopped for an operator; not refunded meanwhile.
-    NeedsReview,
-    /// Not delivered; the refund is being made.
-    Refunding,
-    Refunded,
-    /// Not delivered; an operator refunds it by hand.
-    RefundOwed,
-    /// A state the backend reports that this CLI does not know. Not an end:
-    /// the wait goes on.
-    Unknown,
-}
-
-impl OrderStatus {
+impl CardOrderStatus {
     /// Whether the order can still change in a way worth waiting for. A
     /// refund in progress is settled as far as the buyer is concerned.
     pub fn is_terminal(self) -> bool {
         !matches!(
             self,
-            Self::AwaitingPayment | Self::PaymentPending | Self::Processing | Self::Unknown
+            Self::AwaitingPayment | Self::PaymentPending | Self::Processing
         )
     }
 
@@ -288,12 +265,11 @@ impl OrderStatus {
             Self::Refunding => "refunding",
             Self::Refunded => "refunded",
             Self::RefundOwed => "refund_owed",
-            Self::Unknown => "unknown",
         }
     }
 }
 
-impl fmt::Display for OrderStatus {
+impl fmt::Display for CardOrderStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::AwaitingPayment => "awaiting payment",
@@ -304,23 +280,7 @@ impl fmt::Display for OrderStatus {
             Self::Refunding => "being refunded",
             Self::Refunded => "refunded",
             Self::RefundOwed => "owed a refund",
-            Self::Unknown => "in a state this version of icp does not know",
         })
-    }
-}
-
-impl From<CardOrderStatus> for OrderStatus {
-    fn from(status: CardOrderStatus) -> Self {
-        match status {
-            CardOrderStatus::AwaitingPayment => Self::AwaitingPayment,
-            CardOrderStatus::PaymentPending => Self::PaymentPending,
-            CardOrderStatus::Processing => Self::Processing,
-            CardOrderStatus::Delivered => Self::Delivered,
-            CardOrderStatus::NeedsReview => Self::NeedsReview,
-            CardOrderStatus::Refunding => Self::Refunding,
-            CardOrderStatus::Refunded => Self::Refunded,
-            CardOrderStatus::RefundOwed => Self::RefundOwed,
-        }
     }
 }
 
@@ -328,7 +288,9 @@ impl From<CardOrderStatus> for OrderStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrderView {
     pub id: String,
-    pub status: OrderStatus,
+    /// `None` for a state the backend reports that this CLI does not know.
+    /// Not an end: the wait goes on.
+    pub status: Option<CardOrderStatus>,
     /// What the order asked for.
     pub amount: Money,
     /// What funds the cycles after the card fee: the order's amount until
@@ -352,12 +314,30 @@ pub struct OrderView {
 }
 
 impl OrderView {
+    /// Whether the order can still change in a way worth waiting for.
+    pub fn is_settled(&self) -> bool {
+        self.status.is_some_and(CardOrderStatus::is_terminal)
+    }
+
+    /// The status for people: `owed a refund`.
+    pub fn status_text(&self) -> String {
+        match self.status {
+            Some(status) => status.to_string(),
+            None => "in a state this version of icp does not know".to_owned(),
+        }
+    }
+
+    /// The status for output meant to be parsed: `refund_owed`.
+    pub fn status_tag(&self) -> &'static str {
+        self.status.map_or("unknown", CardOrderStatus::tag)
+    }
+
     /// An order just made by `buyer`, for its own Cycles Ledger account, to
     /// be paid on the page the gateway handed out with it.
     fn created(created: CreatedOrder, buyer: Principal) -> Self {
         Self {
             id: created.order_id,
-            status: OrderStatus::AwaitingPayment,
+            status: Some(CardOrderStatus::AwaitingPayment),
             amount: Money::from_minor_units(created.amount_usd_cents, Currency::Usd),
             net: Money::from_minor_units(created.net_usd_cents, Currency::Usd),
             checkout_url: Some(created.payment_url),
@@ -375,7 +355,7 @@ impl OrderView {
     pub(super) fn read(view: OrderStatusView) -> Self {
         Self {
             id: view.order_id,
-            status: view.status.map_or(OrderStatus::Unknown, OrderStatus::from),
+            status: view.status,
             amount: Money::from_minor_units(view.amount_usd_cents, Currency::Usd),
             net: Money::from_minor_units(view.net_usd_cents, Currency::Usd),
             checkout_url: None,
@@ -614,17 +594,19 @@ struct Phases<F> {
 }
 
 impl<F: FnMut(PurchasePhase)> Phases<F> {
-    fn of(status: OrderStatus) -> PurchasePhase {
+    fn of(status: Option<CardOrderStatus>) -> PurchasePhase {
         match status {
-            OrderStatus::PaymentPending | OrderStatus::Processing => PurchasePhase::Delivering,
+            Some(CardOrderStatus::PaymentPending | CardOrderStatus::Processing) => {
+                PurchasePhase::Delivering
+            }
             _ => PurchasePhase::AwaitingPayment,
         }
     }
 
     /// Move to the phase `status` is in. A state this CLI cannot place
     /// leaves the phase as it is.
-    fn enter(&mut self, status: OrderStatus) {
-        if status == OrderStatus::Unknown && self.current.is_some() {
+    fn enter(&mut self, status: Option<CardOrderStatus>) {
+        if status.is_none() && self.current.is_some() {
             return;
         }
         let phase = Self::of(status);
@@ -664,7 +646,7 @@ pub async fn wait_for_order(
 ) -> Result<OrderView, CyclesPurchaseError> {
     // An order already settled has nothing to wait for: no phase to show,
     // and no call that could turn a known end into an error.
-    if let Some(order) = initial.as_ref().filter(|order| order.status.is_terminal()) {
+    if let Some(order) = initial.as_ref().filter(|order| order.is_settled()) {
         return Ok(order.clone());
     }
     let mut interrupt = pin!(interrupt);
@@ -675,7 +657,7 @@ pub async fn wait_for_order(
     phases.enter(
         initial
             .as_ref()
-            .map_or(OrderStatus::AwaitingPayment, |o| o.status),
+            .map_or(Some(CardOrderStatus::AwaitingPayment), |o| o.status),
     );
     let mut last = initial;
     let mut misses = 0u32;
@@ -684,7 +666,7 @@ pub async fn wait_for_order(
     let interrupted = |last: Option<OrderView>| {
         let order = last.unwrap_or_else(|| OrderView {
             id: id.to_owned(),
-            status: OrderStatus::AwaitingPayment,
+            status: Some(CardOrderStatus::AwaitingPayment),
             amount: Money::from_minor_units(0, Currency::Usd),
             net: Money::from_minor_units(0, Currency::Usd),
             checkout_url: None,
@@ -709,7 +691,7 @@ pub async fn wait_for_order(
         match polled {
             Ok(Some(order)) => {
                 misses = 0;
-                if order.status.is_terminal() {
+                if order.is_settled() {
                     return Ok(order);
                 }
                 phases.enter(order.status);

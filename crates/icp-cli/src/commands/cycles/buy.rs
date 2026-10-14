@@ -6,14 +6,13 @@ use candid::Principal;
 use clap::Args;
 use dialoguer::Confirm;
 use dialoguer::console::Term;
-use icp_app::context::{Context, GetAgentError, GetAgentForEnvError, NetworkSelection};
+use icp_app::context::{Context, GetAgentError, GetAgentForEnvError, GetAgentForNetworkError};
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
 use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::CanisterCalls;
-use icp_project::host::EnvironmentSelection;
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
@@ -25,7 +24,7 @@ use crate::Stopped;
 use crate::commands::args::TokenCommandArgs;
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    CYCLES_GATEWAY_CID, Destination, OrderError, OrderErrorKind, cycles_gateway_canister_id,
+    Destination, OrderError, OrderErrorKind, cycles_gateway_canister_id, is_cyclepay,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -143,7 +142,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         Some(gateway) => gateway,
         None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
     };
-    let cyclepay = canister.to_text() == CYCLES_GATEWAY_CID;
+    let cyclepay = is_cyclepay(canister);
 
     let agent = match ctx
         .get_agent(
@@ -154,21 +153,25 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         .await
     {
         Ok(agent) => agent,
-        // Named neither, the network is a project's own local one, or none
-        // outside a project; CyclePay's gateway is on mainnet only.
+        // No network to reach: none named outside a project, or the one
+        // chosen is a local one that is not running. CyclePay's gateway is
+        // on mainnet only, which is always reachable.
         Err(
             error @ (GetAgentError::NoProjectOrNetwork
             | GetAgentError::GetAgentForEnv {
                 source: GetAgentForEnvError::NetworkAccess { .. },
+            }
+            | GetAgentError::GetAgentForNetwork {
+                source: GetAgentForNetworkError::NetworkAccess { .. },
             }),
-        ) if cyclepay
-            && matches!(selections.network, NetworkSelection::Default)
-            && matches!(selections.environment, EnvironmentSelection::Default) =>
-        {
+        ) if cyclepay => {
             bail!("{error}. {MAINNET_HINT}")
         }
         Err(error) => return Err(error.into()),
     };
+    // CyclePay's gateway is on mainnet only: refuse any other network before
+    // asking it anything.
+    purchase::check_network(canister, &agent.read_root_key())?;
     let buyer = agent
         .get_principal()
         .map_err(|message| anyhow!("failed to get the identity's principal: {message}"))?;
@@ -443,7 +446,7 @@ fn quote_block(
         lines.push(format!("Identity: {name}"));
     }
     lines.push(format!("Buyer:    {buyer}"));
-    let whose = if gateway.canister.to_text() == CYCLES_GATEWAY_CID {
+    let whose = if is_cyclepay(gateway.canister) {
         " (CyclePay)"
     } else {
         ""
@@ -1031,6 +1034,7 @@ struct JsonOrderFinal<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cyclepay::interface::CYCLES_GATEWAY_CID;
 
     fn error(code: &str, message: &str) -> OrderError {
         OrderError {

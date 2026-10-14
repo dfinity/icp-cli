@@ -489,10 +489,10 @@ fn cycles_buy_refuses_the_anonymous_identity() {
         .failure();
 }
 
-/// A local network has no cycles gateway: the command says so and points at
-/// mainnet rather than failing on an opaque rejection.
+/// CyclePay's gateway is on mainnet only: on a local network the command
+/// says so before asking the network for anything, and points at `-n ic`.
 #[tokio::test]
-async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
+async fn cycles_buy_on_a_local_network_points_at_mainnet() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
 
@@ -520,16 +520,16 @@ async fn cycles_buy_on_a_local_network_reports_the_missing_gateway() {
             "random-environment",
         ])
         .assert()
-        .stderr(contains("does not exist on this network"))
-        .stderr(contains("-n ic"))
+        .stderr(contains("this network is not mainnet"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
         .failure();
 }
 
-/// With no network or environment named, the command would use a project's
-/// own local network, or none outside a project, and CyclePay is on mainnet
-/// only: either way it points at `-n ic`.
+/// With no network reachable, whether none was named outside a project or
+/// the one chosen is a local one that is not running, the command points at
+/// `-n ic`: CyclePay is on mainnet only.
 #[test]
-fn cycles_buy_with_no_network_named_points_at_mainnet() {
+fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     write_string(&project_dir.join("icp.yaml"), "").expect("failed to write project manifest");
@@ -539,14 +539,22 @@ fn cycles_buy_with_no_network_named_points_at_mainnet() {
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("is not running"))
-        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .failure();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["cycles", "buy", "--amount", "10", "--yes", "-e", "local"])
+        .assert()
+        .stderr(contains("is not running"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
         .failure();
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("No project found"))
-        .stderr(contains("CyclePay sells cycles on mainnet: add `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
         .failure();
 }
 

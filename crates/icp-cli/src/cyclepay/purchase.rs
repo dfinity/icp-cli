@@ -22,6 +22,7 @@ use icp_events::TaskOutcome;
 use icp_project::calls::{
     CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
 };
+use icp_project::prelude::IC_ROOT_KEY;
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
 use std::fmt;
@@ -31,9 +32,9 @@ use url::Url;
 use super::task::{CyclesPurchaseTask, PurchasePhase, Reporter, TaskReporter};
 
 use super::interface::{
-    CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CYCLES_GATEWAY_CID, CardOrderStatus, CardTerms,
-    CreateOrderArgs, CreateOrderResult, CreatedOrder, Destination, ORDER_STATUS_METHOD,
-    OrderDestination, OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus,
+    CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CardOrderStatus, CardTerms, CreateOrderArgs,
+    CreateOrderResult, CreatedOrder, Destination, ORDER_STATUS_METHOD, OrderDestination,
+    OrderError, OrderStatusView, XDR_RATE_STATUS_METHOD, XdrRateStatus, is_cyclepay,
 };
 use super::money::{Currency, Money};
 use super::pricing::{Terms, card_fee_cents, least_gross_for, ledger_cycles, net_usd_cents};
@@ -95,11 +96,11 @@ impl Gateway {
 
 #[derive(Debug, Snafu)]
 pub enum CyclesPurchaseError {
-    #[snafu(display(
-        "the cycles gateway canister {gateway} does not exist on this network{}",
-        mainnet_hint(*gateway)
-    ))]
+    #[snafu(display("the cycles gateway canister {gateway} does not exist on this network"))]
     GatewayNotFound { gateway: Principal },
+
+    #[snafu(display("this network is not mainnet, and {MAINNET_HINT}"))]
+    GatewayNotOnThisNetwork { gateway: Principal },
 
     #[snafu(display("failed to read the card terms from cycles gateway {gateway}"))]
     ReadTerms {
@@ -861,16 +862,21 @@ pub async fn wait_for_order(
 
 /// Where to buy instead, said whenever CyclePay's own gateway cannot be
 /// reached on the network chosen.
-pub const MAINNET_HINT: &str = "CyclePay sells cycles on mainnet: add `-n ic`";
+pub const MAINNET_HINT: &str = "CyclePay sells cycles on mainnet: use `-n ic`";
 
-/// `. <MAINNET_HINT>` for CyclePay's own gateway, which is on mainnet only;
-/// nothing for another, which could be anywhere.
-fn mainnet_hint(gateway: Principal) -> String {
-    if gateway.to_text() == CYCLES_GATEWAY_CID {
-        format!(". {MAINNET_HINT}")
-    } else {
-        String::new()
+/// Refuse to buy through CyclePay's own gateway anywhere but mainnet, told
+/// apart by `root_key`, the key the agent verifies the network's answers
+/// with. Any other gateway could be on any network, and is left to say for
+/// itself whether it is there.
+///
+/// Checked before the gateway is asked anything, so the answer does not
+/// depend on how a network reports a canister it does not have, and the
+/// same thing is said however the network was chosen.
+pub fn check_network(gateway: Principal, root_key: &[u8]) -> Result<(), CyclesPurchaseError> {
+    if is_cyclepay(gateway) && root_key != IC_ROOT_KEY.as_slice() {
+        return GatewayNotOnThisNetworkSnafu { gateway }.fail();
     }
+    Ok(())
 }
 
 /// An answer saying the gateway canister does not exist becomes
@@ -941,4 +947,30 @@ pub fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cyclepay::interface::CYCLES_GATEWAY_CID;
+
+    const OTHER_ROOT_KEY: &[u8] = b"not the mainnet root key";
+
+    #[test]
+    fn cyclepay_gateway_is_refused_off_mainnet() {
+        let cyclepay = Principal::from_text(CYCLES_GATEWAY_CID).unwrap();
+        assert!(check_network(cyclepay, IC_ROOT_KEY).is_ok());
+        let error = check_network(cyclepay, OTHER_ROOT_KEY).unwrap_err();
+        assert!(
+            matches!(error, CyclesPurchaseError::GatewayNotOnThisNetwork { gateway } if gateway == cyclepay)
+        );
+        assert!(error.to_string().contains(MAINNET_HINT), "{error}");
+    }
+
+    #[test]
+    fn another_gateway_may_be_on_any_network() {
+        let other = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+        assert!(check_network(other, IC_ROOT_KEY).is_ok());
+        assert!(check_network(other, OTHER_ROOT_KEY).is_ok());
+    }
 }

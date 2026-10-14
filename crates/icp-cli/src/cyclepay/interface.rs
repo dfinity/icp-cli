@@ -33,6 +33,15 @@ pub const CYCLES_GATEWAY_CID: &str = "2bwus-iiaaa-aaaac-bee3a-cai";
 /// Environment variable that overrides [`CYCLES_GATEWAY_CID`].
 pub const CYCLES_GATEWAY_CANISTER_ID_ENV: &str = "ICP_CYCLES_GATEWAY_CANISTER_ID";
 
+/// Whether `gateway` is CyclePay's own backend, [`CYCLES_GATEWAY_CID`]: the
+/// one gateway the CLI knows anything about beyond its interface, which is
+/// on mainnet and nowhere else.
+pub fn is_cyclepay(gateway: Principal) -> bool {
+    gateway
+        == Principal::from_text(CYCLES_GATEWAY_CID)
+            .expect("CYCLES_GATEWAY_CID is a valid principal")
+}
+
 /// Public query: `() -> (CardTerms)`. What a buyer needs to pay by card: the
 /// Payment Link, the order limits and the fees.
 pub const CARD_TERMS_METHOD: &str = "get_card_terms";

@@ -331,42 +331,6 @@ async fn connect_on_missing_gateway_is_gateway_not_found() {
 /// the call layer reports as a failure. The command reads it as the gateway
 /// being absent, as it would a replica's IC0301. Any other HTTP failure stays
 /// what it is.
-#[tokio::test]
-async fn connect_reads_a_gateways_canister_not_found_as_absence() {
-    use ic_agent::AgentError;
-    use ic_agent::agent::agent_error::HttpErrorPayload;
-    let http = |status: u16, body: &[u8]| {
-        CallError::failed(
-            principal(BACKEND),
-            CARD_TERMS_METHOD,
-            AgentError::HttpError(HttpErrorPayload {
-                status,
-                content_type: Some("text/plain; charset=utf-8".to_owned()),
-                content: body.to_vec(),
-            }),
-        )
-    };
-    let fake = FakeBackend {
-        refusal: Mutex::new(Some(http(400, b"error: canister_not_found"))),
-        ..FakeBackend::default()
-    };
-    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
-    assert!(
-        matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
-        "{err}"
-    );
-
-    let fake = FakeBackend {
-        refusal: Mutex::new(Some(http(502, b"bad gateway"))),
-        ..FakeBackend::default()
-    };
-    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
-    assert!(
-        matches!(err, CyclesPurchaseError::ReadTerms { .. }),
-        "{err}"
-    );
-}
-
 /// Terms the CLI could not quote on are refused at once, before any quote.
 #[tokio::test]
 async fn connect_refuses_terms_it_cannot_act_on() {

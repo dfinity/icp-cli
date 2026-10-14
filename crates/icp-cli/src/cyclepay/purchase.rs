@@ -17,10 +17,7 @@ use std::pin::pin;
 use std::time::{Duration, Instant};
 
 use candid::Principal;
-use ic_agent::AgentError;
-use icp_project::calls::{
-    CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
-};
+use icp_project::calls::{CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed};
 use icp_project::prelude::IC_ROOT_KEY;
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
@@ -741,37 +738,18 @@ pub fn check_network(gateway: Principal, root_key: &[u8]) -> Result<(), CyclesPu
     Ok(())
 }
 
-/// An answer saying the gateway canister does not exist becomes
+/// A replica's IC0301, saying the gateway canister does not exist, becomes
 /// [`CyclesPurchaseError::GatewayNotFound`]; anything else goes to `wrap`.
-///
-/// A replica says so with an IC0301 rejection. An HTTP gateway that cannot
-/// route to the canister says so itself, before any replica sees the call,
-/// with a 4xx whose body is its `canister_not_found`; `AgentCalls` reports
-/// that as a failure carrying the agent's own error. Only this command reads
-/// the second form as absence: elsewhere in icp-cli a call that no replica
-/// answered stays a failure.
 fn map_absent(
     source: TypedCallError,
     gateway: Principal,
     wrap: impl FnOnce(TypedCallError) -> CyclesPurchaseError,
 ) -> CyclesPurchaseError {
     match &source {
-        TypedCallError::Call { source: call } if is_absent(call) => {
+        TypedCallError::Call { source: call } if call.is_canister_not_found() => {
             CyclesPurchaseError::GatewayNotFound { gateway }
         }
         _ => wrap(source),
-    }
-}
-
-fn is_absent(call: &CallError) -> bool {
-    match call {
-        CallError::Failed { source, .. } => matches!(
-            source.downcast_ref::<AgentError>(),
-            Some(AgentError::HttpError(payload))
-                if (400..500).contains(&payload.status)
-                    && String::from_utf8_lossy(&payload.content).contains("canister_not_found")
-        ),
-        _ => call.is_canister_not_found(),
     }
 }
 

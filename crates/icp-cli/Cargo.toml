@@ -77,7 +77,6 @@ wslpath2.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 cargo-generate = { workspace = true, features = ["vendored-openssl"] }
-nix = { workspace = true, features = ["term"] }
 
 [dev-dependencies]
 assert_cmd.workspace = true

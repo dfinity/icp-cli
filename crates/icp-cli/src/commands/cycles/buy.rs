@@ -29,7 +29,7 @@ use crate::cyclepay::interface::{
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
     self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView, Quote,
-    Rate, Target, WaitOptions, now_secs,
+    Rate, Target, WaitOptions,
 };
 use crate::cyclepay::task::{CyclesPurchaseTask, PurchasePhase, Reporter};
 use crate::render::rendered;
@@ -365,49 +365,6 @@ impl Interrupt {
     }
 }
 
-/// While it lives, the terminal echoes nothing typed: not Ctrl-C (as `^C`,
-/// or the bare control character some terminals show), nor any other key.
-/// An echo lands after the live view's line, and a line that fills the
-/// width wraps it onto a row the view does not know about, which then keeps
-/// a stale copy of the line when the view is cleared.
-struct NoEcho {
-    #[cfg(unix)]
-    saved: Option<nix::sys::termios::Termios>,
-}
-
-impl NoEcho {
-    fn new() -> Self {
-        #[cfg(unix)]
-        {
-            use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
-            let echoes = LocalFlags::ECHO | LocalFlags::ECHOCTL;
-            let saved = tcgetattr(stderr())
-                .ok()
-                .filter(|termios| termios.local_flags.intersects(echoes));
-            let quieted = saved.as_ref().is_some_and(|saved| {
-                let mut quiet = saved.clone();
-                quiet.local_flags.remove(echoes);
-                tcsetattr(stderr(), SetArg::TCSANOW, &quiet).is_ok()
-            });
-            Self {
-                saved: saved.filter(|_| quieted),
-            }
-        }
-        #[cfg(not(unix))]
-        Self {}
-    }
-}
-
-impl Drop for NoEcho {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        if let Some(saved) = &self.saved {
-            use nix::sys::termios::{SetArg, tcsetattr};
-            let _ = tcsetattr(stderr(), SetArg::TCSANOW, saved);
-        }
-    }
-}
-
 /// What to say of a rate CyclePay has not refreshed for longer than it
 /// tolerates, if it has not.
 fn stale_rate_warning(rate: &Rate) -> Option<String> {
@@ -506,7 +463,7 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
             info!(
                 "Order {} is payable{}{leads}",
                 order.id,
-                payable_for(order, now_secs())
+                payable_until(order)
             );
             println!("{url}");
             if !no_open && stderr().is_terminal() && browser_is_at_hand() {
@@ -517,17 +474,13 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
             }
             // A phone camera is the usual way to reach a card from a terminal;
             // the code is for eyes, so it only goes where there are some.
-            let color = std::env::var_os("NO_COLOR").is_none();
             if stderr().is_terminal()
-                && let Some(qr) = render_qr(url, color)
+                && let Some(qr) = render_qr(url)
             {
                 // A code wrapped across lines, or partly scrolled off the
                 // screen by the wait's line below it, cannot be scanned.
                 let (rows, columns) = Term::stderr().size();
-                let width = qr
-                    .lines()
-                    .next()
-                    .map_or(0, |row| row.chars().filter(|c| "█▀▄ ".contains(*c)).count());
+                let width = qr.lines().next().map_or(0, |row| row.chars().count());
                 let height = qr.lines().count() + 1;
                 if width > usize::from(columns) || height > usize::from(rows) {
                     info!(
@@ -578,10 +531,7 @@ async fn wait_and_report(
     // stderr as it comes (an agent, a log) is told in lines instead; -q
     // asks for nothing but the link and the end.
     let result = match output {
-        Output::Human if stderr().is_terminal() => {
-            let _quiet = NoEcho::new();
-            rendered(debug, wait).await
-        }
+        Output::Human if stderr().is_terminal() => rendered(debug, wait).await,
         Output::Human | Output::Json => {
             info!("If this command is stopped, the order carries on without it.");
             with_heartbeat(HEARTBEAT, |line| info!("{line}"), wait).await
@@ -594,13 +544,13 @@ async fn wait_and_report(
         // Stopped, not failed: the order carries on without the command.
         Err(CyclesPurchaseError::Interrupted { order }) => {
             if output != Output::Quiet {
-                info!("{} {AFTER_HINT}", standing(&order, false, now_secs()));
+                info!("{} {AFTER_HINT}", standing(&order, false));
             }
             return Err(Stopped::INTERRUPTED.into());
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
             if output != Output::Quiet {
-                info!("{} {AFTER_HINT}", standing(&order, true, now_secs()));
+                info!("{} {AFTER_HINT}", standing(&order, true));
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
@@ -768,127 +718,71 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
     }
 }
 
-/// Where an order the wait left unsettled stands at `now` (seconds since
-/// the Unix epoch), when it was stopped or (`timed_out`) gave up. Only an
-/// order known to be unpaid is payable.
-fn standing(order: &OrderView, timed_out: bool, now: u64) -> String {
+/// Where an order the wait left unsettled stands, when it was stopped or
+/// (`timed_out`) gave up. Only an order known to be unpaid is payable.
+fn standing(order: &OrderView, timed_out: bool) -> String {
     match order.status {
         OrderStatus::AwaitingPayment if timed_out => format!(
             "No payment arrived. Order {} stays payable{}.",
             order.id,
-            payable_for(order, now)
+            payable_until(order)
         ),
-        OrderStatus::AwaitingPayment => format!(
-            "Order {} stays payable{}.",
-            order.id,
-            payable_for(order, now)
-        ),
+        OrderStatus::AwaitingPayment => {
+            format!("Order {} stays payable{}.", order.id, payable_until(order))
+        }
         status if timed_out => format!("Order {} is still {status}.", order.id),
         status => format!("Order {} is {status}.", order.id),
     }
 }
 
-/// ` for 25 hours (until 2026-10-14 03:33 UTC)`: how much longer an unpaid
-/// order can be paid, from `now` (seconds since the Unix epoch), and until
-/// when, in UTC to the minute. Nothing when the order has no deadline.
-fn payable_for(order: &OrderView, now: u64) -> String {
-    let Some(deadline) = order.expires_at else {
-        return String::new();
-    };
-    let until = format_utc(deadline);
-    match deadline.checked_sub(now).filter(|left| *left > 0) {
-        Some(left) => format!(" for {} (until {until})", format_left(left)),
-        None => format!(" until {until}"),
-    }
-}
-
-/// `25 hours`, `40 minutes`: a time left, to the nearest hour from an hour
-/// and a half, and to the nearest minute below.
-fn format_left(secs: u64) -> String {
-    let (count, unit) = if secs >= 90 * 60 {
-        ((secs + 1_800) / 3_600, "hour")
-    } else {
-        (((secs + 30) / 60).max(1), "minute")
-    };
-    if count == 1 {
-        format!("1 {unit}")
-    } else {
-        format!("{count} {unit}s")
-    }
-}
-
-/// Seconds since the Unix epoch as `2026-10-14 03:33 UTC`, for prose.
-fn format_utc(timestamp: u64) -> String {
-    OffsetDateTime::from_unix_timestamp(timestamp as i64)
-        .map(|dt| {
-            format!(
-                "{:04}-{:02}-{:02} {:02}:{:02} UTC",
-                dt.year(),
-                u8::from(dt.month()),
-                dt.day(),
-                dt.hour(),
-                dt.minute()
-            )
-        })
-        .unwrap_or_else(|_| timestamp.to_string())
+/// ` until 2026-10-15T03:33:12Z`: when an unpaid order stops being payable.
+/// Nothing when the order has no deadline.
+fn payable_until(order: &OrderView) -> String {
+    order
+        .expires_at
+        .map(|deadline| format!(" until {}", format_secs(deadline)))
+        .unwrap_or_default()
 }
 
 /// The URL as a QR code drawn with half-block characters, two modules per
-/// row, for scanning off the terminal. It takes the lowest error correction
-/// (a screen does not smudge) and a two-module quiet zone, the least a
-/// scanner needs, so that the Payment Link's code fits an 80x24 terminal with
-/// the wait's line below it: 41x21, or 45x23 once the order id and amount
-/// make the URL longer than 106 bytes. `None` only if the URL is too long to
-/// encode.
-///
-/// With `color`, every cell is an upper half block whose foreground is the
-/// top module's colour and whose background is the bottom module's: bright
-/// white for light, black for dark. The code reads the same on a light theme
-/// as on a dark one, and any spacing a terminal adds between its rows takes
-/// the colour of the module just above it, rather than cutting a dark line
-/// through light ones. Without, light modules are the blocks, in the
-/// terminal's own colours, which scans best light on dark.
-fn render_qr(url: &str, color: bool) -> Option<String> {
-    use itertools::Itertools;
-    use qrcode::{Color, EcLevel, QrCode};
-    const QUIET: usize = 2;
+/// row, for scanning off the terminal: light modules are the blocks, in the
+/// terminal's own colours, which scans best light on dark. It takes the
+/// lowest error correction (a screen does not smudge) and a two-module quiet
+/// zone, the least a scanner needs, so that the Payment Link's code fits an
+/// 80x24 terminal with the wait's line below it. `None` only if the URL is
+/// too long to encode.
+fn render_qr(url: &str) -> Option<String> {
+    use qrcode::render::unicode::Dense1x2;
+    use qrcode::{EcLevel, QrCode};
     let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).ok()?;
-    let width = code.width();
-    let modules = code.to_colors();
-    let size = width + 2 * QUIET;
-    // The quiet zone, and the half row below an odd height, are light.
-    let light = |x: usize, y: usize| {
-        let inside = (QUIET..QUIET + width).contains(&x) && (QUIET..QUIET + width).contains(&y);
-        !inside || modules[(y - QUIET) * width + (x - QUIET)] == Color::Light
-    };
-    let mut rows = (0..size).step_by(2).map(|y| {
-        if !color {
-            return (0..size)
-                .map(|x| match (light(x, y), light(x, y + 1)) {
-                    (true, true) => '█',
-                    (true, false) => '▀',
-                    (false, true) => '▄',
-                    (false, false) => ' ',
-                })
-                .collect();
-        }
-        // The colours are set where they change, and reset at the row's end.
-        let mut row = String::new();
-        let mut set = None;
-        for x in 0..size {
-            let cell = (light(x, y), light(x, y + 1));
-            if set != Some(cell) {
-                let fg = if cell.0 { 97 } else { 30 };
-                let bg = if cell.1 { 107 } else { 40 };
-                row.push_str(&format!("\x1b[{fg};{bg}m"));
-                set = Some(cell);
-            }
-            row.push('▀');
-        }
-        row.push_str("\x1b[0m");
-        row
+    let drawn = code
+        .render::<Dense1x2>()
+        .dark_color(Dense1x2::Light)
+        .light_color(Dense1x2::Dark)
+        .quiet_zone(false)
+        .build();
+    let rows: Vec<&str> = drawn.lines().collect();
+    let width = rows.first().map_or(0, |row| row.chars().count());
+    // A code is an odd number of modules high, and the renderer leaves the
+    // half row below the last one empty: made light, as the quiet zone is,
+    // so no dark stripe comes between the code and its edge.
+    let last = rows.len().checked_sub(1)?;
+    let edge = "█".repeat(width + 4);
+    let body = rows.iter().enumerate().map(|(y, row)| {
+        let row = if y == last {
+            row.replace('▀', "█").replace(' ', "▄")
+        } else {
+            (*row).to_owned()
+        };
+        format!("██{row}██")
     });
-    Some(rows.join("\n"))
+    Some(
+        std::iter::once(edge.clone())
+            .chain(body)
+            .chain(std::iter::once(edge))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 /// Where the order stands, for a script: one JSON object, or the status tag
@@ -1172,10 +1066,10 @@ mod tests {
     #[test]
     fn qr_renders_a_payment_link() {
         let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-1-0000abcd&prefilled_amount=1000";
-        let qr = render_qr(url, false).unwrap();
+        let qr = render_qr(url).unwrap();
         let lines: Vec<&str> = qr.lines().collect();
-        // Square-ish: every row is the same width and the block characters
-        // are the only ink.
+        // Square-ish, within 80x24 with the wait's line below, and the block
+        // characters are the only ink.
         let width = lines[0].chars().count();
         assert!(width > 20 && width <= 45, "{width}");
         assert!(lines.len() <= 23, "{}", lines.len());
@@ -1185,98 +1079,23 @@ mod tests {
                 .all(|c| matches!(c, '█' | '▀' | '▄' | ' ' | '\n')),
             "{qr}"
         );
-        // In colour, every cell is an upper half block, and every row sets
-        // its colours first and resets them after.
-        let colored = render_qr(url, true).unwrap();
+        // A light quiet zone all round: full rows above and below, and two
+        // blocks at either end of every row. The row above the bottom edge
+        // is light in its lower half, where the renderer left the half row
+        // below the code's odd height empty.
+        assert!(lines[0].chars().all(|c| c == '█'), "{qr}");
+        assert!(lines[lines.len() - 1].chars().all(|c| c == '█'), "{qr}");
         assert!(
-            colored
-                .lines()
-                .all(|l| l.starts_with("\x1b[") && l.ends_with("\x1b[0m")),
-            "{colored}"
+            lines
+                .iter()
+                .all(|l| l.starts_with("██") && l.ends_with("██")),
+            "{qr}"
         );
-        assert!(
-            colored
-                .lines()
-                .all(|l| l.chars().filter(|c| "█▀▄ ".contains(*c)).count() == width),
-            "{colored}"
-        );
-        assert!(!colored.contains(['█', '▄', ' ']), "{colored}");
+        assert!(!lines[lines.len() - 2].contains([' ', '▀']), "{qr}");
         // Far beyond a QR code's capacity.
-        assert!(render_qr(&"x".repeat(10_000), false).is_none());
+        assert!(render_qr(&"x".repeat(10_000)).is_none());
     }
 
-    /// Each cell of a drawn code as (top light, bottom light): read off the
-    /// block characters without colour, and off each cell's foreground
-    /// (top) and background (bottom) with it.
-    fn read_back(qr: &str, color: bool) -> Vec<Vec<(bool, bool)>> {
-        qr.lines()
-            .map(|line| {
-                let mut cells = Vec::new();
-                let (mut fg, mut bg) = (None, None);
-                let mut chars = line.chars();
-                while let Some(c) = chars.next() {
-                    if c == '\x1b' {
-                        let sgr: String = chars.by_ref().take_while(|c| *c != 'm').collect();
-                        let codes: Vec<&str> = sgr.trim_start_matches('[').split(';').collect();
-                        match codes[..] {
-                            ["0"] => (fg, bg) = (None, None),
-                            [f, b] => (fg, bg) = (Some(f.to_owned()), Some(b.to_owned())),
-                            _ => panic!("unexpected SGR {sgr:?}"),
-                        }
-                        continue;
-                    }
-                    cells.push(if color {
-                        assert_eq!(c, '▀', "{line:?}");
-                        let light = |code: &Option<String>, on: &str, off: &str| match code {
-                            Some(code) if code == on => true,
-                            Some(code) if code == off => false,
-                            other => panic!("unexpected colour {other:?} in {line:?}"),
-                        };
-                        (light(&fg, "97", "30"), light(&bg, "107", "40"))
-                    } else {
-                        match c {
-                            '█' => (true, true),
-                            '▀' => (true, false),
-                            '▄' => (false, true),
-                            ' ' => (false, false),
-                            c => panic!("unexpected {c:?}"),
-                        }
-                    });
-                }
-                cells
-            })
-            .collect()
-    }
-
-    /// Read back, with colour and without, the drawing is the code's own
-    /// modules inside a light quiet zone two modules wide, with the half row
-    /// below its odd height light too: a dark stripe there would leave a
-    /// scanner no edge to find.
-    #[test]
-    fn qr_draws_every_module_where_it_is() {
-        use qrcode::{Color, EcLevel, QrCode};
-        let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-4-77fd4ac0&prefilled_amount=100";
-        let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).unwrap();
-        let (width, modules) = (code.width(), code.to_colors());
-        let size = width + 4;
-        for color in [false, true] {
-            let rows = read_back(&render_qr(url, color).unwrap(), color);
-            assert_eq!(rows.len(), size.div_ceil(2));
-            assert!(rows.iter().all(|row| row.len() == size));
-            for y in 0..rows.len() * 2 {
-                for x in 0..size {
-                    let (top, bottom) = rows[y / 2][x];
-                    let drawn_light = if y % 2 == 0 { top } else { bottom };
-                    let inside = (2..2 + width).contains(&x) && (2..2 + width).contains(&y);
-                    let light = !inside || modules[(y - 2) * width + (x - 2)] == Color::Light;
-                    assert_eq!(drawn_light, light, "module ({x}, {y}), color {color}");
-                }
-            }
-        }
-    }
-
-    /// Only a delivery succeeds; every other end is an error that says what
-    /// happened.
     #[test]
     fn only_a_delivery_ends_well() {
         let order = |status| OrderView {
@@ -1321,27 +1140,20 @@ mod tests {
             detail: None,
             destination: None,
         };
-        let now = 1_700_000_000 - 25 * 3_600 + 10;
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), false, now),
-            "Order co-1 stays payable for 25 hours (until 2023-11-14 22:13 UTC)."
+            standing(&order(OrderStatus::AwaitingPayment), false),
+            "Order co-1 stays payable until 2023-11-14T22:13:20Z."
         );
         assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), true, now),
-            "No payment arrived. Order co-1 stays payable for 25 hours (until 2023-11-14 22:13 \
-             UTC)."
-        );
-        // Within the grace a wait allows past the deadline.
-        assert_eq!(
-            standing(&order(OrderStatus::AwaitingPayment), false, 1_700_000_030),
-            "Order co-1 stays payable until 2023-11-14 22:13 UTC."
+            standing(&order(OrderStatus::AwaitingPayment), true),
+            "No payment arrived. Order co-1 stays payable until 2023-11-14T22:13:20Z."
         );
         assert_eq!(
-            standing(&order(OrderStatus::Processing), true, now),
+            standing(&order(OrderStatus::Processing), true),
             "Order co-1 is still paid, delivering."
         );
         for timed_out in [false, true] {
-            let said = standing(&order(OrderStatus::Unknown), timed_out, now);
+            let said = standing(&order(OrderStatus::Unknown), timed_out);
             assert!(said.contains("does not know"), "{said}");
             assert!(
                 !said.contains("payable") && !said.contains("No payment"),
@@ -1484,12 +1296,6 @@ mod tests {
     #[test]
     fn timestamps_and_ages_read_well() {
         assert_eq!(format_secs(1_700_000_000), "2023-11-14T22:13:20Z");
-        assert_eq!(format_utc(1_700_000_000), "2023-11-14 22:13 UTC");
-        assert_eq!(format_left(25 * 3_600 - 15), "25 hours");
-        assert_eq!(format_left(90 * 60), "2 hours");
-        assert_eq!(format_left(89 * 60), "89 minutes");
-        assert_eq!(format_left(61), "1 minute");
-        assert_eq!(format_left(5), "1 minute");
         assert_eq!(format_age(Duration::from_secs(90)), "1 minute");
         assert_eq!(format_age(Duration::from_secs(5 * 3600)), "5 hours");
         assert_eq!(format_age(Duration::from_secs(3 * 86_400)), "3 days");

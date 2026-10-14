@@ -14,7 +14,7 @@
 
 use std::future::Future;
 use std::pin::pin;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use candid::Principal;
 use ic_agent::AgentError;
@@ -821,14 +821,6 @@ fn is_absent(call: &CallError) -> bool {
         ),
         _ => call.is_canister_not_found(),
     }
-}
-
-/// Seconds since the Unix epoch, on this machine's clock.
-pub fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

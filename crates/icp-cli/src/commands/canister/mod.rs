@@ -16,6 +16,7 @@ pub(crate) mod start;
 pub(crate) mod status;
 pub(crate) mod stop;
 pub(crate) mod top_up;
+pub(crate) mod uninstall;
 
 /// Lists principals one per line below a label, indented two spaces past
 /// `indent` — the indent of the label itself — so they nest the way the other
@@ -91,6 +92,7 @@ pub(crate) enum Command {
     Status(status::StatusArgs),
     Stop(stop::StopArgs),
     TopUp(top_up::TopUpArgs),
+    Uninstall(uninstall::UninstallArgs),
 }
 
 #[cfg(test)]

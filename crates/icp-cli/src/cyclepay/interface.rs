@@ -13,10 +13,13 @@
 //! serving these four methods can stand in for CyclePay's backend, and the
 //! CLI carries nothing of its own but the default gateway's canister id. The
 //! page to pay on, the order limits and the fees all come from the gateway.
+//! `cycles_gateway.did`, beside this file, is that interface written down:
+//! the least a gateway must serve, trimmed from CyclePay's backend's own.
 //!
 //! The backend is a Rust canister, so names are as written here on the wire.
 //! Candid lets a record carry more fields than its reader names, so each
-//! record below declares only what the CLI reads.
+//! record below declares only what the CLI reads, and a test holds these
+//! types to the `.did`.
 
 use std::env::{self, VarError};
 use std::fmt;
@@ -327,6 +330,52 @@ mod tests {
         let err =
             resolve_cycles_gateway_canister_id(Ok("not-a-principal".to_string())).unwrap_err();
         assert!(err.contains(CYCLES_GATEWAY_CANISTER_ID_ENV), "{err}");
+    }
+
+    /// `cycles_gateway.did` is the contract a gateway serves. Every reply it
+    /// allows must decode as the type the CLI reads it into, and every
+    /// argument the CLI sends must be one it accepts. Strict about `opt`:
+    /// a reply must fit as declared, never by Candid's fallback to `null`,
+    /// which is what lets `status` be read as `Option` while the `.did`
+    /// requires it.
+    #[test]
+    fn rust_types_hold_to_the_vendored_did() {
+        use candid::types::subtype::{Gamma, OptReport, subtype_with_config};
+        use candid::types::{FuncMode, Type, TypeEnv};
+        use candid_parser::{IDLProg, check_prog};
+
+        let prog: IDLProg = include_str!("cycles_gateway.did").parse().unwrap();
+        let mut env = TypeEnv::new();
+        let service = check_prog(&mut env, &prog).unwrap().expect("a service");
+
+        let check = |name: &str, query: bool, sent: &[Type], read: Type| {
+            let method = env.get_method(&service, name).unwrap();
+            assert_eq!(method.modes.contains(&FuncMode::Query), query, "{name}");
+            let [declared] = method.rets.as_slice() else {
+                panic!("{name} replies with {} values", method.rets.len());
+            };
+            subtype_with_config(OptReport::Error, &mut Gamma::new(), &env, declared, &read)
+                .unwrap_or_else(|e| panic!("{name}'s reply does not fit the CLI's type: {e}"));
+            assert_eq!(method.args.len(), sent.len(), "{name}");
+            for (sent, declared) in sent.iter().zip(&method.args) {
+                subtype_with_config(OptReport::Error, &mut Gamma::new(), &env, sent, declared)
+                    .unwrap_or_else(|e| panic!("{name}'s argument is not accepted: {e}"));
+            }
+        };
+        check(CARD_TERMS_METHOD, true, &[], CardTerms::ty());
+        check(XDR_RATE_STATUS_METHOD, true, &[], XdrRateStatus::ty());
+        check(
+            CREATE_ORDER_METHOD,
+            false,
+            &[CreateOrderArgs::ty()],
+            CreateOrderResult::ty(),
+        );
+        check(
+            ORDER_STATUS_METHOD,
+            true,
+            &[String::ty()],
+            Option::<OrderStatusView>::ty(),
+        );
     }
 
     /// The backend's replies carry more fields than the CLI names; the

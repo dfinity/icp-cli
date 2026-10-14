@@ -36,15 +36,16 @@ use crate::render::rendered;
 
 /// Buy cycles with a card.
 ///
-/// Creates an order on the CyclePay backend canister as the current identity,
-/// prints the Payment Link to pay on (and opens it in a browser when run from
-/// a terminal, but not over SSH or on CI), then waits for the cycles to land
-/// on the identity's own cycles-ledger account. Fund a canister from there
-/// with `icp canister top-up`. Say either how much to spend (--amount, in the
+/// Creates an order on a cycles gateway canister as the current identity,
+/// prints the page to pay on (and opens it in a browser when run from a
+/// terminal, but not over SSH or on CI), then waits for the cycles to land on
+/// the identity's own cycles-ledger account. Fund a canister from there with
+/// `icp canister top-up`. Say either how much to spend (--amount, in the
 /// currency given by --currency) or how many cycles to receive (--cycles); the
 /// latter pays the least amount that buys them once the card fee is taken
 /// out. The gateway publishes its per-order range and its fees, and the quote
-/// shows them. CyclePay accepts USD only, from 1 to 200 per order.
+/// shows them. The default gateway is CyclePay's, on mainnet, which accepts
+/// USD only.
 ///
 /// Exactly one of --amount or --cycles must be given.
 #[derive(Debug, Args)]
@@ -63,13 +64,13 @@ pub(crate) struct BuyArgs {
     #[arg(long, value_name = "CYCLES")]
     pub(crate) cycles: Option<CyclesAmount>,
 
-    /// ISO 4217 code of the currency to pay in. CyclePay accepts USD only.
+    /// ISO 4217 code of the currency to pay in. CyclePay accepts USD only
     #[arg(long, value_name = "CODE", default_value = "USD")]
     pub(crate) currency: Currency,
 
-    /// Canister id of the cycles gateway to buy through: the CyclePay backend, or any canister
-    /// serving its order interface. Defaults to CyclePay's mainnet backend, or to
-    /// ICP_CYCLES_GATEWAY_CANISTER_ID when set.
+    /// Canister id of the cycles gateway to buy through: any canister serving the cycles gateway
+    /// interface. Defaults to CyclePay's backend on mainnet, or to ICP_CYCLES_GATEWAY_CANISTER_ID
+    /// when set
     #[arg(long, value_name = "CANISTER_ID")]
     pub(crate) gateway: Option<Principal>,
 
@@ -80,11 +81,11 @@ pub(crate) struct BuyArgs {
     #[arg(long, short)]
     pub(crate) yes: bool,
 
-    /// Do not open the Payment Link in a browser
+    /// Do not open the payment page in a browser
     #[arg(long)]
     pub(crate) no_open: bool,
 
-    /// Print the Payment Link and return without waiting for the order to complete
+    /// Print the payment page's link and return without waiting for the order to complete
     #[arg(long)]
     pub(crate) no_wait: bool,
 
@@ -92,7 +93,7 @@ pub(crate) struct BuyArgs {
     #[arg(long, conflicts_with = "quiet")]
     pub(crate) json: bool,
 
-    /// Suppress human-readable output; print only the Payment Link, then the final status
+    /// Suppress human-readable output; print only the payment page's link, then the final status
     #[arg(long, short)]
     pub(crate) quiet: bool,
 }

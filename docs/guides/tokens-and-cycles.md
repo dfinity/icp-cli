@@ -116,7 +116,7 @@ icp cycles balance -n ic
 
 ## Buying Cycles with a Card
 
-If you have a card but no ICP, you can buy cycles directly for the current identity through [CyclePay](https://www.cyclepay.org), a service run by the DFINITY Foundation:
+If you have a card but no ICP, `icp cycles buy` buys cycles for the current identity through a cycles gateway: a canister that takes an order, has you pay for it on a web page, and delivers the cycles to your identity's cycles-ledger account. The default gateway is [CyclePay](https://www.cyclepay.org), a service run by the DFINITY Foundation, which is on mainnet:
 
 ```bash
 # Spend 10 USD
@@ -126,7 +126,7 @@ icp cycles buy --amount 10 -n ic
 icp cycles buy --cycles 5t -n ic
 ```
 
-The command quotes what the amount buys at CyclePay's current rate, shows who is paying and which backend canister takes the order, and asks you to confirm:
+The command reads the gateway's terms (its per-order range, its card fee and its rate), quotes what the amount buys, shows who is paying and which gateway takes the order, and asks you to confirm:
 
 ```
 Identity: default
@@ -137,18 +137,18 @@ Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
 Create this order? Nothing is charged until you pay on Stripe. [y/N]
 ```
 
-It then creates the order as your identity on the CyclePay backend canister, prints the Stripe Payment Link for it together with a QR code to scan with a phone (and opens the link in your browser when run from a terminal, but not over SSH or on CI), and waits until the cycles land on your identity's own cycles-ledger account. The QR code is drawn in black and white whatever your terminal's theme; with `NO_COLOR` set it is drawn in the terminal's own colours, light on dark, which scans best on a dark theme. The link is always printed above it. Off a terminal, as when an agent runs it, the wait is told in lines instead: when it begins, every minute that it goes on, and the command that picks it up again if it is stopped. The card is charged on Stripe's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`; USD is the only currency CyclePay accepts, from 1 to 200 per order, a range the gateway publishes along with its fees and the Payment Link, so the CLI has nothing of its own to go out of date.
+It then creates the order as your identity, prints the page to pay on together with a QR code to scan with a phone (and opens the page in your browser when run from a terminal, but not over SSH or on CI), and waits until the cycles land. The card is charged on the gateway's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`, the only currency CyclePay accepts.
 
-The quote is an estimate. CyclePay takes Stripe's card fee of 2.9% plus 0.30 USD from the amount, and mints cycles for the rest at its XDR/USD rate when the payment lands, so the cycles delivered can differ slightly from the figure quoted. The exact figure is reported once they arrive. With `--cycles`, the command pays the smallest amount, to the cent, that buys at least that many cycles at the rate quoted; if that is less than the minimum order, it pays the minimum and you get the more.
+The quote is an estimate. The gateway takes its card fee from the amount and mints cycles for the rest at its rate when the payment lands, so the cycles delivered can differ slightly from the figure quoted; the exact figure is reported once they arrive. With `--cycles`, the command pays the smallest amount, to the cent, that buys at least that many cycles at the rate quoted, or the gateway's minimum order if that is less.
 
 Useful flags:
 
-- `--no-open` prints the Payment Link without opening a browser. You can pay from any device.
-- `--no-wait` returns right after printing the link. The order needs nothing more from the command: once it is paid, the cycles land on your account, and `icp cycles balance` shows them. An unpaid order expires 25 hours after it was made; running the same command again while it is open returns the same order rather than making another.
+- `--no-open` prints the payment page's link without opening a browser. You can pay from any device.
+- `--no-wait` returns right after printing the link. The order needs nothing more from the command: once it is paid, the cycles land on your account, and `icp cycles balance` shows them. An unpaid order expires after a time the gateway sets.
 - `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created (with the amount, net and fee) and one when it settles; `-q` prints only the link, then the final status.
-- `--gateway <canister-id>` buys through another cycles gateway: another CyclePay backend, or any canister serving its order interface (`get_card_terms`, `get_xdr_rate_status`, `create_order` and `order_status`). The [`ICP_CYCLES_GATEWAY_CANISTER_ID`](../reference/environment-variables.md#icp_cycles_gateway_canister_id) environment variable does the same. The gateway's own Payment Link, range and fees apply. CyclePay's own gateway is on mainnet only, so without `--gateway` the command needs `-n ic`, or an environment on mainnet, and refuses any other network before placing an order; another gateway may be on any network.
+- `--gateway <canister-id>` buys through another cycles gateway: any canister serving the [cycles gateway interface](https://github.com/dfinity/icp-cli/blob/main/crates/icp-cli/src/cyclepay/cycles_gateway.did), whose own payment page, range and fees then apply. The [`ICP_CYCLES_GATEWAY_CANISTER_ID`](../reference/environment-variables.md#icp_cycles_gateway_canister_id) environment variable does the same. CyclePay's gateway is on mainnet only, so without `--gateway` the command needs `-n ic`, or an environment on mainnet, and refuses any other network before placing an order; another gateway may be on any network.
 
-Pressing Ctrl-C while waiting stops the wait, not the order: an unpaid order stays payable, and the command says so and exits with status 1. Ctrl-C at the confirmation prompt creates no order. While it waits on a terminal, the command turns off the echo of what you type and turns it back on when it ends; if it is killed outright (`kill -9`), `stty sane` restores the terminal. If the cycles cannot be delivered, CyclePay refunds the card (by hand, when the order ends owed a refund) and the command says so; a payment made after an order expired is refunded the same way. If the order ends up needing review, your card was charged and CyclePay checks the order by hand; a disputed payment is settled by the dispute. Keep the order id; CyclePay's site shows the outcome under "My purchases".
+Pressing Ctrl-C while waiting stops the wait, not the order: an unpaid order stays payable, and the command says so and exits with status 1. Ctrl-C at the confirmation prompt creates no order. If the cycles cannot be delivered, the gateway refunds the card and the command says so; if the order ends up needing review, your card was charged and the gateway checks the order by hand. Keep the order id: the gateway shows the outcome, as CyclePay's site does under "My purchases".
 
 The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from. Purchases made from the terminal appear under "My purchases" on www.cyclepay.org when the identity is the one you sign in there with: `icp identity link web cyclepay --app 4w3yu-fyaaa-aaaac-beeoa-cai.icp0.io` makes one.
 

@@ -7,7 +7,8 @@
 //! limits and the fees are read from the gateway, so any canister serving the
 //! same interface can stand in for it.
 //!
-//! - [`interface`]: the backend canister's Candid, as far as the CLI uses it.
+//! - [`interface`]: the backend canister's Candid, as far as the CLI uses it,
+//!   written down as the contract a gateway serves in `cycles_gateway.did`.
 //! - [`pricing`]: the gateway's arithmetic, applied for quoting before an
 //!   order exists.
 //! - [`purchase`]: the operation — quote, create, read back, wait. It never

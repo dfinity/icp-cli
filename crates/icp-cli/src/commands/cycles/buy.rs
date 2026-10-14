@@ -736,11 +736,6 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
         .unwrap_or_default();
     match order.status {
         OrderStatus::Delivered => Ok(()),
-        OrderStatus::Expired => bail!(
-            "order {} expired unpaid; a payment made on its page from now on is refunded to \
-             the card",
-            order.id
-        ),
         OrderStatus::Refunding => bail!(
             "order {} could not be delivered and is being refunded to your card{detail}",
             order.id
@@ -1303,7 +1298,6 @@ mod tests {
             (OrderStatus::Refunding, "is being refunded"),
             (OrderStatus::RefundOwed, "owes you a refund"),
             (OrderStatus::NeedsReview, "Keep the order id"),
-            (OrderStatus::Expired, "expired unpaid"),
         ] {
             let err = ending(&order(status)).unwrap_err().to_string();
             assert!(err.contains(says), "{status:?}: {err}");

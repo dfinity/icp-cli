@@ -847,125 +847,73 @@ async fn wait_returns_every_settled_status_as_ok() {
     }
 }
 
+/// A poll that says nothing of the order is tried again, whatever kept it
+/// from answering: the network, the backend refusing the call (as it does
+/// for a few minutes during an upgrade), or a replica that has not seen the
+/// order yet.
 #[tokio::test]
-async fn wait_tolerates_transient_errors() {
+async fn wait_retries_a_poll_that_said_nothing() {
     let fake = FakeBackend::default().polls(vec![
         Err(unanswered()),
-        Err(unanswered()),
+        Ok(None),
+        Err(rejected("Canister is stopped")),
         Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Err(unanswered()),
         Err(unanswered()),
         Err(unanswered()),
         Ok(Some(view("co-1", CardOrderStatus::Delivered))),
     ]);
     let options = WaitOptions {
-        max_consecutive_transient: 2,
+        max_consecutive_misses: 3,
         ..fast()
     };
     let (result, _) = wait(&fake, None, &options).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
-}
-
-/// While CyclePay upgrades its backend, every call is refused as stopped
-/// (IC0509 while it stops, IC0508 once stopped) for a few minutes, and a
-/// boundary node may answer 429 or 5xx. Nothing about the order changed.
-#[tokio::test]
-async fn wait_rides_out_a_backend_upgrade_and_a_busy_boundary_node() {
-    use ic_agent::AgentError;
-    use ic_agent::agent::agent_error::HttpErrorPayload;
-    let stopped = |code: &str| CallError::Rejected {
-        canister: principal(BACKEND),
-        method: ORDER_STATUS_METHOD.to_owned(),
-        code: Some(code.to_owned()),
-        message: "Canister is stopped".to_owned(),
-    };
-    let http = |status| {
-        CallError::failed(
-            principal(BACKEND),
-            ORDER_STATUS_METHOD,
-            AgentError::HttpError(HttpErrorPayload {
-                status,
-                content_type: None,
-                content: b"try again".to_vec(),
-            }),
-        )
-    };
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
-        Err(stopped("IC0509")),
-        Err(stopped("IC0508")),
-        Err(http(503)),
-        Err(http(429)),
-        Err(http(502)),
-        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
-    ]);
-    let (result, _) = wait(&fake, None, &fast()).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
-
-    // A 4xx other than those is an answer, and ends the wait.
-    let fake = FakeBackend::default().polls(vec![Err(http(403))]);
-    let (result, _) = wait(&fake, None, &fast()).await;
-    assert!(matches!(
-        result.unwrap_err(),
-        CyclesPurchaseError::GetOrder { .. }
-    ));
+    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 8);
 }
 
 #[tokio::test]
-async fn wait_gives_up_after_consecutive_transient_errors() {
+async fn wait_gives_up_after_consecutive_failed_polls() {
     let fake = FakeBackend::default().polls(vec![
         Err(unanswered()),
         Err(unanswered()),
         Err(unanswered()),
     ]);
     let options = WaitOptions {
-        max_consecutive_transient: 2,
+        max_consecutive_misses: 2,
         ..fast()
     };
-    let (result, _) = wait(&fake, None, &options).await;
-    let err = result.unwrap_err();
-    assert!(
-        matches!(err, CyclesPurchaseError::WaitUnanswered { .. }),
-        "{err}"
-    );
-    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
-}
-
-#[tokio::test]
-async fn wait_fails_fast_on_non_transient_error() {
-    let fake = FakeBackend::default().polls(vec![Err(rejected("canister trapped"))]);
-    let (result, _) = wait(&fake, None, &fast()).await;
+    let (result, phases) = wait(&fake, None, &options).await;
     let err = result.unwrap_err();
     assert!(matches!(err, CyclesPurchaseError::GetOrder { .. }), "{err}");
-    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 1);
+    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
+    assert_eq!(
+        phases,
+        vec![failed(
+            PurchasePhase::AwaitingPayment,
+            "lost contact with the gateway"
+        )]
+    );
 }
 
+/// An order gone for longer than a replica lags is not the caller's, or
+/// was forgotten after expiring unpaid: either way, not found.
 #[tokio::test]
-async fn wait_not_found_before_the_deadline_is_order_not_found() {
-    let fake = FakeBackend::default().polls(vec![Ok(None)]);
-    let (result, phases) = wait(&fake, None, &fast()).await;
+async fn wait_calls_an_order_gone_for_long_not_found() {
+    let fake = FakeBackend::default().polls(vec![Ok(None), Ok(None), Ok(None)]);
+    let options = WaitOptions {
+        max_consecutive_misses: 2,
+        ..fast()
+    };
+    let (result, phases) = wait(&fake, None, &options).await;
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::OrderNotFound { .. }
     ));
+    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
     assert_eq!(
         phases,
         vec![failed(PurchasePhase::AwaitingPayment, "order not found")]
-    );
-
-    // Known and payable, then gone for longer than a replica lags: not an
-    // expiry, so not the caller's. That takes its own, short budget, not
-    // the ten minutes an unanswered network is given.
-    let mut polls = vec![Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment)))];
-    polls.extend((0..=WaitOptions::default().max_consecutive_missing).map(|_| Ok(None)));
-    let fake = FakeBackend::default().polls(polls);
-    let (result, _) = wait(&fake, None, &fast()).await;
-    assert!(matches!(
-        result.unwrap_err(),
-        CyclesPurchaseError::OrderNotFound { .. }
-    ));
-    assert_eq!(
-        fake.count_of(ORDER_STATUS_METHOD),
-        2 + WaitOptions::default().max_consecutive_missing as usize
     );
 }
 
@@ -1024,46 +972,14 @@ async fn wait_on_a_settled_order_returns_it_without_a_call() {
     }
 }
 
-fn past_deadline() -> OrderStatusView {
-    OrderStatusView {
-        expires_at: Some(1_000_000_000),
-        ..view("co-1", CardOrderStatus::AwaitingPayment)
-    }
-}
-
 #[tokio::test]
-async fn wait_reads_an_unpaid_order_past_its_deadline_as_expired() {
-    // The backend still reports it, as it does until it prunes it.
-    let fake = FakeBackend::default().polls(vec![Ok(Some(past_deadline()))]);
-    let (result, phases) = wait(&fake, None, &fast()).await;
-    let order = result.unwrap();
-    assert_eq!(order.status, OrderStatus::Expired);
-    assert_eq!(order.checkout_url, None);
-    assert_eq!(
-        phases,
-        vec![failed(PurchasePhase::AwaitingPayment, "order expired")]
-    );
-
-    // Pruned since the last poll: the same answer.
-    let fake = FakeBackend::default().polls(vec![Ok(Some(past_deadline())), Ok(None)]);
-    let options = WaitOptions {
-        // The deadline has passed, but not by the grace: the first poll
-        // still reads as payable, and the second finds it gone.
-        expiry_grace: Duration::from_secs(u64::MAX / 4),
-        ..fast()
-    };
-    let (result, _) = wait(&fake, None, &options).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Expired);
-}
-
-#[tokio::test]
-async fn wait_times_out_on_an_unpaid_order() {
+async fn wait_times_out() {
     let fake = FakeBackend::default().polls(vec![Ok(Some(view(
         "co-1",
         CardOrderStatus::AwaitingPayment,
     )))]);
     let options = WaitOptions {
-        max_unpaid_wait: Duration::ZERO,
+        timeout: Duration::ZERO,
         ..fast()
     };
     let (result, phases) = wait(&fake, None, &options).await;
@@ -1078,27 +994,6 @@ async fn wait_times_out_on_an_unpaid_order() {
         phases,
         vec![failed(PurchasePhase::AwaitingPayment, "gave up waiting")]
     );
-}
-
-#[tokio::test]
-async fn wait_times_out_on_a_stuck_paid_order() {
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::Processing))),
-        Ok(Some(view("co-1", CardOrderStatus::Processing))),
-    ]);
-    let options = WaitOptions {
-        max_paid_wait: Duration::ZERO,
-        // An unpaid wait that would have ended first must not be the reason.
-        max_unpaid_wait: Duration::ZERO,
-        ..fast()
-    };
-    let (result, _) = wait(&fake, None, &options).await;
-    match result.unwrap_err() {
-        CyclesPurchaseError::WaitTimedOut { order } => {
-            assert_eq!(order.status, OrderStatus::Processing)
-        }
-        other => panic!("unexpected {other:?}"),
-    }
 }
 
 #[tokio::test]
@@ -1166,7 +1061,7 @@ async fn wait_interrupt_lands_during_a_stalled_poll() {
 }
 
 #[test]
-fn statuses_tell_paid_and_settled_apart() {
+fn statuses_tell_settled_apart() {
     for status in [
         OrderStatus::AwaitingPayment,
         OrderStatus::PaymentPending,
@@ -1180,14 +1075,9 @@ fn statuses_tell_paid_and_settled_apart() {
         OrderStatus::Refunding,
         OrderStatus::Refunded,
         OrderStatus::RefundOwed,
-        OrderStatus::Expired,
     ] {
         assert!(status.is_terminal(), "{status}");
     }
-    assert!(!OrderStatus::AwaitingPayment.is_paid());
-    assert!(!OrderStatus::Expired.is_paid());
-    assert!(OrderStatus::PaymentPending.is_paid());
-    assert!(OrderStatus::RefundOwed.is_paid());
     assert_eq!(OrderStatus::RefundOwed.tag(), "refund_owed");
     assert_eq!(OrderStatus::RefundOwed.to_string(), "owed a refund");
 }

@@ -195,14 +195,6 @@ pub enum CyclesPurchaseError {
         "gave up waiting for order {} (last status: {})", order.id, order.status
     ))]
     WaitTimedOut { order: Box<OrderView> },
-
-    #[snafu(display("lost contact with cycles gateway {gateway} while waiting for order {id}"))]
-    WaitUnanswered {
-        gateway: Principal,
-        id: String,
-        #[snafu(source(from(TypedCallError, Box::new)))]
-        source: Box<TypedCallError>,
-    },
 }
 
 /// What the buyer asked for: a sum to spend, or cycles to receive.
@@ -254,12 +246,8 @@ pub struct Quote {
     pub rate: Rate,
 }
 
-/// An order's state as the CLI tells it.
-///
-/// The backend's own states, plus [`OrderStatus::Expired`] for an unpaid
-/// order past its deadline: the backend reports such an order as still
-/// awaiting payment until it forgets it, but a payment for it is refunded
-/// rather than delivered, so it is over.
+/// An order's state as the CLI tells it: the backend's own states, and
+/// [`OrderStatus::Unknown`] for one this version does not know.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OrderStatus {
     /// Made, not paid.
@@ -276,8 +264,6 @@ pub enum OrderStatus {
     Refunded,
     /// Not delivered; an operator refunds it by hand.
     RefundOwed,
-    /// Unpaid past its deadline.
-    Expired,
     /// A state the backend reports that this CLI does not know. Not an end:
     /// the wait goes on.
     Unknown,
@@ -293,11 +279,6 @@ impl OrderStatus {
         )
     }
 
-    /// Whether a payment has been made.
-    pub fn is_paid(self) -> bool {
-        !matches!(self, Self::AwaitingPayment | Self::Expired | Self::Unknown)
-    }
-
     /// The status for output meant to be parsed, e.g. `refund_owed`.
     /// [`fmt::Display`] is for people.
     pub fn tag(self) -> &'static str {
@@ -310,7 +291,6 @@ impl OrderStatus {
             Self::Refunding => "refunding",
             Self::Refunded => "refunded",
             Self::RefundOwed => "refund_owed",
-            Self::Expired => "expired",
             Self::Unknown => "unknown",
         }
     }
@@ -327,7 +307,6 @@ impl fmt::Display for OrderStatus {
             Self::Refunding => "being refunded",
             Self::Refunded => "refunded",
             Self::RefundOwed => "owed a refund",
-            Self::Expired => "expired",
             Self::Unknown => "in a state this version of icp does not know",
         })
     }
@@ -413,22 +392,6 @@ impl OrderView {
             detail: view.detail,
             destination: view.destination,
         }
-    }
-
-    /// The same order, over: unpaid past its deadline.
-    fn expired(mut self) -> Self {
-        self.status = OrderStatus::Expired;
-        self.checkout_url = None;
-        self
-    }
-
-    /// Whether the order is unpaid and `now` (seconds since the Unix epoch)
-    /// is more than `grace` past its deadline.
-    fn is_past_deadline(&self, now: u64, grace: Duration) -> bool {
-        self.status == OrderStatus::AwaitingPayment
-            && self
-                .expires_at
-                .is_some_and(|deadline| now > deadline.saturating_add(grace.as_secs()))
     }
 }
 
@@ -618,34 +581,22 @@ async fn fetch_order(
 pub struct WaitOptions {
     /// Time between polls.
     pub poll_interval: Duration,
-    /// How far past its deadline an unpaid order is still read as payable.
-    /// Clocks differ, and the backend expires it on its own.
-    pub expiry_grace: Duration,
-    /// How long an unpaid order is waited on in one run. Its deadline is a
-    /// day away; a buyer who has not paid by now is told where it stands.
-    pub max_unpaid_wait: Duration,
-    /// How long a paid order is given to be delivered.
-    pub max_paid_wait: Duration,
-    /// Consecutive polls that could not be answered tolerated before giving
-    /// up: ten minutes of them at [`POLL_INTERVAL`], longer than the few
-    /// minutes CyclePay's backend is stopped for during an upgrade.
-    pub max_consecutive_transient: u32,
-    /// Consecutive polls answering `null` for an order already seen, before
-    /// its deadline, tolerated before it is called not found: a minute of
-    /// them at [`POLL_INTERVAL`], where a replica that has not caught up
-    /// needs seconds.
-    pub max_consecutive_missing: u32,
+    /// Consecutive polls that said nothing of the order (unanswered,
+    /// refused, or finding none) before the wait gives up: five minutes of
+    /// them at [`POLL_INTERVAL`], longer than CyclePay's backend is stopped
+    /// for during an upgrade.
+    pub max_consecutive_misses: u32,
+    /// How long the order is waited on in one run. Its deadline is a day
+    /// away; a buyer who has not paid by now is told where it stands.
+    pub timeout: Duration,
 }
 
 impl Default for WaitOptions {
     fn default() -> Self {
         Self {
             poll_interval: POLL_INTERVAL,
-            expiry_grace: Duration::from_secs(60),
-            max_unpaid_wait: Duration::from_secs(60 * 60),
-            max_paid_wait: Duration::from_secs(15 * 60),
-            max_consecutive_transient: 200,
-            max_consecutive_missing: 20,
+            max_consecutive_misses: 100,
+            timeout: Duration::from_secs(60 * 60),
         }
     }
 }
@@ -700,11 +651,13 @@ impl Phases<'_> {
 /// `interrupt` is raced against every poll as well as the sleep between
 /// them, so an interrupt lands even while a call is stalled.
 ///
-/// A poll the network never answered is retried; any other failure returns at
-/// once. An unpaid order past its deadline comes back as
-/// [`OrderStatus::Expired`], whether the backend still reports it or has
-/// forgotten it. A terminal status is a success here whatever it is — a
-/// refund is an answer — and the caller decides what each one means.
+/// A poll that says nothing of the order is tried again, up to
+/// [`WaitOptions::max_consecutive_misses`] in a row: one the network never
+/// answered, one the backend refused (as it does for a few minutes during
+/// an upgrade), or one answered `null` (a replica that has not caught up
+/// with a new order, or an unpaid order forgotten once it expired). A
+/// terminal status is a success here whatever it is — a refund is an answer
+/// — and the caller decides what each one means.
 pub async fn wait_for_order(
     calls: &dyn CanisterCalls,
     gateway: &Gateway,
@@ -731,10 +684,8 @@ pub async fn wait_for_order(
             .map_or(OrderStatus::AwaitingPayment, |o| o.status),
     );
     let mut last = initial;
-    let mut transient_streak = 0u32;
-    let mut missing_streak = 0u32;
+    let mut misses = 0u32;
     let started = Instant::now();
-    let mut paid_since: Option<Instant> = None;
 
     let interrupted = |last: Option<OrderView>| {
         let order = last.unwrap_or_else(|| OrderView {
@@ -768,13 +719,7 @@ pub async fn wait_for_order(
         };
         match polled {
             Ok(Some(order)) => {
-                transient_streak = 0;
-                missing_streak = 0;
-                let order = if order.is_past_deadline(now_secs(), options.expiry_grace) {
-                    order.expired()
-                } else {
-                    order
-                };
+                misses = 0;
                 if order.status.is_terminal() {
                     // A delivery first seen at its end still went through
                     // payment: both legs are ticked off, as for any other.
@@ -788,14 +733,7 @@ pub async fn wait_for_order(
                     return Ok(order);
                 }
                 phases.enter(order.status);
-                if order.status.is_paid() && paid_since.is_none() {
-                    paid_since = Some(Instant::now());
-                }
-                let overdue = match paid_since {
-                    Some(since) => since.elapsed() > options.max_paid_wait,
-                    None => started.elapsed() > options.max_unpaid_wait,
-                };
-                if overdue {
+                if started.elapsed() > options.timeout {
                     phases.finish(TaskOutcome::failed("gave up waiting"));
                     return WaitTimedOutSnafu {
                         order: Box::new(order),
@@ -804,46 +742,18 @@ pub async fn wait_for_order(
                 }
                 last = Some(order);
             }
-            // The backend forgets an unpaid order once it expires. One that
-            // was awaiting payment and is now gone past its deadline expired;
-            // one gone for any other reason was never the caller's to wait on.
-            Ok(None) => match last.take() {
-                Some(order) if order.is_past_deadline(now_secs(), Duration::ZERO) => {
-                    let order = order.expired();
-                    phases.finish(TaskOutcome::failed(format!("order {}", order.status)));
-                    return Ok(order);
+            Ok(None) | Err(_) if misses < options.max_consecutive_misses => misses += 1,
+            Ok(None) => {
+                phases.finish(TaskOutcome::failed("order not found"));
+                return OrderNotFoundSnafu {
+                    gateway: gateway.canister,
+                    id,
+                    caller: calls.caller(),
                 }
-                // The backend forgets an order only once it expires, so a
-                // null before then is a replica that has not caught up with
-                // it (a poll right after `create_order` can reach one): tried
-                // again, for as long as a replica lags.
-                Some(order) if missing_streak < options.max_consecutive_missing => {
-                    missing_streak += 1;
-                    last = Some(order);
-                }
-                _ => {
-                    phases.finish(TaskOutcome::failed("order not found"));
-                    return OrderNotFoundSnafu {
-                        gateway: gateway.canister,
-                        id,
-                        caller: calls.caller(),
-                    }
-                    .fail();
-                }
-            },
-            Err(CyclesPurchaseError::GetOrder { source, .. }) if is_transient(&source) => {
-                transient_streak += 1;
-                if transient_streak > options.max_consecutive_transient {
-                    phases.finish(TaskOutcome::failed("lost contact with the gateway"));
-                    return Err(CyclesPurchaseError::WaitUnanswered {
-                        gateway: gateway.canister,
-                        id: id.to_owned(),
-                        source,
-                    });
-                }
+                .fail();
             }
             Err(error) => {
-                phases.finish(TaskOutcome::failed(error.to_string()));
+                phases.finish(TaskOutcome::failed("lost contact with the gateway"));
                 return Err(error);
             }
         }
@@ -911,34 +821,6 @@ fn is_absent(call: &CallError) -> bool {
         ),
         _ => call.is_canister_not_found(),
     }
-}
-
-/// The replica's error codes for a call to a canister that is stopped or
-/// stopping, as CyclePay's backend is for a few minutes during each upgrade.
-const STOPPED_CODES: [&str; 2] = ["IC0508", "IC0509"];
-
-/// Whether a failed read of an order is worth repeating. Reading changes
-/// nothing, so it always is when the answer could come out differently: the
-/// network did not answer; the backend is stopped for an upgrade; or a
-/// boundary node was overloaded or could not reach the subnet (an HTTP 429
-/// or 5xx, which `icp_app::calls::AgentCalls` reports as a failure carrying
-/// the agent's own error).
-fn is_transient(error: &TypedCallError) -> bool {
-    let TypedCallError::Call { source } = error else {
-        return false;
-    };
-    let overloaded = match source.as_ref() {
-        CallError::Failed { source, .. } => matches!(
-            source.downcast_ref::<AgentError>(),
-            Some(AgentError::HttpError(payload)) if payload.status == 429 || payload.status >= 500
-        ),
-        _ => false,
-    };
-    source.is_transient()
-        || source
-            .code()
-            .is_some_and(|code| STOPPED_CODES.contains(&code))
-        || overloaded
 }
 
 /// Seconds since the Unix epoch, on this machine's clock.

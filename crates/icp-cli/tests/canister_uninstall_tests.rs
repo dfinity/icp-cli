@@ -69,7 +69,8 @@ async fn canister_uninstall() {
         .stdout(
             starts_with("Canister Id:")
                 .and(contains("Status: Running"))
-                .and(contains("Module hash: <none>")),
+                .and(contains("Module hash: <none>"))
+                .and(contains("controller: 2vxsx-fae")),
         );
 
     ctx.icp()
@@ -154,5 +155,9 @@ async fn canister_uninstall_through_proxy() {
         ])
         .assert()
         .success()
-        .stdout(starts_with("Canister Id:").and(contains("Module hash: <none>")));
+        .stdout(
+            starts_with("Canister Id:")
+                .and(contains("Module hash: <none>"))
+                .and(contains(&proxy_cid)),
+        );
 }

@@ -1,10 +1,11 @@
 use indoc::formatdoc;
 use predicates::str::contains;
 
-use crate::common::{
-    ChildGuard, ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients,
-};
+#[cfg(unix)] // the stand-in gateway needs moc
+use crate::common::ChildGuard;
+use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
 use icp_project::fs::write_string;
+#[cfg(unix)]
 use icp_project::prelude::{PathBuf, TRILLION};
 
 mod common;
@@ -553,6 +554,7 @@ fn cycles_buy_with_no_network_named_points_at_mainnet() {
 /// actor serving the four methods the command uses) on a fresh local
 /// network, and switch to a random identity to buy with. Returns the project
 /// directory, the gateway's canister id, and the network's guard.
+#[cfg(unix)] // moc
 async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     let project_dir = ctx.create_project_dir("icp");
     ctx.copy_asset_dir("cycles_gateway_canister", &project_dir);
@@ -603,6 +605,7 @@ async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
 
 /// Tell the stand-in gateway where its order stands: `pay` with the canister
 /// the cycles went to, or `refund`.
+#[cfg(unix)] // moc
 fn settle(ctx: &TestContext, project_dir: &PathBuf, gateway: &str, how: &str, arg: &str) {
     ctx.icp()
         .current_dir(project_dir)

@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use candid::{Decode, Encode, Nat, Principal};
-use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::{Authority, Call, CallError, CanisterCalls};
 
 use super::interface::{
@@ -16,7 +15,6 @@ use super::interface::{
 use super::money::{Currency, Money};
 use super::pricing::{Terms, ledger_cycles};
 use super::purchase::*;
-use super::task::{PurchasePhase, Reporter};
 
 const BACKEND: &str = "2bwus-iiaaa-aaaac-bee3a-cai";
 const BUYER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -692,16 +690,13 @@ async fn place_order_on_missing_gateway_is_gateway_not_found() {
 
 // --- wait_for_order --------------------------------------------------------
 
-/// A reported phase and how it ended: `Err` carries the failure message.
-type Phase = (PurchasePhase, Result<(), String>);
-
-/// Run the wait and collect the phases it reported, each with its outcome.
+/// Run the wait and collect the phases it told of, in order.
 async fn wait(
     fake: &FakeBackend,
     initial: Option<OrderView>,
     options: &WaitOptions,
-) -> (Result<OrderView, CyclesPurchaseError>, Vec<Phase>) {
-    let (reporter, mut events) = icp_events::channel();
+) -> (Result<OrderView, CyclesPurchaseError>, Vec<PurchasePhase>) {
+    let mut phases = Vec::new();
     let result = wait_for_order(
         fake,
         &gateway(),
@@ -709,41 +704,10 @@ async fn wait(
         initial,
         options,
         pending(),
-        &reporter,
+        |phase| phases.push(phase),
     )
     .await;
-    drop(reporter);
-    let mut phases = Vec::new();
-    while let Some(event) = events.recv().await {
-        match event.kind {
-            EventKind::TaskStarted { task, .. } => phases.push((task.phase, None)),
-            EventKind::TaskCompleted { outcome } => {
-                let (_, slot) = phases.last_mut().expect("completed before started");
-                *slot = Some(match outcome {
-                    TaskOutcome::Succeeded { .. } => Ok(()),
-                    TaskOutcome::Failed { message, .. } => Err(message),
-                    TaskOutcome::Skipped { reason } => Err(reason),
-                    TaskOutcome::Stopped { message } => Err(message),
-                });
-            }
-            other => panic!("unexpected event {other:?}"),
-        }
-    }
-    (
-        result,
-        phases
-            .into_iter()
-            .map(|(phase, outcome)| (phase, outcome.expect("phase never finished")))
-            .collect(),
-    )
-}
-
-fn succeeded(phase: PurchasePhase) -> Phase {
-    (phase, Ok(()))
-}
-
-fn failed(phase: PurchasePhase, message: &str) -> Phase {
-    (phase, Err(message.to_owned()))
+    (result, phases)
 }
 
 /// An order as the wait last saw it.
@@ -767,10 +731,7 @@ async fn wait_happy_path_awaiting_processing_delivered() {
     // Pending and processing are one leg: the card has been charged.
     assert_eq!(
         phases,
-        vec![
-            succeeded(PurchasePhase::AwaitingPayment),
-            succeeded(PurchasePhase::Delivering),
-        ]
+        vec![PurchasePhase::AwaitingPayment, PurchasePhase::Delivering]
     );
     assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 5);
 }
@@ -785,26 +746,7 @@ async fn wait_starts_in_the_initial_orders_phase() {
     let (result, phases) = wait(&fake, Some(paid), &fast()).await;
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
     // Already paid: no "awaiting payment" leg is reported.
-    assert_eq!(phases, vec![succeeded(PurchasePhase::Delivering)]);
-}
-
-/// Delivered between two polls, the order is never seen paying; its wait
-/// still ends with both legs ticked off.
-#[tokio::test]
-async fn wait_ticks_off_both_legs_of_a_delivery_seen_only_at_its_end() {
-    let fake = FakeBackend::default().polls(vec![
-        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
-        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
-    ]);
-    let (result, phases) = wait(&fake, None, &fast()).await;
-    assert_eq!(result.unwrap().status, OrderStatus::Delivered);
-    assert_eq!(
-        phases,
-        vec![
-            succeeded(PurchasePhase::AwaitingPayment),
-            succeeded(PurchasePhase::Delivering),
-        ]
-    );
+    assert_eq!(phases, vec![PurchasePhase::Delivering]);
 }
 
 /// A refund is read with what was refunded and why.
@@ -836,14 +778,7 @@ async fn wait_returns_every_settled_status_as_ok() {
         let fake = FakeBackend::default().polls(vec![Ok(Some(view("co-1", status)))]);
         let (result, phases) = wait(&fake, None, &fast()).await;
         assert_eq!(result.unwrap().status, expected);
-        // An answer, but not the one hoped for: the leg is shown as failed.
-        assert_eq!(
-            phases,
-            vec![failed(
-                PurchasePhase::AwaitingPayment,
-                &format!("order {expected}")
-            )]
-        );
+        assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
     }
 }
 
@@ -887,13 +822,7 @@ async fn wait_gives_up_after_consecutive_failed_polls() {
     let err = result.unwrap_err();
     assert!(matches!(err, CyclesPurchaseError::GetOrder { .. }), "{err}");
     assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
-    assert_eq!(
-        phases,
-        vec![failed(
-            PurchasePhase::AwaitingPayment,
-            "lost contact with the gateway"
-        )]
-    );
+    assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
 }
 
 /// An order gone for longer than a replica lags is not the caller's, or
@@ -911,10 +840,7 @@ async fn wait_calls_an_order_gone_for_long_not_found() {
         CyclesPurchaseError::OrderNotFound { .. }
     ));
     assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
-    assert_eq!(
-        phases,
-        vec![failed(PurchasePhase::AwaitingPayment, "order not found")]
-    );
+    assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
 }
 
 /// Right after `create_order` a poll can reach a replica that has not seen
@@ -944,10 +870,7 @@ async fn wait_goes_on_through_a_state_it_does_not_know() {
     assert_eq!(result.unwrap().status, OrderStatus::Delivered);
     assert_eq!(
         phases,
-        vec![
-            succeeded(PurchasePhase::AwaitingPayment),
-            succeeded(PurchasePhase::Delivering),
-        ]
+        vec![PurchasePhase::AwaitingPayment, PurchasePhase::Delivering]
     );
 }
 
@@ -989,11 +912,7 @@ async fn wait_times_out() {
         }
         other => panic!("unexpected {other:?}"),
     }
-    // The leg was closed out before giving up.
-    assert_eq!(
-        phases,
-        vec![failed(PurchasePhase::AwaitingPayment, "gave up waiting")]
-    );
+    assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
 }
 
 #[tokio::test]
@@ -1010,7 +929,7 @@ async fn wait_interrupted_returns_last_order() {
         Some(paid),
         &WaitOptions::default(),
         ready(()),
-        &Reporter::null(),
+        |_| {},
     )
     .await;
     match result.unwrap_err() {
@@ -1024,13 +943,11 @@ async fn wait_interrupted_returns_last_order() {
 
 #[tokio::test]
 async fn wait_interrupt_lands_during_a_stalled_poll() {
-    // The backend never answers; the interrupt must still get through, with
-    // the phase closed out so a renderer does not spin on.
+    // The backend never answers; the interrupt must still get through.
     let fake = FakeBackend {
         stall_polls: true,
         ..FakeBackend::default()
     };
-    let (reporter, mut events) = icp_events::channel();
     let result = wait_for_order(
         &fake,
         &gateway(),
@@ -1038,26 +955,13 @@ async fn wait_interrupt_lands_during_a_stalled_poll() {
         None,
         &WaitOptions::default(),
         ready(()),
-        &reporter,
+        |_| {},
     )
     .await;
-    drop(reporter);
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::Interrupted { .. }
     ));
-    let mut completed = 0;
-    while let Some(event) = events.recv().await {
-        // Stopped, not failed: the order carries on without the command.
-        if let EventKind::TaskCompleted {
-            outcome: TaskOutcome::Stopped { message },
-        } = event.kind
-        {
-            assert_eq!(message, "stopped waiting");
-            completed += 1;
-        }
-    }
-    assert_eq!(completed, 1);
 }
 
 #[test]

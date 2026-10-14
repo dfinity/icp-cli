@@ -11,7 +11,6 @@ use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
 use icp_app::operations::token::balance::get_raw_balance;
 use icp_canister_interfaces::cycles_ledger::CYCLES_LEDGER_PRINCIPAL;
-use icp_events::{EventKind, TaskOutcome};
 use icp_project::calls::CanisterCalls;
 use icp_project::parsers::CyclesAmount;
 use icp_project::signal::stop_signal;
@@ -28,11 +27,10 @@ use crate::cyclepay::interface::{
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
-    self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView, Quote,
-    Rate, Target, WaitOptions,
+    self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderStatus, OrderView,
+    PurchasePhase, Quote, Rate, Target, WaitOptions,
 };
-use crate::cyclepay::task::{CyclesPurchaseTask, PurchasePhase, Reporter};
-use crate::render::rendered;
+use crate::render::{ProgressManager, ProgressManagerSettings};
 
 /// Buy cycles with a card.
 ///
@@ -514,29 +512,69 @@ async fn wait_and_report(
     debug: bool,
 ) -> Result<(), anyhow::Error> {
     let id = order.id.clone();
+    // The live line is for a person at a terminal. Anyone else reading
+    // stderr as it comes (an agent, a log, the debug log a spinner would
+    // interleave with) is told in lines instead; -q asks for nothing but the
+    // link and the end.
+    let live = output == Output::Human && stderr().is_terminal() && !debug;
+    let progress = live.then(|| ProgressManager::new(ProgressManagerSettings { hidden: false }));
+    let bar = progress.as_ref().map(|progress| {
+        let bar = progress.create_independent_progress_bar();
+        bar.set_prefix(format!("[order {}]", order_number(&id)));
+        bar
+    });
+    if !live && output != Output::Quiet {
+        info!("If this command is stopped, the order carries on without it.");
+    }
+    let on_phase = |phase: PurchasePhase| match &bar {
+        Some(bar) => bar.set_message(live_message(phase)),
+        None if output != Output::Quiet => info!("[order {id}] {}", line_message(phase)),
+        None => {}
+    };
     let options = WaitOptions::default();
-    let wait = async |reporter: &Reporter| {
-        purchase::wait_for_order(
-            calls,
-            gateway,
-            &id,
-            Some(order),
-            &options,
-            interrupt.received(),
-            reporter,
+    let wait = purchase::wait_for_order(
+        calls,
+        gateway,
+        &id,
+        Some(order),
+        &options,
+        interrupt.received(),
+        on_phase,
+    );
+    let result = match &bar {
+        None => wait.await,
+        // Only a delivery ends the line well; any other end, the wait's or
+        // the order's, is said on it in a few words. The command then tells
+        // the whole of it.
+        Some(bar) => ProgressManager::execute_with_progress(
+            bar,
+            async {
+                match wait.await {
+                    Ok(order) if order.status == OrderStatus::Delivered => Ok(order),
+                    Ok(order) => Err(Ended::Order(order)),
+                    Err(error) => Err(Ended::Error(error)),
+                }
+            },
+            || "Cycles delivered".to_owned(),
+            |ended| match ended {
+                Ended::Order(order) => format!("order {}", order.status),
+                Ended::Error(CyclesPurchaseError::Interrupted { .. }) => {
+                    "stopped waiting".to_owned()
+                }
+                Ended::Error(CyclesPurchaseError::WaitTimedOut { .. }) => {
+                    "gave up waiting".to_owned()
+                }
+                Ended::Error(CyclesPurchaseError::OrderNotFound { .. }) => {
+                    "order not found".to_owned()
+                }
+                Ended::Error(_) => "lost contact with the gateway".to_owned(),
+            },
         )
         .await
-    };
-    // The live view is for a person at a terminal. Anyone else reading
-    // stderr as it comes (an agent, a log) is told in lines instead; -q
-    // asks for nothing but the link and the end.
-    let result = match output {
-        Output::Human if stderr().is_terminal() => rendered(debug, wait).await,
-        Output::Human | Output::Json => {
-            info!("If this command is stopped, the order carries on without it.");
-            with_heartbeat(HEARTBEAT, |line| info!("{line}"), wait).await
-        }
-        Output::Quiet => wait(&Reporter::null()).await,
+        .or_else(|ended| match ended {
+            Ended::Order(order) => Ok(order),
+            Ended::Error(error) => Err(error),
+        }),
     };
 
     let order = match result {
@@ -560,70 +598,42 @@ async fn wait_and_report(
     report_end(agent, buyer, &order, output).await
 }
 
-/// How often a wait with nothing drawn says it is still going.
-const HEARTBEAT: Duration = Duration::from_secs(60);
+/// How a wait ended other than in a delivery.
+enum Ended {
+    /// Settled, but not delivered.
+    Order(OrderView),
+    Error(CyclesPurchaseError),
+}
 
-/// Run a wait with no live view, saying when each of its phases begins and,
-/// every `period`, that it is still going: off a terminal nothing is drawn,
-/// and whoever reads the output as it comes would otherwise hear nothing
-/// until the order settles, up to an hour later.
-async fn with_heartbeat<T>(
-    period: Duration,
-    say: impl Fn(String),
-    op: impl AsyncFnOnce(&Reporter) -> T,
-) -> T {
-    let (reporter, mut events) = icp_events::channel();
-    let op = async move {
-        let result = op(&reporter).await;
-        drop(reporter);
-        result
-    };
-    let beat = async {
-        let started = tokio::time::Instant::now();
-        let mut ticks = tokio::time::interval_at(started + period, period);
-        let mut phase: Option<CyclesPurchaseTask> = None;
-        loop {
-            tokio::select! {
-                event = events.recv() => match event.map(|event| event.kind) {
-                    None => break,
-                    Some(EventKind::TaskStarted { task, .. }) => {
-                        // Not the live view's line, whose Ctrl-C hint is
-                        // for a person at the terminal.
-                        let begun = match task.phase {
-                            PurchasePhase::AwaitingPayment => "Waiting for payment...",
-                            PurchasePhase::Delivering => "Payment received; delivering cycles...",
-                        };
-                        say(format!("[order {}] {begun}", task.order_id));
-                        phase = Some(task);
-                    }
-                    // A stop is said as the live view says it; any other end
-                    // is told by the command once the wait returns.
-                    Some(EventKind::TaskCompleted { outcome }) => {
-                        if let (Some(task), TaskOutcome::Stopped { message }) = (phase.take(), outcome)
-                        {
-                            say(format!("[order {}] {message}", task.order_id));
-                        }
-                    }
-                    Some(_) => {}
-                },
-                _ = ticks.tick() => {
-                    if let Some(task) = &phase {
-                        let doing = match task.phase {
-                            PurchasePhase::AwaitingPayment => "Still waiting for payment",
-                            PurchasePhase::Delivering => "Payment received; still delivering cycles",
-                        };
-                        say(format!(
-                            "[order {}] {doing} ({} so far)",
-                            task.order_id,
-                            format_age(started.elapsed())
-                        ));
-                    }
-                }
-            }
-        }
-    };
-    let (result, ()) = tokio::join!(op, beat);
-    result
+/// The live line's message for a phase. With its `[order co-<n>] ✷ ` prefix
+/// this is 66 columns plus the digits of the order's number, so within 80 up
+/// to 14 of them.
+fn live_message(phase: PurchasePhase) -> &'static str {
+    match phase {
+        PurchasePhase::AwaitingPayment => "Waiting for payment; Ctrl-C leaves the order payable",
+        PurchasePhase::Delivering => "Payment received; delivering cycles...",
+    }
+}
+
+/// What a line off a terminal says of a phase: not the live line's, whose
+/// Ctrl-C hint is for a person at the terminal.
+fn line_message(phase: PurchasePhase) -> &'static str {
+    match phase {
+        PurchasePhase::AwaitingPayment => "Waiting for payment...",
+        PurchasePhase::Delivering => "Payment received; delivering cycles...",
+    }
+}
+
+/// `co-1234` for CyclePay's `co-1234-<32 hex>`: the order's number, which
+/// no other order shares, without the random part, which only paying the
+/// order needs. It keeps the live line within 80 columns whatever the id's
+/// length; the whole id is printed with the link and in the lines off a
+/// terminal. An id of any other shape is shown whole.
+fn order_number(order_id: &str) -> &str {
+    match order_id.match_indices('-').nth(1) {
+        Some((at, _)) => &order_id[..at],
+        None => order_id,
+    }
 }
 
 /// Tell how a settled order ended, and fail unless it was delivered.
@@ -1162,42 +1172,6 @@ mod tests {
         }
     }
 
-    /// Off a terminal, a wait says when each phase begins and, every
-    /// minute, that it goes on, until it ends. On a paused clock: 150 s
-    /// awaiting payment, then 130 s delivering, so no beat falls on a change.
-    #[tokio::test(start_paused = true)]
-    async fn a_wait_with_nothing_drawn_keeps_saying_it_goes_on() {
-        let said = std::sync::Mutex::new(Vec::new());
-        let ended = with_heartbeat(
-            HEARTBEAT,
-            |line| said.lock().unwrap().push(line),
-            async |reporter: &Reporter| {
-                for (phase, secs) in [
-                    (PurchasePhase::AwaitingPayment, 150),
-                    (PurchasePhase::Delivering, 130),
-                ] {
-                    let task = reporter.task(CyclesPurchaseTask::new("co-1", phase));
-                    tokio::time::sleep(Duration::from_secs(secs)).await;
-                    task.finish(TaskOutcome::succeeded());
-                }
-                "delivered"
-            },
-        )
-        .await;
-        assert_eq!(ended, "delivered");
-        assert_eq!(
-            said.into_inner().unwrap(),
-            [
-                "[order co-1] Waiting for payment...",
-                "[order co-1] Still waiting for payment (1 minute so far)",
-                "[order co-1] Still waiting for payment (2 minutes so far)",
-                "[order co-1] Payment received; delivering cycles...",
-                "[order co-1] Payment received; still delivering cycles (3 minutes so far)",
-                "[order co-1] Payment received; still delivering cycles (4 minutes so far)",
-            ]
-        );
-    }
-
     /// A delivery is told against the place the order says, whichever it is.
     #[test]
     fn a_delivery_names_where_the_cycles_went() {
@@ -1240,38 +1214,24 @@ mod tests {
         assert!(warning.contains("for 5 hours"), "{warning}");
     }
 
-    /// Off a terminal, a stopped wait says so, as the live view does.
-    #[tokio::test(start_paused = true)]
-    async fn a_wait_with_nothing_drawn_says_it_was_stopped() {
-        let said = std::sync::Mutex::new(Vec::new());
-        with_heartbeat(
-            HEARTBEAT,
-            |line| said.lock().unwrap().push(line),
-            async |reporter: &Reporter| {
-                let task = reporter.task(CyclesPurchaseTask::new(
-                    "co-1",
-                    PurchasePhase::AwaitingPayment,
-                ));
-                tokio::time::sleep(Duration::from_secs(70)).await;
-                task.finish(TaskOutcome::Stopped {
-                    message: "stopped waiting".to_owned(),
-                });
-            },
-        )
-        .await;
-        assert_eq!(
-            said.into_inner().unwrap(),
-            [
-                "[order co-1] Waiting for payment...",
-                "[order co-1] Still waiting for payment (1 minute so far)",
-                "[order co-1] stopped waiting",
-            ]
-        );
+    /// CyclePay's ids are `co-<n>-<32 hex>`, 37 to 41 characters today: the
+    /// live line names the order by its number, and fits 80 columns.
+    #[test]
+    fn the_live_line_names_the_order_by_its_number_and_fits_80_columns() {
+        let id = "co-1234-0123456789abcdef0123456789abcdef";
+        assert_eq!(order_number(id), "co-1234");
+        assert_eq!(order_number("co-6-5e64b574"), "co-6");
+        assert_eq!(order_number("o1"), "o1");
+        for phase in [PurchasePhase::AwaitingPayment, PurchasePhase::Delivering] {
+            let line = format!("[order {}] ✷ {}", order_number(id), live_message(phase));
+            assert!(
+                line.chars().count() <= 80,
+                "{} columns: {line}",
+                line.chars().count()
+            );
+        }
     }
 
-    /// A Ctrl-C caught at the prompt is kept until asked for, once; without
-    /// one, asking does not wait. SIGINT is raised at this test process,
-    /// whose handler the prompt's listener has just installed.
     #[cfg(unix)]
     #[tokio::test]
     async fn a_ctrl_c_caught_at_the_prompt_is_kept_for_after_the_order() {

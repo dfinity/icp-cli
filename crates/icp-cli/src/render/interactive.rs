@@ -6,29 +6,28 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use icp_events::{Event, EventKind, TaskId, TaskOutcome};
+use icp_events::{EventKind, TaskId, TaskOutcome};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use tracing::{debug, info};
 
 use super::style::{
-    COLOR_FAILURE, COLOR_REGULAR, COLOR_STOPPED, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE,
-    TICK_STOPPED, TICK_SUCCESS, make_style,
+    COLOR_FAILURE, COLOR_REGULAR, COLOR_SUCCESS, TICK_EMPTY, TICK_FAILURE, TICK_SUCCESS, make_style,
 };
-use icp_project::operations::task::Widget;
+use icp_project::operations::task::{Event, Widget};
 
-use super::{INDENT, Presented, RollingLines, TaskLog, dump_failures};
+use super::{INDENT, RollingLines, TaskLog, dump_failures};
 
 /// Number of output lines shown live under a task's progress bar.
 const LIVE_WINDOW_LINES: usize = 4;
 
-pub(crate) struct InteractiveRenderer<T> {
+pub(crate) struct InteractiveRenderer {
     multi_progress: MultiProgress,
-    tasks: BTreeMap<TaskId, TaskView<T>>,
+    tasks: BTreeMap<TaskId, TaskView>,
 }
 
-struct TaskView<T> {
-    log: TaskLog<T>,
+struct TaskView {
+    log: TaskLog,
     /// The live widget, or `None` for a phase — a heading has no live state,
     /// so it is printed once above the bars rather than animated.
     bar: Option<ProgressBar>,
@@ -43,7 +42,7 @@ struct TaskView<T> {
     window: RollingLines,
 }
 
-impl<T: Presented> InteractiveRenderer<T> {
+impl InteractiveRenderer {
     pub(crate) fn new() -> Self {
         Self {
             multi_progress: MultiProgress::new(),
@@ -83,7 +82,7 @@ impl<T: Presented> InteractiveRenderer<T> {
         }
     }
 
-    pub(crate) fn handle(&mut self, event: Event<T>) {
+    pub(crate) fn handle(&mut self, event: Event) {
         match event.kind {
             EventKind::TaskStarted { parent, task } => {
                 let depth = self.depth_of(parent);
@@ -245,13 +244,6 @@ impl<T: Presented> InteractiveRenderer<T> {
                     TaskOutcome::Skipped { reason } => {
                         if let Some(bar) = &view.bar {
                             bar.finish_with_message(format!("Skipped ({reason})"));
-                        }
-                    }
-                    // Stopped at the user's request: a warning, not a failure.
-                    TaskOutcome::Stopped { message } => {
-                        if let Some(bar) = &view.bar {
-                            bar.set_style(make_style(TICK_STOPPED, COLOR_STOPPED));
-                            bar.finish_with_message(message);
                         }
                     }
                 }

@@ -10,13 +10,11 @@ const TICKS: &[&str] = &["✶", "✸", "✹", "✺", "✹", "✷"];
 pub(super) const TICK_EMPTY: &str = " ";
 pub(super) const TICK_SUCCESS: &str = "✔";
 pub(super) const TICK_FAILURE: &str = "✘";
-pub(super) const TICK_STOPPED: &str = "!";
 
 // Color schemes for different progress states
 pub(super) const COLOR_REGULAR: &str = "blue";
 pub(super) const COLOR_SUCCESS: &str = "green";
 pub(super) const COLOR_FAILURE: &str = "red";
-pub(super) const COLOR_STOPPED: &str = "yellow";
 
 // Creates a progress bar style with a spinner that transitions to a final tick symbol
 // - end_tick: the symbol to display when the progress completes (success, failure, etc.)

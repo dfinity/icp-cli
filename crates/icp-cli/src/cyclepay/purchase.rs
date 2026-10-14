@@ -7,10 +7,10 @@
 //! the order, pay on the page the gateway hands out for it, then wait for the
 //! gateway to report the order delivered.
 //!
-//! Nothing here prints. [`wait_for_order`] reports its progress as
-//! [`icp_events`] tasks, one per [`PurchasePhase`], and hands the last order
-//! it saw back inside its error when it is interrupted, so the caller can say
-//! where it stands.
+//! Nothing here prints. [`wait_for_order`] tells its caller each
+//! [`PurchasePhase`] the order enters, and hands the last order it saw back
+//! inside its error when it is interrupted, so the caller can say where it
+//! stands.
 
 use std::future::Future;
 use std::pin::pin;
@@ -18,7 +18,6 @@ use std::time::{Duration, Instant};
 
 use candid::Principal;
 use ic_agent::AgentError;
-use icp_events::TaskOutcome;
 use icp_project::calls::{
     CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
 };
@@ -28,8 +27,6 @@ use snafu::{OptionExt, Snafu};
 use std::fmt;
 use tokio::{select, time::sleep};
 use url::Url;
-
-use super::task::{CyclesPurchaseTask, PurchasePhase, Reporter, TaskReporter};
 
 use super::interface::{
     CARD_TERMS_METHOD, CREATE_ORDER_METHOD, CardOrderStatus, CardTerms, CreateOrderArgs,
@@ -601,15 +598,22 @@ impl Default for WaitOptions {
     }
 }
 
-/// The legs of a wait, reported as one [`CyclesPurchaseTask`] each so a
-/// consumer can tick off "payment received" before "delivered".
-struct Phases<'a> {
-    reporter: &'a Reporter,
-    id: &'a str,
-    current: Option<(PurchasePhase, TaskReporter)>,
+/// Which leg of a card purchase of cycles is in progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PurchasePhase {
+    /// The order is payable and the buyer has not paid yet.
+    AwaitingPayment,
+    /// The card was charged; the gateway is sending the cycles.
+    Delivering,
 }
 
-impl Phases<'_> {
+/// The legs of a wait, each told to `on_phase` as the order enters it.
+struct Phases<F> {
+    current: Option<PurchasePhase>,
+    on_phase: F,
+}
+
+impl<F: FnMut(PurchasePhase)> Phases<F> {
     fn of(status: OrderStatus) -> PurchasePhase {
         match status {
             OrderStatus::PaymentPending | OrderStatus::Processing => PurchasePhase::Delivering,
@@ -617,24 +621,16 @@ impl Phases<'_> {
         }
     }
 
-    /// Move to the phase `status` is in, finishing the one before it. A
-    /// state this CLI cannot place leaves the phase as it is.
+    /// Move to the phase `status` is in. A state this CLI cannot place
+    /// leaves the phase as it is.
     fn enter(&mut self, status: OrderStatus) {
         if status == OrderStatus::Unknown && self.current.is_some() {
             return;
         }
         let phase = Self::of(status);
-        if self.current.as_ref().is_some_and(|(p, _)| *p == phase) {
-            return;
-        }
-        self.finish(TaskOutcome::succeeded());
-        let task = self.reporter.task(CyclesPurchaseTask::new(self.id, phase));
-        self.current = Some((phase, task));
-    }
-
-    fn finish(&mut self, outcome: TaskOutcome) {
-        if let Some((_, task)) = self.current.take() {
-            task.finish(outcome);
+        if self.current != Some(phase) {
+            self.current = Some(phase);
+            (self.on_phase)(phase);
         }
     }
 }
@@ -644,9 +640,8 @@ impl Phases<'_> {
 /// `initial` is the order as last seen, if the caller has it: it names the
 /// phase the wait starts in, and it is what
 /// [`CyclesPurchaseError::Interrupted`] carries if `interrupt` resolves before
-/// the first poll answers. Each [`PurchasePhase`] the order passes through is
-/// reported as a task on `reporter`, finished when the next begins or the
-/// wait ends.
+/// the first poll answers. `on_phase` is told each [`PurchasePhase`] the
+/// order enters, the first before the first poll.
 ///
 /// `interrupt` is raced against every poll as well as the sleep between
 /// them, so an interrupt lands even while a call is stalled.
@@ -665,7 +660,7 @@ pub async fn wait_for_order(
     initial: Option<OrderView>,
     options: &WaitOptions,
     interrupt: impl Future<Output = ()>,
-    reporter: &Reporter,
+    on_phase: impl FnMut(PurchasePhase),
 ) -> Result<OrderView, CyclesPurchaseError> {
     // An order already settled has nothing to wait for: no phase to show,
     // and no call that could turn a known end into an error.
@@ -674,9 +669,8 @@ pub async fn wait_for_order(
     }
     let mut interrupt = pin!(interrupt);
     let mut phases = Phases {
-        reporter,
-        id,
         current: None,
+        on_phase,
     };
     phases.enter(
         initial
@@ -710,31 +704,16 @@ pub async fn wait_for_order(
     loop {
         let polled = select! {
             polled = fetch_order(calls, gateway, id) => polled,
-            _ = &mut interrupt => {
-                phases.finish(TaskOutcome::Stopped {
-                    message: "stopped waiting".to_owned(),
-                });
-                return interrupted(last);
-            }
+            _ = &mut interrupt => return interrupted(last),
         };
         match polled {
             Ok(Some(order)) => {
                 misses = 0;
                 if order.status.is_terminal() {
-                    // A delivery first seen at its end still went through
-                    // payment: both legs are ticked off, as for any other.
-                    if order.status == OrderStatus::Delivered {
-                        phases.enter(OrderStatus::Processing);
-                    }
-                    phases.finish(match order.status {
-                        OrderStatus::Delivered => TaskOutcome::succeeded(),
-                        status => TaskOutcome::failed(format!("order {status}")),
-                    });
                     return Ok(order);
                 }
                 phases.enter(order.status);
                 if started.elapsed() > options.timeout {
-                    phases.finish(TaskOutcome::failed("gave up waiting"));
                     return WaitTimedOutSnafu {
                         order: Box::new(order),
                     }
@@ -744,7 +723,6 @@ pub async fn wait_for_order(
             }
             Ok(None) | Err(_) if misses < options.max_consecutive_misses => misses += 1,
             Ok(None) => {
-                phases.finish(TaskOutcome::failed("order not found"));
                 return OrderNotFoundSnafu {
                     gateway: gateway.canister,
                     id,
@@ -752,20 +730,12 @@ pub async fn wait_for_order(
                 }
                 .fail();
             }
-            Err(error) => {
-                phases.finish(TaskOutcome::failed("lost contact with the gateway"));
-                return Err(error);
-            }
+            Err(error) => return Err(error),
         }
 
         select! {
             _ = sleep(options.poll_interval) => {}
-            _ = &mut interrupt => {
-                phases.finish(TaskOutcome::Stopped {
-                    message: "stopped waiting".to_owned(),
-                });
-                return interrupted(last);
-            }
+            _ = &mut interrupt => return interrupted(last),
         }
     }
 }

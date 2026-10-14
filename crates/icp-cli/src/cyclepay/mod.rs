@@ -20,7 +20,6 @@ pub(crate) mod interface;
 pub(crate) mod money;
 pub(crate) mod pricing;
 pub(crate) mod purchase;
-pub(crate) mod task;
 
 #[cfg(test)]
 mod tests;

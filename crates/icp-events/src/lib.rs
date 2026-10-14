@@ -133,10 +133,6 @@ pub enum TaskOutcome {
     /// The task did not apply and no work was done (e.g. a Candid
     /// compatibility check on an install that is not an upgrade).
     Skipped { reason: String },
-    /// The task was stopped before it ended, at the user's request (e.g.
-    /// Ctrl-C while waiting on something that carries on without the
-    /// command). Nothing failed; `message` says what was stopped.
-    Stopped { message: String },
 }
 
 impl TaskOutcome {
@@ -738,17 +734,6 @@ mod tests {
             serde_json::json!({
                 "task_id": 7, "event": "task_completed",
                 "outcome": { "result": "skipped", "reason": "not an upgrade" },
-            })
-        );
-        assert_eq!(
-            event(EventKind::<DemoTask>::TaskCompleted {
-                outcome: TaskOutcome::Stopped {
-                    message: "stopped waiting".to_owned(),
-                },
-            }),
-            serde_json::json!({
-                "task_id": 7, "event": "task_completed",
-                "outcome": { "result": "stopped", "message": "stopped waiting" },
             })
         );
     }

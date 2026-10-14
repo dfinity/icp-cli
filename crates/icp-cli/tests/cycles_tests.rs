@@ -5,7 +5,7 @@ use crate::common::{
     ChildGuard, ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients,
 };
 use icp_project::fs::write_string;
-use icp_project::prelude::PathBuf;
+use icp_project::prelude::{PathBuf, TRILLION};
 
 mod common;
 
@@ -549,46 +549,69 @@ fn cycles_buy_with_no_network_named_points_at_mainnet() {
         .failure();
 }
 
-/// A local network running a stand-in for CyclePay's backend, built from
-/// `wasm` in the test assets, and a fresh identity to buy as. Returns the
-/// project and the stand-in's canister id; the guard keeps the network up.
-async fn stand_in_gateway(ctx: &TestContext, wasm: &str) -> (PathBuf, String, ChildGuard) {
+/// Deploy the stand-in gateway (`assets/cycles_gateway_canister`, a Motoko
+/// actor serving the four methods the command uses) on a fresh local
+/// network, and switch to a random identity to buy with. Returns the project
+/// directory, the gateway's canister id, and the network's guard.
+async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     let project_dir = ctx.create_project_dir("icp");
+    ctx.copy_asset_dir("cycles_gateway_canister", &project_dir);
 
     let pm = formatdoc! {r#"
+        canisters:
+          - name: gateway
+            recipe:
+              type: "@dfinity/motoko@v4.0.0"
+              configuration:
+                main: main.mo
+                args: ""
+
         {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
     "#};
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
 
     let guard = ctx.start_network_in(&project_dir, "random-network").await;
     ctx.ping_until_healthy(&project_dir, "random-network");
 
-    let wasm = ctx.make_asset(wasm);
+    let client = clients::icp(ctx, &project_dir, Some("random-environment".to_string()));
+    client.mint_cycles(10 * TRILLION);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
     let output = ctx
         .icp()
         .current_dir(&project_dir)
         .args([
             "canister",
-            "create",
-            "--detached",
-            "--quiet",
-            "--identity",
-            "anonymous",
-            "--network",
-            "random-network",
+            "status",
+            "gateway",
+            "--environment",
+            "random-environment",
+            "--id-only",
         ])
         .output()
-        .expect("failed to run icp canister create");
+        .expect("failed to read the gateway's canister id");
     assert!(output.status.success(), "{output:?}");
     let gateway = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+
+    client.use_new_random_identity();
+    (project_dir, gateway, guard)
+}
+
+/// Tell the stand-in gateway where its order stands: `pay` with the canister
+/// the cycles went to, or `refund`.
+fn settle(ctx: &TestContext, project_dir: &PathBuf, gateway: &str, how: &str, arg: &str) {
     ctx.icp()
-        .current_dir(&project_dir)
+        .current_dir(project_dir)
         .args([
             "canister",
-            "install",
-            &gateway,
-            "--wasm",
-            wasm.as_str(),
+            "call",
+            gateway,
+            how,
+            arg,
             "--identity",
             "anonymous",
             "--network",
@@ -596,17 +619,17 @@ async fn stand_in_gateway(ctx: &TestContext, wasm: &str) -> (PathBuf, String, Ch
         ])
         .assert()
         .success();
-    clients::icp(ctx, &project_dir, None).use_new_random_identity();
-    (project_dir, gateway, guard)
 }
 
 /// An order the gateway cannot deliver is refunded: the command says so and
 /// fails, and --json prints the order as made, then its end.
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn cycles_buy_reports_a_refunded_order() {
     let ctx = TestContext::new();
-    // A stand-in gateway whose every order is refunded; see its `.wat`.
-    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "refunded_order_canister.wasm").await;
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+    // The stand-in's order was paid, could not be delivered, and was refunded.
+    settle(&ctx, &project_dir, &gateway, "refund", "()");
 
     let buy = |args: &[&str]| {
         let mut cmd = ctx.icp();
@@ -664,7 +687,7 @@ async fn cycles_buy_reports_a_refunded_order() {
 /// with no error line. Off a terminal, as here, the wait is told in lines.
 /// The link handed out is the stand-in's own: nothing of CyclePay's is built
 /// in.
-#[cfg(unix)]
+#[cfg(unix)] // SIGINT, moc
 #[tokio::test]
 async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
     use std::io::{BufRead, BufReader};
@@ -674,8 +697,8 @@ async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
     use nix::unistd::Pid;
 
     let ctx = TestContext::new();
-    // A stand-in gateway whose every order awaits payment; see its `.wat`.
-    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "awaiting_order_canister.wasm").await;
+    // The stand-in's order awaits payment until told otherwise.
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
 
     let mut child = ctx
         .icp_std()
@@ -730,15 +753,14 @@ async fn cycles_buy_ctrl_c_stops_the_wait_with_no_error() {
 /// (its `pay` update), the next poll finds the order delivered, and the
 /// command reports CyclePay's delivery to where the order says it went and
 /// succeeds.
+#[cfg(unix)] // moc
 #[tokio::test]
 async fn cycles_buy_waits_through_payment_to_delivery() {
     use std::io::{BufRead, BufReader, Read};
     use std::process::Stdio;
 
     let ctx = TestContext::new();
-    // A stand-in gateway whose order is delivered once `pay` is called; see
-    // its `.wat`.
-    let (project_dir, gateway, _g) = stand_in_gateway(&ctx, "paid_on_call_canister.wasm").await;
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
 
     let mut child = ctx
         .icp_std()
@@ -765,21 +787,13 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
         assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
     }
 
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args([
-            "canister",
-            "call",
-            &gateway,
-            "pay",
-            "()",
-            "--identity",
-            "anonymous",
-            "--network",
-            "random-network",
-        ])
-        .assert()
-        .success();
+    settle(
+        &ctx,
+        &project_dir,
+        &gateway,
+        "pay",
+        "(principal \"rrkah-fqaaa-aaaaa-aaaaq-cai\")",
+    );
 
     stderr.read_to_string(&mut said).unwrap();
     let status = child.wait().unwrap();

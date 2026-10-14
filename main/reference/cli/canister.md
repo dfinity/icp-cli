@@ -21,6 +21,7 @@ Perform canister operations against a network
 * [`status`](canister-status.md) — Show the status of canister(s)
 * [`stop`](canister-stop.md) — Stop a canister on a network
 * [`top-up`](canister-top-up.md) — Top up a canister with cycles
+* [`uninstall`](canister-uninstall.md) — Uninstall a canister's code, deleting its state
 
 
 

@@ -96,6 +96,7 @@ icp-cli assumes users will use canister environment variables to connect caniste
 | Get canister ID | `dfx canister id my_canister` | `icp canister status my_canister --id-only` |
 | List canisters | `dfx canister ls` | `icp canister list` |
 | Canister status | `dfx canister status my_canister` | `icp canister status my_canister` |
+| Uninstall code | `dfx canister uninstall-code my_canister` | `icp canister uninstall my_canister` |
 | Create identity | `dfx identity new my_id` | `icp identity new my_id` |
 | Use identity | `dfx identity use my_id` | `icp identity default my_id` |
 | Show principal | `dfx identity get-principal` | `icp identity principal` |

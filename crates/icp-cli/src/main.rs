@@ -357,6 +357,10 @@ async fn dispatch(ctx: &icp_app::context::Context, command: Command) -> Result<(
             commands::canister::Command::TopUp(args) => {
                 commands::canister::top_up::exec(ctx, &args).await?
             }
+
+            commands::canister::Command::Uninstall(args) => {
+                commands::canister::uninstall::exec(ctx, &args).await?
+            }
         },
 
         // Completions: handled in `main` before the context exists

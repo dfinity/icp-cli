@@ -1,9 +1,10 @@
 use ic_utils::interfaces::ManagementCanister;
 use indoc::formatdoc;
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients, error_text,
+};
 use icp_project::{fs::write_string, prelude::*};
 
 mod common;
@@ -72,7 +73,8 @@ async fn canister_top_up() {
         .success();
 
     // top up with more cycles than available
-    ctx.icp()
+    let output = ctx
+        .icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -85,24 +87,26 @@ async fn canister_top_up() {
             "--amount",
             &format!("{}", 10 * TRILLION),
         ])
-        .assert()
-        // How many are missing, and how to convert ICP to them, as that
-        // identity on that environment: never a card, off mainnet.
-        .stderr(contains(
+        .output()
+        .expect("failed to run icp canister top-up");
+    // How many are missing, and how to make them up on a local network, as
+    // that identity on that environment: never a card, off mainnet.
+    let principal = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .get_principal("financially-challenged");
+    let stderr = error_text(&output);
+    assert!(
+        stderr.ends_with(&format!(
             "Error: not enough cycles to top up my-canister with 10T cycles.\n\
              It takes 10.0001T cycles, fees included,\n\
              and identity financially-challenged has 0.\n\
              Get 10.1T more, from the anonymous identity, which a local network funds, or\n\
              from ICP, then run the top-up again:\n\n    \
-             icp cycles transfer 10.1T ",
-        ))
-        .stderr(predicates::str::ends_with(
-            " --identity anonymous -e random-environment\n    \
+             icp cycles transfer 10.1T {principal} --identity anonymous -e random-environment\n    \
              icp cycles mint --cycles 10.1T --identity financially-challenged -e \
-             random-environment\n",
-        ))
-        .stderr(contains("card").not())
-        .failure();
+             random-environment"
+        )) && !stderr.contains("card"),
+        "{stderr}"
+    );
 
     // top up with reasonable amount
     ctx.icp()

@@ -1,10 +1,11 @@
 use indoc::formatdoc;
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 #[cfg(unix)] // the stand-in gateway needs moc
 use crate::common::ChildGuard;
-use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
+use crate::common::{
+    ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients, error_text,
+};
 use icp_project::fs::write_string;
 #[cfg(unix)]
 use icp_project::prelude::{PathBuf, TRILLION};
@@ -884,8 +885,7 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
         ])
         .output()
         .expect("failed to run icp deploy");
-    assert!(!output.status.success(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let stderr = error_text(&output);
     assert!(
         stderr.ends_with(&format!(
             "Error: not enough cycles to create 2 canisters.\n\
@@ -893,7 +893,7 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
              Get 4.03T more, from the anonymous identity, which a local network funds, or\n\
              from ICP, then run the deploy again:\n\n    \
              icp cycles transfer 4.03T {short} --identity anonymous -e random-environment\n    \
-             icp cycles mint --cycles 4.03T --identity short -e random-environment\n"
+             icp cycles mint --cycles 4.03T --identity short -e random-environment"
         )),
         "{stderr}"
     );
@@ -915,12 +915,11 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
         ])
         .output()
         .expect("failed to run icp deploy");
-    assert!(!output.status.success(), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let stderr = error_text(&output);
     assert!(
-        stderr.contains(
-            "    icp cycles mint --cycles 4.03T --identity short -e random-environment\n"
+        stderr.ends_with(
+            "\n    icp cycles mint --cycles 4.03T --identity short -e random-environment"
         ),
         "{stderr}"
     );
@@ -974,8 +973,7 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
     let output = create()
         .output()
         .expect("failed to run icp canister create");
-    assert!(!output.status.success(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let stderr = error_text(&output);
     assert!(
         stderr.ends_with(&format!(
             "Error: not enough cycles to create the canister.\n\
@@ -985,7 +983,7 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
              icp cycles transfer 1.01M {nearly} --identity anonymous -n random-network\n    \
              icp cycles mint --cycles 1.01M --identity nearly -n random-network\n\n\
              You can also give the canister fewer cycles with --cycles,\n\
-             at least the 0.5T a creation costs.\n"
+             at least the 0.5T a creation costs."
         )),
         "{stderr}"
     );
@@ -997,11 +995,10 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
     let output = create()
         .output()
         .expect("failed to run icp canister create");
-    assert!(!output.status.success(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let stderr = error_text(&output);
     assert!(
         stderr
-            .contains("\n    icp cycles mint --cycles 2.02T --identity nearly -n random-network\n"),
+            .ends_with("\n    icp cycles mint --cycles 2.02T --identity nearly -n random-network"),
         "{stderr}"
     );
     run_printed(&stderr, "mint");
@@ -1023,7 +1020,8 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
         ])
         .assert()
         .success();
-    ctx.icp()
+    let output = ctx
+        .icp()
         .current_dir(&project_dir)
         .args([
             "deploy",
@@ -1032,18 +1030,25 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
             "--identity",
             "half",
         ])
-        .assert()
-        .failure()
-        .stderr(contains(
+        .output()
+        .expect("failed to run icp deploy");
+    let stderr = error_text(&output);
+    assert!(
+        stderr.contains(
             "Error: not enough cycles to create 1 canister.\n\
              It takes 2.0001T cycles, fees included, and identity half has 999.9B.\n\
              Get 1.01T more, from the anonymous identity, which a local network funds, or\n\
-             from ICP, then run the deploy again:\n\n",
-        ))
-        .stderr(contains(
+             from ICP, then run the deploy again:\n\n"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.ends_with(
             "\n\nYou can also give each canister fewer cycles with --cycles,\n\
-             at least the 0.5T a creation costs.\n",
-        ));
+             at least the 0.5T a creation costs."
+        ),
+        "{stderr}"
+    );
 
     // The anonymous identity, the default here, holds more cycles on a local
     // network than a canister can be given, but not as many as asked for:
@@ -1069,26 +1074,31 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
         (&[][..], ""),
         (&["--identity", "anonymous"][..], " --identity anonymous"),
     ] {
-        anonymous(identity)
-            .assert()
-            .failure()
-            .stderr(contains("\nand the anonymous identity has "))
-            .stderr(contains(
-                " more from ICP, then create the canister again:\n\n    \
-                 icp cycles mint --cycles ",
-            ))
-            .stderr(contains(format!(
-                "T{flag} -n random-network\n\n\
-                 You can also give the canister fewer cycles with --cycles,\n\
-                 at least the 0.5T a creation costs.\n"
-            )))
-            .stderr(contains("icp identity").not())
-            .stderr(contains("icp cycles transfer").not());
+        let output = anonymous(identity)
+            .output()
+            .expect("failed to run icp canister create");
+        let stderr = error_text(&output);
+        assert!(
+            stderr.contains("\nand the anonymous identity has ")
+                && stderr.contains(
+                    " more from ICP, then create the canister again:\n\n    \
+                     icp cycles mint --cycles "
+                )
+                && stderr.ends_with(&format!(
+                    "T{flag} -n random-network\n\n\
+                     You can also give the canister fewer cycles with --cycles,\n\
+                     at least the 0.5T a creation costs."
+                ))
+                && !stderr.contains("icp identity")
+                && !stderr.contains("icp cycles transfer"),
+            "{stderr}"
+        );
     }
 
     // Creating with ICP the identity does not have: the ICP ledger's
     // refusal, as before, and no word of cycles to get.
-    ctx.icp()
+    let output = ctx
+        .icp()
         .current_dir(&project_dir)
         .args([
             "canister",
@@ -1101,9 +1111,13 @@ async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
             "--network",
             "random-network",
         ])
-        .assert()
-        .failure()
-        .stderr(contains("InsufficientFunds"))
-        .stderr(contains("more cycles").not())
-        .stderr(contains("icp cycles").not());
+        .output()
+        .expect("failed to run icp canister create");
+    let stderr = error_text(&output);
+    assert!(
+        stderr.contains("InsufficientFunds")
+            && !stderr.contains("more cycles")
+            && !stderr.contains("icp cycles"),
+        "{stderr}"
+    );
 }

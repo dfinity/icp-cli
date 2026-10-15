@@ -21,6 +21,17 @@ pub(crate) const PATH_SEPARATOR: &str = ";";
 // with the version from network-launcher-version injected.
 include!(concat!(env!("OUT_DIR"), "/network_constants.rs"));
 
+/// What a failed `icp` wrote to stderr, up to the end of its `Error:` message:
+/// cut before the backtrace that a `RUST_BACKTRACE` in the environment adds,
+/// as on CI, with Windows line endings made plain and the last newline
+/// dropped.
+pub(crate) fn error_text(output: &std::process::Output) -> String {
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n");
+    let end = stderr.find("\n\nStack backtrace:").unwrap_or(stderr.len());
+    stderr[..end].trim_end().to_owned()
+}
+
 /// An environment manifest utilizing the above network
 pub(crate) const ENVIRONMENT_RANDOM_PORT: &str = r#"
 environments:

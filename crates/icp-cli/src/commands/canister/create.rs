@@ -6,19 +6,19 @@ use bigdecimal::BigDecimal;
 use candid::{Nat, Principal};
 use clap::{ArgGroup, Args, Parser};
 use ic_management_canister_types::CanisterSettings as MgmtCanisterSettings;
-use icp_app::context::{Context, NetworkSelection};
-use icp_app::identity::IdentitySelection;
+use icp_app::context::Context;
 use icp_canister_interfaces::engine_canister::engine_canister_id;
 use icp_project::calls::CanisterCalls;
 use icp_project::canister::resolve_controllers;
-use icp_project::host::EnvironmentSelection;
 use icp_project::parsers::{CyclesAmount, DurationAmount, MemoryAmount, parse_token_amount};
 use icp_project::store_id::IdMapping;
 use icp_project::{Canister, host::CanisterSelection, prelude::*};
 use serde::Serialize;
 use tracing::{info, warn};
 
-use icp_project::operations::create::{CreateFunding, CreateOperation, CreateTarget, shell_quote};
+use icp_project::operations::create::{
+    CreateFunding, CreateOperation, CreateOperationError, CreateTarget,
+};
 
 use crate::commands::args;
 
@@ -209,7 +209,7 @@ impl CreateArgs {
         match &self.with_icp {
             Some(icp) => CreateFunding::Icp {
                 amount: icp.clone(),
-                recovery_flags: self.recovery_flags(),
+                recovery_flags: self.recovery_flags().text,
             },
             None => CreateFunding::Cycles(self.cycles.get()),
         }
@@ -218,36 +218,29 @@ impl CreateArgs {
     /// Renders the identity/network/environment selection as CLI flags to append
     /// to the CMC recovery command (see [`CreateFunding::Icp`]), so a timed-out or
     /// interrupted creation can be finished by pasting the printed command as-is.
-    fn recovery_flags(&self) -> String {
+    fn recovery_flags(&self) -> args::PasteFlags {
         let selections = self.cmd_args.selections();
-        let mut flags = String::new();
-        match selections.identity {
-            IdentitySelection::Default => {}
-            IdentitySelection::Anonymous => flags.push_str(" --identity anonymous"),
-            IdentitySelection::Named(name) => {
-                flags.push_str(&format!(" --identity {}", shell_quote(&name)));
+        args::selection_flags(
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+    }
+
+    /// The error for a creation through the CMC that stopped before the CMC
+    /// confirmed it: the recovery command it carries is followed by a line
+    /// for each value in it left to fill in, since the ICP is already spent.
+    fn with_recovery_notes(&self, error: CreateOperationError) -> anyhow::Error {
+        let notes = self.recovery_flags().notes();
+        match error {
+            CreateOperationError::NotifyCreateTimeout { .. }
+            | CreateOperationError::NotifyCreateInterrupted { .. }
+                if !notes.is_empty() =>
+            {
+                anyhow!("{error}\n{}", notes.join("\n"))
             }
+            error => error.into(),
         }
-        match selections.network {
-            NetworkSelection::Default => {}
-            NetworkSelection::Named(name) => {
-                flags.push_str(&format!(" --network {}", shell_quote(&name)));
-            }
-            NetworkSelection::Url(url, root_key) => {
-                flags.push_str(&format!(
-                    " --network {} --root-key {}",
-                    shell_quote(url.as_str()),
-                    shell_quote(&String::from(root_key)),
-                ));
-            }
-        }
-        match selections.environment {
-            EnvironmentSelection::Default => {}
-            EnvironmentSelection::Named(name) => {
-                flags.push_str(&format!(" --environment {}", shell_quote(&name)));
-            }
-        }
-        flags
     }
 
     /// Where the canister goes, once `--engine` has been resolved to the
@@ -352,7 +345,10 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     let canister_settings = args.canister_settings();
 
-    let id = create_operation.create(&canister_settings).await?;
+    let id = create_operation
+        .create(&canister_settings)
+        .await
+        .map_err(|error| args.with_recovery_notes(error))?;
 
     if args.quiet {
         println!("{id}");
@@ -434,7 +430,10 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         );
     }
 
-    let id = create_operation.create(&canister_settings).await?;
+    let id = create_operation
+        .create(&canister_settings)
+        .await
+        .map_err(|error| args.with_recovery_notes(error))?;
 
     ctx.host
         .set_canister_id_for_env(&canister, id, &selections.environment)
@@ -474,4 +473,69 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
 struct JsonCreate {
     canister_id: Principal,
     canister_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+    use crate::commands::{Command, canister};
+
+    /// `icp canister create`, parsed from `words`.
+    fn create(words: &[&str]) -> CreateArgs {
+        let words = ["icp", "canister", "create", "--detached", "--with-icp", "1"]
+            .iter()
+            .chain(words);
+        match crate::Cli::try_parse_from(words).unwrap().command {
+            Some(Command::Canister(canister::Command::Create(args))) => args,
+            _ => unreachable!(),
+        }
+    }
+
+    /// The recovery command a creation through the CMC prints when it stops
+    /// before the CMC confirms it, with `flags` on the end.
+    fn timeout(flags: &str) -> CreateOperationError {
+        CreateOperationError::NotifyCreateTimeout {
+            height: 7,
+            command: format!(
+                "icp canister call rkp4c-7iaaa-aaaaa-aaaca-cai notify_create_canister \
+                 '(record {{ block_index = 7 : nat64 }})'{flags}"
+            ),
+        }
+    }
+
+    /// After the ICP is spent, the recovery command must paste as printed:
+    /// a name starting with `-` as `--identity=`, one with a quote in double
+    /// quotes, and one no quoting carries left to fill in, and said so.
+    #[test]
+    fn the_recovery_command_pastes_or_says_what_to_fill_in() {
+        for (words, flags) in [
+            (
+                &["--identity=-dash", "-n", "ic"][..],
+                " --identity=-dash -n ic",
+            ),
+            (
+                &["--identity", "o'neil", "-n", "ic"][..],
+                " --identity \"o'neil\" -n ic",
+            ),
+        ] {
+            let args = create(words);
+            assert_eq!(args.recovery_flags().text, flags);
+            let said = args.with_recovery_notes(timeout(flags)).to_string();
+            assert!(said.ends_with(&format!("{flags}\n")), "{said}");
+        }
+
+        let args = create(&["--identity", "o'neil $x", "-n", "ic"]);
+        let flags = args.recovery_flags().text;
+        assert_eq!(flags, " --identity <your identity> -n ic");
+        let said = args.with_recovery_notes(timeout(&flags)).to_string();
+        assert!(
+            said.ends_with(
+                " --identity <your identity> -n ic\n\n\
+                 Fill in <your identity> yourself: no quoting of it works in every shell."
+            ),
+            "{said}"
+        );
+    }
 }

@@ -10,9 +10,11 @@
 // payable until 2100-01-01T00:00:00Z.
 //
 // `order_status` reports that order as the stand-in was last told:
-// awaiting payment until `pay` or `refund` is called; paid and delivered,
-// 6.938T cycles to the canister `pay` names, after `pay`; paid and refunded
-// in full, "the cycles could not be delivered", after `refund`.
+// awaiting payment until `pay`, `pend`, `refunding` or `refund` is called;
+// paid and delivered, 6.938T cycles to the canister `pay` names, after
+// `pay`; paid by a method that has not settled yet after `pend`; paid, not
+// delivered and being refunded after `refunding`; paid and refunded in full,
+// "the cycles could not be delivered", after `refund`.
 persistent actor {
   type CardTerms = {
     deliveries_paused : Bool;
@@ -106,9 +108,15 @@ persistent actor {
   let CYCLES_DELIVERED : Nat64 = 6_938_000_000_000;
   let PAID_AT : Nat64 = 1;
 
-  // Where the order stands: as made, paid and delivered to a canister, or
-  // refunded.
-  var outcome : { #awaiting; #delivered : Principal; #refunded } = #awaiting;
+  // Where the order stands: as made, paid and delivered to a canister, paid
+  // and not settled, being refunded, or refunded.
+  var outcome : {
+    #awaiting;
+    #delivered : Principal;
+    #pending;
+    #refunding;
+    #refunded;
+  } = #awaiting;
 
   public query func get_card_terms() : async CardTerms {
     {
@@ -190,6 +198,27 @@ persistent actor {
         };
         ?view;
       };
+      case (#pending) {
+        let view : OrderStatusView = {
+          base with
+          status = #PaymentPending;
+          paid_at = ?PAID_AT;
+          paid_usd_cents = ?AMOUNT_USD_CENTS;
+          expires_at = null;
+        };
+        ?view;
+      };
+      case (#refunding) {
+        let view : OrderStatusView = {
+          base with
+          status = #Refunding;
+          detail = ?"DELIVERY_FAILED: the cycles could not be delivered";
+          paid_at = ?PAID_AT;
+          paid_usd_cents = ?AMOUNT_USD_CENTS;
+          expires_at = null;
+        };
+        ?view;
+      };
       case (#refunded) {
         let view : OrderStatusView = {
           base with
@@ -207,6 +236,16 @@ persistent actor {
   // The card was charged and the cycles delivered to `canister`.
   public func pay(canister : Principal) : async () {
     outcome := #delivered(canister);
+  };
+
+  // The order was paid by a method that has not settled yet.
+  public func pend() : async () {
+    outcome := #pending;
+  };
+
+  // The card was charged, the delivery failed, and the refund is under way.
+  public func refunding() : async () {
+    outcome := #refunding;
   };
 
   // The card was charged, the delivery failed, and the payment was refunded.

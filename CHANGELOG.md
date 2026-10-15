@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+# v1.7.0
+
 * feat: `icp cycles buy --amount <amount> [--currency USD]` buys cycles with a card for the current identity through CyclePay (https://www.cyclepay.org); `--cycles <cycles>` instead names the cycles to receive and pays the least amount that buys them, card fee included. It quotes the amount at CyclePay's published rate, asks for confirmation, creates the order as the identity on the CyclePay backend canister, prints the page to pay on with a QR code to scan (and opens it in a browser from a terminal, but not over SSH or on CI) and waits for the cycles to land on the identity's cycles-ledger account; Ctrl-C stops the wait, not the order. `--gateway` or `ICP_CYCLES_GATEWAY_CANISTER_ID` picks another backend canister.
 * feat: `icp deploy` and `icp canister create` take `--engine <name>` to target a cloud engine by name. The name is resolved to the engine's subnet through the engine canister, among the engines visible to the identity in use, and then behaves as `--subnet` would with that subnet; a subnet id passed as the engine is used as-is. `name/slug` or the engine's id picks one of several engines sharing a name.
 * fix: reject path-like network and environment names

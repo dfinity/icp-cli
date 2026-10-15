@@ -3550,7 +3550,7 @@ dependencies = [
 
 [[package]]
 name = "icp-app"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "async-dropper",
  "async-trait",
@@ -3623,7 +3623,7 @@ dependencies = [
 
 [[package]]
 name = "icp-canister-interfaces"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "bigdecimal",
  "candid",
@@ -3633,7 +3633,7 @@ dependencies = [
 
 [[package]]
 name = "icp-cli"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "anstyle",
  "anyhow",
@@ -3714,7 +3714,7 @@ dependencies = [
 
 [[package]]
 name = "icp-events"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3723,7 +3723,7 @@ dependencies = [
 
 [[package]]
 name = "icp-project"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "async-trait",
  "bigdecimal",
@@ -3773,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "icp-sync-plugin"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6297,7 +6297,7 @@ dependencies = [
 
 [[package]]
 name = "schema-gen"
-version = "1.6.0"
+version = "1.7.0"
 dependencies = [
  "icp-project",
  "schemars",

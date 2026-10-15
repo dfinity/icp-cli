@@ -1,4 +1,5 @@
 use indoc::formatdoc;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 #[cfg(unix)] // the stand-in gateway needs moc
@@ -822,4 +823,287 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
     );
     // Not the buyer's account, so no balance of the buyer's is read.
     assert!(!printed.contains("Balance"), "{printed}");
+}
+
+/// Short of cycles on a local network, `icp deploy` and `icp canister create`
+/// say how many are missing, and give a transfer from the anonymous identity,
+/// which the network funds, and the conversion of ICP, as the identity and on
+/// the environment or network they ran with. They never mention buying them
+/// with a card, which is for mainnet alone. `--json` adds nothing to stdout.
+/// Off a terminal, as here, the message is plain text.
+///
+/// The figures are the ledger's own: one cycle short, the commands printed
+/// ask for that cycle and a margin, and once either has been run as printed
+/// the creation goes through. A deploy that can pay for some of its
+/// canisters is told what the rest need, and that fewer cycles would do. The
+/// anonymous identity is told to convert ICP. Creating with ICP runs short
+/// of ICP, not cycles, and gets no cycles hint.
+#[tokio::test]
+async fn running_short_of_cycles_says_how_many_and_how_to_get_them() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: one
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+          - name: two
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+    let client = clients::icp(&ctx, &project_dir, Some("random-environment".to_string()));
+
+    // A new identity, with no cycles at all, as any made after the network
+    // started is.
+    client.create_identity("short");
+    let short = client.get_principal("short").to_text();
+
+    // Two canisters at the default 2T each, and the ledger's fee on each.
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "short",
+        ])
+        .output()
+        .expect("failed to run icp deploy");
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.ends_with(&format!(
+            "Error: not enough cycles to create 2 canisters.\n\
+             It takes 4.0002T cycles, fees included, and identity short has 0.\n\
+             Get 4.03T more, from the anonymous identity, which a local network funds, or\n\
+             from ICP, then run the deploy again:\n\n    \
+             icp cycles transfer 4.03T {short} --identity anonymous -e random-environment\n    \
+             icp cycles mint --cycles 4.03T --identity short -e random-environment\n"
+        )),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("card") && !stderr.contains('\x1b'),
+        "{stderr}"
+    );
+
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "short",
+            "--json",
+        ])
+        .output()
+        .expect("failed to run icp deploy");
+    assert!(!output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains(
+            "    icp cycles mint --cycles 4.03T --identity short -e random-environment\n"
+        ),
+        "{stderr}"
+    );
+
+    // One cycle short of one canister, on a network named rather than an
+    // environment: funded with cycles from the default identity, which
+    // pays the transfer's fee, and ICP to convert.
+    client.create_identity("nearly");
+    let nearly = client.get_principal("nearly").to_text();
+    for (what, amount) in [("cycles", "2000099999999"), ("token", "100")] {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                what,
+                "transfer",
+                amount,
+                &nearly,
+                "--environment",
+                "random-environment",
+            ])
+            .assert()
+            .success();
+    }
+    let create = || {
+        let mut command = ctx.icp();
+        command.current_dir(&project_dir).args([
+            "canister",
+            "create",
+            "--detached",
+            "--identity",
+            "nearly",
+            "--network",
+            "random-network",
+        ]);
+        command
+    };
+    // The command on the line that starts `    icp cycles {what}`, run as
+    // printed.
+    let run_printed = |stderr: &str, what: &str| {
+        let printed = stderr
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("    icp cycles {what} ")))
+            .unwrap_or_else(|| panic!("no icp cycles {what} in {stderr}"));
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["cycles", what])
+            .args(printed.split(' '))
+            .assert()
+            .success();
+    };
+    let output = create()
+        .output()
+        .expect("failed to run icp canister create");
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.ends_with(&format!(
+            "Error: not enough cycles to create the canister.\n\
+             It takes 2.0001T cycles, fees included, and identity nearly has 2.000099999999T.\n\
+             Get 1.01M more, from the anonymous identity, which a local network funds, or\n\
+             from ICP, then create the canister again:\n\n    \
+             icp cycles transfer 1.01M {nearly} --identity anonymous -n random-network\n    \
+             icp cycles mint --cycles 1.01M --identity nearly -n random-network\n\n\
+             You can also give the canister fewer cycles with --cycles,\n\
+             at least the 0.5T a creation costs.\n"
+        )),
+        "{stderr}"
+    );
+    // The transfer, run as printed, and the creation goes through.
+    run_printed(&stderr, "transfer");
+    create().assert().success();
+    // Short again, by what that took; the conversion, run as printed, and it
+    // goes through.
+    let output = create()
+        .output()
+        .expect("failed to run icp canister create");
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr
+            .contains("\n    icp cycles mint --cycles 2.02T --identity nearly -n random-network\n"),
+        "{stderr}"
+    );
+    run_printed(&stderr, "mint");
+    create().assert().success();
+
+    // Enough for one of the two canisters: one is created, and the error
+    // covers the other, from what the first left.
+    client.create_identity("half");
+    let half = client.get_principal("half").to_text();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "transfer",
+            "3t",
+            &half,
+            "--environment",
+            "random-environment",
+        ])
+        .assert()
+        .success();
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "deploy",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "half",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "Error: not enough cycles to create 1 canister.\n\
+             It takes 2.0001T cycles, fees included, and identity half has 999.9B.\n\
+             Get 1.01T more, from the anonymous identity, which a local network funds, or\n\
+             from ICP, then run the deploy again:\n\n",
+        ))
+        .stderr(contains(
+            "\n\nYou can also give each canister fewer cycles with --cycles,\n\
+             at least the 0.5T a creation costs.\n",
+        ));
+
+    // The anonymous identity, the default here, holds more cycles on a local
+    // network than a canister can be given, but not as many as asked for:
+    // the ordinary hint, converting ICP, as it was selected; no transfer from
+    // itself, and no word of making an identity.
+    let anonymous = |identity: &[&str]| {
+        let mut command = ctx.icp();
+        command
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                "create",
+                "--detached",
+                "--network",
+                "random-network",
+                "--cycles",
+                "300000000000000000000000000T",
+            ])
+            .args(identity);
+        command
+    };
+    for (identity, flag) in [
+        (&[][..], ""),
+        (&["--identity", "anonymous"][..], " --identity anonymous"),
+    ] {
+        anonymous(identity)
+            .assert()
+            .failure()
+            .stderr(contains("\nand the anonymous identity has "))
+            .stderr(contains(
+                " more from ICP, then create the canister again:\n\n    \
+                 icp cycles mint --cycles ",
+            ))
+            .stderr(contains(format!(
+                "T{flag} -n random-network\n\n\
+                 You can also give the canister fewer cycles with --cycles,\n\
+                 at least the 0.5T a creation costs.\n"
+            )))
+            .stderr(contains("icp identity").not())
+            .stderr(contains("icp cycles transfer").not());
+    }
+
+    // Creating with ICP the identity does not have: the ICP ledger's
+    // refusal, as before, and no word of cycles to get.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "create",
+            "--detached",
+            "--with-icp",
+            "1",
+            "--identity",
+            "short",
+            "--network",
+            "random-network",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("InsufficientFunds"))
+        .stderr(contains("more cycles").not())
+        .stderr(contains("icp cycles").not());
 }

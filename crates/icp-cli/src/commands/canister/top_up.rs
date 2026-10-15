@@ -4,12 +4,14 @@ use candid::{Decode, Encode, Nat};
 use clap::Args;
 use icp_app::context::Context;
 use icp_canister_interfaces::cycles_ledger::{
-    CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawResponse,
+    CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, WithdrawArgs, WithdrawError, WithdrawResponse,
 };
 use icp_project::parsers::CyclesAmount;
+use num_traits::ToPrimitive;
 use tracing::info;
 
 use crate::commands::args;
+use crate::shortfall;
 use icp_app::operations::token::TokenAmount;
 
 /// Top up a canister with cycles
@@ -55,6 +57,30 @@ pub(crate) async fn exec(ctx: &Context, args: &TopUpArgs) -> Result<(), anyhow::
         .await?;
 
     let response = Decode!(&bs, WithdrawResponse).context("failed to decode withdraw response")?;
+    // Refused for want of cycles: how many are missing, and how to get them
+    // (see `shortfall`). A balance past u128 is not short of a u128 request.
+    if let Err(WithdrawError::InsufficientFunds { balance }) = &response
+        && let Some(hint) = shortfall::Hint::read(
+            ctx,
+            &agent,
+            args.amount.get().saturating_add(CYCLES_LEDGER_BLOCK_FEE),
+            balance.0.to_u128().unwrap_or(u128::MAX),
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await
+    {
+        bail!(hint.message(
+            &format!(
+                "top up {} with {}",
+                args.cmd_args.canister,
+                shortfall::cycles(args.amount.get())
+            ),
+            "run the top-up again",
+            None,
+        ));
+    }
     if let Err(err) = response {
         bail!("failed to top up: {}", err.format_error(args.amount.get()));
     }

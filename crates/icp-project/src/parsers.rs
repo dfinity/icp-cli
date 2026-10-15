@@ -179,6 +179,25 @@ impl From<u128> for CyclesAmount {
     }
 }
 
+/// `2.0001T`, `510B`, `110M`, `42`: cycles in the largest unit they reach,
+/// exactly (`2.000099999999T`), as [`CyclesAmount`] reads them back.
+pub fn display_cycles(cycles: u128) -> String {
+    const UNITS: [(u128, usize, &str); 3] = [
+        (1_000_000_000_000, 12, "T"),
+        (1_000_000_000, 9, "B"),
+        (1_000_000, 6, "M"),
+    ];
+    for (unit, places, suffix) in UNITS {
+        if cycles >= unit {
+            let decimals = format!("{:0places$}", cycles % unit);
+            let decimals = decimals.trim_end_matches('0');
+            let point = if decimals.is_empty() { "" } else { "." };
+            return format!("{}{point}{decimals}{suffix}", cycles / unit);
+        }
+    }
+    cycles.to_string()
+}
+
 const KB: u64 = 1000;
 const KIB: u64 = 1024;
 const MB: u64 = 1_000_000;
@@ -496,6 +515,25 @@ impl fmt::Display for FlexibleAccountId {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn displayed_cycles_read_back_as_written() {
+        const T: u128 = 1_000_000_000_000;
+        for (cycles, text) in [
+            (2_010_000_000_000, "2.01T"),
+            (2 * T + 100_000_000, "2.0001T"),
+            (2 * T + 99_999_999, "2.000099999999T"),
+            (4 * T, "4T"),
+            (999_999_999, "999.999999M"),
+            (501_000_000_000, "501B"),
+            (101_000_000, "101M"),
+            (250, "250"),
+            (0, "0"),
+        ] {
+            assert_eq!(display_cycles(cycles), text);
+            assert_eq!(text.parse::<CyclesAmount>().map(|c| c.get()), Ok(cycles));
+        }
+    }
 
     #[test]
     fn cycles_amount_from_str_plain() {

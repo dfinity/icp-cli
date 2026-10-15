@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::calls::{Call, CanisterCalls, RouteTo};
-use crate::parsers::to_token_unit_amount;
+use crate::parsers::{display_cycles, to_token_unit_amount};
 use crate::signal::stop_signal;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
@@ -14,8 +14,8 @@ use ic_management_canister_types::{
 };
 use icp_canister_interfaces::{
     cycles_ledger::{
-        CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterResponse, CreationArgs,
-        SubnetSelectionArg,
+        CYCLES_LEDGER_BLOCK_FEE, CYCLES_LEDGER_PRINCIPAL, CreateCanisterArgs, CreateCanisterError,
+        CreateCanisterResponse, CreationArgs, SubnetSelectionArg,
     },
     cycles_minting_canister::{
         CYCLES_MINTING_CANISTER_CID, CYCLES_MINTING_CANISTER_PRINCIPAL, MEMO_CREATE_CANISTER,
@@ -54,6 +54,25 @@ pub enum CreateOperationError {
 
     #[snafu(display("failed to create canister: {message}"))]
     CreateCanister { message: String },
+
+    /// The cycles ledger refused the creation: the caller's balance does not
+    /// cover it. Typed, rather than folded into [`Self::CreateCanister`], so
+    /// that a command can say how much is missing and where to get it, which
+    /// depends on the network.
+    #[snafu(display(
+        // What it needs counts the ledger's fee in.
+        "not enough cycles: needs {}, has {}",
+        display_cycles(requested.saturating_add(*fee)),
+        display_cycles(*balance)
+    ))]
+    InsufficientCycles {
+        /// The cycles the new canister was to be given.
+        requested: u128,
+        /// What the cycles ledger charges for the creation, on top.
+        fee: u128,
+        /// The caller's balance when it refused.
+        balance: u128,
+    },
 
     #[snafu(display(
         "failed to check whether subnet {subnet} creates canisters through an engine operator"
@@ -337,6 +356,15 @@ impl CreateOperation {
             Decode!(&resp, CreateCanisterResponse).context(CandidDecodeSnafu)?;
         let cid = match resp {
             CreateCanisterResponse::Ok { canister_id, .. } => canister_id,
+            CreateCanisterResponse::Err(CreateCanisterError::InsufficientFunds { balance }) => {
+                return InsufficientCyclesSnafu {
+                    requested: self.cycles(),
+                    fee: CYCLES_LEDGER_BLOCK_FEE,
+                    // A balance past u128 cannot be short of a u128 request.
+                    balance: balance.0.to_u128().unwrap_or(u128::MAX),
+                }
+                .fail();
+            }
             CreateCanisterResponse::Err(err) => {
                 return CreateCanisterSnafu {
                     message: err.format_error(self.cycles()),
@@ -788,6 +816,122 @@ mod tests {
         let bare = Encode!(&settings).unwrap();
         let (as_args,): (MgmtCreateCanisterArgs,) = candid::decode_args(&bare).unwrap();
         assert!(as_args.settings.is_none());
+    }
+
+    /// A cycles ledger whose `create_canister` always answers `reply`, on a
+    /// subnet that creates canisters the ordinary way.
+    struct FakeLedger {
+        reply: CreateCanisterResponse,
+    }
+
+    #[async_trait::async_trait]
+    impl CanisterCalls for FakeLedger {
+        fn caller(&self) -> Principal {
+            Principal::anonymous()
+        }
+
+        async fn update(&self, call: Call) -> Result<Vec<u8>, crate::calls::CallError> {
+            assert_eq!(call.canister, CYCLES_LEDGER_PRINCIPAL);
+            assert_eq!(call.method, "create_canister");
+            Ok(Encode!(&self.reply).unwrap())
+        }
+
+        async fn query(&self, _call: Call) -> Result<Vec<u8>, crate::calls::CallError> {
+            unimplemented!()
+        }
+
+        async fn metadata_section(
+            &self,
+            _canister: Principal,
+            _path: &str,
+            _authority: crate::calls::Authority,
+        ) -> Result<Option<Vec<u8>>, crate::calls::CallError> {
+            unimplemented!()
+        }
+
+        async fn controllers(
+            &self,
+            _canister: Principal,
+        ) -> Result<Option<Vec<Principal>>, crate::calls::CallError> {
+            unimplemented!()
+        }
+
+        async fn module_hash(
+            &self,
+            _canister: Principal,
+        ) -> Result<Option<Vec<u8>>, crate::calls::CallError> {
+            unimplemented!()
+        }
+
+        async fn subnet_of(
+            &self,
+            _canister: Principal,
+        ) -> Result<Principal, crate::calls::CallError> {
+            unimplemented!()
+        }
+
+        async fn subnet_uses_engine_operator(
+            &self,
+            _subnet: Principal,
+        ) -> Result<bool, crate::calls::CallError> {
+            Ok(false)
+        }
+    }
+
+    fn ledger_create(reply: CreateCanisterResponse, cycles: u128) -> CreateOperation {
+        CreateOperation::new(
+            Arc::new(FakeLedger { reply }),
+            Arc::new(crate::random::FirstChoice),
+            CreateTarget::Subnet(Principal::management_canister()),
+            CreateFunding::Cycles(cycles),
+            vec![],
+            Principal::anonymous(),
+        )
+    }
+
+    /// The cycles ledger's refusal for want of cycles comes back typed, with
+    /// what was asked for, the fee on top and the balance, so that a command
+    /// can work out the shortfall; any other refusal keeps its message.
+    #[tokio::test]
+    async fn a_refusal_for_want_of_cycles_says_what_was_needed() {
+        let create = ledger_create(
+            CreateCanisterResponse::Err(CreateCanisterError::InsufficientFunds {
+                balance: Nat::from(500_000_000_000u64),
+            }),
+            2_000_000_000_000,
+        );
+        let err = create
+            .create(&CanisterSettings::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CreateOperationError::InsufficientCycles {
+                    requested: 2_000_000_000_000,
+                    fee: CYCLES_LEDGER_BLOCK_FEE,
+                    balance: 500_000_000_000,
+                }
+            ),
+            "{err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "not enough cycles: needs 2.0001T, has 500B"
+        );
+
+        let create = ledger_create(
+            CreateCanisterResponse::Err(CreateCanisterError::TemporarilyUnavailable),
+            2_000_000_000_000,
+        );
+        let err = create
+            .create(&CanisterSettings::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CreateOperationError::CreateCanister { .. }),
+            "{err}"
+        );
     }
 
     #[test]

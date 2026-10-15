@@ -24,6 +24,7 @@ mod engine;
 mod logging;
 mod options;
 mod render;
+mod shortfall;
 mod telemetry;
 mod version;
 

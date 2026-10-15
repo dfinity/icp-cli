@@ -1,5 +1,6 @@
 use ic_utils::interfaces::ManagementCanister;
 use indoc::formatdoc;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
@@ -85,9 +86,22 @@ async fn canister_top_up() {
             &format!("{}", 10 * TRILLION),
         ])
         .assert()
+        // How many are missing, and how to convert ICP to them, as that
+        // identity on that environment: never a card, off mainnet.
         .stderr(contains(
-            "failed to top up: Insufficient cycles. Requested: 10_000_000_000_000 cycles",
+            "Error: not enough cycles to top up my-canister with 10T cycles.\n\
+             It takes 10.0001T cycles, fees included,\n\
+             and identity financially-challenged has 0.\n\
+             Get 10.1T more, from the anonymous identity, which a local network funds, or\n\
+             from ICP, then run the top-up again:\n\n    \
+             icp cycles transfer 10.1T ",
         ))
+        .stderr(predicates::str::ends_with(
+            " --identity anonymous -e random-environment\n    \
+             icp cycles mint --cycles 10.1T --identity financially-challenged -e \
+             random-environment\n",
+        ))
+        .stderr(contains("card").not())
         .failure();
 
     // top up with reasonable amount

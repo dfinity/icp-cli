@@ -7,7 +7,9 @@ use icp_app::{context::Context, identity::IdentitySelection};
 use icp_canister_interfaces::candid_ui::MAINNET_CANDID_UI_CID;
 use icp_canister_interfaces::engine_canister::engine_canister_id;
 use icp_project::calls::{Call, CallError, CanisterCalls};
-use icp_project::operations::deploy::{DeployParams, DeployReport, deploy, resolve_targets};
+use icp_project::operations::deploy::{
+    DeployError, DeployParams, DeployReport, deploy, resolve_targets,
+};
 use icp_project::parsers::CyclesAmount;
 use icp_project::{
     defer::{Deferred, DeferredError},
@@ -18,6 +20,7 @@ use serde::Serialize;
 use tracing::info;
 
 use crate::options::EnvironmentOpt;
+use crate::shortfall;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
     options::{IdentityOpt, arg_struct_change_help},
@@ -187,6 +190,31 @@ pub(crate) async fn exec(ctx: &Context, args: &DeployArgs) -> Result<(), anyhow:
         for (name, id) in &report.created {
             println!("Created canister {name} with ID {id}");
         }
+    }
+    // Refused for want of cycles: how many are missing, and how to get
+    // them (see `shortfall`).
+    if let Err(DeployError::InsufficientCycles {
+        canisters,
+        required,
+        balance,
+    }) = &result
+        && let Some(hint) = shortfall::Hint::read(
+            ctx,
+            agent.get().await?,
+            *required,
+            *balance,
+            &identity_selection,
+            &icp_app::context::NetworkSelection::Default,
+            &environment_selection,
+        )
+        .await
+    {
+        let plural = if *canisters == 1 { "" } else { "s" };
+        bail!(hint.message(
+            &format!("create {canisters} canister{plural}"),
+            "run the deploy again",
+            Some(("each canister", *canisters)),
+        ));
     }
     result?;
 

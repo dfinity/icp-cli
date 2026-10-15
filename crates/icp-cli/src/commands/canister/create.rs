@@ -21,6 +21,7 @@ use icp_project::operations::create::{
 };
 
 use crate::commands::args;
+use crate::shortfall;
 
 pub(crate) const DEFAULT_CANISTER_CYCLES: u128 = 2 * TRILLION;
 
@@ -243,6 +244,43 @@ impl CreateArgs {
         }
     }
 
+    /// The error for a failed creation: for one refused for want of cycles,
+    /// how many are missing and how to get them (see [`shortfall`]).
+    async fn creation_failed(
+        &self,
+        error: CreateOperationError,
+        ctx: &Context,
+        agent: &ic_agent::Agent,
+    ) -> anyhow::Error {
+        let CreateOperationError::InsufficientCycles {
+            requested,
+            fee,
+            balance,
+        } = &error
+        else {
+            return self.with_recovery_notes(error);
+        };
+        let selections = self.cmd_args.selections();
+        let hint = shortfall::Hint::read(
+            ctx,
+            agent,
+            requested.saturating_add(*fee),
+            *balance,
+            &selections.identity,
+            &selections.network,
+            &selections.environment,
+        )
+        .await;
+        let Some(hint) = hint else {
+            return error.into();
+        };
+        anyhow!(hint.message(
+            "create the canister",
+            "create the canister again",
+            Some(("the canister", 1)),
+        ))
+    }
+
     /// Where the canister goes, once `--engine` has been resolved to the
     /// subnet it stands for (see [`Self::resolve_subnet`]).
     fn create_target(&self, subnet: Option<Principal>) -> CreateTarget {
@@ -345,10 +383,10 @@ async fn create_canister(ctx: &Context, args: &CreateArgs) -> Result<(), anyhow:
 
     let canister_settings = args.canister_settings();
 
-    let id = create_operation
-        .create(&canister_settings)
-        .await
-        .map_err(|error| args.with_recovery_notes(error))?;
+    let id = match create_operation.create(&canister_settings).await {
+        Ok(id) => id,
+        Err(error) => return Err(args.creation_failed(error, ctx, &agent).await),
+    };
 
     if args.quiet {
         println!("{id}");
@@ -430,10 +468,10 @@ async fn create_project_canister(ctx: &Context, args: &CreateArgs) -> Result<(),
         );
     }
 
-    let id = create_operation
-        .create(&canister_settings)
-        .await
-        .map_err(|error| args.with_recovery_notes(error))?;
+    let id = match create_operation.create(&canister_settings).await {
+        Ok(id) => id,
+        Err(error) => return Err(args.creation_failed(error, ctx, &agent).await),
+    };
 
     ctx.host
         .set_canister_id_for_env(&canister, id, &selections.environment)

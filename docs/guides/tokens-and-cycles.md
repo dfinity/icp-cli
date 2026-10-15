@@ -457,6 +457,10 @@ Fees are automatically deducted from your balance when you initiate a transfer.
 
 ## Troubleshooting
 
+**"not enough cycles"**
+
+Creating a canister or topping one up needs more cycles than your balance holds. The error says how many are missing and the commands that make them up, as the identity and on the environment or network you ran with: on mainnet, `icp cycles buy` with a card when one order covers them, and `icp cycles mint` from ICP; on a local network, a transfer from the anonymous identity, which the network funds (an identity made after `icp network start` has nothing until then), and `icp cycles mint`. Cycles bought with a card are delivered on mainnet only. On mainnet, as the anonymous identity, it says to make an identity of your own first. It appears only when a command is refused for want of cycles.
+
 **"Insufficient balance"**
 
 Your account doesn't have enough ICP or cycles. Check your balance:

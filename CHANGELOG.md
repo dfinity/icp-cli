@@ -8,6 +8,7 @@ air-gapped signing
 
 # Unreleased
 
+* feat: when `icp deploy`, `icp canister create` or `icp canister top-up` is refused for want of cycles, the error says how many are missing and gives the commands that make them up, as the identity and on the environment or network the command ran with: on mainnet `icp cycles buy --cycles <missing>` with a card when one order covers them, and `icp cycles mint` from ICP; on a local network a transfer from the anonymous identity, which the network funds, and `icp cycles mint`; elsewhere `icp cycles mint` alone. On mainnet the anonymous identity is told to make an identity of its own instead
 * fix: the command `icp canister create --with-icp` prints to finish an interrupted creation now pastes as printed with an identity, network or environment name starting with `-`, and in PowerShell, fish and elvish as well as POSIX shells. A name no quoting carries in all of them is left as `<your identity>`, with a line asking to fill it in
 
 # v1.7.0

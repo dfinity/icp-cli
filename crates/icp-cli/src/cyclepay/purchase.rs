@@ -732,10 +732,16 @@ pub const MAINNET_HINT: &str = "CyclePay sells cycles on mainnet: use `-n ic`";
 /// depend on how a network reports a canister it does not have, and the
 /// same thing is said however the network was chosen.
 pub fn check_network(gateway: Principal, root_key: &[u8]) -> Result<(), CyclesPurchaseError> {
-    if is_cyclepay(gateway) && root_key != IC_ROOT_KEY.as_slice() {
+    if is_cyclepay(gateway) && !is_mainnet(root_key) {
         return GatewayNotOnThisNetworkSnafu { gateway }.fail();
     }
     Ok(())
+}
+
+/// Whether the network whose answers verify against `root_key` is mainnet:
+/// no other network can sign with mainnet's key.
+pub fn is_mainnet(root_key: &[u8]) -> bool {
+    root_key == IC_ROOT_KEY.as_slice()
 }
 
 /// A replica's IC0301, saying the gateway canister does not exist, becomes

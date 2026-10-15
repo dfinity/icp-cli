@@ -2,10 +2,11 @@
 //!
 //! A vendor integration, kept to this crate: everything about CyclePay's
 //! canisters and their order interface lives under this module, and nothing
-//! outside the `cycles buy` command reaches into it. The CLI carries nothing
-//! of CyclePay's but its backend's canister id: the Payment Link, the order
-//! limits and the fees are read from the gateway, so any canister serving the
-//! same interface can stand in for it.
+//! outside the `cycles buy` command reaches into it but the shortfall hint,
+//! which asks what one order buys (see `crate::shortfall`). The CLI carries
+//! nothing of CyclePay's but its backend's canister id: the Payment Link, the
+//! order limits and the fees are read from the gateway, so any canister
+//! serving the same interface can stand in for it.
 //!
 //! - [`interface`]: the backend canister's Candid, as far as the CLI uses it,
 //!   written down as the contract a gateway serves in `cycles_gateway.did`.

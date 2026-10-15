@@ -46,6 +46,7 @@ use crate::operations::{
     sync::{SyncOperationError, sync_many},
     task::{Reporter, Task, TaskReporter, notice},
 };
+use crate::parsers::display_cycles;
 use crate::project::ArgsField;
 use crate::{CanisterArgsToBytesError, ProjectLoadError};
 
@@ -80,6 +81,25 @@ pub enum DeployError {
 
     #[snafu(transparent)]
     Create { source: CreateOperationError },
+
+    /// The cycles ledger refused to create `canisters` of them: the caller's
+    /// balance does not cover them. What they need together, so that a
+    /// command can say how much is missing; each one's own refusal is on its
+    /// task.
+    #[snafu(display(
+        "not enough cycles to create {canisters} canister{}: needs {}, has {}",
+        if *canisters == 1 { "" } else { "s" },
+        display_cycles(*required),
+        display_cycles(*balance)
+    ))]
+    InsufficientCycles {
+        canisters: usize,
+        /// What they need together, the cycles ledger's fee on each included.
+        required: u128,
+        /// The lowest balance any refusal reported: what is left once the
+        /// creations that went through have been paid for.
+        balance: u128,
+    },
 
     #[snafu(transparent)]
     RecordCanisterId { source: SetCanisterIdForEnvError },
@@ -468,6 +488,7 @@ async fn create_canisters(
     // very loss this loop exists to prevent. So no step below short-circuits the
     // loop: the first error is held back and returned once the stream is empty.
     let mut error: Option<DeployError> = None;
+    let mut refused = Refused::default();
     let mut idx = 0;
     while let Some(res) = futs.next().await {
         match res {
@@ -507,14 +528,58 @@ async fn create_canisters(
                 }
             }
             Err(err) => {
+                refused.note(&err);
                 error.get_or_insert(err.into());
             }
         }
         idx += 1;
     }
-    match error {
-        Some(err) => Err(err),
-        None => Ok(()),
+    refused.result(error)
+}
+
+/// The creations the cycles ledger refused for want of cycles, gathered so
+/// that the error can say what all of them need, not only the first.
+#[derive(Default)]
+struct Refused {
+    canisters: usize,
+    required: u128,
+    /// The lowest balance any of them reported.
+    balance: Option<u128>,
+}
+
+impl Refused {
+    fn note(&mut self, err: &CreateOperationError) {
+        if let CreateOperationError::InsufficientCycles {
+            requested,
+            fee,
+            balance,
+        } = err
+        {
+            self.canisters += 1;
+            self.required = self.required.saturating_add(requested.saturating_add(*fee));
+            self.balance = Some(self.balance.map_or(*balance, |lowest| lowest.min(*balance)));
+        }
+    }
+
+    /// How the creations end, given the first error among them: that error,
+    /// unless it is a refusal for want of cycles, which stands for all of
+    /// them.
+    fn result(self, first: Option<DeployError>) -> Result<(), DeployError> {
+        match (first, self.balance) {
+            (
+                Some(DeployError::Create {
+                    source: CreateOperationError::InsufficientCycles { .. },
+                }),
+                Some(balance),
+            ) => InsufficientCyclesSnafu {
+                canisters: self.canisters,
+                required: self.required,
+                balance,
+            }
+            .fail(),
+            (Some(err), _) => Err(err),
+            (None, _) => Ok(()),
+        }
     }
 }
 
@@ -818,6 +883,93 @@ fn is_serving_reject(err: &CallError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const T: u128 = 1_000_000_000_000;
+    const B: u128 = 1_000_000_000;
+    const FEE: u128 = 100_000_000;
+
+    /// The cycles ledger's refusal of a 2T creation from `balance`.
+    fn refusal(balance: u128) -> CreateOperationError {
+        CreateOperationError::InsufficientCycles {
+            requested: 2 * T,
+            fee: FEE,
+            balance,
+        }
+    }
+
+    fn other() -> CreateOperationError {
+        CreateOperationError::CreateCanister {
+            message: "temporarily unavailable".to_owned(),
+        }
+    }
+
+    /// The creations failing with `errors`, in order, as the loop over them
+    /// ends.
+    fn ending(errors: Vec<CreateOperationError>) -> Result<(), DeployError> {
+        let (mut refused, mut first) = (Refused::default(), None);
+        for err in errors {
+            refused.note(&err);
+            first.get_or_insert(DeployError::from(err));
+        }
+        refused.result(first)
+    }
+
+    /// Every refusal counts, fees included, against the lowest balance any
+    /// of them reported, whichever came first.
+    #[test]
+    fn refusals_for_want_of_cycles_add_up() {
+        for balances in [[1500 * B, 500 * B], [500 * B, 1500 * B]] {
+            let err = ending(balances.map(refusal).into()).unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    DeployError::InsufficientCycles {
+                        canisters: 2,
+                        required: 4_000_200_000_000,
+                        balance: 500_000_000_000,
+                    }
+                ),
+                "{err}"
+            );
+            assert_eq!(
+                err.to_string(),
+                "not enough cycles to create 2 canisters: needs 4.0002T, has 500B"
+            );
+        }
+        assert_eq!(
+            ending(vec![refusal(0)]).unwrap_err().to_string(),
+            "not enough cycles to create 1 canister: needs 2.0001T, has 0"
+        );
+    }
+
+    /// The first error decides: another one is returned as it is, and a
+    /// refusal for want of cycles stands for the refusals alone.
+    #[test]
+    fn the_first_error_decides() {
+        let err = ending(vec![other(), refusal(0)]).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DeployError::Create {
+                    source: CreateOperationError::CreateCanister { .. }
+                }
+            ),
+            "{err}"
+        );
+        let err = ending(vec![refusal(0), other()]).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DeployError::InsufficientCycles {
+                    canisters: 1,
+                    required: 2_000_100_000_000,
+                    balance: 0,
+                }
+            ),
+            "{err}"
+        );
+        assert!(ending(vec![]).is_ok());
+    }
 
     fn reject(code: Option<&str>, message: &str) -> CallError {
         CallError::Rejected {

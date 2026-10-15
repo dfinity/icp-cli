@@ -286,9 +286,24 @@ The sections above explain each step in detail.
 
 ## Troubleshooting
 
-**"Insufficient cycles"**
+**"not enough cycles"**
 
-Your canister needs more cycles. Top up using:
+Your identity's cycles balance cannot cover what the command asked for: creating canisters in `icp deploy` or `icp canister create` (2T each by default, plus the cycles ledger's 0.0001T fee), or `icp canister top-up`. The error says what is missing and gives the commands that make it up, with a small margin, as the identity and on the environment you ran with, so you can paste them as they are. On mainnet that is buying the cycles with a card, or converting ICP:
+
+```text
+Error: not enough cycles to create 1 canister.
+It takes 2.0001T cycles, fees included, and the identity has 500B.
+Get 1.51T more, with a card or from ICP, then run the deploy again:
+
+    icp cycles buy --cycles 1.51T -e ic
+    icp cycles mint --cycles 1.51T -e ic
+```
+
+When more are missing than one card order buys, the error gives only the command that converts ICP, and says how much one order buys. When the balance would cover a canister given fewer cycles, at least the 0.5T a creation costs, the error says so. As the anonymous identity, which anyone can spend from, the error instead says to make an identity of your own and use it.
+
+**"Canister out of cycles"**
+
+A canister that has run low needs a top-up from your balance:
 
 ```bash
 icp canister top-up my-canister --amount 1T -e ic

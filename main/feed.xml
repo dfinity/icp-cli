@@ -6,15 +6,39 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Wed, 14 Oct 2026 13:38:34 GMT</lastBuildDate>
-    <pubDate>Wed, 14 Oct 2026 13:37:28 GMT</pubDate>
+    <lastBuildDate>Thu, 15 Oct 2026 01:07:53 GMT</lastBuildDate>
+    <pubDate>Thu, 15 Oct 2026 01:06:45 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Wed, 14 Oct 2026 13:37:28 GMT</pubDate>
+      <pubDate>Thu, 15 Oct 2026 01:06:45 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Environment Variables Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
+      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
+      <pubDate>Thu, 15 Oct 2026 01:06:45 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Deploying to IC Mainnet</title>
+      <link>https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</link>
+      <description>Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.</description>
+      <pubDate>Thu, 15 Oct 2026 01:06:45 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Tokens and Cycles</title>
+      <link>https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</link>
+      <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
+      <pubDate>Thu, 15 Oct 2026 01:06:45 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -23,14 +47,6 @@
       <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
       <pubDate>Wed, 14 Oct 2026 13:37:28 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Environment Variables Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
-      <description>All environment variables used by icp-cli during builds, deployments, and script execution.</description>
-      <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/environment-variables/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -202,14 +218,6 @@
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
-      <title>Tokens and Cycles</title>
-      <link>https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</link>
-      <description>Manage ICP tokens and cycles, including conversions, balance checks, and topping up canisters.</description>
-      <pubDate>Tue, 14 Jul 2026 15:29:59 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/tokens-and-cycles/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
       <title>Local Development</title>
       <link>https://cli.internetcomputer.org/main/guides/local-development/</link>
       <description>Day-to-day edit-build-deploy workflow for developing and testing canisters on a local ICP network.</description>
@@ -279,14 +287,6 @@
       <description>Back up, transfer, and restore full canister state using snapshots.</description>
       <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/canister-snapshots/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Deploying to IC Mainnet</title>
-      <link>https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</link>
-      <description>Set up an identity, obtain cycles, and deploy canisters to the Internet Computer mainnet.</description>
-      <pubDate>Mon, 16 Mar 2026 22:48:57 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-mainnet/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

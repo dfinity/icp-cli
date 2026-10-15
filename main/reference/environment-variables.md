@@ -191,6 +191,10 @@ export ENGINE_CANISTER_ID=<canister-id>
 icp deploy -e staging --engine my-engine
 ```
 
+### `ICP_CYCLES_GATEWAY_CANISTER_ID`
+
+The cycles gateway canister that `icp cycles buy` [buys cycles with a card](../guides/tokens-and-cycles.md#buying-cycles-with-a-card) through: any canister serving the [cycles gateway interface](https://github.com/dfinity/icp-cli/blob/main/crates/icp-cli/src/cyclepay/cycles_gateway.did). Defaults to CyclePay's backend canister on mainnet (`2bwus-iiaaa-aaaac-bee3a-cai`). `icp cycles buy --gateway` takes precedence. An empty value is ignored; an invalid one is an error, so a typo never sends an order to the default gateway. Everything else about the gateway, its payment page, its per-order range and its fees, is read from the gateway itself.
+
 ### `NO_COLOR`
 
 When set to any value, icp-cli prints its output without colors, following the [`NO_COLOR`](https://no-color.org/) convention. Colors are also turned off when output is not a terminal.

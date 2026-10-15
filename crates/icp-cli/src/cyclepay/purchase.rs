@@ -203,6 +203,13 @@ pub enum CyclesPurchaseError {
     #[snafu(display("interrupted while waiting for order {}", order.id))]
     Interrupted { order: Box<OrderView> },
 
+    /// Interrupted before the gateway answered `create_order`: the order may
+    /// or may not have been made.
+    #[snafu(display(
+        "interrupted before cycles gateway {gateway} answered whether it made the order"
+    ))]
+    InterruptedPlacing { gateway: Principal },
+
     #[snafu(display(
         "gave up waiting for order {} (last status: {})", order.id, order.status_text()
     ))]
@@ -505,10 +512,16 @@ pub async fn quote_target(
 /// The backend answers an open order of the caller's for the same amount and
 /// destination again rather than making a second one, so repeating a run
 /// resumes it.
+///
+/// `interrupt` is raced against the call, which a stalled network can hold
+/// for minutes: if it comes first, the call is abandoned with
+/// [`CyclesPurchaseError::InterruptedPlacing`], and whether the order was
+/// made is not known.
 pub async fn place_order(
     calls: &dyn CanisterCalls,
     gateway: &Gateway,
     amount: Money,
+    interrupt: impl Future<Output = ()>,
 ) -> Result<OrderView, CyclesPurchaseError> {
     let Currency::Usd = amount.currency;
     let args = CreateOrderArgs {
@@ -519,16 +532,21 @@ pub async fn place_order(
         confirm_system_canister: None,
     };
     let canister = gateway.canister;
-    let (result,): (CreateOrderResult,) = update_typed(
+    let call = update_typed(
         calls,
         canister,
         CREATE_ORDER_METHOD,
         (args,),
         RouteTo::Callee,
         0,
-    )
-    .await
-    .map_err(|source| {
+    );
+    // An answer that comes with the interrupt is taken: the order is known.
+    let answered = select! {
+        biased;
+        answered = call => answered,
+        _ = interrupt => return InterruptedPlacingSnafu { gateway: canister }.fail(),
+    };
+    let (result,): (CreateOrderResult,) = answered.map_err(|source| {
         map_absent(source, canister, |source| {
             CyclesPurchaseError::CreateOrder {
                 gateway: canister,

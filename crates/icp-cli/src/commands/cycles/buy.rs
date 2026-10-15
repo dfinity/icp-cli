@@ -1,4 +1,4 @@
-use std::io::{IsTerminal, stderr, stdin, stdout};
+use std::io::{self, IsTerminal, stderr, stdin, stdout};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail};
@@ -19,9 +19,12 @@ use icp_project::signal::stop_signal;
 use num_traits::ToPrimitive;
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use tokio::select;
 use tracing::{info, warn};
 
-use crate::commands::args::TokenCommandArgs;
+use crate::commands::args::{
+    PasteFlags, TokenCommandArgs, TokenCommandSelections, selection_flags,
+};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
     CardOrderStatus, Destination, cycles_gateway_canister_id, is_cyclepay,
@@ -244,8 +247,18 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     let output = Output::of(args);
 
     let identity = identity_name(ctx, &selections.identity).await;
-    let (order, quote) =
-        create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
+    let flags = paste_flags(&selections, identity.as_deref());
+    let (order, quote, interrupt) = create_order(
+        calls,
+        &gateway,
+        buyer,
+        identity.as_deref(),
+        target,
+        args,
+        &flags,
+        &mut TerminalPrompt,
+    )
+    .await?;
     announce_payable(&order, &quote, output, args.no_open);
 
     if args.no_wait {
@@ -255,7 +268,10 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         return Ok(());
     }
 
-    wait_and_report(calls, &agent, &gateway, buyer, order, output, ctx.debug).await
+    wait_and_report(
+        calls, &agent, &gateway, buyer, order, output, ctx.debug, interrupt,
+    )
+    .await
 }
 
 /// What the gateway is called in prose. CyclePay's own is named, with
@@ -312,13 +328,35 @@ fn reported(error: CyclesPurchaseError) -> anyhow::Error {
     anyhow!("{}", paragraphs(&[&error.to_string()]))
 }
 
+/// The flags that select what this run selected, for a command printed to
+/// be pasted. The identity is named even when it was the default: only the
+/// identity that made an order can read it, and the default can change.
+fn paste_flags(selections: &TokenCommandSelections, identity: Option<&str>) -> PasteFlags {
+    let identity = match (&selections.identity, identity) {
+        (IdentitySelection::Default, Some(name)) => IdentitySelection::Named(name.to_owned()),
+        (selected, _) => selected.clone(),
+    };
+    selection_flags(&identity, &selections.network, &selections.environment)
+}
+
+/// `commands`, set apart in `message`, and a word on any blank in `flags`
+/// that the reader fills in.
+fn commands_with(message: &mut Message, commands: &[String], flags: &PasteFlags) {
+    message.commands(commands);
+    for note in flags.notes() {
+        message.prose(&note);
+    }
+}
+
 /// What becomes of an order the command is no longer waiting on. The order
 /// needs nothing from the command: the gateway delivers once the payment
 /// lands, so the buyer is told where the cycles will show.
 const AFTER_HINT: &str = "Once the order is paid, the cycles land on your identity's \
                           cycles-ledger account; `icp cycles balance` shows them.";
 
-/// Quote, confirm, create. Returns the order with the quote it was placed on.
+/// Quote, confirm, create. Returns the order with the quote it was placed on,
+/// and what the wait is to stop on.
+#[allow(clippy::too_many_arguments)]
 async fn create_order(
     calls: &dyn CanisterCalls,
     gateway: &Gateway,
@@ -326,25 +364,127 @@ async fn create_order(
     identity: Option<&str>,
     target: Target,
     args: &BuyArgs,
-) -> Result<(OrderView, Quote), anyhow::Error> {
+    flags: &PasteFlags,
+    prompt: &mut dyn Prompt,
+) -> Result<(OrderView, Quote, Interrupt), anyhow::Error> {
     let quote = purchase::quote_target(calls, gateway, target)
         .await
         .map_err(reported)?;
     // A script that said --yes reads the figures off --json; -q asks for
     // nothing but the link.
     let speak = !args.yes || !(args.quiet || args.json);
-    confirm(&quote, target, gateway, buyer, identity, args.yes, speak)?;
-    match purchase::place_order(calls, gateway, quote.amount).await {
-        Ok(order) => Ok((order, quote)),
+    let interrupt = confirm(
+        &quote, target, gateway, buyer, identity, args.yes, speak, prompt,
+    )?;
+    // Caught from here on, prompt or not: a stop while the order is made
+    // must not end the process before it can say the order may exist.
+    let mut interrupt = interrupt.caught()?;
+    let names = Names::of(gateway);
+    let placed = purchase::place_order(calls, gateway, quote.amount, interrupt.received()).await;
+    match placed {
+        Ok(order) => Ok((order, quote, interrupt)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
-            bail!("{} refused the order: {error}", Names::of(gateway).subject)
+            bail!("{} refused the order: {error}", names.subject)
+        }
+        Err(CyclesPurchaseError::InterruptedPlacing { .. }) => {
+            // A terminal echoes the ^C where the cursor is: the error starts
+            // a line of its own.
+            if stderr().is_terminal() {
+                eprintln!();
+            }
+            bail!("{}", not_known(&quote, names, flags))
         }
         Err(error) => Err(reported(error)),
     }
 }
 
-/// Show what is about to happen and ask. Without a terminal there is nobody
-/// to ask, so `--yes` is required.
+/// What to say when the command was stopped before the gateway answered
+/// whether it made the order: that it may or may not have, and how to find
+/// out. CyclePay hands an open order back to the identity that asks again
+/// for the same amount within the hour, rather than making a second one.
+fn not_known(quote: &Quote, names: Names, flags: &PasteFlags) -> String {
+    let mut message = Message::default();
+    message.prose(&format!(
+        "stopped before {} answered; the order may or may not exist.",
+        names.name
+    ));
+    if names.cyclepay {
+        message.prose(
+            "Nothing is charged unless it is paid. To find out, run the command again within \
+             the hour with the same amount: CyclePay hands back the open order if it made one, \
+             rather than making another.",
+        );
+        let again = format!(
+            "icp cycles buy --amount {}{}",
+            quote.amount.to_decimal_string(),
+            flags.text
+        );
+        commands_with(&mut message, &[again], flags);
+    } else {
+        message.prose(
+            "Nothing is charged unless it is paid, and an unpaid order lapses at its deadline.",
+        );
+    }
+    message.text()
+}
+
+/// The answer to the confirmation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Answer {
+    Yes,
+    No,
+    /// Ctrl-C, once it is caught.
+    Interrupted,
+}
+
+/// Where the confirmation is asked: the terminal, or a stand-in under test.
+trait Prompt {
+    /// Whether stdin, which the answer is read on, and stderr, which the
+    /// question is drawn on, are terminals.
+    fn terminals(&self) -> (bool, bool);
+
+    /// Ask `question`.
+    fn ask(&mut self, question: &str) -> Result<Answer, dialoguer::Error>;
+
+    /// Leave the question unanswered after Ctrl-C: show the cursor it hid,
+    /// and end its line.
+    fn abandon(&mut self);
+}
+
+/// The prompt on the terminal.
+struct TerminalPrompt;
+
+impl Prompt for TerminalPrompt {
+    fn terminals(&self) -> (bool, bool) {
+        (stdin().is_terminal(), stderr().is_terminal())
+    }
+
+    fn ask(&mut self, question: &str) -> Result<Answer, dialoguer::Error> {
+        match Confirm::new()
+            .with_prompt(question)
+            .default(false)
+            .interact()
+        {
+            Ok(true) => Ok(Answer::Yes),
+            Ok(false) => Ok(Answer::No),
+            // Ctrl-C, read as an answer: the prompt leaves its cursor hidden
+            // and its line open.
+            Err(dialoguer::Error::IO(e)) if e.kind() == io::ErrorKind::Interrupted => {
+                Ok(Answer::Interrupted)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn abandon(&mut self) {
+        let _ = Term::stderr().show_cursor();
+        eprintln!();
+    }
+}
+
+/// Show what is about to happen and ask. Without a terminal to ask on there
+/// is nobody to ask, so `--yes` is required. Returns what the wait is to
+/// stop on.
 #[allow(clippy::too_many_arguments)]
 fn confirm(
     quote: &Quote,
@@ -354,7 +494,8 @@ fn confirm(
     identity: Option<&str>,
     yes: bool,
     speak: bool,
-) -> Result<(), anyhow::Error> {
+    prompt: &mut dyn Prompt,
+) -> Result<Interrupt, anyhow::Error> {
     let names = Names::of(gateway);
     if speak {
         for line in quote_block(quote, target, gateway, buyer, identity) {
@@ -367,30 +508,105 @@ fn confirm(
         warn!("{warning}");
     }
     if !speak {
-        return Ok(());
+        return Ok(Interrupt::later());
     }
 
     if yes {
         info!("Proceeding without confirmation (--yes).");
-        return Ok(());
+        return Ok(Interrupt::later());
     }
-    if !stdin().is_terminal() {
-        bail!(
+    let (stdin_is_terminal, stderr_is_terminal) = prompt.terminals();
+    if let Some(why) = cannot_prompt(stdin_is_terminal, stderr_is_terminal) {
+        bail!("{}", paragraphs(&[why]));
+    }
+    // Said apart from the question, which stays short: a question wider
+    // than the terminal is drawn again on every keypress.
+    info!("Nothing is charged until you pay on {}.", names.page);
+    // Caught before the question is asked, so that Ctrl-C is an answer to
+    // it rather than the end of the process.
+    let interrupt = Interrupt::catch()?;
+    match prompt.ask("Create this order?")? {
+        Answer::Yes => Ok(interrupt),
+        Answer::No => bail!("no order created"),
+        Answer::Interrupted => {
+            prompt.abandon();
+            bail!("no order created")
+        }
+    }
+}
+
+/// Why the confirmation cannot be asked, if it cannot: the answer is read on
+/// stdin and the question drawn on stderr, so both must be a terminal.
+fn cannot_prompt(stdin_is_terminal: bool, stderr_is_terminal: bool) -> Option<&'static str> {
+    match (stdin_is_terminal, stderr_is_terminal) {
+        (true, true) => None,
+        (true, false) => Some(
+            "Refusing to create an order without confirmation: the prompt is drawn on stderr, \
+             which is not a terminal here. Use --yes to proceed.",
+        ),
+        (false, _) => Some(
             "Refusing to create an order without confirmation in a non-interactive context. \
-             Use --yes to proceed."
-        );
+             Use --yes to proceed.",
+        ),
     }
-    let confirmed = Confirm::new()
-        .with_prompt(format!(
-            "Create this order? Nothing is charged until you pay on {}.",
-            names.page
-        ))
-        .default(false)
-        .interact()?;
-    if !confirmed {
-        bail!("no order created");
+}
+
+/// Ctrl-C, or a stop signal, for the order's creation, the wait and the
+/// balance read after it to stop on.
+///
+/// Catching Ctrl-C is what lets the prompt read it as an answer: left alone,
+/// it ends the process with the prompt's cursor hidden. Once caught it stays
+/// caught for the life of the process, so everything after the prompt must
+/// race its work against [`Interrupt::received`]; the same listeners are
+/// handed on, so that a stop sent between two steps is not lost.
+struct Interrupt {
+    #[cfg(unix)]
+    caught: Option<(tokio::signal::unix::Signal, tokio::signal::unix::Signal)>,
+}
+
+impl Interrupt {
+    /// Nothing caught yet.
+    fn later() -> Self {
+        Self {
+            #[cfg(unix)]
+            caught: None,
+        }
     }
-    Ok(())
+
+    /// Catch Ctrl-C and SIGTERM from now on. Only on Unix: Windows hands a
+    /// caught Ctrl-C to no reader, so the prompt there is left as it is, and
+    /// the steps after it listen as icp-cli's other waits do.
+    fn catch() -> io::Result<Self> {
+        Self::later().caught()
+    }
+
+    /// Caught from now on, if not already.
+    fn caught(self) -> io::Result<Self> {
+        #[cfg(unix)]
+        if self.caught.is_none() {
+            use tokio::signal::unix::{SignalKind, signal};
+            return Ok(Self {
+                caught: Some((
+                    signal(SignalKind::interrupt())?,
+                    signal(SignalKind::terminate())?,
+                )),
+            });
+        }
+        Ok(self)
+    }
+
+    /// The next stop: one sent since the last was taken counts.
+    async fn received(&mut self) {
+        #[cfg(unix)]
+        if let Some((interrupt, terminate)) = &mut self.caught {
+            select! {
+                _ = interrupt.recv() => {}
+                _ = terminate.recv() => {}
+            }
+            return;
+        }
+        stop_signal().await
+    }
 }
 
 /// What to say of a rate the gateway has not refreshed for longer than it
@@ -541,6 +757,7 @@ async fn wait_and_report(
     order: OrderView,
     output: Output,
     debug: bool,
+    mut interrupt: Interrupt,
 ) -> Result<(), anyhow::Error> {
     let names = Names::of(gateway);
     let id = order.id.clone();
@@ -570,7 +787,7 @@ async fn wait_and_report(
         &id,
         Some(order),
         &options,
-        stop_signal(),
+        interrupt.received(),
         on_phase,
     );
     let result = match &bar {
@@ -627,7 +844,7 @@ async fn wait_and_report(
         Err(error) => return Err(reported(error)),
     };
 
-    report_end(agent, buyer, &order, output, names).await
+    report_end(agent, buyer, &order, output, names, &mut interrupt).await
 }
 
 /// How a wait ended other than in a delivery.
@@ -675,18 +892,24 @@ async fn report_end(
     order: &OrderView,
     output: Output,
     names: Names,
+    interrupt: &mut Interrupt,
 ) -> Result<(), anyhow::Error> {
     // The buyer's balance says something only when the cycles went there:
     // an order made on CyclePay's site can top up a canister, or credit
     // another principal.
     let to_buyer = order.destination == Some(Destination::Ledger(buyer));
     let balance = if order.status == Some(CardOrderStatus::Delivered) && to_buyer {
-        match get_raw_balance(agent, CYCLES_LEDGER_PRINCIPAL, buyer, None).await {
-            Ok(balance) => balance.0.to_u128(),
-            Err(e) => {
-                warn!("Cycles were delivered, but the balance could not be read: {e}");
-                None
-            }
+        // A stop while the balance is read leaves it out, rather than
+        // waiting on a read the network may hold for minutes.
+        select! {
+            read = get_raw_balance(agent, CYCLES_LEDGER_PRINCIPAL, buyer, None) => match read {
+                Ok(balance) => balance.0.to_u128(),
+                Err(e) => {
+                    warn!("Cycles were delivered, but the balance could not be read: {e}");
+                    None
+                }
+            },
+            _ = interrupt.received() => None,
         }
     } else {
         None
@@ -1226,6 +1449,168 @@ mod tests {
         );
     }
 
+    const BUYER: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+
+    fn quote() -> Quote {
+        Quote {
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            fee: Money::from_minor_units(59, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            cycles: 6_959_866_863_905,
+            rate: Rate {
+                xdr_usd_x10000: 13_520,
+                stale: false,
+                age: None,
+            },
+        }
+    }
+
+    /// The flags of a run on mainnet as the default identity, `alice`.
+    fn alice_on_ic() -> PasteFlags {
+        let selections = TokenCommandSelections {
+            environment: icp_project::host::EnvironmentSelection::Default,
+            network: icp_app::context::NetworkSelection::Named("ic".into()),
+            identity: IdentitySelection::Default,
+        };
+        paste_flags(&selections, Some("alice"))
+    }
+
+    /// Every line within 80 columns, the first leaving room for `Error: `;
+    /// commands on lines of their own, indented, with a blank line either
+    /// side; and no backticks.
+    fn assert_laid_out(message: &str) {
+        let lines: Vec<&str> = message.lines().collect();
+        for (n, line) in lines.iter().enumerate() {
+            let room = if n == 0 { 80 - "Error: ".len() } else { 80 };
+            assert!(
+                line.chars().count() <= room || line.starts_with("    icp "),
+                "{n}: {line}\n{message}"
+            );
+            if line.starts_with("    ") {
+                assert!(line.starts_with("    icp "), "{message}");
+                assert!(
+                    lines[n - 1].is_empty() || lines[n - 1].starts_with("    "),
+                    "{message}"
+                );
+            }
+        }
+        assert!(!message.contains('`'), "{message}");
+    }
+
+    /// A prompt that answers as told, and remembers what was done with it.
+    struct FakePrompt {
+        terminals: (bool, bool),
+        answer: Answer,
+        /// Press Ctrl-C while the question is up: SIGINT to this process,
+        /// which ends it unless something catches the signal.
+        ctrl_c: bool,
+        asked: bool,
+        abandoned: bool,
+    }
+
+    impl FakePrompt {
+        fn answering(answer: Answer) -> Self {
+            Self {
+                terminals: (true, true),
+                answer,
+                ctrl_c: false,
+                asked: false,
+                abandoned: false,
+            }
+        }
+    }
+
+    impl Prompt for FakePrompt {
+        fn terminals(&self) -> (bool, bool) {
+            self.terminals
+        }
+
+        fn ask(&mut self, _question: &str) -> Result<Answer, dialoguer::Error> {
+            self.asked = true;
+            #[cfg(unix)]
+            if self.ctrl_c {
+                nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
+            }
+            Ok(self.answer)
+        }
+
+        fn abandon(&mut self) {
+            self.abandoned = true;
+        }
+    }
+
+    /// Confirm the quote on CyclePay's gateway, without `--yes`, at `prompt`.
+    fn confirm_at(prompt: &mut FakePrompt) -> Result<Interrupt, anyhow::Error> {
+        let quote = quote();
+        confirm(
+            &quote,
+            Target::Spend(quote.amount),
+            &gateway_at(CYCLES_GATEWAY_CID),
+            Principal::from_text(BUYER).unwrap(),
+            None,
+            false,
+            true,
+            prompt,
+        )
+    }
+
+    /// The prompt needs a terminal to read the answer on and one to draw the
+    /// question on: stdin and stderr. Either redirected (`2>&1 | tee` sends
+    /// stderr down a pipe) is a refusal that names `--yes`, not an IO error,
+    /// and the question is never asked.
+    #[tokio::test]
+    async fn the_prompt_needs_stdin_and_stderr_on_a_terminal() {
+        assert_eq!(cannot_prompt(true, true), None);
+        for terminals in [(true, false), (false, true), (false, false)] {
+            let mut prompt = FakePrompt {
+                terminals,
+                ..FakePrompt::answering(Answer::Yes)
+            };
+            let err = confirm_at(&mut prompt).err().unwrap().to_string();
+            assert_eq!(
+                Some(err.clone()),
+                cannot_prompt(terminals.0, terminals.1).map(|why| paragraphs(&[why])),
+                "{terminals:?}"
+            );
+            assert!(err.lines().all(|line| line.chars().count() <= 80), "{err}");
+            assert!(
+                err.replace('\n', " ").contains("Use --yes to proceed"),
+                "{err}"
+            );
+            assert!(!prompt.asked, "{terminals:?}");
+        }
+        let mut prompt = FakePrompt {
+            terminals: (true, false),
+            ..FakePrompt::answering(Answer::Yes)
+        };
+        let err = confirm_at(&mut prompt).err().unwrap().to_string();
+        assert!(err.replace('\n', " ").contains("drawn on stderr"), "{err}");
+    }
+
+    /// Ctrl-C at the question is an answer, not the end of the process: the
+    /// signal is caught before the question is asked (were it not, SIGINT
+    /// would end this test binary), the prompt gives the cursor back, and no
+    /// order is made.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ctrl_c_at_the_prompt_is_an_answer() {
+        let mut prompt = FakePrompt {
+            ctrl_c: true,
+            ..FakePrompt::answering(Answer::Interrupted)
+        };
+        let err = confirm_at(&mut prompt).err().unwrap();
+        assert_eq!(err.to_string(), "no order created");
+        assert!(prompt.asked && prompt.abandoned);
+
+        let mut prompt = FakePrompt::answering(Answer::No);
+        let err = confirm_at(&mut prompt).err().unwrap();
+        assert_eq!(err.to_string(), "no order created");
+        assert!(!prompt.abandoned);
+
+        let mut prompt = FakePrompt::answering(Answer::Yes);
+        assert!(confirm_at(&mut prompt).is_ok());
+    }
+
     /// Exactly one of --amount and --cycles, said as such when neither is
     /// given; and a negative value of either refused by clap in the same
     /// words, the form with a suffix included, rather than read as a flag.
@@ -1306,6 +1691,32 @@ mod tests {
         assert_eq!(format_age(Duration::from_secs(90)), "1 minute");
         assert_eq!(format_age(Duration::from_secs(5 * 3600)), "5 hours");
         assert_eq!(format_age(Duration::from_secs(3 * 86_400)), "3 days");
+    }
+
+    /// Stopped before the gateway answered whether it made the order, the
+    /// command says it may or may not have, and, on CyclePay, how to find
+    /// out: the same amount asked for again within the hour hands the open
+    /// order back.
+    #[test]
+    fn stopped_while_ordering_says_the_order_may_exist() {
+        let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        let said = not_known(&quote(), names, &alice_on_ic());
+        assert_eq!(
+            said,
+            "\
+stopped before CyclePay answered; the order may or may not exist.
+Nothing is charged unless it is paid. To find out, run the command again within
+the hour with the same amount: CyclePay hands back the open order if it made
+one, rather than making another.
+
+    icp cycles buy --amount 10.00 --identity alice -n ic"
+        );
+        assert_laid_out(&said);
+        let other = Names::of(&gateway_at("ryjl3-tyaaa-aaaaa-aaaba-cai"));
+        let said = not_known(&quote(), other, &alice_on_ic());
+        assert!(said.contains("may or may not exist"), "{said}");
+        assert!(!said.contains("icp cycles buy"), "{said}");
+        assert_laid_out(&said);
     }
 
     /// An error that is the whole story is wrapped to 80 columns, the

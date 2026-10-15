@@ -139,6 +139,9 @@ struct FakeBackend {
     refusal: Mutex<Option<CallError>>,
     /// Never answers `order_status`, as a backend behind a stalled connection.
     stall_polls: bool,
+    /// Never answers `create_order`, as a backend behind a stalled
+    /// connection.
+    stall_creates: bool,
 }
 
 impl FakeBackend {
@@ -209,6 +212,9 @@ impl CanisterCalls for FakeBackend {
         self.record(&call)?;
         match call.method.as_str() {
             CREATE_ORDER_METHOD => {
+                if self.stall_creates {
+                    pending::<()>().await;
+                }
                 let reply = self
                     .create
                     .lock()
@@ -663,7 +669,9 @@ async fn quote_receive_beyond_the_maximum_names_what_it_buys() {
 #[tokio::test]
 async fn place_order_sends_the_amount_to_the_callers_ledger_account() {
     let fake = FakeBackend::default().creates(vec![created("co-1", 2500)]);
-    let order = place_order(&fake, &gateway(), usd(2500)).await.unwrap();
+    let order = place_order(&fake, &gateway(), usd(2500), pending())
+        .await
+        .unwrap();
     assert_eq!(order.id, "co-1");
     assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));
     assert_eq!(order.amount, usd(2500));
@@ -698,7 +706,9 @@ async fn place_order_hands_out_the_gateways_payment_page_as_it_is() {
     };
     order.payment_url = "https://pay.example/checkout/abc?ref=xyz".to_owned();
     let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
-    let order = place_order(&fake, &gateway(), usd(2500)).await.unwrap();
+    let order = place_order(&fake, &gateway(), usd(2500), pending())
+        .await
+        .unwrap();
     assert_eq!(
         order.checkout_url.as_deref(),
         Some("https://pay.example/checkout/abc?ref=xyz")
@@ -714,7 +724,9 @@ async fn place_order_refuses_a_payment_page_that_is_not_https() {
         };
         order.payment_url = bad.to_owned();
         let fake = FakeBackend::default().creates(vec![CreateOrderResult::Ok(order)]);
-        let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+        let err = place_order(&fake, &gateway(), usd(2500), pending())
+            .await
+            .unwrap_err();
         assert!(
             matches!(&err, CyclesPurchaseError::InvalidPaymentUrl { id, url, .. }
                 if id == "co-1" && url == bad),
@@ -726,7 +738,9 @@ async fn place_order_refuses_a_payment_page_that_is_not_https() {
 #[tokio::test]
 async fn place_order_maps_a_refusal() {
     let fake = FakeBackend::default().creates(vec![refused("RATE_LIMITED")]);
-    let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+    let err = place_order(&fake, &gateway(), usd(2500), pending())
+        .await
+        .unwrap_err();
     match err {
         CyclesPurchaseError::OrderRefused { error } => {
             assert_eq!(error.to_string(), "RATE_LIMITED: as the backend puts it");
@@ -741,11 +755,34 @@ async fn place_order_on_missing_gateway_is_gateway_not_found() {
         absent: true,
         ..FakeBackend::default()
     };
-    let err = place_order(&fake, &gateway(), usd(2500)).await.unwrap_err();
+    let err = place_order(&fake, &gateway(), usd(2500), pending())
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
         "{err}"
     );
+}
+
+/// A stop while `create_order` is stalled ends the call at once: whether
+/// the order was made is then not known, and said not to be.
+#[tokio::test]
+async fn place_order_gives_way_to_an_interrupt_while_the_call_stalls() {
+    let fake = FakeBackend {
+        stall_creates: true,
+        ..FakeBackend::default()
+    };
+    let placed = tokio::time::timeout(
+        Duration::from_secs(5),
+        place_order(&fake, &gateway(), usd(2500), ready(())),
+    )
+    .await
+    .expect("place_order did not give way to the interrupt");
+    assert!(matches!(
+        placed.unwrap_err(),
+        CyclesPurchaseError::InterruptedPlacing { .. }
+    ),);
+    assert_eq!(fake.count_of(CREATE_ORDER_METHOD), 1);
 }
 
 // --- wait_for_order --------------------------------------------------------

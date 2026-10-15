@@ -10,6 +10,7 @@ air-gapped signing
 
 * feat: when `icp deploy`, `icp canister create` or `icp canister top-up` is refused for want of cycles, the error says how many are missing and gives the commands that make them up, as the identity and on the environment or network the command ran with: on mainnet `icp cycles buy --cycles <missing>` with a card when one order covers them, and `icp cycles mint` from ICP; on a local network a transfer from the anonymous identity, which the network funds, and `icp cycles mint`; elsewhere `icp cycles mint` alone. On mainnet the anonymous identity is told to make an identity of its own instead
 * fix: the command `icp canister create --with-icp` prints to finish an interrupted creation now pastes as printed with an identity, network or environment name starting with `-`, and in PowerShell, fish and elvish as well as POSIX shells. A name no quoting carries in all of them is left as `<your identity>`, with a line asking to fill it in
+* fix: `icp cycles buy` says in words what is wrong with a `--gateway` that is not a canister id, a canister that serves no gateway, and one a boundary node cannot route to; with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag. `-n local` outside a project points at `-n ic`, CyclePay and Stripe are named only for CyclePay's gateway, and its errors are wrapped to 80 columns rather than broken mid-word by the terminal
 
 # v1.7.0
 

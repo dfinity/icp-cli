@@ -428,6 +428,8 @@ async fn cycles_mint_to_subaccount() {
 /// machine-readable outputs; none of this needs a network.
 #[test]
 fn cycles_buy_rejects_conflicting_arguments() {
+    use predicates::prelude::PredicateBooleanExt;
+
     let ctx = TestContext::new();
 
     ctx.icp()
@@ -436,11 +438,26 @@ fn cycles_buy_rejects_conflicting_arguments() {
         .stderr(contains("cannot be used with"))
         .failure();
 
+    // Neither: the one of the two that is required is named, not --amount.
     ctx.icp()
         .args(["cycles", "buy"])
         .assert()
         .stderr(contains("required arguments were not provided"))
+        .stderr(contains("<--amount <AMOUNT>|--cycles <CYCLES>>"))
         .failure();
+
+    // A negative value of either is refused in the same words and with the
+    // same status, the form with a suffix included, rather than read as a
+    // flag nobody passed.
+    for (flag, value) in [("--amount", "-1"), ("--cycles", "-1"), ("--cycles", "-5t")] {
+        ctx.icp()
+            .args(["cycles", "buy", flag, value])
+            .assert()
+            .stderr(contains(format!("invalid value '{value}' for '{flag} <")))
+            .stderr(contains("cannot be negative: give the"))
+            .stderr(contains("unexpected argument").not())
+            .code(2);
+    }
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10.005"])
@@ -522,7 +539,7 @@ async fn cycles_buy_on_a_local_network_points_at_mainnet() {
         ])
         .assert()
         .stderr(contains("this network is not mainnet"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 }
 
@@ -540,7 +557,7 @@ fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("is not running"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 
     ctx.icp()
@@ -548,14 +565,55 @@ fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
         .args(["cycles", "buy", "--amount", "10", "--yes", "-e", "local"])
         .assert()
         .stderr(contains("is not running"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("No project found"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
+        .failure();
+}
+
+/// A gateway id that cannot be a canister is refused in words, before any
+/// network is asked about it; and a network that is not there points at
+/// mainnet, outside a project as inside one.
+#[test]
+fn cycles_buy_refuses_a_gateway_that_cannot_be_one() {
+    let ctx = TestContext::new();
+
+    for (gateway, what) in [
+        ("2vxsx-fae", "it is the anonymous principal"),
+        ("aaaaa-aa", "it is the management canister"),
+    ] {
+        ctx.icp()
+            .args([
+                "cycles",
+                "buy",
+                "--amount",
+                "10",
+                "--yes",
+                "--gateway",
+                gateway,
+                "-n",
+                "ic",
+            ])
+            .assert()
+            .stderr(contains(format!(
+                "{gateway} cannot be a cycles gateway: {what}"
+            )))
+            .failure();
+    }
+
+    // No project, so no network called local: CyclePay is on mainnet.
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--yes", "-n", "local"])
+        .assert()
+        .stderr(contains(
+            "Error: there is no network named 'local' outside a project.\n\
+             CyclePay sells cycles on mainnet: use -n ic",
+        ))
         .failure();
 }
 
@@ -759,9 +817,63 @@ async fn cycles_buy_ctrl_c_stops_the_wait_not_the_order() {
     );
 }
 
+/// A canister that serves no gateway, or none at all, is said to be so in
+/// words, not in the replica's or the HTTP gateway's.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_names_a_canister_that_is_no_gateway() {
+    let ctx = TestContext::new();
+    let (project_dir, _gateway, _g) = stand_in_gateway(&ctx).await;
+    let buy = |gateway: &str| {
+        let mut cmd = ctx.icp();
+        cmd.current_dir(&project_dir).args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            gateway,
+            "-n",
+            "random-network",
+        ]);
+        cmd
+    };
+
+    // Wrapped to 80 columns: read as prose.
+    let said = |gateway: &str| {
+        let output = buy(gateway).output().unwrap();
+        assert!(!output.status.success(), "{output:?}");
+        String::from_utf8(output.stderr).unwrap().replace('\n', " ")
+    };
+
+    // The ICP ledger, which every local network has.
+    let ledger = said("ryjl3-tyaaa-aaaaa-aaaba-cai");
+    assert!(
+        ledger.contains(
+            "canister ryjl3-tyaaa-aaaaa-aaaba-cai is not a cycles gateway: it does not serve \
+             get_card_terms, the method"
+        ),
+        "{ledger}"
+    );
+    assert!(!ledger.contains("Caused by"), "{ledger}");
+
+    // A canister id no canister on this network has.
+    let unused = said("ht2ng-gaaaa-aaaac-p77ya-cai");
+    assert!(
+        unused.contains(
+            "the cycles gateway canister ht2ng-gaaaa-aaaac-p77ya-cai does not exist on this \
+             network"
+        ),
+        "{unused}"
+    );
+    assert!(!unused.contains("HTTP"), "{unused}");
+}
+
 /// A wait through payment to delivery: once the stand-in gateway is paid
 /// (its `pay` update), the next poll finds the order delivered, and the
-/// command reports CyclePay's delivery to where the order says it went and
+/// command reports the gateway's delivery to where the order says it went,
+/// without calling a gateway that is not CyclePay's by its name, and
 /// succeeds.
 #[cfg(unix)] // moc
 #[tokio::test]
@@ -817,7 +929,7 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
     assert!(status.success(), "{said}");
     assert!(
         printed.contains(
-            "CyclePay reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
+            "The gateway reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
         ),
         "{printed}"
     );

@@ -134,7 +134,7 @@ Buyer:    7k7px-dcypq-wulnh-byzgd-6sib2-udn6c-lfo6e-6oujd-veifp-62woo-5ae
 Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
-Create this order? Nothing is charged until you pay on Stripe. [y/N]
+Create this order? Nothing is charged until you pay on Stripe's page. [y/N]
 ```
 
 It then creates the order as your identity, prints the page to pay on together with a QR code to scan with a phone (and opens the page in your browser when run from a terminal, but not over SSH or on CI), and waits until the cycles land. The card is charged on the gateway's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`, the only currency CyclePay accepts.

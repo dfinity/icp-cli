@@ -1,0 +1,149 @@
+// The cycles gateway interface: the four methods `icp cycles buy` calls on
+// the canister it buys through, and their types. CyclePay's backend serves
+// it, and this file is trimmed from that backend's own interface
+// (dfinity/cyclepay, backend-canister/cyclepay_backend.did). So does any
+// canister that serves these methods with these types, which `--gateway` or
+// ICP_CYCLES_GATEWAY_CANISTER_ID names.
+//
+// This is the least a gateway must serve. A record here lists the fields the
+// CLI reads, and a gateway may reply with more. A variant lists the cases the
+// CLI knows; a case added later is read as none of them rather than failing
+// the reply. interface.rs mirrors this file, and a test holds the two to it.
+
+// What a buyer needs to pay by card, as the gateway publishes it. Every
+// figure the CLI quotes with comes from here, so a gateway can change any of
+// them without a CLI release.
+type CardTerms = record {
+  // create_order refuses new orders (CARDS_UNAVAILABLE) while true.
+  deliveries_paused : bool;
+  // Per order, in US cents (create_order's AMOUNT_OUT_OF_RANGE).
+  min_order_usd_cents : nat64;
+  max_order_usd_cents : nat64;
+  // The card fee taken off the amount paid:
+  // `fee = amount * fee_bps / 10_000 + fee_fixed_usd_cents`, rounded to the
+  // cent as the gateway rounds, so a client can quote net_usd_cents before
+  // it orders.
+  fee_bps : nat64;
+  fee_fixed_usd_cents : nat64;
+  // Taken off a delivery to a Cycles Ledger account, in cycles. A canister
+  // top-up pays none.
+  ledger_delivery_fee_cycles : nat;
+};
+
+// The XDR/USD rate the gateway prices every order with.
+type XdrRateStatus = record {
+  // US dollars per XDR, times 10,000. One XDR is one trillion cycles.
+  xdr_usd_x10000 : nat64;
+  // No refresh for longer than the gateway tolerates. The rate is still the
+  // one every order is priced with.
+  stale : bool;
+  // Seconds since the rate was set, when known.
+  age_seconds : opt nat64;
+};
+
+// Where the cycles go.
+type OrderDestination = variant {
+  // Top up this canister.
+  Canister : principal;
+  // Credit a Cycles Ledger account: `beneficiary`'s, by default the
+  // caller's.
+  Ledger;
+};
+
+type CreateOrderArgs = record {
+  destination : OrderDestination;
+  // Ledger only: whose account is credited. Absent is the caller's.
+  beneficiary : opt principal;
+  // A project of the gateway's own that the order belongs to, if it keeps
+  // such. Absent is an order of the caller's own.
+  project_id : opt text;
+  // What the buyer will pay, in US cents.
+  amount_usd_cents : nat64;
+  // Required (opt true) to top up a system canister. Irrelevant to a ledger
+  // destination.
+  confirm_system_canister : opt bool;
+};
+
+type CreatedOrder = record {
+  order_id : text;
+  amount_usd_cents : nat64;
+  // What the payment funds after the card fee, in US cents.
+  net_usd_cents : nat64;
+  // Where to pay: an https page for this order, to be opened as it is.
+  payment_url : text;
+  // When the order is forgotten if unpaid, in seconds since the Unix epoch.
+  expires_at : nat64;
+};
+
+// Why create_order refused. Nothing is written for any of them.
+type OrderError = record {
+  // Matched on, unlike message. One of ANONYMOUS, PAUSED,
+  // CARDS_UNAVAILABLE, AMOUNT_OUT_OF_RANGE, CANISTER_ID_INVALID,
+  // DESTINATION_BLOCKED, SYSTEM_CANISTER_WARNING, BENEFICIARY_NOT_ALLOWED,
+  // RATE_LIMITED, TOO_MANY_OPEN_ORDERS, NOT_PROJECT_MEMBER,
+  // PROJECTS_UNAVAILABLE.
+  code : text;
+  message : text;
+};
+
+type CreateOrderResult = variant { Ok : CreatedOrder; Err : OrderError };
+
+type CardOrderStatus = variant {
+  // Made, not paid.
+  AwaitingPayment;
+  // Paid with a delayed method; not settled yet.
+  PaymentPending;
+  // Paid; the cycles are on their way.
+  Processing;
+  Delivered;
+  // Stopped for an operator; not refunded meanwhile.
+  NeedsReview;
+  // Not delivered; the refund is being made.
+  Refunding;
+  Refunded;
+  // Not delivered; an operator refunds it by hand.
+  RefundOwed;
+};
+
+// Where an order's cycles go, as the gateway records it.
+type Destination = variant {
+  // Top up this canister.
+  Canister : principal;
+  // Credit this principal's Cycles Ledger account.
+  Ledger : principal;
+};
+
+// An order as its owner sees it.
+type OrderStatusView = record {
+  order_id : text;
+  status : CardOrderStatus;
+  destination : Destination;
+  // What the order asked for, in US cents.
+  amount_usd_cents : nat64;
+  // What the payment funds after the card fee, in US cents: the order's
+  // amount until paid, then the amount paid.
+  net_usd_cents : nat64;
+  // What was paid, once paid, in US cents.
+  paid_usd_cents : opt nat64;
+  // Exact cycles, once delivered.
+  cycles_delivered : opt nat64;
+  // Refunded so far, in US cents.
+  amount_refunded_usd_cents : nat64;
+  // Why delivery waits or stopped, or why a refund is owed.
+  detail : opt text;
+  // Until paid: when the order is forgotten, in seconds since the Unix
+  // epoch.
+  expires_at : opt nat64;
+};
+
+service : {
+  // What a buyer needs to pay by card. Public.
+  get_card_terms : () -> (CardTerms) query;
+  // The rate every order is priced with. Public.
+  get_xdr_rate_status : () -> (XdrRateStatus) query;
+  // Create an order for the caller, who pays for it on the page returned.
+  create_order : (CreateOrderArgs) -> (CreateOrderResult);
+  // An order of the caller's, by id: null for one the caller does not own,
+  // one that never existed, and one forgotten after expiring unpaid.
+  order_status : (text) -> (opt OrderStatusView) query;
+}

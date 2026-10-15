@@ -51,6 +51,7 @@ lazy_static.workspace = true
 num-integer.workspace = true
 num-traits.workspace = true
 open.workspace = true
+qrcode.workspace = true
 p256.workspace = true
 pem.workspace = true
 pkcs8.workspace = true
@@ -91,6 +92,7 @@ serial_test.workspace = true
 sha2.workspace = true
 tar.workspace = true
 test-tag.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 uuid.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]

@@ -18,6 +18,7 @@ mod artifacts;
 mod call_output;
 mod commands;
 mod complete;
+mod cyclepay;
 mod dist;
 mod engine;
 mod logging;
@@ -337,6 +338,8 @@ async fn dispatch(ctx: &icp_app::context::Context, command: Command) -> Result<(
             commands::cycles::Command::Balance(args) => {
                 commands::cycles::balance::exec(ctx, &args).await?
             }
+
+            commands::cycles::Command::Buy(args) => commands::cycles::buy::exec(ctx, &args).await?,
 
             commands::cycles::Command::Mint(args) => {
                 commands::cycles::mint::exec(ctx, &args).await?

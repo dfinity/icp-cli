@@ -934,16 +934,27 @@ Display the cycles balance
 
 Buy cycles with a card.
 
-Creates an order on a cycles gateway canister as the current identity, prints the page to pay on (and opens it in a browser when run from a terminal, but not over SSH or on CI), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles); the latter pays the least amount that buys them once the card fee is taken out. The gateway publishes its per-order range and its fees, and the quote shows them. The default gateway is CyclePay's, on mainnet, which accepts USD only.
+Creates an order on a cycles gateway canister as the current identity, prints the page to pay on, with a QR code to scan on a terminal (and opens it in a browser when run from a terminal, but not over SSH or on CI), then waits for the cycles to land on the identity's own cycles-ledger account. Fund a canister from there with `icp canister top-up`. Say either how much to spend (--amount, in the currency given by --currency) or how many cycles to receive (--cycles). The quote shows the gateway's card fee and what the amount is estimated to buy. The default gateway is CyclePay's, on mainnet (-n ic, or an environment on mainnet such as -e ic), which accepts USD only.
+
+The wait asks the gateway every 3 seconds for up to an hour. It says so when the gateway has not answered for 9 seconds, and gives up after five minutes without word of the order. Stopping it, with Ctrl-C or by the hour running out, does not stop the order: an unpaid order stays payable until its deadline, and a paid one is still delivered. With --json, the last line says how the wait ended.
 
 Exactly one of --amount or --cycles must be given.
 
-**Usage:** `icp cycles buy [OPTIONS]`
+**Usage:** `icp cycles buy [OPTIONS] <--amount <AMOUNT>|--cycles <CYCLES>>`
+
+Examples:
+
+    # Spend 10 USD on cycles for the current identity, on mainnet
+    icp cycles buy --amount 10 -n ic
+
+    # Ask for 5 trillion cycles, and pay the least whose estimate covers them
+    icp cycles buy --cycles 5t -n ic
+
 
 ###### **Options:**
 
 * `--amount <AMOUNT>` — Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
-* `--cycles <CYCLES>` — Cycles to receive; the amount to pay is worked out from the current rate, card fee included. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
+* `--cycles <CYCLES>` — Cycles to receive: the amount to pay is the least whose estimate, at the current rate with the card fee taken out, covers them. The cycles are minted at the rate in force when the payment lands, so what arrives can differ slightly from the estimate. Supports suffixes: k (thousand), m (million), b (billion), t (trillion)
 * `--currency <CODE>` — ISO 4217 code of the currency to pay in. CyclePay accepts USD only
 
   Default value: `USD`
@@ -955,7 +966,7 @@ Exactly one of --amount or --cycles must be given.
 * `-y`, `--yes` — Skip confirmation prompts
 * `--no-open` — Do not open the payment page in a browser
 * `--no-wait` — Print the payment page's link and return without waiting for the order to complete
-* `--json` — Output command results as JSON
+* `--json` — Output command results as JSON: one object once the order is made, and, unless --no-wait, one when the wait ends, saying how
 * `-q`, `--quiet` — Suppress human-readable output; print only the payment page's link, then the final status
 
 

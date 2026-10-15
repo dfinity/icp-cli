@@ -317,14 +317,14 @@ const WIDTH: usize = 80;
 
 /// A message built up of prose and of commands set apart.
 #[derive(Default)]
-struct Message {
+pub(crate) struct Message {
     lines: Vec<String>,
 }
 
 impl Message {
     /// `text`, wrapped at spaces to [`WIDTH`]; the first line of the message
     /// leaves room for `Error: `.
-    fn prose(&mut self, text: &str) {
+    pub(crate) fn prose(&mut self, text: &str) {
         let mut line = String::new();
         for word in text.split(' ') {
             let room = if self.lines.is_empty() {
@@ -345,7 +345,7 @@ impl Message {
 
     /// `commands`, indented, each on a line of its own and never wrapped,
     /// with a blank line either side.
-    fn commands(&mut self, commands: &[String]) {
+    pub(crate) fn commands(&mut self, commands: &[String]) {
         self.lines.push(String::new());
         self.lines
             .extend(commands.iter().map(|command| format!("    {command}")));
@@ -353,7 +353,7 @@ impl Message {
     }
 
     /// The lines, with nothing after the last.
-    fn text(mut self) -> String {
+    pub(crate) fn text(mut self) -> String {
         while self.lines.last().is_some_and(String::is_empty) {
             self.lines.pop();
         }

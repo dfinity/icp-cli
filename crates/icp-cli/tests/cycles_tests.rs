@@ -429,6 +429,8 @@ async fn cycles_mint_to_subaccount() {
 /// machine-readable outputs; none of this needs a network.
 #[test]
 fn cycles_buy_rejects_conflicting_arguments() {
+    use predicates::prelude::PredicateBooleanExt;
+
     let ctx = TestContext::new();
 
     ctx.icp()
@@ -437,11 +439,26 @@ fn cycles_buy_rejects_conflicting_arguments() {
         .stderr(contains("cannot be used with"))
         .failure();
 
+    // Neither: the one of the two that is required is named, not --amount.
     ctx.icp()
         .args(["cycles", "buy"])
         .assert()
         .stderr(contains("required arguments were not provided"))
+        .stderr(contains("<--amount <AMOUNT>|--cycles <CYCLES>>"))
         .failure();
+
+    // A negative value of either is refused in the same words and with the
+    // same status, the form with a suffix included, rather than read as a
+    // flag nobody passed.
+    for (flag, value) in [("--amount", "-1"), ("--cycles", "-1"), ("--cycles", "-5t")] {
+        ctx.icp()
+            .args(["cycles", "buy", flag, value])
+            .assert()
+            .stderr(contains(format!("invalid value '{value}' for '{flag} <")))
+            .stderr(contains("cannot be negative: give the"))
+            .stderr(contains("unexpected argument").not())
+            .code(2);
+    }
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10.005"])
@@ -523,7 +540,7 @@ async fn cycles_buy_on_a_local_network_points_at_mainnet() {
         ])
         .assert()
         .stderr(contains("this network is not mainnet"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 }
 
@@ -541,7 +558,7 @@ fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("is not running"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 
     ctx.icp()
@@ -549,21 +566,63 @@ fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
         .args(["cycles", "buy", "--amount", "10", "--yes", "-e", "local"])
         .assert()
         .stderr(contains("is not running"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
         .failure();
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10", "--yes"])
         .assert()
         .stderr(contains("No project found"))
-        .stderr(contains("CyclePay sells cycles on mainnet: use `-n ic`"))
+        .stderr(contains("CyclePay sells cycles on mainnet: use -n ic"))
+        .failure();
+}
+
+/// A gateway id that cannot be a canister is refused in words, before any
+/// network is asked about it; and a network that is not there points at
+/// mainnet, outside a project as inside one.
+#[test]
+fn cycles_buy_refuses_a_gateway_that_cannot_be_one() {
+    let ctx = TestContext::new();
+
+    for (gateway, what) in [
+        ("2vxsx-fae", "it is the anonymous principal"),
+        ("aaaaa-aa", "it is the management canister"),
+    ] {
+        ctx.icp()
+            .args([
+                "cycles",
+                "buy",
+                "--amount",
+                "10",
+                "--yes",
+                "--gateway",
+                gateway,
+                "-n",
+                "ic",
+            ])
+            .assert()
+            .stderr(contains(format!(
+                "{gateway} cannot be a cycles gateway: {what}"
+            )))
+            .failure();
+    }
+
+    // No project, so no network called local: CyclePay is on mainnet.
+    ctx.icp()
+        .args(["cycles", "buy", "--amount", "10", "--yes", "-n", "local"])
+        .assert()
+        .stderr(contains(
+            "Error: there is no network named 'local' outside a project.\n\
+             CyclePay sells cycles on mainnet: use -n ic",
+        ))
         .failure();
 }
 
 /// Deploy the stand-in gateway (`assets/cycles_gateway_canister`, a Motoko
 /// actor serving the four methods the command uses) on a fresh local
-/// network, and switch to a random identity to buy with. Returns the project
-/// directory, the gateway's canister id, and the network's guard.
+/// network, and make a new identity, `buyer`, the default to buy with.
+/// Returns the project directory, the gateway's canister id, and the
+/// network's guard.
 #[cfg(unix)] // moc
 async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     let project_dir = ctx.create_project_dir("icp");
@@ -609,7 +668,8 @@ async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     assert!(output.status.success(), "{output:?}");
     let gateway = String::from_utf8(output.stdout).unwrap().trim().to_owned();
 
-    client.use_new_random_identity();
+    client.create_identity("buyer");
+    client.use_identity("buyer");
     (project_dir, gateway, guard)
 }
 
@@ -663,14 +723,21 @@ async fn cycles_buy_reports_a_refunded_order() {
         cmd
     };
 
-    buy(&[])
-        .assert()
-        .stdout(contains(
+    let output = buy(&[]).output().unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(
             "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
-        ))
-        .stderr(contains("10.00 USD was refunded to your card"))
-        .stderr(contains("the cycles could not be delivered"))
-        .failure();
+        ),
+        "{output:?}"
+    );
+    // The error is wrapped to 80 columns: read it as prose.
+    let said = String::from_utf8(output.stderr).unwrap().replace('\n', " ");
+    assert!(
+        said.contains("10.00 USD was refunded to your card"),
+        "{said}"
+    );
+    assert!(said.contains("the cycles could not be delivered"), "{said}");
 
     let output = buy(&["--json"]).output().unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -752,17 +819,338 @@ async fn cycles_buy_ctrl_c_stops_the_wait_not_the_order() {
         printed.trim(),
         "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
     );
-    assert!(said.contains("stays payable"), "{said}");
-    assert!(said.contains("icp cycles balance"), "{said}");
+    // Where the order stands is said once, as the error the command ends
+    // with: still payable, where its cycles land, and the command that shows
+    // them, on a line of its own, as the identity (the default, named) and
+    // on the network the run used.
     assert!(
-        said.contains("interrupted while waiting for order co-1-0000test"),
+        said.ends_with(
+            "Error: stopped waiting for order co-1-0000test.\n\
+             It stays payable until 2100-01-01T00:00:00Z. Once it is paid, its cycles land on\n\
+             your identity's cycles-ledger account. To see them:\n\
+             \n    icp cycles balance --identity buyer -n random-network\n"
+        ),
+        "{said}"
+    );
+    assert_eq!(said.matches("stays payable").count(), 1, "{said}");
+    assert!(!said.contains("interrupted while waiting"), "{said}");
+}
+
+/// With --json, a script is told how the wait ended whatever the end: here
+/// an interrupt, as a last line on stdout after the order as made, which
+/// names the gateway and the buyer.
+#[cfg(unix)] // SIGINT, moc
+#[tokio::test]
+async fn cycles_buy_json_says_how_the_wait_ended() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--json",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
+    let status = child.wait().unwrap();
+    stderr.read_to_string(&mut said).unwrap();
+    let mut printed = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut printed)
+        .unwrap();
+
+    assert_eq!(status.code(), Some(1), "{said}");
+    let objects: Vec<serde_json::Value> = printed
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(objects.len(), 2, "{printed}");
+    assert_eq!(objects[0]["order_id"], "co-1-0000test");
+    assert_eq!(objects[0]["gateway"], gateway.as_str());
+    let buyer = objects[0]["buyer"].as_str().unwrap();
+    candid::Principal::from_text(buyer).unwrap();
+    assert_eq!(objects[1]["order_id"], "co-1-0000test");
+    assert_eq!(objects[1]["status"], "awaiting_payment");
+    assert_eq!(objects[1]["ended"], "interrupted");
+    assert_eq!(objects[1]["expires_at"], "2100-01-01T00:00:00Z");
+    // Every key is there, null where it does not apply.
+    for key in ["cycles_delivered", "paid", "refunded", "detail", "balance"] {
+        assert!(objects[1][key].is_null(), "{key}: {printed}");
+    }
+}
+
+/// A payment by a method that has not settled is not called received; a
+/// refund under way is not an end, and the command says how to see how it
+/// ends. Off a terminal each step is a line.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_tells_a_pending_payment_and_a_refund_under_way() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    settle(&ctx, &project_dir, &gateway, "pend", "()");
+    while !said.contains("Payment pending") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    settle(&ctx, &project_dir, &gateway, "refunding", "()");
+    stderr.read_to_string(&mut said).unwrap();
+    let status = child.wait().unwrap();
+
+    assert!(!status.success(), "{said}");
+    assert!(
+        said.contains("[order co-1-0000test] Payment pending; waiting for it to settle..."),
+        "{said}"
+    );
+    assert!(!said.contains("Payment received"), "{said}");
+    let prose = said.replace('\n', " ");
+    assert!(
+        prose.contains("A refund to your card is under way"),
+        "{said}"
+    );
+    assert!(prose.contains("owed a refund"), "{said}");
+    // The command that reads the order back, on a line of its own, as the
+    // identity that made the order, which alone can read it.
+    assert!(
+        said.contains(&format!(
+            "\n    icp canister call {gateway} order_status --query --identity buyer \
+             -n random-network '(\"co-1-0000test\")'\n"
+        )),
+        "{said}"
+    );
+    // Not CyclePay's gateway: nothing of CyclePay's is said of it.
+    assert!(!said.contains("CyclePay"), "{said}");
+}
+
+/// A gateway that stops answering is said to while the wait goes on trying,
+/// and so is its answering again; the wait then ends as it would have.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_says_when_the_gateway_stops_answering() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+    let canister = |verb: &str| {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                verb,
+                "gateway",
+                "--environment",
+                "random-environment",
+                // The stand-in's controller.
+                "--identity",
+                "anonymous",
+            ])
+            .assert()
+            .success();
+    };
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    // A stopped canister refuses every poll, as CyclePay's backend does for
+    // a few minutes during an upgrade.
+    canister("stop");
+    while !said.contains("No answer from the gateway") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    canister("start");
+    while !said.contains("answering again") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    settle(
+        &ctx,
+        &project_dir,
+        &gateway,
+        "pay",
+        "(principal \"rrkah-fqaaa-aaaaa-aaaaq-cai\")",
+    );
+    stderr.read_to_string(&mut said).unwrap();
+    let status = child.wait().unwrap();
+    assert!(status.success(), "{said}");
+    assert!(
+        said.contains("[order co-1-0000test] No answer from the gateway; retrying..."),
+        "{said}"
+    );
+    assert!(
+        said.contains("[order co-1-0000test] The gateway is answering again."),
+        "{said}"
+    );
+}
+
+/// A canister that serves no gateway, or none at all, is said to be so in
+/// words, not in the replica's or the HTTP gateway's.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_names_a_canister_that_is_no_gateway() {
+    let ctx = TestContext::new();
+    let (project_dir, _gateway, _g) = stand_in_gateway(&ctx).await;
+    let buy = |gateway: &str| {
+        let mut cmd = ctx.icp();
+        cmd.current_dir(&project_dir).args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            gateway,
+            "-n",
+            "random-network",
+        ]);
+        cmd
+    };
+
+    // Wrapped to 80 columns: read as prose.
+    let said = |gateway: &str| {
+        let output = buy(gateway).output().unwrap();
+        assert!(!output.status.success(), "{output:?}");
+        String::from_utf8(output.stderr).unwrap().replace('\n', " ")
+    };
+
+    // The ICP ledger, which every local network has.
+    let ledger = said("ryjl3-tyaaa-aaaaa-aaaba-cai");
+    assert!(
+        ledger.contains(
+            "canister ryjl3-tyaaa-aaaaa-aaaba-cai is not a cycles gateway: it does not serve \
+             get_card_terms, the method"
+        ),
+        "{ledger}"
+    );
+    assert!(!ledger.contains("Caused by"), "{ledger}");
+
+    // A canister id no canister on this network has.
+    let unused = said("ht2ng-gaaaa-aaaac-p77ya-cai");
+    assert!(
+        unused.contains(
+            "the cycles gateway canister ht2ng-gaaaa-aaaac-p77ya-cai does not exist on this \
+             network"
+        ),
+        "{unused}"
+    );
+    assert!(!unused.contains("HTTP"), "{unused}");
+}
+
+/// With --no-wait the command returns once the order is made, and says
+/// where its cycles will show, with the command that shows them on a line
+/// of its own.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_no_wait_says_where_the_cycles_will_show() {
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--no-wait",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+        ])
+        .output()
+        .expect("failed to run icp cycles buy");
+    let said = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{said}");
+    assert!(
+        said.ends_with(
+            "Not waiting. Once the order is paid, its cycles land on your identity's\n\
+             cycles-ledger account. To see them:\n\
+             \n    icp cycles balance --identity buyer -n random-network\n"
+        ),
         "{said}"
     );
 }
 
 /// A wait through payment to delivery: once the stand-in gateway is paid
 /// (its `pay` update), the next poll finds the order delivered, and the
-/// command reports CyclePay's delivery to where the order says it went and
+/// command reports the gateway's delivery to where the order says it went,
+/// without calling a gateway that is not CyclePay's by its name, and
 /// succeeds.
 #[cfg(unix)] // moc
 #[tokio::test]
@@ -818,7 +1206,7 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
     assert!(status.success(), "{said}");
     assert!(
         printed.contains(
-            "CyclePay reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
+            "The gateway reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
         ),
         "{printed}"
     );

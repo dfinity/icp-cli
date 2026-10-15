@@ -14,6 +14,7 @@ air-gapped signing
 * feat: `icp deploy` and `icp canister create` take `--engine <name>` to target a cloud engine by name. The name is resolved to the engine's subnet through the engine canister, among the engines visible to the identity in use, and then behaves as `--subnet` would with that subnet; a subnet id passed as the engine is used as-is. `name/slug` or the engine's id picks one of several engines sharing a name.
 * fix: reject path-like network and environment names
 * feat: `icp canister uninstall` removes a canister's code and state, leaving it empty with its id, cycles and settings intact — the equivalent of `dfx canister uninstall-code`. `--proxy` routes it through a proxy canister, as for `stop` and `delete`.
+* fix(sync-plugin): Wasmtime is updated 49.0.2 → 49.0.3, patching the runtime that executes `plugin` sync steps against RUSTSEC-2026-0352 through RUSTSEC-2026-0364 — among them a WASI filesystem sandbox escape when renaming symlinks with trailing slashes ([RUSTSEC-2026-0352](https://rustsec.org/advisories/RUSTSEC-2026-0352)), and a set of guest-triggerable host panics in the component model. No manifest, API, or minimum-toolchain change.
 
 # v1.6.0
 

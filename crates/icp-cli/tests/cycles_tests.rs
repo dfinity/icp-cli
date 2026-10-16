@@ -633,7 +633,9 @@ fn settle(ctx: &TestContext, project_dir: &PathBuf, gateway: &str, how: &str, ar
 }
 
 /// An order the gateway cannot deliver is refunded: the command says so and
-/// fails, and --json prints the order as made, then its end.
+/// fails, and --json prints the order as made, then its end. A --json run
+/// implies --yes: off a terminal, as here, it neither asks nor refuses, and
+/// the quote stays off stderr.
 #[cfg(unix)] // moc
 #[tokio::test]
 async fn cycles_buy_reports_a_refunded_order() {
@@ -650,7 +652,6 @@ async fn cycles_buy_reports_a_refunded_order() {
                 "buy",
                 "--amount",
                 "10",
-                "--yes",
                 "--no-open",
                 "--gateway",
                 &gateway,
@@ -661,7 +662,7 @@ async fn cycles_buy_reports_a_refunded_order() {
         cmd
     };
 
-    buy(&[])
+    buy(&["--yes"])
         .assert()
         .stdout(contains(
             "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
@@ -672,6 +673,9 @@ async fn cycles_buy_reports_a_refunded_order() {
 
     let output = buy(&["--json"]).output().unwrap();
     assert!(!output.status.success(), "{output:?}");
+    let said = String::from_utf8(output.stderr).unwrap();
+    assert!(!said.contains("Refusing to create an order"), "{said}");
+    assert!(!said.contains("Price:"), "{said}");
     let printed = String::from_utf8(output.stdout).unwrap();
     let objects: Vec<serde_json::Value> = printed
         .lines()

@@ -575,6 +575,36 @@ fn cycles_buy_with_no_network_reachable_points_at_mainnet() {
         .failure();
 }
 
+/// A gateway id that cannot be a canister is refused in words, before any
+/// network is asked about it.
+#[test]
+fn cycles_buy_refuses_a_gateway_that_cannot_be_one() {
+    let ctx = TestContext::new();
+
+    for (gateway, what) in [
+        ("2vxsx-fae", "it is the anonymous principal"),
+        ("aaaaa-aa", "it is the management canister"),
+    ] {
+        ctx.icp()
+            .args([
+                "cycles",
+                "buy",
+                "--amount",
+                "10",
+                "--yes",
+                "--gateway",
+                gateway,
+                "-n",
+                "ic",
+            ])
+            .assert()
+            .stderr(contains(format!(
+                "{gateway} cannot be a cycles gateway: {what}"
+            )))
+            .failure();
+    }
+}
+
 /// Deploy the stand-in gateway (`assets/cycles_gateway_canister`, a Motoko
 /// actor serving the four methods the command uses) on a fresh local
 /// network, and switch to a random identity to buy with. Returns the project
@@ -779,9 +809,61 @@ async fn cycles_buy_ctrl_c_stops_the_wait_not_the_order() {
     );
 }
 
+/// A canister that serves no gateway, or none at all, is said to be so in
+/// words, not in the replica's or the HTTP gateway's.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_names_a_canister_that_is_no_gateway() {
+    let ctx = TestContext::new();
+    let (project_dir, _gateway, _g) = stand_in_gateway(&ctx).await;
+    let said = |gateway: &str| {
+        let output = ctx
+            .icp()
+            .current_dir(&project_dir)
+            .args([
+                "cycles",
+                "buy",
+                "--amount",
+                "10",
+                "--yes",
+                "--gateway",
+                gateway,
+                "-n",
+                "random-network",
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{output:?}");
+        String::from_utf8(output.stderr).unwrap()
+    };
+
+    // The ICP ledger, which every local network has.
+    let ledger = said("ryjl3-tyaaa-aaaaa-aaaba-cai");
+    assert!(
+        ledger.contains(
+            "canister ryjl3-tyaaa-aaaaa-aaaba-cai is not a cycles gateway: it does not serve \
+             get_card_terms, the method a gateway publishes its terms with"
+        ),
+        "{ledger}"
+    );
+    assert!(!ledger.contains("Caused by"), "{ledger}");
+
+    // A canister id no canister on this network has.
+    let unused = said("ht2ng-gaaaa-aaaac-p77ya-cai");
+    assert!(
+        unused.contains(
+            "the cycles gateway canister ht2ng-gaaaa-aaaac-p77ya-cai does not exist on this \
+             network"
+        ),
+        "{unused}"
+    );
+    assert!(!unused.contains("HTTP"), "{unused}");
+}
+
 /// A wait through payment to delivery: once the stand-in gateway is paid
 /// (its `pay` update), the next poll finds the order delivered, and the
-/// command reports CyclePay's delivery to where the order says it went and
+/// command reports the gateway's delivery to where the order says it went,
+/// without calling a gateway that is not CyclePay's by its name, and
 /// succeeds.
 #[cfg(unix)] // moc
 #[tokio::test]
@@ -837,7 +919,7 @@ async fn cycles_buy_waits_through_payment_to_delivery() {
     assert!(status.success(), "{said}");
     assert!(
         printed.contains(
-            "CyclePay reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
+            "The gateway reports 6.938T cycles delivered to canister rrkah-fqaaa-aaaaa-aaaaq-cai"
         ),
         "{printed}"
     );

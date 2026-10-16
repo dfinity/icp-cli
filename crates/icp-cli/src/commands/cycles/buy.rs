@@ -173,6 +173,9 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         Some(gateway) => gateway,
         None => cycles_gateway_canister_id().map_err(|message| anyhow!(message))?,
     };
+    // A principal that cannot be a canister is said so before any network
+    // is asked about it.
+    purchase::check_gateway_id(canister)?;
     let cyclepay = is_cyclepay(canister);
 
     let agent = match ctx
@@ -231,6 +234,40 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     wait_and_report(calls, &agent, &gateway, buyer, order, output, ctx.debug).await
 }
 
+/// What the gateway is called in prose. CyclePay's own is named, with
+/// Stripe, which takes its card payments; nothing of either is said of any
+/// other gateway, which may sell some other way.
+#[derive(Clone, Copy)]
+pub(crate) struct Names {
+    /// At the start of a sentence: `CyclePay`, `The gateway`.
+    pub(crate) subject: &'static str,
+    /// Within one: `CyclePay`, `the gateway`.
+    pub(crate) name: &'static str,
+    /// The page a card is paid on.
+    pub(crate) page: &'static str,
+    pub(crate) cyclepay: bool,
+}
+
+impl Names {
+    pub(crate) fn of(gateway: &Gateway) -> Self {
+        if is_cyclepay(gateway.canister) {
+            Self {
+                subject: "CyclePay",
+                name: "CyclePay",
+                page: "Stripe's page",
+                cyclepay: true,
+            }
+        } else {
+            Self {
+                subject: "The gateway",
+                name: "the gateway",
+                page: "the gateway's payment page",
+                cyclepay: false,
+            }
+        }
+    }
+}
+
 /// What becomes of an order the command is no longer waiting on. The order
 /// needs nothing from the command: the gateway delivers once the payment
 /// lands, so the buyer is told where the cycles will show.
@@ -252,7 +289,7 @@ async fn create_order(
     match purchase::place_order(calls, gateway, quote.amount).await {
         Ok(order) => Ok((order, quote)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
-            bail!("CyclePay refused the order: {error}")
+            bail!("{} refused the order: {error}", Names::of(gateway).subject)
         }
         Err(error) => Err(error.into()),
     }
@@ -280,6 +317,7 @@ fn confirm(
     yes: bool,
     speak: bool,
 ) -> Result<(), anyhow::Error> {
+    let names = Names::of(gateway);
     if speak {
         for line in quote_block(quote, target, gateway, buyer, identity) {
             info!("{line}");
@@ -287,7 +325,7 @@ fn confirm(
     }
     // Said even when the quote is not: a script that reads the figures off
     // --json, or -q's, would otherwise never hear they may be off.
-    if let Some(warning) = stale_rate_warning(&quote.rate) {
+    if let Some(warning) = stale_rate_warning(&quote.rate, names) {
         warn!("{warning}");
     }
     if !speak {
@@ -305,7 +343,10 @@ fn confirm(
         );
     }
     let confirmed = Confirm::new()
-        .with_prompt("Create this order? Nothing is charged until you pay on Stripe.")
+        .with_prompt(format!(
+            "Create this order? Nothing is charged until you pay on {}.",
+            names.page
+        ))
         .default(false)
         .interact()?;
     if !confirmed {
@@ -314,17 +355,18 @@ fn confirm(
     Ok(())
 }
 
-/// What to say of a rate CyclePay has not refreshed for longer than it
+/// What to say of a rate the gateway has not refreshed for longer than it
 /// tolerates, if it has not.
-fn stale_rate_warning(rate: &Rate) -> Option<String> {
+fn stale_rate_warning(rate: &Rate, names: Names) -> Option<String> {
     let age = rate
         .age
         .map(|age| format!(" for {}", format_age(age)))
         .unwrap_or_default();
     rate.stale.then(|| {
         format!(
-            "CyclePay has not refreshed its exchange rate{age}; the quote may be off, and the \
-             cycles delivered follow the rate when the payment lands."
+            "{} has not refreshed its exchange rate{age}; the quote may be off, and the \
+             cycles delivered follow the rate when the payment lands.",
+            names.subject
         )
     })
 }
@@ -462,6 +504,7 @@ async fn wait_and_report(
     output: Output,
     debug: bool,
 ) -> Result<(), anyhow::Error> {
+    let names = Names::of(gateway);
     let id = order.id.clone();
     // The live line is for a person at a terminal. Anyone else reading
     // stderr as it comes (an agent, a log, the debug log a spinner would
@@ -546,7 +589,7 @@ async fn wait_and_report(
         Err(error) => return Err(error.into()),
     };
 
-    report_end(agent, buyer, &order, output).await
+    report_end(agent, buyer, &order, output, names).await
 }
 
 /// How a wait ended other than in a delivery.
@@ -593,6 +636,7 @@ async fn report_end(
     buyer: Principal,
     order: &OrderView,
     output: Output,
+    names: Names,
 ) -> Result<(), anyhow::Error> {
     // The buyer's balance says something only when the cycles went there:
     // an order made on CyclePay's site can top up a canister, or credit
@@ -617,14 +661,18 @@ async fn report_end(
             .cycles_delivered
             .map(format_cycles)
             .unwrap_or_else(|| "cycles".to_owned());
-        // The status is read by query, so it is CyclePay's report as one
-        // replica gives it, and is said to be.
-        println!("CyclePay reports {cycles} delivered{}", delivered_to(order));
+        // The status is read by query, so it is the gateway's report as
+        // one replica gives it, and is said to be.
+        println!(
+            "{} reports {cycles} delivered{}",
+            names.subject,
+            delivered_to(order)
+        );
         if let Some(balance) = balance {
             println!("Balance: {}", format_cycles(balance));
         }
     }
-    ending(order)
+    ending(order, names)
 }
 
 /// ` to <principal>`, ` to canister <id>`: where the order says its cycles
@@ -639,7 +687,7 @@ fn delivered_to(order: &OrderView) -> String {
 
 /// How a settled order ended, as the command's result: `Ok` for a delivery,
 /// and an error that says what happened otherwise.
-fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
+fn ending(order: &OrderView, names: Names) -> Result<(), anyhow::Error> {
     let detail = order
         .detail
         .as_deref()
@@ -660,17 +708,23 @@ fn ending(order: &OrderView) -> Result<(), anyhow::Error> {
                 .unwrap_or_else(|| "the payment".to_owned())
         ),
         Some(CardOrderStatus::RefundOwed) => bail!(
-            "order {} could not be delivered; CyclePay owes you a refund, which an operator \
-             makes by hand{detail}. Keep the order id",
-            order.id
+            "order {} could not be delivered; {} owes you a refund, which an operator makes by \
+             hand{detail}. Keep the order id",
+            order.id,
+            names.name
         ),
         // Not a promise of a refund: a payment disputed before delivery
         // also needs review, and the dispute settles it.
         Some(CardOrderStatus::NeedsReview) => bail!(
-            "order {} needs review{detail}: your card was charged, and CyclePay checks the \
-             order by hand (a disputed payment is settled by the dispute). Keep the order id; \
-             CyclePay's site shows the outcome under My purchases",
-            order.id
+            "order {} needs review{detail}: your card was charged, and {} checks the order by \
+             hand (a disputed payment is settled by the dispute). Keep the order id{}",
+            order.id,
+            names.name,
+            if names.cyclepay {
+                "; CyclePay's site shows the outcome under My purchases"
+            } else {
+                ""
+            }
         ),
         Some(
             CardOrderStatus::AwaitingPayment
@@ -1024,14 +1078,15 @@ mod tests {
             detail: None,
             destination: None,
         };
-        assert!(ending(&order(Some(CardOrderStatus::Delivered))).is_ok());
+        let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        assert!(ending(&order(Some(CardOrderStatus::Delivered)), names).is_ok());
         for (status, says) in [
             (Some(CardOrderStatus::Refunded), "10.00 USD was refunded"),
             (Some(CardOrderStatus::Refunding), "is being refunded"),
             (Some(CardOrderStatus::RefundOwed), "owes you a refund"),
             (Some(CardOrderStatus::NeedsReview), "Keep the order id"),
         ] {
-            let err = ending(&order(status)).unwrap_err().to_string();
+            let err = ending(&order(status), names).unwrap_err().to_string();
             assert!(err.contains(says), "{status:?}: {err}");
         }
     }
@@ -1112,8 +1167,9 @@ mod tests {
             stale,
             age: Some(Duration::from_secs(5 * 3600)),
         };
-        assert_eq!(stale_rate_warning(&rate(false)), None);
-        let warning = stale_rate_warning(&rate(true)).unwrap();
+        let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        assert_eq!(stale_rate_warning(&rate(false), names), None);
+        let warning = stale_rate_warning(&rate(true), names).unwrap();
         assert!(warning.contains("for 5 hours"), "{warning}");
     }
 
@@ -1171,6 +1227,47 @@ mod tests {
         assert_eq!(parse_cycles("5t").unwrap().get(), 5_000_000_000_000);
         assert_eq!(parse_amount("12.50").unwrap(), "12.50");
         Cli::command().debug_assert();
+    }
+
+    /// Nothing of CyclePay's, or of Stripe's, is said of another gateway.
+    #[test]
+    fn another_gateway_is_not_called_cyclepay() {
+        let names = Names::of(&gateway_at("ryjl3-tyaaa-aaaaa-aaaba-cai"));
+        let stale = Rate {
+            xdr_usd_x10000: 13_520,
+            stale: true,
+            age: None,
+        };
+        let warning = stale_rate_warning(&stale, names).unwrap();
+        assert!(
+            warning.starts_with("The gateway has not refreshed"),
+            "{warning}"
+        );
+        assert!(!names.page.contains("Stripe"), "{}", names.page);
+        let order = |status| OrderView {
+            id: "co-1".into(),
+            status: Some(status),
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            checkout_url: None,
+            expires_at: None,
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+            destination: None,
+        };
+        for status in [CardOrderStatus::RefundOwed, CardOrderStatus::NeedsReview] {
+            let err = ending(&order(status), names).unwrap_err().to_string();
+            assert!(!err.contains("CyclePay"), "{err}");
+        }
+        let cyclepay = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        assert_eq!(cyclepay.page, "Stripe's page");
+        assert!(
+            stale_rate_warning(&stale, cyclepay)
+                .unwrap()
+                .starts_with("CyclePay has not refreshed")
+        );
     }
 
     /// CyclePay's ids are `co-<n>-<32 hex>`, 37 to 41 characters today: the

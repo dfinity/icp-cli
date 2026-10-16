@@ -10,6 +10,7 @@ air-gapped signing
 
 * fix: `icp cycles buy --json` and `icp cycles buy -q` imply `--yes`: a machine-readable run has nobody to ask, so neither prompts for confirmation on a terminal nor refuses without one, and the quote stays off stderr.
 * fix: `icp cycles buy` says, with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag
+* fix: `icp cycles buy` says in words what is wrong with a `--gateway` that is not a canister id, a canister that serves no gateway, and one a boundary node cannot route to, where it printed the replica's IC0536 or the HTTP gateway's routing error; CyclePay and Stripe are named only for CyclePay's gateway, any other is "the gateway"
 
 # v1.7.0
 

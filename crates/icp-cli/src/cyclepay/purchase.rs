@@ -17,7 +17,10 @@ use std::pin::pin;
 use std::time::{Duration, Instant};
 
 use candid::Principal;
-use icp_project::calls::{CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed};
+use ic_agent::AgentError;
+use icp_project::calls::{
+    CallError, CanisterCalls, RouteTo, TypedCallError, query_typed, update_typed,
+};
 use icp_project::prelude::IC_ROOT_KEY;
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
@@ -90,8 +93,23 @@ impl Gateway {
 
 #[derive(Debug, Snafu)]
 pub enum CyclesPurchaseError {
+    #[snafu(display("{gateway} cannot be a cycles gateway: it is {what}"))]
+    NotACanister {
+        gateway: Principal,
+        what: &'static str,
+    },
+
     #[snafu(display("the cycles gateway canister {gateway} does not exist on this network"))]
     GatewayNotFound { gateway: Principal },
+
+    #[snafu(display(
+        "canister {gateway} is not a cycles gateway: it does not serve {method}, the method a \
+         gateway publishes its terms with"
+    ))]
+    NotAGateway {
+        gateway: Principal,
+        method: &'static str,
+    },
 
     #[snafu(display("this network is not mainnet, and {MAINNET_HINT}"))]
     GatewayNotOnThisNetwork { gateway: Principal },
@@ -379,11 +397,19 @@ pub async fn connect(
 ) -> Result<Gateway, CyclesPurchaseError> {
     let (terms,): (CardTerms,) = query_typed(calls, canister, CARD_TERMS_METHOD, ())
         .await
-        .map_err(|source| {
-            map_absent(source, canister, |source| CyclesPurchaseError::ReadTerms {
+        .map_err(|source| match &source {
+            // A canister that is there but serves no such method: not a
+            // gateway at all, which the call's own words would only hint at.
+            TypedCallError::Call { source: call } if is_method_not_found(call) => {
+                CyclesPurchaseError::NotAGateway {
+                    gateway: canister,
+                    method: CARD_TERMS_METHOD,
+                }
+            }
+            _ => map_absent(source, canister, |source| CyclesPurchaseError::ReadTerms {
                 gateway: canister,
                 source: Box::new(source),
-            })
+            }),
         })?;
     Gateway::new(canister, terms)
 }
@@ -723,6 +749,20 @@ pub async fn wait_for_order(
 /// reached on the network chosen.
 pub const MAINNET_HINT: &str = "CyclePay sells cycles on mainnet: use `-n ic`";
 
+/// Refuse a principal that cannot be a gateway's canister id, before any
+/// network is asked about it: the management canister, the anonymous
+/// principal, and any principal of a kind no canister has (an identity's,
+/// say). A canister's id is an opaque principal, whose last byte is 1.
+pub fn check_gateway_id(gateway: Principal) -> Result<(), CyclesPurchaseError> {
+    let what = match gateway.as_slice() {
+        [] => "the management canister",
+        _ if gateway == Principal::anonymous() => "the anonymous principal",
+        [.., 0x01] => return Ok(()),
+        _ => "not a canister id",
+    };
+    NotACanisterSnafu { gateway, what }.fail()
+}
+
 /// Refuse to buy through CyclePay's own gateway anywhere but mainnet, told
 /// apart by `root_key`, the key the agent verifies the network's answers
 /// with. Any other gateway could be on any network, and is left to say for
@@ -738,19 +778,54 @@ pub fn check_network(gateway: Principal, root_key: &[u8]) -> Result<(), CyclesPu
     Ok(())
 }
 
-/// A replica's IC0301, saying the gateway canister does not exist, becomes
+/// A call saying the gateway canister does not exist becomes
 /// [`CyclesPurchaseError::GatewayNotFound`]; anything else goes to `wrap`.
+/// Either a replica says so (IC0301), or a boundary node does, before any
+/// replica sees the call, for an id it cannot route.
 fn map_absent(
     source: TypedCallError,
     gateway: Principal,
     wrap: impl FnOnce(TypedCallError) -> CyclesPurchaseError,
 ) -> CyclesPurchaseError {
     match &source {
-        TypedCallError::Call { source: call } if call.is_canister_not_found() => {
+        TypedCallError::Call { source: call }
+            if call.is_canister_not_found() || is_unroutable(call) =>
+        {
             CyclesPurchaseError::GatewayNotFound { gateway }
         }
         _ => wrap(source),
     }
+}
+
+/// The replica's error code for a call to a method the canister does not
+/// export (`CanisterMethodNotFound`).
+const METHOD_NOT_FOUND: &str = "IC0536";
+
+/// Whether `call` reached a canister that exports no such method. A replica
+/// that gave no code leaves only its words to go on.
+fn is_method_not_found(call: &CallError) -> bool {
+    match call.code() {
+        Some(code) => code == METHOD_NOT_FOUND,
+        None => call
+            .message()
+            .is_some_and(|message| message.contains("has no query method")),
+    }
+}
+
+/// Whether a boundary node answered `call` that the canister it was addressed
+/// to does not exist: an HTTP 4xx whose body is its `canister_not_found`.
+/// The agent reports that as a failure, not a rejection, since no replica
+/// gave a verdict.
+fn is_unroutable(call: &CallError) -> bool {
+    let CallError::Failed { source, .. } = call else {
+        return false;
+    };
+    matches!(
+        source.downcast_ref::<AgentError>(),
+        Some(AgentError::HttpError(payload))
+            if (400..500).contains(&payload.status)
+                && String::from_utf8_lossy(&payload.content).contains("canister_not_found")
+    )
 }
 
 #[cfg(test)]

@@ -955,7 +955,7 @@ Exactly one of --amount or --cycles must be given.
 * `-y`, `--yes` — Skip confirmation prompts. Implied by --json and --quiet, which have nobody to ask
 * `--no-open` — Do not open the payment page in a browser
 * `--no-wait` — Print the payment page's link and return without waiting for the order to complete
-* `--json` — Output command results as JSON
+* `--json` — Output command results as JSON: one object once the order is made, and, unless --no-wait, one when the wait ends, saying how
 * `-q`, `--quiet` — Suppress human-readable output; print only the payment page's link, then the final status
 
 

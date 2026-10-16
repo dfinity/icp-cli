@@ -19,10 +19,12 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{info, warn};
 
-use crate::commands::args::TokenCommandArgs;
+use crate::commands::args::{
+    PasteFlags, TokenCommandArgs, TokenCommandSelections, selection_flags, shell_word,
+};
 use crate::cyclepay::format_cycles;
 use crate::cyclepay::interface::{
-    CardOrderStatus, Destination, cycles_gateway_canister_id, is_cyclepay,
+    CardOrderStatus, Destination, ORDER_STATUS_METHOD, cycles_gateway_canister_id, is_cyclepay,
 };
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
@@ -222,16 +224,29 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
     let identity = identity_name(ctx, &selections.identity).await;
     let (order, quote) =
         create_order(calls, &gateway, buyer, identity.as_deref(), target, args).await?;
+    let after = FollowUp {
+        flags: paste_flags(&selections, identity.as_deref()),
+        canister,
+    };
     announce_payable(&order, &quote, output, args.no_open);
 
     if args.no_wait {
         if output == Output::Human {
-            info!("Not waiting. {AFTER_HINT}");
+            let mut paragraphs = vec![
+                "Not waiting. Once the order is paid, its cycles land on your identity's \
+                 cycles-ledger account. To see them:"
+                    .to_owned(),
+            ];
+            after.balance(&mut paragraphs);
+            info!("{}", paragraphs.join("\n\n"));
         }
         return Ok(());
     }
 
-    wait_and_report(calls, &agent, &gateway, buyer, order, output, ctx.debug).await
+    wait_and_report(
+        calls, &agent, &gateway, buyer, order, output, ctx.debug, &after,
+    )
+    .await
 }
 
 /// What the gateway is called in prose. CyclePay's own is named, with
@@ -268,11 +283,57 @@ impl Names {
     }
 }
 
-/// What becomes of an order the command is no longer waiting on. The order
-/// needs nothing from the command: the gateway delivers once the payment
-/// lands, so the buyer is told where the cycles will show.
-const AFTER_HINT: &str = "Once the order is paid, the cycles land on your identity's \
-                          cycles-ledger account; `icp cycles balance` shows them.";
+/// The flags that select what this run selected, for a command printed to
+/// be pasted. The identity is named even when it was the default: only the
+/// identity that made an order can read it, and the default can change.
+fn paste_flags(selections: &TokenCommandSelections, identity: Option<&str>) -> PasteFlags {
+    let identity = match (&selections.identity, identity) {
+        (IdentitySelection::Default, Some(name)) => IdentitySelection::Named(name.to_owned()),
+        (selected, _) => selected.clone(),
+    };
+    selection_flags(&identity, &selections.network, &selections.environment)
+}
+
+/// `commands` as a paragraph of their own, each on a line of its own,
+/// indented and never wrapped; then a paragraph for any blank in `flags`
+/// that the reader fills in.
+fn commands_with(paragraphs: &mut Vec<String>, commands: &[String], flags: &PasteFlags) {
+    paragraphs.push(
+        commands
+            .iter()
+            .map(|command| format!("    {command}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    paragraphs.extend(flags.notes());
+}
+
+/// How to look in on an order once the command has stopped waiting on it,
+/// as the identity and on the network the command ran with.
+struct FollowUp {
+    flags: PasteFlags,
+    /// The gateway the order was made on.
+    canister: Principal,
+}
+
+impl FollowUp {
+    /// The command that shows the cycles once they land.
+    fn balance(&self, paragraphs: &mut Vec<String>) {
+        let command = format!("icp cycles balance{}", self.flags.text);
+        commands_with(paragraphs, &[command], &self.flags);
+    }
+
+    /// The command that reads order `id` back.
+    fn order_status(&self, paragraphs: &mut Vec<String>, id: &str) {
+        let arg = shell_word(&format!("(\"{}\")", id.escape_default()))
+            .unwrap_or_else(|| "'(\"<order id>\")'".to_owned());
+        let command = format!(
+            "icp canister call {} {ORDER_STATUS_METHOD} --query{} {arg}",
+            self.canister, self.flags.text
+        );
+        commands_with(paragraphs, &[command], &self.flags);
+    }
+}
 
 /// Quote, confirm, create. Returns the order with the quote it was placed on.
 async fn create_order(
@@ -505,6 +566,7 @@ async fn wait_and_report(
     order: OrderView,
     output: Output,
     debug: bool,
+    after: &FollowUp,
 ) -> Result<(), anyhow::Error> {
     let names = Names::of(gateway);
     let id = order.id.clone();
@@ -598,40 +660,32 @@ async fn wait_and_report(
 
     let order = match result {
         Ok(order) => order,
-        // Stopped, not failed: the order carries on without the command.
+        // -q asks for nothing but the link and the end: the error alone.
+        Err(error) if output == Output::Quiet => return Err(error.into()),
+        // The wait ended with the order unsettled. It carries on without
+        // the command, which says once where it stands, as the error it
+        // ends with.
         Err(CyclesPurchaseError::Interrupted { order }) => {
-            if output != Output::Quiet {
-                info!("{} {AFTER_HINT}", standing(&order, false));
-            }
-            return Err(CyclesPurchaseError::Interrupted { order }.into());
+            bail!("{}", unsettled(&order, Unsettled::Stopped, names, after))
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
-            if output != Output::Quiet {
-                info!("{} {AFTER_HINT}", standing(&order, true));
-            }
-            return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
+            bail!("{}", unsettled(&order, Unsettled::TimedOut, names, after))
         }
         // The gateway stopped answering for five minutes: the order is said
-        // as last seen, which is all that is known of it.
-        Err(CyclesPurchaseError::ContactLost {
-            gateway,
-            order,
-            source,
-        }) => {
-            if output != Output::Quiet {
-                info!("{} {AFTER_HINT}", standing(&order, false));
-            }
-            return Err(CyclesPurchaseError::ContactLost {
-                gateway,
-                order,
-                source,
-            }
-            .into());
+        // as last seen, which is all that is known of it, over the last
+        // poll's failure.
+        Err(CyclesPurchaseError::ContactLost { order, source, .. }) => {
+            return Err(anyhow::Error::new(*source).context(unsettled(
+                &order,
+                Unsettled::ContactLost,
+                names,
+                after,
+            )));
         }
         Err(error) => return Err(error.into()),
     };
 
-    report_end(agent, buyer, &order, output, names).await
+    report_end(agent, buyer, &order, output, names, after).await
 }
 
 /// How a wait ended other than in a delivery.
@@ -683,6 +737,7 @@ async fn report_end(
     order: &OrderView,
     output: Output,
     names: Names,
+    after: &FollowUp,
 ) -> Result<(), anyhow::Error> {
     // The buyer's balance says something only when the cycles went there:
     // an order made on CyclePay's site can top up a canister, or credit
@@ -718,7 +773,7 @@ async fn report_end(
             println!("Balance: {}", format_cycles(balance));
         }
     }
-    ending(order, names)
+    ending(order, names, after)
 }
 
 /// ` to <principal>`, ` to canister <id>`: where the order says its cycles
@@ -732,70 +787,124 @@ fn delivered_to(order: &OrderView) -> String {
 }
 
 /// How a settled order ended, as the command's result: `Ok` for a delivery,
-/// and an error that says what happened otherwise.
-fn ending(order: &OrderView, names: Names) -> Result<(), anyhow::Error> {
+/// and an error that says what happened otherwise. An order an operator
+/// handles comes with the command that shows how it ends.
+fn ending(order: &OrderView, names: Names, after: &FollowUp) -> Result<(), anyhow::Error> {
     let detail = order
         .detail
         .as_deref()
         .map(|detail| format!(" ({detail})"))
         .unwrap_or_default();
+    let id = &order.id;
+    let mut paragraphs = Vec::new();
     match order.status {
-        Some(CardOrderStatus::Delivered) => Ok(()),
-        Some(CardOrderStatus::Refunding) => bail!(
-            "order {} could not be delivered and is being refunded to your card{detail}",
-            order.id
-        ),
+        Some(CardOrderStatus::Delivered) => return Ok(()),
+        Some(CardOrderStatus::Refunding) => {
+            bail!("order {id} could not be delivered and is being refunded to your card{detail}")
+        }
         Some(CardOrderStatus::Refunded) => bail!(
-            "order {} could not be delivered; {} was refunded to your card{detail}",
-            order.id,
+            "order {id} could not be delivered; {} was refunded to your card{detail}",
             order
                 .refunded
                 .map(|m| m.to_string())
                 .unwrap_or_else(|| "the payment".to_owned())
         ),
-        Some(CardOrderStatus::RefundOwed) => bail!(
-            "order {} could not be delivered; {} owes you a refund, which an operator makes by \
-             hand{detail}. Keep the order id",
-            order.id,
-            names.name
-        ),
+        Some(CardOrderStatus::RefundOwed) => {
+            paragraphs.push(format!(
+                "order {id} could not be delivered: {} owes you a refund, which an operator \
+                 makes by hand{detail}.",
+                names.name
+            ));
+            look_later(&mut paragraphs, id, names, after);
+        }
         // Not a promise of a refund: a payment disputed before delivery
         // also needs review, and the dispute settles it.
-        Some(CardOrderStatus::NeedsReview) => bail!(
-            "order {} needs review{detail}: your card was charged, and {} checks the order by \
-             hand (a disputed payment is settled by the dispute). Keep the order id{}",
-            order.id,
-            names.name,
-            if names.cyclepay {
-                "; CyclePay's site shows the outcome under My purchases"
-            } else {
-                ""
-            }
-        ),
+        Some(CardOrderStatus::NeedsReview) => {
+            paragraphs.push(format!(
+                "order {id} needs review{detail}: your card was charged, and {} checks the order \
+                 by hand (a disputed payment is settled by the dispute).",
+                names.name
+            ));
+            look_later(&mut paragraphs, id, names, after);
+        }
         Some(
             CardOrderStatus::AwaitingPayment
             | CardOrderStatus::PaymentPending
             | CardOrderStatus::Processing,
         )
-        | None => bail!("order {} is still {}", order.id, order.status_text()),
+        | None => bail!("order {id} is still {}", order.status_text()),
     }
+    bail!("{}", paragraphs.join("\n\n"))
 }
 
-/// Where an order the wait left unsettled stands, when it was stopped or
-/// (`timed_out`) gave up. Only an order known to be unpaid is payable.
-fn standing(order: &OrderView, timed_out: bool) -> String {
-    match order.status {
-        Some(CardOrderStatus::AwaitingPayment) if timed_out => format!(
-            "No payment arrived. Order {} stays payable{}.",
-            order.id,
-            payable_until(order)
-        ),
-        Some(CardOrderStatus::AwaitingPayment) => {
-            format!("Order {} stays payable{}.", order.id, payable_until(order))
+/// Where to see how an order an operator handles ends: the gateway shows it
+/// to the identity that made the order, and CyclePay's site to an identity
+/// linked there.
+fn look_later(paragraphs: &mut Vec<String>, id: &str, names: Names, after: &FollowUp) {
+    paragraphs.push(
+        if names.cyclepay {
+            "Keep the order id. CyclePay's site shows how it ends under My purchases, and so does:"
+        } else {
+            "Keep the order id. To see how it ends:"
         }
-        _ if timed_out => format!("Order {} is still {}.", order.id, order.status_text()),
-        _ => format!("Order {} is {}.", order.id, order.status_text()),
-    }
+        .to_owned(),
+    );
+    after.order_status(paragraphs, id);
+}
+
+/// How a wait ended with the order unsettled.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Unsettled {
+    /// Ctrl-C, or a stop signal.
+    Stopped,
+    /// The hour ran out.
+    TimedOut,
+    /// The gateway stopped answering for long enough.
+    ContactLost,
+}
+
+/// Where an order the wait left unsettled stands, said once: why the wait
+/// ended, whether the order is still payable or already paid, where its
+/// cycles land, and the command that shows them. Only an order known to be
+/// unpaid is called payable; one the wait lost contact over may have been
+/// paid since, so both are said.
+fn unsettled(order: &OrderView, how: Unsettled, names: Names, after: &FollowUp) -> String {
+    let id = &order.id;
+    let until = payable_until(order);
+    let land = "its cycles land on your identity's cycles-ledger account. To see them:";
+    let mut paragraphs = vec![match how {
+        Unsettled::Stopped => format!("stopped waiting for order {id}."),
+        Unsettled::TimedOut | Unsettled::ContactLost => {
+            format!("gave up waiting for order {id}.")
+        }
+    }];
+    // Why, unless it was asked for.
+    let why = match how {
+        Unsettled::Stopped => String::new(),
+        Unsettled::TimedOut => "An hour passed. ".to_owned(),
+        Unsettled::ContactLost => format!("{} stopped answering. ", names.subject),
+    };
+    paragraphs.push(match (order.status, how) {
+        (Some(CardOrderStatus::AwaitingPayment), Unsettled::ContactLost) => format!(
+            "{why}The order carries on without this command. Unpaid, it stays payable{until}; \
+             once it is paid, {land}"
+        ),
+        (Some(CardOrderStatus::AwaitingPayment), Unsettled::TimedOut) => format!(
+            "No payment arrived in an hour. It stays payable{until}; once it is paid, {land}"
+        ),
+        (Some(CardOrderStatus::AwaitingPayment), Unsettled::Stopped) => {
+            format!("It stays payable{until}. Once it is paid, {land}")
+        }
+        (Some(CardOrderStatus::Processing), _) => {
+            format!("{why}It is paid and being delivered: {land}")
+        }
+        (_, _) => format!(
+            "{why}It is {}. The order carries on without this command: if it is paid, {land}",
+            order.status_text()
+        ),
+    });
+    after.balance(&mut paragraphs);
+    paragraphs.join("\n\n")
 }
 
 /// ` until 2026-10-15T03:33:12Z`: when an unpaid order stops being payable.
@@ -973,6 +1082,9 @@ struct JsonOrderFinal<'a> {
 
 #[cfg(test)]
 mod tests {
+    use icp_app::context::NetworkSelection;
+    use icp_project::host::EnvironmentSelection;
+
     use super::*;
     use crate::cyclepay::interface::CYCLES_GATEWAY_CID;
 
@@ -988,6 +1100,57 @@ mod tests {
                 ledger_delivery_fee_cycles: 200_000_000,
             },
         }
+    }
+
+    fn order_with(status: Option<CardOrderStatus>, expires_at: Option<u64>) -> OrderView {
+        OrderView {
+            id: "co-1".into(),
+            status,
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            checkout_url: None,
+            expires_at,
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+            destination: None,
+        }
+    }
+
+    fn selections(identity: IdentitySelection) -> TokenCommandSelections {
+        TokenCommandSelections {
+            environment: EnvironmentSelection::Default,
+            network: NetworkSelection::Named("ic".into()),
+            identity,
+        }
+    }
+
+    /// A run on mainnet as the default identity, `alice`.
+    fn after() -> FollowUp {
+        FollowUp {
+            flags: paste_flags(&selections(IdentitySelection::Default), Some("alice")),
+            canister: Principal::from_text(CYCLES_GATEWAY_CID).unwrap(),
+        }
+    }
+
+    /// Paragraphs with a blank line between them; commands on lines of
+    /// their own, indented, after a blank line; and no backticks.
+    fn assert_laid_out(message: &str) {
+        let lines: Vec<&str> = message.lines().collect();
+        for (n, line) in lines.iter().enumerate() {
+            if line.starts_with("    ") {
+                assert!(line.starts_with("    icp "), "{message}");
+                assert!(
+                    lines[n - 1].is_empty() || lines[n - 1].starts_with("    "),
+                    "{message}"
+                );
+            } else if !line.is_empty() && n > 0 {
+                assert!(lines[n - 1].is_empty(), "{n}: {line}\n{message}");
+            }
+        }
+        assert!(!message.contains('`'), "{message}");
+        assert!(!message.ends_with('\n'), "{message:?}");
     }
 
     /// `--json` and `-q` imply `--yes` and keep the quote off stderr; `--yes`
@@ -1161,68 +1324,180 @@ mod tests {
     #[test]
     fn only_a_delivery_ends_well() {
         let order = |status| OrderView {
-            id: "co-1".into(),
-            status,
-            amount: Money::from_minor_units(1000, Currency::Usd),
-            net: Money::from_minor_units(941, Currency::Usd),
-            checkout_url: None,
-            expires_at: None,
             paid: Some(Money::from_minor_units(1000, Currency::Usd)),
-            cycles_delivered: None,
             refunded: Some(Money::from_minor_units(1000, Currency::Usd)),
-            detail: None,
-            destination: None,
+            ..order_with(status, None)
         };
         let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
-        assert!(ending(&order(Some(CardOrderStatus::Delivered)), names).is_ok());
+        assert!(ending(&order(Some(CardOrderStatus::Delivered)), names, &after()).is_ok());
         for (status, says) in [
             (Some(CardOrderStatus::Refunded), "10.00 USD was refunded"),
             (Some(CardOrderStatus::Refunding), "is being refunded"),
             (Some(CardOrderStatus::RefundOwed), "owes you a refund"),
             (Some(CardOrderStatus::NeedsReview), "Keep the order id"),
         ] {
-            let err = ending(&order(status), names).unwrap_err().to_string();
+            let err = ending(&order(status), names, &after())
+                .unwrap_err()
+                .to_string();
             assert!(err.contains(says), "{status:?}: {err}");
+            assert_laid_out(&err);
         }
+        // An order an operator handles comes with the command that reads it
+        // back, as the identity and on the network the run used.
+        let err = ending(&order(Some(CardOrderStatus::RefundOwed)), names, &after())
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err,
+            "order co-1 could not be delivered: CyclePay owes you a refund, which an operator \
+             makes by hand.\n\
+             \n\
+             Keep the order id. CyclePay's site shows how it ends under My purchases, and so \
+             does:\n\
+             \n    icp canister call 2bwus-iiaaa-aaaac-bee3a-cai order_status --query \
+             --identity alice -n ic '(\"co-1\")'"
+        );
     }
 
-    /// A wait that stops or gives up calls an order payable only when it is
-    /// known to be unpaid.
+    /// `unsettled`, as said of an order on CyclePay's gateway.
+    fn said(order: &OrderView, how: Unsettled) -> String {
+        let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        unsettled(order, how, names, &after())
+    }
+
+    /// A wait that stops, gives up or loses contact says once where the
+    /// order stands: payable only when it is known to be unpaid, paid when
+    /// it is, and both when contact was lost and it may have been paid
+    /// since. Every one ends with the command that shows the cycles, on a
+    /// line of its own, as the identity and on the network the run used.
     #[test]
-    fn an_unsettled_order_is_payable_only_when_known_unpaid() {
-        let order = |status| OrderView {
-            id: "co-1".into(),
-            status,
-            amount: Money::from_minor_units(1000, Currency::Usd),
-            net: Money::from_minor_units(941, Currency::Usd),
-            checkout_url: None,
-            expires_at: Some(1_700_000_000),
-            paid: None,
-            cycles_delivered: None,
-            refunded: None,
-            detail: None,
-            destination: None,
+    fn an_unsettled_order_is_said_once_where_it_stands() {
+        let unpaid = OrderView {
+            id: "co-12-20d30d24771ff92787f41d95b6764a61".into(),
+            ..order_with(Some(CardOrderStatus::AwaitingPayment), Some(1_700_000_000))
         };
         assert_eq!(
-            standing(&order(Some(CardOrderStatus::AwaitingPayment)), false),
-            "Order co-1 stays payable until 2023-11-14T22:13:20Z."
+            said(&unpaid, Unsettled::Stopped),
+            "\
+stopped waiting for order co-12-20d30d24771ff92787f41d95b6764a61.
+
+It stays payable until 2023-11-14T22:13:20Z. Once it is paid, its cycles land on your identity's cycles-ledger account. To see them:
+
+    icp cycles balance --identity alice -n ic"
         );
         assert_eq!(
-            standing(&order(Some(CardOrderStatus::AwaitingPayment)), true),
-            "No payment arrived. Order co-1 stays payable until 2023-11-14T22:13:20Z."
+            said(&unpaid, Unsettled::TimedOut),
+            "\
+gave up waiting for order co-12-20d30d24771ff92787f41d95b6764a61.
+
+No payment arrived in an hour. It stays payable until 2023-11-14T22:13:20Z; once it is paid, its cycles land on your identity's cycles-ledger account. To see them:
+
+    icp cycles balance --identity alice -n ic"
         );
         assert_eq!(
-            standing(&order(Some(CardOrderStatus::Processing)), true),
-            "Order co-1 is still paid, delivering."
+            said(&unpaid, Unsettled::ContactLost),
+            "\
+gave up waiting for order co-12-20d30d24771ff92787f41d95b6764a61.
+
+CyclePay stopped answering. The order carries on without this command. Unpaid, it stays payable until 2023-11-14T22:13:20Z; once it is paid, its cycles land on your identity's cycles-ledger account. To see them:
+
+    icp cycles balance --identity alice -n ic"
         );
-        for timed_out in [false, true] {
-            let said = standing(&order(None), timed_out);
-            assert!(said.contains("does not know"), "{said}");
+
+        let delivering = order_with(Some(CardOrderStatus::Processing), None);
+        let text = said(&delivering, Unsettled::TimedOut);
+        assert!(
+            text.contains("An hour passed. It is paid and being delivered: its cycles land"),
+            "{text}"
+        );
+        assert!(!text.contains("payable"), "{text}");
+        // Paid is said once: no "once it is paid" after "is paid".
+        assert_eq!(text.matches("paid").count(), 1, "{text}");
+
+        for how in [
+            Unsettled::Stopped,
+            Unsettled::TimedOut,
+            Unsettled::ContactLost,
+        ] {
+            let text = said(&order_with(None, None), how);
+            assert!(text.contains("does not know"), "{text}");
+            assert!(!text.contains("payable"), "{text}");
             assert!(
-                !said.contains("payable") && !said.contains("No payment"),
-                "{said}"
+                text.ends_with(":\n\n    icp cycles balance --identity alice -n ic"),
+                "{text}"
             );
+            assert_laid_out(&text);
+            assert_laid_out(&said(&unpaid, how));
         }
+        // Another gateway is not called CyclePay when it stops answering.
+        let names = Names::of(&gateway_at("ryjl3-tyaaa-aaaaa-aaaba-cai"));
+        let text = unsettled(&unpaid, Unsettled::ContactLost, names, &after());
+        assert!(text.contains("The gateway stopped answering."), "{text}");
+        assert!(!text.contains("CyclePay"), "{text}");
+    }
+
+    /// The follow-up commands carry the run's identity (the default named,
+    /// since only the identity that made an order can read it), network and
+    /// environment, quoted for every shell, and leave a blank with a note
+    /// where no quoting works.
+    #[test]
+    fn the_follow_up_commands_carry_the_selections() {
+        let flags = |identity, name: Option<&str>| paste_flags(&selections(identity), name).text;
+        assert_eq!(
+            flags(IdentitySelection::Default, Some("alice")),
+            " --identity alice -n ic"
+        );
+        assert_eq!(flags(IdentitySelection::Default, None), " -n ic");
+        let named = |name: &str| IdentitySelection::Named(name.to_owned());
+        assert_eq!(
+            flags(named("-dash"), Some("-dash")),
+            " --identity=-dash -n ic"
+        );
+        assert_eq!(
+            flags(named("o'neil"), Some("o'neil")),
+            " --identity \"o'neil\" -n ic"
+        );
+        let environment = TokenCommandSelections {
+            environment: EnvironmentSelection::Named("ic".into()),
+            network: NetworkSelection::Default,
+            identity: IdentitySelection::Default,
+        };
+        assert_eq!(
+            paste_flags(&environment, Some("alice")).text,
+            " --identity alice -e ic"
+        );
+
+        let order = order_with(Some(CardOrderStatus::NeedsReview), None);
+        let names = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
+        let unquotable = FollowUp {
+            flags: paste_flags(&selections(named("o'neil $x")), Some("o'neil $x")),
+            ..after()
+        };
+        let err = ending(&order, names, &unquotable).unwrap_err().to_string();
+        assert!(
+            err.contains(
+                "\n    icp canister call 2bwus-iiaaa-aaaac-bee3a-cai order_status --query \
+                 --identity <your identity> -n ic '(\"co-1\")'\n"
+            ),
+            "{err}"
+        );
+        assert!(
+            err.ends_with(
+                "\n\nFill in <your identity> yourself: no quoting of it works in every shell."
+            ),
+            "{err}"
+        );
+        assert_laid_out(&err);
+        // The balance command carries the same blank and note.
+        let mut paragraphs = Vec::new();
+        unquotable.balance(&mut paragraphs);
+        assert_eq!(
+            paragraphs,
+            [
+                "    icp cycles balance --identity <your identity> -n ic",
+                "Fill in <your identity> yourself: no quoting of it works in every shell."
+            ]
+        );
     }
 
     /// A delivery is told against the place the order says, whichever it is.
@@ -1353,8 +1628,16 @@ mod tests {
             destination: None,
         };
         for status in [CardOrderStatus::RefundOwed, CardOrderStatus::NeedsReview] {
-            let err = ending(&order(status), names).unwrap_err().to_string();
+            let err = ending(&order(status), names, &after())
+                .unwrap_err()
+                .to_string();
             assert!(!err.contains("CyclePay"), "{err}");
+            assert!(
+                err.contains(
+                    "\n\nKeep the order id. To see how it ends:\n\n    icp canister call "
+                ),
+                "{err}"
+            );
         }
         let cyclepay = Names::of(&gateway_at(CYCLES_GATEWAY_CID));
         assert_eq!(cyclepay.page, "Stripe's page");

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use candid::Principal;
-use clap::Args;
+use clap::{ArgGroup, Args};
 use dialoguer::Confirm;
 use dialoguer::console::Term;
 use icp_app::context::{Context, GetAgentError, GetAgentForEnvError, GetAgentForNetworkError};
@@ -46,19 +46,25 @@ use crate::render::{ProgressManager, ProgressManagerSettings};
 ///
 /// Exactly one of --amount or --cycles must be given.
 #[derive(Debug, Args)]
+#[command(group(ArgGroup::new("what").required(true).args(["amount", "cycles"])))]
 pub(crate) struct BuyArgs {
     /// Amount to spend, as a decimal (e.g. 10 or 12.50), in the currency given by --currency
     #[arg(
         long,
         value_name = "AMOUNT",
-        required_unless_present = "cycles",
-        conflicts_with = "cycles"
+        allow_hyphen_values = true,
+        value_parser = parse_amount
     )]
     pub(crate) amount: Option<String>,
 
     /// Cycles to receive; the amount to pay is worked out from the current rate, card fee included.
     /// Supports suffixes: k (thousand), m (million), b (billion), t (trillion).
-    #[arg(long, value_name = "CYCLES")]
+    #[arg(
+        long,
+        value_name = "CYCLES",
+        allow_hyphen_values = true,
+        value_parser = parse_cycles
+    )]
     pub(crate) cycles: Option<CyclesAmount>,
 
     /// ISO 4217 code of the currency to pay in. CyclePay accepts USD only
@@ -93,6 +99,33 @@ pub(crate) struct BuyArgs {
     /// Suppress human-readable output; print only the payment page's link, then the final status
     #[arg(long, short)]
     pub(crate) quiet: bool,
+}
+
+/// `--amount` as given, but for a sign, which is refused here as `--cycles`
+/// refuses one; the rest is read once the currency is known.
+fn parse_amount(input: &str) -> Result<String, String> {
+    unsigned(input, "the amount to spend, such as 10 or 12.50")?;
+    Ok(input.to_owned())
+}
+
+/// `--cycles`, refusing a sign as `--amount` does.
+fn parse_cycles(input: &str) -> Result<CyclesAmount, String> {
+    unsigned(input, "the cycles to receive, such as 5t")?;
+    input.parse()
+}
+
+/// Refuse a value that starts with `-`, which both options take as theirs
+/// rather than as a flag: a negative number (`-1`, `-5t`), or a flag given
+/// where the value was left out (`--amount --yes`). Said in words, where clap
+/// would read `-5t` as an unknown flag.
+fn unsigned(input: &str, wanted: &str) -> Result<(), String> {
+    match input.trim_start().strip_prefix('-') {
+        None => Ok(()),
+        Some(rest) if rest.starts_with(|c: char| c.is_ascii_digit() || c == '.') => {
+            Err(format!("cannot be negative: give {wanted}"))
+        }
+        Some(_) => Err(format!("give {wanted}")),
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1082,6 +1115,62 @@ mod tests {
         assert_eq!(stale_rate_warning(&rate(false)), None);
         let warning = stale_rate_warning(&rate(true)).unwrap();
         assert!(warning.contains("for 5 hours"), "{warning}");
+    }
+
+    /// Exactly one of --amount and --cycles, said as such when neither is
+    /// given; and a negative value of either refused by clap in the same
+    /// words, the form with a suffix included, rather than read as a flag.
+    #[test]
+    fn amount_or_cycles_is_required_and_neither_may_be_negative() {
+        use clap::error::ErrorKind;
+        use clap::{CommandFactory, Parser};
+
+        #[derive(Parser)]
+        struct Cli {
+            #[command(flatten)]
+            buy: BuyArgs,
+        }
+
+        let err = Cli::try_parse_from(["buy"]).err().unwrap().to_string();
+        assert!(err.contains("--amount <AMOUNT>|--cycles <CYCLES>"), "{err}");
+        let err = Cli::try_parse_from(["buy", "--amount", "1", "--cycles", "1t"])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("cannot be used with"), "{err}");
+        for (args, says) in [
+            (
+                ["buy", "--amount", "-1"],
+                "invalid value '-1' for '--amount <AMOUNT>': cannot be negative: give the \
+                 amount to spend, such as 10 or 12.50",
+            ),
+            (
+                ["buy", "--amount", "-0.5"],
+                "invalid value '-0.5' for '--amount <AMOUNT>': cannot be negative",
+            ),
+            (
+                ["buy", "--cycles", "-1"],
+                "invalid value '-1' for '--cycles <CYCLES>': cannot be negative: give the \
+                 cycles to receive, such as 5t",
+            ),
+            (
+                ["buy", "--cycles", "-5t"],
+                "invalid value '-5t' for '--cycles <CYCLES>': cannot be negative: give the \
+                 cycles to receive, such as 5t",
+            ),
+            (
+                ["buy", "--amount", "--yes"],
+                "invalid value '--yes' for '--amount <AMOUNT>': give the amount to spend",
+            ),
+        ] {
+            let err = Cli::try_parse_from(args).err().unwrap();
+            assert_eq!(err.kind(), ErrorKind::ValueValidation, "{args:?}");
+            assert_eq!(err.exit_code(), 2, "{args:?}");
+            assert!(err.to_string().contains(says), "{args:?}: {err}");
+        }
+        assert_eq!(parse_cycles("5t").unwrap().get(), 5_000_000_000_000);
+        assert_eq!(parse_amount("12.50").unwrap(), "12.50");
+        Cli::command().debug_assert();
     }
 
     /// CyclePay's ids are `co-<n>-<32 hex>`, 37 to 41 characters today: the

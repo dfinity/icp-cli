@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail};
 use candid::Principal;
 use clap::{ArgGroup, Args};
 use dialoguer::Confirm;
-use dialoguer::console::Term;
+use dialoguer::console::{Term, colors_enabled_stderr};
 use icp_app::context::{Context, GetAgentError, GetAgentForEnvError, GetAgentForNetworkError};
 use icp_app::identity::IdentitySelection;
 use icp_app::identity::manifest::IdentityDefaults;
@@ -479,6 +479,8 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
                         "(Make the terminal {width} columns by {height} rows or larger to see the \
                          QR code.)"
                     );
+                } else if colors_enabled_stderr() {
+                    eprintln!("{}", black_on_white(&qr));
                 } else {
                     eprintln!("{qr}");
                 }
@@ -762,12 +764,12 @@ fn payable_until(order: &OrderView) -> String {
 }
 
 /// The URL as a QR code drawn with half-block characters, two modules per
-/// row, for scanning off the terminal: light modules are the blocks, in the
-/// terminal's own colours, which scans best light on dark. It takes the
-/// lowest error correction (a screen does not smudge) and a two-module quiet
-/// zone, the least a scanner needs, so that the Payment Link's code fits an
-/// 80x24 terminal with the wait's line below it. `None` only if the URL is
-/// too long to encode.
+/// row, for scanning off the terminal: light modules are the blocks, dark
+/// ones the spaces, in the terminal's own colours (`black_on_white` fixes
+/// those where it can). It takes the lowest error correction (a screen does
+/// not smudge) and a two-module quiet zone, the least a scanner needs, so
+/// that the Payment Link's code fits an 80x24 terminal with the wait's line
+/// below it. `None` only if the URL is too long to encode.
 fn render_qr(url: &str) -> Option<String> {
     use qrcode::render::unicode::Dense1x2;
     use qrcode::{EcLevel, QrCode};
@@ -800,6 +802,25 @@ fn render_qr(url: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join("\n"),
     )
+}
+
+/// The drawn code, black on white whatever the terminal's theme: every row
+/// set to white (256-colour palette entry 231) on black (entry 16) and reset
+/// at its end. Left in the terminal's own colours, the code is at the mercy
+/// of the theme: a light theme inverts it, and a dark theme's background is
+/// often a grey rather than black, and many phone cameras read neither.
+/// Entries 16 and 231 are in the fixed colour cube, which themes do not
+/// remap as they do the first 16 colours, so the result is the same on all
+/// of them. For a terminal without colour support the caller prints the
+/// plain drawing, which is what every terminal got before: the worst case
+/// is no worse than today. The width and height to fit on the screen are
+/// those of the plain drawing; measure that, not this.
+fn black_on_white(drawing: &str) -> String {
+    drawing
+        .lines()
+        .map(|row| format!("\x1b[38;5;231;48;5;16m{row}\x1b[0m"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Where the order stands, for a script: one JSON object, or the status tag
@@ -1061,6 +1082,36 @@ mod tests {
         assert!(!lines[lines.len() - 2].contains([' ', '▀']), "{qr}");
         // Far beyond a QR code's capacity.
         assert!(render_qr(&"x".repeat(10_000)).is_none());
+    }
+
+    #[test]
+    fn the_qr_code_is_coloured_black_on_white_row_by_row() {
+        let url = "https://buy.stripe.com/6oU7sLg7t4ih4LtgwX3VC00?client_reference_id=o_co-1-0000abcd&prefilled_amount=1000";
+        let plain = render_qr(url).unwrap();
+        let coloured = black_on_white(&plain);
+        const SET: &str = "\x1b[38;5;231;48;5;16m";
+        const RESET: &str = "\x1b[0m";
+        let rows: Vec<&str> = coloured.lines().collect();
+        assert_eq!(rows.len(), plain.lines().count());
+        // Every row is set and reset on its own, so nothing bleeds into the
+        // line after the code, and stripped of the escapes it is the plain
+        // drawing again.
+        assert!(
+            rows.iter()
+                .all(|row| row.starts_with(SET) && row.ends_with(RESET)),
+            "{coloured:?}"
+        );
+        let stripped: Vec<String> = rows
+            .iter()
+            .map(|row| {
+                row.strip_prefix(SET)
+                    .and_then(|row| row.strip_suffix(RESET))
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(stripped.join("\n"), plain);
+        assert!(!stripped.iter().any(|row| row.contains('\x1b')));
     }
 
     #[test]

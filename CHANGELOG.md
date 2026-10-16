@@ -12,6 +12,7 @@ air-gapped signing
 * fix: `icp cycles buy` says, with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag
 * fix: `icp cycles buy` says in words what is wrong with a `--gateway` that is not a canister id, a canister that serves no gateway, and one a boundary node cannot route to, where it printed the replica's IC0536 or the HTTP gateway's routing error; CyclePay and Stripe are named only for CyclePay's gateway, any other is "the gateway"
 * fix: `icp cycles buy` draws the payment QR code black on white on any terminal theme. It used to take the terminal's own colours, which a light theme inverts and a dark theme often renders grey on near-black, and many phone cameras read neither. A terminal without colour support gets the plain drawing as before.
+* fix: `icp cycles buy` gives up after five minutes without word of the order, saying where the order stands, where it kept waiting while the gateway was out of reach: a poll now counts as unanswered after 10 seconds, where it had the HTTP client's six minutes, and the give-up and the hour limit are counted on the clock after every poll, so they hold on a network that stalls as on one that refuses
 
 # v1.7.0
 

@@ -952,7 +952,7 @@ Exactly one of --amount or --cycles must be given.
 * `-k`, `--root-key <ROOT_KEY>` — The root key to use if connecting to a network by URL. Required when using `--network <URL>`. One of `mainnet`, `fetch`, or a 266-character hex-encoded root key
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `-y`, `--yes` — Skip confirmation prompts
+* `-y`, `--yes` — Skip confirmation prompts. Implied by --json and --quiet, which have nobody to ask
 * `--no-open` — Do not open the payment page in a browser
 * `--no-wait` — Print the payment page's link and return without waiting for the order to complete
 * `--json` — Output command results as JSON

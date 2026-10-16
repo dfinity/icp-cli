@@ -732,6 +732,9 @@ async fn cycles_buy_reports_a_refunded_order() {
         .collect();
     assert_eq!(objects.len(), 2, "{printed}");
     assert_eq!(objects[0]["order_id"], "co-1-0000test");
+    assert_eq!(objects[0]["gateway"], gateway.as_str());
+    let buyer = objects[0]["buyer"].as_str().unwrap();
+    candid::Principal::from_text(buyer).unwrap();
     assert_eq!(objects[0]["amount"]["value"], "10.00");
     assert_eq!(objects[0]["fee"]["value"], "0.59");
     assert!(
@@ -743,6 +746,7 @@ async fn cycles_buy_reports_a_refunded_order() {
     );
     assert_eq!(objects[1]["order_id"], "co-1-0000test");
     assert_eq!(objects[1]["status"], "refunded");
+    assert_eq!(objects[1]["ended"], "settled");
     assert_eq!(objects[1]["refunded"]["value"], "10.00");
 }
 
@@ -938,6 +942,79 @@ async fn cycles_buy_no_wait_says_where_the_cycles_will_show() {
         ),
         "{said}"
     );
+}
+
+/// With --json, a script is told how the wait ended whatever the end: here
+/// an interrupt, as a last line on stdout after the order as made, which
+/// names the gateway and the buyer.
+#[cfg(unix)] // SIGINT, moc
+#[tokio::test]
+async fn cycles_buy_json_says_how_the_wait_ended() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--json",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    // The line is printed before the first poll of the wait, which is what
+    // installs the Ctrl-C handler: a signal sent at once kills the process.
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
+    let status = child.wait().unwrap();
+    stderr.read_to_string(&mut said).unwrap();
+    let mut printed = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut printed)
+        .unwrap();
+
+    assert_eq!(status.code(), Some(1), "{said}");
+    let objects: Vec<serde_json::Value> = printed
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(objects.len(), 2, "{printed}");
+    assert_eq!(objects[0]["order_id"], "co-1-0000test");
+    assert_eq!(objects[0]["gateway"], gateway.as_str());
+    let buyer = objects[0]["buyer"].as_str().unwrap();
+    candid::Principal::from_text(buyer).unwrap();
+    assert_eq!(objects[1]["order_id"], "co-1-0000test");
+    assert_eq!(objects[1]["status"], "awaiting_payment");
+    assert_eq!(objects[1]["ended"], "interrupted");
+    assert_eq!(objects[1]["expires_at"], "2100-01-01T00:00:00Z");
+    // Every key is there, null where it does not apply.
+    for key in ["cycles_delivered", "paid", "refunded", "detail", "balance"] {
+        assert!(objects[1][key].is_null(), "{key}: {printed}");
+    }
 }
 
 /// A canister that serves no gateway, or none at all, is said to be so in

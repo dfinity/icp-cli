@@ -9,6 +9,7 @@ air-gapped signing
 # Unreleased
 
 * fix: `icp cycles buy --json` and `icp cycles buy -q` imply `--yes`: a machine-readable run has nobody to ask, so neither prompts for confirmation on a terminal nor refuses without one, and the quote stays off stderr.
+* fix: `icp cycles buy` says, with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag
 
 # v1.7.0
 

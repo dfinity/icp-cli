@@ -938,7 +938,7 @@ Creates an order on a cycles gateway canister as the current identity, prints th
 
 Exactly one of --amount or --cycles must be given.
 
-**Usage:** `icp cycles buy [OPTIONS]`
+**Usage:** `icp cycles buy [OPTIONS] <--amount <AMOUNT>|--cycles <CYCLES>>`
 
 ###### **Options:**
 

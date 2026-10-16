@@ -607,8 +607,9 @@ fn cycles_buy_refuses_a_gateway_that_cannot_be_one() {
 
 /// Deploy the stand-in gateway (`assets/cycles_gateway_canister`, a Motoko
 /// actor serving the four methods the command uses) on a fresh local
-/// network, and switch to a random identity to buy with. Returns the project
-/// directory, the gateway's canister id, and the network's guard.
+/// network, and make a new identity, `buyer`, the default to buy with.
+/// Returns the project directory, the gateway's canister id, and the
+/// network's guard.
 #[cfg(unix)] // moc
 async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     let project_dir = ctx.create_project_dir("icp");
@@ -654,7 +655,8 @@ async fn stand_in_gateway(ctx: &TestContext) -> (PathBuf, String, ChildGuard) {
     assert!(output.status.success(), "{output:?}");
     let gateway = String::from_utf8(output.stdout).unwrap().trim().to_owned();
 
-    client.use_new_random_identity();
+    client.create_identity("buyer");
+    client.use_identity("buyer");
     (project_dir, gateway, guard)
 }
 
@@ -882,10 +884,58 @@ async fn cycles_buy_ctrl_c_stops_the_wait_not_the_order() {
         printed.trim(),
         "https://buy.stripe.com/test_standin?client_reference_id=o_co-1-0000test&prefilled_amount=1000",
     );
-    assert!(said.contains("stays payable"), "{said}");
-    assert!(said.contains("icp cycles balance"), "{said}");
+    // Where the order stands is said once, as the error the command ends
+    // with: still payable, where its cycles land, and the command that shows
+    // them, on a line of its own, as the identity (the default, named) and
+    // on the network the run used.
     assert!(
-        said.contains("interrupted while waiting for order co-1-0000test"),
+        said.ends_with(
+            "Error: stopped waiting for order co-1-0000test.\n\
+             \n\
+             It stays payable until 2100-01-01T00:00:00Z. Once it is paid, its cycles land on \
+             your identity's cycles-ledger account. To see them:\n\
+             \n    icp cycles balance --identity buyer -n random-network\n"
+        ),
+        "{said}"
+    );
+    assert_eq!(said.matches("stays payable").count(), 1, "{said}");
+    assert!(!said.contains("interrupted while waiting"), "{said}");
+}
+
+/// With --no-wait the command returns once the order is made, and says
+/// where its cycles will show, with the command that shows them on a line
+/// of its own.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_no_wait_says_where_the_cycles_will_show() {
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--no-wait",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+        ])
+        .output()
+        .expect("failed to run icp cycles buy");
+    let said = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{said}");
+    assert!(
+        said.ends_with(
+            "Not waiting. Once the order is paid, its cycles land on your identity's \
+             cycles-ledger account. To see them:\n\
+             \n    icp cycles balance --identity buyer -n random-network\n"
+        ),
         "{said}"
     );
 }

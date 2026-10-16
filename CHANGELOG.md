@@ -13,6 +13,7 @@ air-gapped signing
 * fix: `icp cycles buy` says in words what is wrong with a `--gateway` that is not a canister id, a canister that serves no gateway, and one a boundary node cannot route to, where it printed the replica's IC0536 or the HTTP gateway's routing error; CyclePay and Stripe are named only for CyclePay's gateway, any other is "the gateway"
 * fix: `icp cycles buy` draws the payment QR code black on white on any terminal theme. It used to take the terminal's own colours, which a light theme inverts and a dark theme often renders grey on near-black, and many phone cameras read neither. A terminal without colour support gets the plain drawing as before.
 * fix: the command `icp canister create --with-icp` prints to finish an interrupted creation now pastes as printed with an identity, network or environment name starting with `-`, and in PowerShell, fish and elvish as well as POSIX shells. A name no quoting carries in all of them is left as `<your identity>`, with a line asking to fill it in
+* fix: `icp cycles buy` says when the gateway has not answered for 9 seconds, while it keeps trying, and that it is answering again; and gives up after five minutes without word of the order, saying where the order stands. Both are counted on the clock, so they hold on a network that stalls as on one that refuses, and a poll that stalls counts as unanswered after 10 seconds, where a poll had no time limit and the line kept saying "Waiting for payment" while the gateway was out of reach
 
 # v1.7.0
 

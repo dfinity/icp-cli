@@ -27,7 +27,7 @@ use crate::cyclepay::interface::{
 use crate::cyclepay::money::{Currency, Money};
 use crate::cyclepay::purchase::{
     self as purchase, CyclesPurchaseError, Gateway, MAINNET_HINT, OrderView, PurchasePhase, Quote,
-    Rate, Target, WaitOptions,
+    Rate, Target, WaitEvent, WaitOptions,
 };
 use crate::render::{ProgressManager, ProgressManagerSettings};
 
@@ -522,10 +522,33 @@ async fn wait_and_report(
     if !live && output != Output::Quiet {
         info!("If this command is stopped, the order carries on without it.");
     }
-    let on_phase = |phase: PurchasePhase| match &bar {
-        Some(bar) => bar.set_message(live_message(phase)),
-        None if output != Output::Quiet => info!("[order {id}] {}", line_message(phase)),
-        None => {}
+    // The live line shows the phase, or that the gateway has gone quiet,
+    // until it answers again; off a terminal each change is a line.
+    let mut phase = PurchasePhase::AwaitingPayment;
+    let mut quiet = false;
+    let on_event = |event: WaitEvent| {
+        match event {
+            WaitEvent::Order { phase: entered } => phase = entered,
+            WaitEvent::ContactLost => quiet = true,
+            WaitEvent::ContactRestored => quiet = false,
+        }
+        match &bar {
+            Some(bar) => bar.set_message(if quiet {
+                NO_ANSWER_LIVE
+            } else {
+                live_message(phase)
+            }),
+            None if output != Output::Quiet => match event {
+                WaitEvent::Order { phase } => info!("[order {id}] {}", line_message(phase)),
+                WaitEvent::ContactLost => {
+                    info!("[order {id}] No answer from the gateway; retrying...")
+                }
+                WaitEvent::ContactRestored => {
+                    info!("[order {id}] {} is answering again.", names.subject)
+                }
+            },
+            None => {}
+        }
     };
     let options = WaitOptions::default();
     let wait = purchase::wait_for_order(
@@ -535,7 +558,7 @@ async fn wait_and_report(
         Some(order),
         &options,
         stop_signal(),
-        on_phase,
+        on_event,
     );
     let result = match &bar {
         None => wait.await,
@@ -588,6 +611,23 @@ async fn wait_and_report(
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
+        // The gateway stopped answering for five minutes: the order is said
+        // as last seen, which is all that is known of it.
+        Err(CyclesPurchaseError::ContactLost {
+            gateway,
+            order,
+            source,
+        }) => {
+            if output != Output::Quiet {
+                info!("{} {AFTER_HINT}", standing(&order, false));
+            }
+            return Err(CyclesPurchaseError::ContactLost {
+                gateway,
+                order,
+                source,
+            }
+            .into());
+        }
         Err(error) => return Err(error.into()),
     };
 
@@ -610,6 +650,10 @@ fn live_message(phase: PurchasePhase) -> &'static str {
         PurchasePhase::Delivering => "Payment received; delivering cycles...",
     }
 }
+
+/// The live line's message while the gateway has not answered for
+/// [`WaitOptions::quiet_after`]; the phase's message comes back once it does.
+const NO_ANSWER_LIVE: &str = "No answer from the gateway, retrying; Ctrl-C stops waiting";
 
 /// What a line off a terminal says of a phase: not the live line's, whose
 /// Ctrl-C hint is for a person at the terminal.
@@ -1329,8 +1373,13 @@ mod tests {
         assert_eq!(order_number(id), "co-1234");
         assert_eq!(order_number("co-6-5e64b574"), "co-6");
         assert_eq!(order_number("o1"), "o1");
-        for phase in [PurchasePhase::AwaitingPayment, PurchasePhase::Delivering] {
-            let line = format!("[order {}] ✷ {}", order_number(id), live_message(phase));
+        let messages = [
+            live_message(PurchasePhase::AwaitingPayment),
+            live_message(PurchasePhase::Delivering),
+            NO_ANSWER_LIVE,
+        ];
+        for message in messages {
+            let line = format!("[order {}] ✷ {message}", order_number(id));
             assert!(
                 line.chars().count() <= 80,
                 "{} columns: {line}",

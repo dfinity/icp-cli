@@ -744,6 +744,87 @@ async fn cycles_buy_reports_a_refunded_order() {
     assert_eq!(objects[1]["refunded"]["value"], "10.00");
 }
 
+/// A gateway that stops answering is said to while the wait goes on trying,
+/// and so is its answering again; the wait then ends as it would have.
+#[cfg(unix)] // moc
+#[tokio::test]
+async fn cycles_buy_says_when_the_gateway_stops_answering() {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+
+    let ctx = TestContext::new();
+    let (project_dir, gateway, _g) = stand_in_gateway(&ctx).await;
+    let canister = |verb: &str| {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([
+                "canister",
+                verb,
+                "gateway",
+                "--environment",
+                "random-environment",
+                // The stand-in's controller.
+                "--identity",
+                "anonymous",
+            ])
+            .assert()
+            .success();
+    };
+
+    let mut child = ctx
+        .icp_std()
+        .current_dir(&project_dir)
+        .args([
+            "cycles",
+            "buy",
+            "--amount",
+            "10",
+            "--yes",
+            "--gateway",
+            &gateway,
+            "-n",
+            "random-network",
+            "--no-open",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn icp cycles buy");
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    while !said.contains("Waiting for payment") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    // A stopped canister refuses every poll, as CyclePay's backend does for
+    // a few minutes during an upgrade.
+    canister("stop");
+    while !said.contains("No answer from the gateway") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    canister("start");
+    while !said.contains("answering again") {
+        assert_ne!(stderr.read_line(&mut said).unwrap(), 0, "{said}");
+    }
+    settle(
+        &ctx,
+        &project_dir,
+        &gateway,
+        "pay",
+        "(principal \"rrkah-fqaaa-aaaaa-aaaaq-cai\")",
+    );
+    stderr.read_to_string(&mut said).unwrap();
+    let status = child.wait().unwrap();
+    assert!(status.success(), "{said}");
+    assert!(
+        said.contains("[order co-1-0000test] No answer from the gateway; retrying..."),
+        "{said}"
+    );
+    assert!(
+        said.contains("[order co-1-0000test] The gateway is answering again."),
+        "{said}"
+    );
+}
+
 /// Ctrl-C while waiting stops the wait, not the order: the command says the
 /// order stays payable and exits 1, as icp-cli's other interrupted waits do.
 /// Off a terminal, as here, the wait is told in lines. The link handed out

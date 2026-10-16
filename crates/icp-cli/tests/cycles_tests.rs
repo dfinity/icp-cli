@@ -427,6 +427,8 @@ async fn cycles_mint_to_subaccount() {
 /// machine-readable outputs; none of this needs a network.
 #[test]
 fn cycles_buy_rejects_conflicting_arguments() {
+    use predicates::prelude::PredicateBooleanExt;
+
     let ctx = TestContext::new();
 
     ctx.icp()
@@ -435,11 +437,26 @@ fn cycles_buy_rejects_conflicting_arguments() {
         .stderr(contains("cannot be used with"))
         .failure();
 
+    // Neither: the one of the two that is required is named, not --amount.
     ctx.icp()
         .args(["cycles", "buy"])
         .assert()
         .stderr(contains("required arguments were not provided"))
+        .stderr(contains("<--amount <AMOUNT>|--cycles <CYCLES>>"))
         .failure();
+
+    // A negative value of either is refused in the same words and with the
+    // same status, the form with a suffix included, rather than read as a
+    // flag nobody passed.
+    for (flag, value) in [("--amount", "-1"), ("--cycles", "-1"), ("--cycles", "-5t")] {
+        ctx.icp()
+            .args(["cycles", "buy", flag, value])
+            .assert()
+            .stderr(contains(format!("invalid value '{value}' for '{flag} <")))
+            .stderr(contains("cannot be negative: give the"))
+            .stderr(contains("unexpected argument").not())
+            .code(2);
+    }
 
     ctx.icp()
         .args(["cycles", "buy", "--amount", "10.005"])

@@ -326,11 +326,108 @@ async fn connect_on_missing_gateway_is_gateway_not_found() {
     );
 }
 
-/// A local HTTP gateway refuses to route to a canister it has never heard of
-/// before any replica sees the call: an HTTP 400 with no reject code, which
-/// the call layer reports as a failure. The command reads it as the gateway
-/// being absent, as it would a replica's IC0301. Any other HTTP failure stays
-/// what it is.
+/// A boundary node, or a local HTTP gateway, refuses to route to a canister
+/// it has never heard of before any replica sees the call: an HTTP 400 with
+/// no reject code, which the call layer reports as a failure. The command
+/// reads it as the gateway being absent, as it would a replica's IC0301. Any
+/// other HTTP failure stays what it is.
+#[tokio::test]
+async fn connect_reads_an_unroutable_canister_as_gateway_not_found() {
+    let http = |status: u16, body: &str| {
+        CallError::failed(
+            principal(BACKEND),
+            CARD_TERMS_METHOD,
+            ic_agent::AgentError::HttpError(ic_agent::agent::agent_error::HttpErrorPayload {
+                status,
+                content_type: Some("text/plain; charset=utf-8".to_owned()),
+                content: body.as_bytes().to_vec(),
+            }),
+        )
+    };
+    let fake = FakeBackend::default();
+    *fake.refusal.lock().unwrap() = Some(http(
+        400,
+        "error: canister_not_found\ndetails: The specified canister does not exist.",
+    ));
+    let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+    assert!(
+        matches!(err, CyclesPurchaseError::GatewayNotFound { .. }),
+        "{err}"
+    );
+
+    // Only the boundary node's own words say so: another 4xx, or a 5xx,
+    // stays a failure to read the terms.
+    for (status, body) in [
+        (
+            400,
+            "error: invalid_request\ndetails: the request could not be parsed",
+        ),
+        (403, "forbidden"),
+        (502, "bad gateway"),
+    ] {
+        let fake = FakeBackend::default();
+        *fake.refusal.lock().unwrap() = Some(http(status, body));
+        let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+        assert!(
+            matches!(err, CyclesPurchaseError::ReadTerms { .. }),
+            "{status}: {err}"
+        );
+    }
+}
+
+/// A canister that is there but serves no `get_card_terms` is not a gateway,
+/// and is said to be none, rather than in the replica's words.
+#[tokio::test]
+async fn connect_on_a_canister_that_is_no_gateway_says_so() {
+    for (code, message) in [
+        (
+            Some("IC0536"),
+            "Canister ryjl3 has no query method 'get_card_terms'",
+        ),
+        (None, "Canister ryjl3 has no query method 'get_card_terms'"),
+    ] {
+        let fake = FakeBackend::default();
+        *fake.refusal.lock().unwrap() = Some(CallError::Rejected {
+            canister: principal(BACKEND),
+            method: CARD_TERMS_METHOD.to_owned(),
+            code: code.map(str::to_owned),
+            message: message.to_owned(),
+        });
+        let err = connect(&fake, principal(BACKEND)).await.unwrap_err();
+        assert!(
+            matches!(err, CyclesPurchaseError::NotAGateway { .. }),
+            "{err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "canister {BACKEND} is not a cycles gateway: it does not serve \
+                 get_card_terms, the method a gateway publishes its terms with"
+            )
+        );
+    }
+}
+
+/// A principal no canister can have is refused before anything is asked.
+#[test]
+fn a_gateway_must_be_a_canister_id() {
+    assert!(check_gateway_id(principal(BACKEND)).is_ok());
+    for (gateway, what) in [
+        ("aaaaa-aa", "the management canister"),
+        ("2vxsx-fae", "the anonymous principal"),
+        (
+            "7k7px-dcypq-wulnh-byzgd-6sib2-udn6c-lfo6e-6oujd-veifp-62woo-5ae",
+            "not a canister id",
+        ),
+    ] {
+        let err = check_gateway_id(principal(gateway)).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("{gateway} cannot be a cycles gateway: it is {what}")
+        );
+    }
+}
+
 /// Terms the CLI could not quote on are refused at once, before any quote.
 #[tokio::test]
 async fn connect_refuses_terms_it_cannot_act_on() {

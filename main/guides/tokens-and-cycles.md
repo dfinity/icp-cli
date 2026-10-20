@@ -131,7 +131,7 @@ Buyer:    7k7px-dcypq-wulnh-byzgd-6sib2-udn6c-lfo6e-6oujd-veifp-62woo-5ae
 Gateway:  2bwus-iiaaa-aaaac-bee3a-cai (CyclePay)
 Price:    10.00 USD (9.41 USD after a 0.59 USD card fee)
 Estimate: about 6.959T cycles, at 1.3520 USD per 1T cycles
-Create this order? Nothing is charged until you pay on Stripe. [y/N]
+Create this order? Nothing is charged until you pay on Stripe's page. [y/N]
 ```
 
 It then creates the order as your identity, prints the page to pay on together with a QR code to scan with a phone (and opens the page in your browser when run from a terminal, but not over SSH or on CI), and waits until the cycles land. The card is charged on the gateway's hosted page; the CLI never sees card details. `--amount` is in the currency given by `--currency`, which defaults to `USD`, the only currency CyclePay accepts.
@@ -142,7 +142,7 @@ Useful flags:
 
 - `--no-open` prints the payment page's link without opening a browser. You can pay from any device.
 - `--no-wait` returns right after printing the link. The order needs nothing more from the command: once it is paid, the cycles land on your account, and `icp cycles balance` shows them. An unpaid order expires after a time the gateway sets.
-- `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created (with the amount, net and fee) and one when it settles; `-q` prints only the link, then the final status.
+- `--yes` skips the confirmation, which is required when there is no terminal to ask. `--json` prints one object after the order is created (with the amount, net and fee) and one when it settles; `-q` prints only the link, then the final status. Both are for scripts and agents, which have nobody to ask, so both imply `--yes`.
 - `--gateway <canister-id>` buys through another cycles gateway: any canister serving the [cycles gateway interface](https://github.com/dfinity/icp-cli/blob/main/crates/icp-cli/src/cyclepay/cycles_gateway.did), whose own payment page, range and fees then apply. The [`ICP_CYCLES_GATEWAY_CANISTER_ID`](../reference/environment-variables.md#icp_cycles_gateway_canister_id) environment variable does the same. CyclePay's gateway is on mainnet only, so without `--gateway` the command needs `-n ic`, or an environment on mainnet, and refuses any other network before placing an order; another gateway may be on any network.
 
 Pressing Ctrl-C while waiting stops the wait, not the order: an unpaid order stays payable, and the command says so and exits with status 1. Ctrl-C at the confirmation prompt creates no order. If the cycles cannot be delivered, the gateway refunds the card and the command says so; if the order ends up needing review, your card was charged and the gateway checks the order by hand. Keep the order id: the gateway shows the outcome, as CyclePay's site does under "My purchases".

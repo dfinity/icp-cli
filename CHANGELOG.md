@@ -8,6 +8,8 @@ air-gapped signing
 
 # Unreleased
 
+* fix: `icp cycles buy --json` and `icp cycles buy -q` imply `--yes`: a machine-readable run has nobody to ask, so neither prompts for confirmation on a terminal nor refuses without one, and the quote stays off stderr.
+
 # v1.7.0
 
 * feat: `icp cycles buy --amount <amount> [--currency USD]` buys cycles with a card for the current identity through CyclePay (https://www.cyclepay.org); `--cycles <cycles>` instead names the cycles to receive and pays the least amount that buys them, card fee included. It quotes the amount at CyclePay's published rate, asks for confirmation, creates the order as the identity on the CyclePay backend canister, prints the page to pay on with a QR code to scan (and opens it in a browser from a terminal, but not over SSH or on CI) and waits for the cycles to land on the identity's cycles-ledger account; Ctrl-C stops the wait, not the order. `--gateway` or `ICP_CYCLES_GATEWAY_CANISTER_ID` picks another backend canister.

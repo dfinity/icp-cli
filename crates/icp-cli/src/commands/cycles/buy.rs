@@ -74,7 +74,7 @@ pub(crate) struct BuyArgs {
     #[command(flatten)]
     pub(crate) token_command_args: TokenCommandArgs,
 
-    /// Skip confirmation prompts
+    /// Skip confirmation prompts. Implied by --json and --quiet, which have nobody to ask
     #[arg(long, short)]
     pub(crate) yes: bool,
 
@@ -214,10 +214,8 @@ async fn create_order(
     args: &BuyArgs,
 ) -> Result<(OrderView, Quote), anyhow::Error> {
     let quote = purchase::quote_target(calls, gateway, target).await?;
-    // A script that said --yes reads the figures off --json; -q asks for
-    // nothing but the link.
-    let speak = !args.yes || !(args.quiet || args.json);
-    confirm(&quote, target, gateway, buyer, identity, args.yes, speak)?;
+    let (yes, speak) = consent(args);
+    confirm(&quote, target, gateway, buyer, identity, yes, speak)?;
     match purchase::place_order(calls, gateway, quote.amount).await {
         Ok(order) => Ok((order, quote)),
         Err(CyclesPurchaseError::OrderRefused { error }) => {
@@ -227,8 +225,18 @@ async fn create_order(
     }
 }
 
+/// Whether the order is already consented to (`yes`), and whether to show the
+/// quote and say so (`speak`). A machine-readable run, `--json` or `-q`, has
+/// nobody to ask and reads the figures off stdout: it implies `--yes`, and the
+/// quote stays off stderr. A person who said `--yes` outright is still shown
+/// the quote.
+fn consent(args: &BuyArgs) -> (bool, bool) {
+    let machine = Output::of(args) != Output::Human;
+    (args.yes || machine, !machine)
+}
+
 /// Show what is about to happen and ask. Without a terminal there is nobody
-/// to ask, so `--yes` is required.
+/// to ask, so `--yes` is required; a run that does not `speak` has implied it.
 #[allow(clippy::too_many_arguments)]
 fn confirm(
     quote: &Quote,
@@ -828,6 +836,32 @@ mod tests {
                 ledger_delivery_fee_cycles: 200_000_000,
             },
         }
+    }
+
+    /// `--json` and `-q` imply `--yes` and keep the quote off stderr; `--yes`
+    /// alone, or nothing, still shows it, and only `--yes` skips the asking.
+    #[test]
+    fn a_machine_readable_run_implies_yes() {
+        #[derive(clap::Parser)]
+        struct Cli {
+            #[command(flatten)]
+            args: BuyArgs,
+        }
+        let consent_to = |flags: &[&str]| {
+            let cli = <Cli as clap::Parser>::try_parse_from(
+                ["icp", "--amount", "10"].iter().chain(flags),
+            )
+            .unwrap();
+            consent(&cli.args)
+        };
+        // (yes, speak)
+        assert_eq!(consent_to(&[]), (false, true));
+        assert_eq!(consent_to(&["--yes"]), (true, true));
+        assert_eq!(consent_to(&["--json"]), (true, false));
+        assert_eq!(consent_to(&["--quiet"]), (true, false));
+        assert_eq!(consent_to(&["-q"]), (true, false));
+        assert_eq!(consent_to(&["--yes", "--json"]), (true, false));
+        assert_eq!(consent_to(&["-y", "-q"]), (true, false));
     }
 
     #[test]

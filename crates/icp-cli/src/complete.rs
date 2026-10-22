@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use clap::CommandFactory as _;
 use clap_complete::CompleteEnv;
 use clap_complete::engine::CompletionCandidate;
 use icp_app::context::Context;
@@ -25,7 +24,8 @@ use icp_project::{Environment, Network, Project};
 /// Must run before anything writes to stdout: the completion protocol is
 /// carried over it.
 pub(crate) fn env() {
-    CompleteEnv::with_factory(crate::Cli::command).complete();
+    CompleteEnv::with_factory(|| crate::extension::cli_command(&crate::extension::installed()))
+        .complete();
 }
 
 /// Upper bound on the work one completion request may do. Loading the project

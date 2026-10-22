@@ -491,7 +491,7 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
 
 /// Whether a browser opened here would be in front of the buyer: not on a
 /// CI runner, nor at the far end of an SSH session.
-fn browser_is_at_hand() -> bool {
+pub(crate) fn browser_is_at_hand() -> bool {
     let set = |name| std::env::var(name).is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false"));
     !(set("CI") || set("SSH_CONNECTION") || set("SSH_CLIENT") || set("SSH_TTY"))
 }
@@ -770,7 +770,7 @@ fn payable_until(order: &OrderView) -> String {
 /// not smudge) and a two-module quiet zone, the least a scanner needs, so
 /// that the Payment Link's code fits an 80x24 terminal with the wait's line
 /// below it. `None` only if the URL is too long to encode.
-fn render_qr(url: &str) -> Option<String> {
+pub(crate) fn render_qr(url: &str) -> Option<String> {
     use qrcode::render::unicode::Dense1x2;
     use qrcode::{EcLevel, QrCode};
     let code = QrCode::with_error_correction_level(url.as_bytes(), EcLevel::L).ok()?;
@@ -815,7 +815,7 @@ fn render_qr(url: &str) -> Option<String> {
 /// plain drawing, which is what every terminal got before: the worst case
 /// is no worse than today. The width and height to fit on the screen are
 /// those of the plain drawing; measure that, not this.
-fn black_on_white(drawing: &str) -> String {
+pub(crate) fn black_on_white(drawing: &str) -> String {
     drawing
         .lines()
         .map(|row| format!("\x1b[38;5;231;48;5;16m{row}\x1b[0m"))

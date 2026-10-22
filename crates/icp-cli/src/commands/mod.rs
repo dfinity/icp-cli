@@ -7,6 +7,7 @@ pub(crate) mod completions;
 pub(crate) mod cycles;
 pub(crate) mod deploy;
 pub(crate) mod environment;
+pub(crate) mod extension;
 pub(crate) mod identity;
 pub(crate) mod message;
 pub(crate) mod network;
@@ -29,6 +30,8 @@ pub(crate) enum Command {
     Deploy(deploy::DeployArgs),
     #[command(subcommand)]
     Environment(environment::Command),
+    #[command(subcommand)]
+    Extension(extension::Command),
     #[command(subcommand)]
     Identity(identity::Command),
     #[command(subcommand)]

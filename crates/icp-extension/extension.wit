@@ -44,8 +44,10 @@ interface types {
     }
 
     /// A command of the extension, addressed by its path under `icp <name>`.
-    /// The empty path is `icp <name>` itself. A path whose parents are not
-    /// declared gets them as plain groups.
+    /// The empty path is `icp <name>` itself. A command with commands beneath
+    /// it is a group: it is never run itself, takes no arguments, and is
+    /// declared only to give it an `about`. Undeclared parents are groups with
+    /// none.
     record command {
         path: list<string>,
         about: string,

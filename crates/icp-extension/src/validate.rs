@@ -84,6 +84,12 @@ pub enum InvalidInfo {
         "positional argument '{arg}' of command '{path}' takes many values, so it must come last"
     ))]
     PositionalNotLast { path: String, arg: String },
+
+    #[snafu(display(
+        "command '{path}' has subcommands, so it is a group: it can take no arguments or \
+         standard flags of its own"
+    ))]
+    GroupWithArgs { path: String },
 }
 
 fn is_name(s: &str) -> bool {
@@ -214,6 +220,14 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
             }
             .fail();
         }
+        let is_group = info
+            .commands
+            .iter()
+            .any(|c| c.path.len() > command.path.len() && c.path.starts_with(&command.path));
+        ensure!(
+            !is_group || (command.args.is_empty() && command.standard.is_empty()),
+            GroupWithArgsSnafu { path: &path }
+        );
     }
     Ok(())
 }
@@ -316,6 +330,26 @@ mod tests {
             validate(&info),
             Err(InvalidInfo::DuplicateFlag { .. })
         ));
+    }
+
+    #[test]
+    fn a_group_takes_no_arguments() {
+        let group = command(
+            &["cycles"],
+            vec![option("x", Some("x"), None, ArgKind::Flag)],
+        );
+        let info = info(vec![group, command(&["cycles", "buy"], vec![])]);
+        assert!(matches!(
+            validate(&info),
+            Err(InvalidInfo::GroupWithArgs { .. })
+        ));
+
+        // Declared with no arguments, a group only names itself.
+        let info = self::info(vec![
+            command(&["cycles"], vec![]),
+            command(&["cycles", "buy"], vec![]),
+        ]);
+        validate(&info).unwrap();
     }
 
     #[test]

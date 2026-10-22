@@ -3722,6 +3722,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "icp-extension"
+version = "1.7.0"
+dependencies = [
+ "async-trait",
+ "camino",
+ "candid",
+ "icp-project",
+ "semver",
+ "serde",
+ "snafu",
+ "tokio",
+ "wasmtime",
+ "wasmtime-wasi",
+]
+
+[[package]]
 name = "icp-project"
 version = "1.7.0"
 dependencies = [

@@ -17,6 +17,7 @@ pub mod agent;
 pub mod calls;
 pub mod context;
 pub mod directories;
+pub mod extension;
 pub mod identity;
 pub mod network;
 pub mod operations;

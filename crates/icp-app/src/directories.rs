@@ -32,6 +32,9 @@ pub trait Access: Sync + Send {
 
     /// Returns the path to the CLI update-nag timestamp file.
     fn cli_update_nag_timestamp(&self) -> PathBuf;
+
+    /// Returns the path to the directory installed extensions live in.
+    fn extensions(&self) -> PathBuf;
 }
 
 /// Inner structure holding data and cache directory paths.
@@ -217,6 +220,14 @@ impl Access for Directories {
     fn cli_update_nag_timestamp(&self) -> PathBuf {
         self.cache().join(".cli-update-nag-timestamp")
     }
+
+    /// Returns the path to the directory installed extensions live in.
+    ///
+    /// Each extension has a directory of its own, named after it, holding
+    /// its wasm component and what was approved at install.
+    fn extensions(&self) -> PathBuf {
+        self.data().join("extensions")
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +260,9 @@ impl Access for UnimplementedMockDirs {
 
     fn cli_update_nag_timestamp(&self) -> PathBuf {
         unimplemented!("UnimplementedMockDirs::cli_update_nag_timestamp")
+    }
+
+    fn extensions(&self) -> PathBuf {
+        unimplemented!("UnimplementedMockDirs::extensions")
     }
 }

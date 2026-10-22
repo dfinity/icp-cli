@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Error;
-use clap::{CommandFactory, Parser, ValueHint};
+use clap::{ArgMatches, FromArgMatches, Parser, ValueHint};
 use commands::Command;
 use icp_app::directories::Access;
 use icp_project::prelude::*;
@@ -21,6 +21,7 @@ mod complete;
 mod cyclepay;
 mod dist;
 mod engine;
+mod extension;
 mod logging;
 mod options;
 mod render;
@@ -118,7 +119,27 @@ async fn run() -> Result<(), Error> {
         return Ok(());
     }
 
-    let cli = Cli::parse();
+    // Installed extensions are subcommands like any other, so they are read
+    // before anything is parsed.
+    let installed = extension::installed();
+    let matches = extension::cli_command(&installed).get_matches();
+    let extension = matches.subcommand().and_then(|(name, sub)| {
+        let installed = installed.iter().find(|e| e.info.name == name)?;
+        Some((installed.clone(), sub.clone()))
+    });
+    let cli = match extension {
+        // `Cli` has no variant for an extension: read the global flags alone.
+        Some(_) => Cli {
+            project_root_override: matches.get_one::<PathBuf>("project_root_override").cloned(),
+            debug: matches.get_flag("debug"),
+            identity_password_file: matches
+                .get_one::<PathBuf>("identity_password_file")
+                .cloned(),
+            markdown_help: false,
+            command: None,
+        },
+        None => Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit()),
+    };
 
     // Generate markdown documentation if requested
     if cli.markdown_help {
@@ -127,10 +148,11 @@ async fn run() -> Result<(), Error> {
     }
 
     // If no command was provided, print help and exit
-    let command = match cli.command {
-        Some(cmd) => cmd,
-        None => {
-            Cli::command().print_help()?;
+    let command = match (extension, cli.command) {
+        (Some((installed, matches)), _) => Invocation::Extension(installed, matches),
+        (None, Some(cmd)) => Invocation::BuiltIn(cmd),
+        (None, None) => {
+            extension::cli_command(&installed).print_help()?;
             return Ok(());
         }
     };
@@ -138,7 +160,7 @@ async fn run() -> Result<(), Error> {
     // Completion scripts are derived from the clap definition alone. Handle them
     // before any other setup: they are generated at package-install time, where
     // the telemetry notice and the update check have no business firing.
-    if let Command::Completions(args) = &command {
+    if let Invocation::BuiltIn(Command::Completions(args)) = &command {
         commands::completions::exec(args)?;
         return Ok(());
     }
@@ -194,7 +216,10 @@ async fn run() -> Result<(), Error> {
         pem_session_duration,
     )?;
 
-    let telemetry_session = telemetry::setup(&ctx, &raw_args, &Cli::command()).await;
+    // Extension commands are left out of telemetry: telemetry parses against
+    // the built-in commands alone, and records nothing for one it cannot.
+    let telemetry_session =
+        telemetry::setup(&ctx, &raw_args, &<Cli as clap::CommandFactory>::command()).await;
 
     // Run update check in the background
     let update_check = tokio::spawn({
@@ -202,7 +227,14 @@ async fn run() -> Result<(), Error> {
         async move { update_check(&ctx).await }
     });
 
-    let result = dispatch(&ctx, command).instrument(trace_span).await;
+    let result = match command {
+        Invocation::BuiltIn(command) => dispatch(&ctx, command).instrument(trace_span).await,
+        Invocation::Extension(installed, matches) => {
+            extension::exec(&ctx, &installed, &matches)
+                .instrument(trace_span)
+                .await
+        }
+    };
 
     if let Some(session) = telemetry_session {
         session.finish(result.is_ok(), &ctx.telemetry_data);
@@ -223,6 +255,15 @@ async fn run() -> Result<(), Error> {
     debug!("Command executed successfully");
 
     Ok(())
+}
+
+/// What the user asked to run.
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum Invocation {
+    BuiltIn(Command),
+    /// An installed extension, and the matches of its subcommand.
+    Extension(icp_app::extension::Installed, ArgMatches),
 }
 
 /// Dispatch the command to its handler.
@@ -352,6 +393,21 @@ async fn dispatch(ctx: &icp_app::context::Context, command: Command) -> Result<(
 
         // Deploy
         Command::Deploy(args) => commands::deploy::exec(ctx, &args).await?,
+
+        // Extension
+        Command::Extension(cmd) => match cmd {
+            commands::extension::Command::Install(args) => {
+                commands::extension::install::exec(ctx, &args).await?
+            }
+
+            commands::extension::Command::List(args) => {
+                commands::extension::list::exec(ctx, &args).await?
+            }
+
+            commands::extension::Command::Uninstall(args) => {
+                commands::extension::uninstall::exec(ctx, &args).await?
+            }
+        },
 
         // Environment
         Command::Environment(cmd) => match cmd {

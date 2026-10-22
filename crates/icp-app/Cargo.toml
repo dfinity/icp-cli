@@ -44,6 +44,7 @@ icp-project = { workspace = true }
 icp-sync-plugin = { workspace = true }
 icp-canister-interfaces = { workspace = true }
 icp-events = { workspace = true }
+icp-extension = { workspace = true }
 icrc-ledger-types = { workspace = true }
 itertools = { workspace = true }
 k256 = { workspace = true }

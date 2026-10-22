@@ -44,6 +44,10 @@ This document contains the help content for the `icp` command-line program.
 * [`icp deploy`↴](#icp-deploy)
 * [`icp environment`↴](#icp-environment)
 * [`icp environment list`↴](#icp-environment-list)
+* [`icp extension`↴](#icp-extension)
+* [`icp extension install`↴](#icp-extension-install)
+* [`icp extension list`↴](#icp-extension-list)
+* [`icp extension uninstall`↴](#icp-extension-uninstall)
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
@@ -98,6 +102,7 @@ This document contains the help content for the `icp` command-line program.
 * `cycles` — Mint and manage cycles
 * `deploy` — Deploy a project to an environment
 * `environment` — Show information about the current project environments
+* `extension` — Install and manage extensions: third-party commands run in a sandbox
 * `identity` — Manage your identities
 * `message` — Work with signed messages
 * `network` — Launch and manage local test networks
@@ -1087,6 +1092,57 @@ List the environments defined in this project, one per line.
 Use `icp project show` to see the fully expanded configuration including implicit environments (local, ic) and their network and canister assignments.
 
 **Usage:** `icp environment list`
+
+
+
+## `icp extension`
+
+Install and manage extensions: third-party commands run in a sandbox
+
+**Usage:** `icp extension <COMMAND>`
+
+###### **Subcommands:**
+
+* `install` — Install an extension, or replace an installed one
+* `list` — List installed extensions
+* `uninstall` — Uninstall an extension
+
+
+
+## `icp extension install`
+
+Install an extension, or replace an installed one
+
+**Usage:** `icp extension install [OPTIONS] <SOURCE>`
+
+###### **Arguments:**
+
+* `<SOURCE>` — The extension's wasm component: an https URL or a local path
+
+###### **Options:**
+
+* `--sha256 <SHA256>` — Refuse the install unless the component has this sha256 (hex)
+* `-y`, `--yes` — Approve the install without asking
+
+
+
+## `icp extension list`
+
+List installed extensions
+
+**Usage:** `icp extension list`
+
+
+
+## `icp extension uninstall`
+
+Uninstall an extension
+
+**Usage:** `icp extension uninstall <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The extension's name
 
 
 

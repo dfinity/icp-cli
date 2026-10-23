@@ -150,7 +150,13 @@ Useful flags:
 
 The wait asks the gateway every 3 seconds for up to an hour. If the gateway stops answering (a dropped connection, or the gateway being upgraded), the command keeps trying and gives up after five minutes without word of the order, saying where the order stands as last seen. Giving up, like Ctrl-C, stops the wait, not the order.
 
-Pressing Ctrl-C while waiting stops the wait, not the order: an unpaid order stays payable, and the command says so and exits with status 1. Ctrl-C at the confirmation prompt creates no order. If the cycles cannot be delivered, the gateway refunds the card and the command says so; if the order ends up needing review, your card was charged and the gateway checks the order by hand. Keep the order id: the gateway shows the outcome, as CyclePay's site does under "My purchases".
+Stopping the wait does not stop the order, however the wait ends: Ctrl-C, the hour running out, or the gateway out of reach. The command says once where the order stands (still payable until its deadline while unpaid; paid and being delivered once paid) and the `icp cycles balance` command, for the same identity and network, that shows the cycles once they land, then exits with status 1. Ctrl-C at the confirmation prompt creates no order. If the cycles cannot be delivered, the gateway refunds the card and the command says so. If the gateway owes you a refund that an operator makes by hand, or the order ends up needing review (your card was charged, and the gateway checks the order by hand), keep the order id: the gateway shows the outcome, as CyclePay's site does under "My purchases", and the command prints the one that reads the order back:
+
+```bash
+icp canister call <gateway> order_status --query --identity <identity> -n ic '("<order id>")'
+```
+
+Run it as the identity that made the order (no other can read it) and on the same network; the command prints it with both filled in.
 
 The cycles arrive in your identity's default cycles-ledger account, where `icp deploy` and `icp canister top-up` spend from. Purchases made from the terminal appear under "My purchases" on www.cyclepay.org when the identity is the one you sign in there with: `icp identity link web cyclepay --app 4w3yu-fyaaa-aaaac-beeoa-cai.icp0.io` makes one.
 

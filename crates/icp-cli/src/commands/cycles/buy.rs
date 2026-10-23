@@ -94,7 +94,8 @@ pub(crate) struct BuyArgs {
     #[arg(long)]
     pub(crate) no_wait: bool,
 
-    /// Output command results as JSON
+    /// Output command results as JSON: one object once the order is made, and, unless --no-wait,
+    /// one when the wait ends, saying how
     #[arg(long, conflicts_with = "quiet")]
     pub(crate) json: bool,
 
@@ -228,7 +229,7 @@ pub(crate) async fn exec(ctx: &Context, args: &BuyArgs) -> Result<(), anyhow::Er
         flags: paste_flags(&selections, identity.as_deref()),
         canister,
     };
-    announce_payable(&order, &quote, output, args.no_open);
+    announce_payable(&order, &quote, &gateway, buyer, output, args.no_open);
 
     if args.no_wait {
         if output == Output::Human {
@@ -462,8 +463,10 @@ fn quote_block(
         ""
     };
     lines.push(format!("Gateway:  {}{whose}", gateway.canister));
+    // What was asked for, not a promise: the estimate below is what the
+    // gateway's published arithmetic says the price buys at today's rate.
     if let Target::Receive { cycles, .. } = target {
-        lines.push(format!("Wanted:   at least {}", format_cycles(cycles)));
+        lines.push(format!("Wanted:   {}", format_cycles(cycles)));
     }
     lines.push(format!(
         "Price:    {} ({} after a {} card fee)",
@@ -481,7 +484,14 @@ fn quote_block(
 /// at a terminal who did not ask otherwise, and not over SSH or on CI, where
 /// the browser would not be theirs. Agents, containers and scripts (`--json`,
 /// `--quiet`) have no browser; they get the link to hand on.
-fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: bool) {
+fn announce_payable(
+    order: &OrderView,
+    quote: &Quote,
+    gateway: &Gateway,
+    buyer: Principal,
+    output: Output,
+    no_open: bool,
+) {
     let Some(url) = order.checkout_url.as_deref() else {
         warn!(
             "Order {} is {} but has no Payment Link",
@@ -494,6 +504,8 @@ fn announce_payable(order: &OrderView, quote: &Quote, output: Output, no_open: b
         Output::Json => {
             if let Err(e) = print_json(&JsonOrderCreated {
                 order_id: &order.id,
+                gateway: gateway.canister.to_text(),
+                buyer: buyer.to_text(),
                 checkout_url: url,
                 amount: order.amount,
                 net: order.net,
@@ -570,6 +582,9 @@ async fn wait_and_report(
 ) -> Result<(), anyhow::Error> {
     let names = Names::of(gateway);
     let id = order.id.clone();
+    // The order as made: what --json's last line says of it should the
+    // gateway no longer know it.
+    let made = order.clone();
     // The live line is for a person at a terminal. Anyone else reading
     // stderr as it comes (an agent, a log, the debug log a spinner would
     // interleave with) is told in lines instead; -q asks for nothing but the
@@ -641,23 +656,37 @@ async fn wait_and_report(
         Err(error) if output == Output::Quiet => return Err(error.into()),
         // The wait ended with the order unsettled. It carries on without
         // the command, which says once where it stands, as the error it
-        // ends with.
+        // ends with; --json is told once how it ended, and where the order
+        // stood then.
         Err(CyclesPurchaseError::Interrupted { order }) => {
+            print_final(&order, None, output, WaitEnd::Interrupted)?;
             bail!("{}", unsettled(&order, Unsettled::Stopped, names, after))
         }
         Err(CyclesPurchaseError::WaitTimedOut { order }) => {
+            print_final(&order, None, output, WaitEnd::TimedOut)?;
             bail!("{}", unsettled(&order, Unsettled::TimedOut, names, after))
         }
         // The gateway stopped answering for five minutes: the order is said
         // as last seen, which is all that is known of it, over the last
         // poll's failure.
         Err(CyclesPurchaseError::ContactLost { order, source, .. }) => {
+            print_final(&order, None, output, WaitEnd::ContactLost)?;
             return Err(anyhow::Error::new(*source).context(unsettled(
                 &order,
                 Unsettled::ContactLost,
                 names,
                 after,
             )));
+        }
+        // The gateway no longer knows the order: it is said as made, with
+        // no status, since none could be read.
+        Err(error @ CyclesPurchaseError::OrderNotFound { .. }) => {
+            let unknown = OrderView {
+                status: None,
+                ..made
+            };
+            print_final(&unknown, None, output, WaitEnd::NotFound)?;
+            return Err(error.into());
         }
         Err(error) => return Err(error.into()),
     };
@@ -728,7 +757,7 @@ async fn report_end(
         None
     };
 
-    print_final(order, balance, output)?;
+    print_final(order, balance, output, WaitEnd::Settled)?;
 
     if order.status == Some(CardOrderStatus::Delivered) && output == Output::Human {
         let cycles = order
@@ -949,28 +978,43 @@ fn black_on_white(drawing: &str) -> String {
         .join("\n")
 }
 
+/// Why a wait ended, for `--json`'s last line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum WaitEnd {
+    /// The order reached a status the wait ends on.
+    Settled,
+    Interrupted,
+    TimedOut,
+    ContactLost,
+    NotFound,
+}
+
 /// Where the order stands, for a script: one JSON object, or the status tag
-/// alone. A person is told in prose by the caller.
+/// alone once it settled. A person is told in prose by the caller.
 fn print_final(
     order: &OrderView,
     balance: Option<u128>,
     output: Output,
+    ended: WaitEnd,
 ) -> Result<(), anyhow::Error> {
     match output {
         Output::Json => print_json(&JsonOrderFinal {
             order_id: &order.id,
             status: order.status_tag(),
+            ended,
             cycles_delivered: order.cycles_delivered.map(|c| c.to_string()),
             paid: order.paid,
             refunded: order.refunded,
             detail: order.detail.as_deref(),
             balance: balance.map(|b| b.to_string()),
+            expires_at: order.expires_at.map(format_secs),
         }),
-        Output::Quiet => {
+        Output::Quiet if ended == WaitEnd::Settled => {
             println!("{}", order.status_tag());
             Ok(())
         }
-        Output::Human => Ok(()),
+        Output::Quiet | Output::Human => Ok(()),
     }
 }
 
@@ -1021,9 +1065,15 @@ fn print_json<T: Serialize>(value: &T) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// The first line `--json` prints: the order as made.
 #[derive(Serialize)]
 struct JsonOrderCreated<'a> {
     order_id: &'a str,
+    /// The canister id of the gateway the order was placed with.
+    gateway: String,
+    /// The principal that placed it, whose Cycles Ledger account the cycles
+    /// go to.
+    buyer: String,
     checkout_url: &'a str,
     /// What the card will be charged, as the order asks.
     amount: Money,
@@ -1037,10 +1087,19 @@ struct JsonOrderCreated<'a> {
     expires_at: Option<String>,
 }
 
+/// The last line `--json` prints, unless `--no-wait`: how the wait ended,
+/// and where the order stood then. Every key is always there, `null` where
+/// it does not apply.
 #[derive(Serialize)]
 struct JsonOrderFinal<'a> {
     order_id: &'a str,
+    /// The order's status as last read, e.g. `delivered` or
+    /// `awaiting_payment`; `unknown` for one this CLI does not know, or
+    /// could not read.
     status: &'static str,
+    /// Why the wait ended: `settled` (the order reached a status the wait
+    /// ends on), `interrupted`, `timed_out`, `contact_lost` or `not_found`.
+    ended: WaitEnd,
     /// Exact cycles delivered, as a decimal string; only when delivered.
     cycles_delivered: Option<String>,
     /// What the card was charged, once paid.
@@ -1051,6 +1110,8 @@ struct JsonOrderFinal<'a> {
     detail: Option<&'a str>,
     /// The buyer's cycles-ledger balance afterwards, as a decimal string.
     balance: Option<String>,
+    /// RFC 3339: until when an unpaid order stays payable.
+    expires_at: Option<String>,
 }
 
 #[cfg(test)]
@@ -1228,6 +1289,107 @@ mod tests {
                 "{} columns: {line}",
                 line.chars().count()
             );
+        }
+    }
+
+    /// `--cycles` asks for cycles; the block says what was asked and what the
+    /// price buys by the gateway's arithmetic: at the boundary the least
+    /// cent's estimate covers the cycles asked for, and the block promises
+    /// nothing more than that estimate.
+    #[test]
+    fn the_quote_block_asks_for_cycles_without_promising_them() {
+        use crate::cyclepay::pricing::{least_gross_for, ledger_cycles};
+        let gateway = gateway_at(CYCLES_GATEWAY_CID);
+        let rate = Rate {
+            xdr_usd_x10000: 13_566,
+            stale: false,
+            age: None,
+        };
+        // Exactly what $1.00 buys, and one cycle more, which takes a cent
+        // more.
+        let at_one_dollar = ledger_cycles(100, rate.xdr_usd_x10000, &gateway.terms);
+        for (wanted, cents) in [(at_one_dollar, 100), (at_one_dollar + 1, 101)] {
+            let target = Target::Receive {
+                cycles: wanted,
+                currency: Currency::Usd,
+            };
+            let quote = purchase::quote_at(&gateway, rate, target).unwrap();
+            assert_eq!(quote.amount.minor_units, cents);
+            assert_eq!(
+                least_gross_for(wanted, rate.xdr_usd_x10000, &gateway.terms),
+                Some(cents)
+            );
+            assert!(quote.cycles >= wanted);
+            let buyer = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+            let block = quote_block(&quote, target, &gateway, buyer, None);
+            assert_eq!(block[2], format!("Wanted:   {}", format_cycles(wanted)));
+            assert!(
+                block.iter().all(|line| !line.contains("at least")),
+                "{block:?}"
+            );
+            assert!(block[4].starts_with("Estimate: about "), "{block:?}");
+        }
+    }
+
+    /// `--json`'s last line carries every key, `null` where it does not
+    /// apply, and says how the wait ended in snake_case.
+    #[test]
+    fn the_final_json_line_has_every_key_and_says_how_the_wait_ended() {
+        let unpaid = OrderView {
+            id: "co-1".into(),
+            status: Some(CardOrderStatus::AwaitingPayment),
+            amount: Money::from_minor_units(1000, Currency::Usd),
+            net: Money::from_minor_units(941, Currency::Usd),
+            checkout_url: None,
+            expires_at: Some(1_700_000_000),
+            paid: None,
+            cycles_delivered: None,
+            refunded: None,
+            detail: None,
+            destination: None,
+        };
+        let line = serde_json::to_value(JsonOrderFinal {
+            order_id: &unpaid.id,
+            status: unpaid.status_tag(),
+            ended: WaitEnd::Interrupted,
+            cycles_delivered: None,
+            paid: unpaid.paid,
+            refunded: unpaid.refunded,
+            detail: unpaid.detail.as_deref(),
+            balance: None,
+            expires_at: unpaid.expires_at.map(format_secs),
+        })
+        .unwrap();
+        // serde_json's map keeps its keys sorted.
+        let keys: Vec<_> = line.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys,
+            [
+                "balance",
+                "cycles_delivered",
+                "detail",
+                "ended",
+                "expires_at",
+                "order_id",
+                "paid",
+                "refunded",
+                "status",
+            ]
+        );
+        assert_eq!(line["status"], "awaiting_payment");
+        assert_eq!(line["ended"], "interrupted");
+        assert_eq!(line["expires_at"], "2023-11-14T22:13:20Z");
+        for key in ["cycles_delivered", "paid", "refunded", "detail", "balance"] {
+            assert!(line[key].is_null(), "{key}: {line}");
+        }
+        for (ended, says) in [
+            (WaitEnd::Settled, "settled"),
+            (WaitEnd::Interrupted, "interrupted"),
+            (WaitEnd::TimedOut, "timed_out"),
+            (WaitEnd::ContactLost, "contact_lost"),
+            (WaitEnd::NotFound, "not_found"),
+        ] {
+            assert_eq!(serde_json::to_value(ended).unwrap(), says);
         }
     }
 

@@ -8,8 +8,8 @@
 exclude-dev = true
 
 [advisories]
-# Vulnerabilities are denied, except one listed in `ignore` below, which needs
-# a fix already in progress and a link to it. Informational advisories are
+# Vulnerabilities are denied, except those listed in `ignore` below, each of
+# which needs a fix already in progress and a link to it. Informational advisories are
 # transitive crates we do not pick, usually with no patched version, and GHSA
 # omits them so Dependabot never raises them either. Replaces the stale
 # hand-maintained ignore list in .cargo/audit.toml.
@@ -22,6 +22,16 @@ ignore = [
   # that signs only with the user's own keys. Remove once ic-agent ships the
   # 0.14 stack (dfinity/agent-rs#745) and icp-cli moves to it.
   { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by ic-agent; fix in dfinity/agent-rs#745" },
+  # zstd 0.13 and zstd-safe 7 have no patched release on their line, and
+  # wasmtime's cache crate requires `zstd = "0.13"`; the patched versions are a
+  # semver-major bump, and as of 2026-10-26 no wasmtime release or open PR moves
+  # it (bytecodealliance/wasmtime#14995 and #14996 were closed unmerged). The
+  # flaws are in streaming decompression of untrusted input and in `Seekable`,
+  # and wasmtime only round-trips its own cache files. Remove once a wasmtime
+  # release requires zstd 0.14 and icp-cli moves to it.
+  { id = "RUSTSEC-2026-0391", reason = "zstd 0.13 pinned by wasmtime-internal-cache; no wasmtime release on zstd 0.14 yet" },
+  { id = "RUSTSEC-2026-0398", reason = "zstd-safe 7 pinned by wasmtime-internal-cache; no wasmtime release on zstd 0.14 yet" },
+  { id = "RUSTSEC-2026-0403", reason = "zstd-safe 7 pinned by wasmtime-internal-cache; no wasmtime release on zstd 0.14 yet" },
 ]
 
 [licenses]

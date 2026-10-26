@@ -51,6 +51,3 @@ multiple-versions = "allow"
 # make a tagged release non-reproducible. cargo-deny only warns by default.
 unknown-registry = "deny"
 unknown-git = "deny"
-# Temporary, with the `[patch.crates-io]` in Cargo.toml: remove both once an
-# ic-agent release carries the RustCrypto 0.14 stack (RUSTSEC-2026-0387).
-allow-git = ["https://github.com/dfinity/agent-rs"]

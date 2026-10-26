@@ -3,8 +3,8 @@
 //! Implements <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
 
 use bip32::DerivationPath;
-use crypto_bigint::{NonZero, U256};
-use elliptic_curve::{Curve, sec1::ToSec1Point};
+use crypto_bigint::{Encoding, U256, Zero};
+use elliptic_curve::{Curve, sec1::ToEncodedPoint};
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha512;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -20,7 +20,7 @@ pub(super) fn derive_secp256k1(seed: &[u8], path: &DerivationPath) -> k256::Secr
         seed,
         path,
         SECP256K1_SEED_KEY,
-        Some(k256::Secp256k1::ORDER.into_nz()),
+        Some(k256::Secp256k1::ORDER),
         k256_compressed_public_key,
     );
     k256::SecretKey::from_slice(&*key_bytes)
@@ -32,7 +32,7 @@ pub(super) fn derive_p256(seed: &[u8], path: &DerivationPath) -> p256::SecretKey
         seed,
         path,
         P256_SEED_KEY,
-        Some(p256::NistP256::ORDER.into_nz()),
+        Some(p256::NistP256::ORDER),
         p256_compressed_public_key,
     );
     p256::SecretKey::from_slice(&*key_bytes)
@@ -69,16 +69,16 @@ fn slip10_derive(
     seed: &[u8],
     path: &DerivationPath,
     curve_key: &[u8],
-    order: Option<NonZero<U256>>,
+    order: Option<U256>,
     pub_key: impl Fn(&[u8; 32]) -> [u8; 33],
 ) -> Zeroizing<[u8; 32]> {
     let (mut key, mut chain_code) = hmac_sha512_split(curve_key, seed);
 
     // For EC curves, the spec requires the master key to be a valid scalar.
     if let Some(order) = order {
-        let master = Zeroizing::new(U256::from_be_slice(&*key));
+        let master = Zeroizing::new(U256::from_be_bytes(*key));
         assert!(
-            !bool::from(master.is_zero()) && *master < *order.as_ref(),
+            !bool::from(master.is_zero()) && *master < order,
             "SLIP-0010: master key derived from seed is invalid; use a different seed",
         );
     }
@@ -107,12 +107,12 @@ fn slip10_derive(
 
             if let Some(order) = order {
                 // EC: child key = (IL + parent_key) mod n
-                let il_scalar = Zeroizing::new(U256::from_be_slice(&*il));
-                if *il_scalar >= *order.as_ref() {
+                let il_scalar = Zeroizing::new(U256::from_be_bytes(*il));
+                if *il_scalar >= order {
                     index += 1;
                     continue;
                 }
-                let key_scalar = Zeroizing::new(U256::from_be_slice(&*key));
+                let key_scalar = Zeroizing::new(U256::from_be_bytes(*key));
                 // add_mod requires both operands < order; key_scalar is guaranteed < order
                 // because it was validated on entry (master key check above) and every
                 // subsequent value is the output of a prior add_mod call.
@@ -121,7 +121,7 @@ fn slip10_derive(
                     index += 1;
                     continue;
                 }
-                *key = child_scalar.to_be_bytes().into();
+                *key = child_scalar.to_be_bytes();
                 chain_code = ir;
             } else {
                 // Ed25519: child key is the left 32 bytes directly; no modular arithmetic.
@@ -140,7 +140,7 @@ fn k256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
     let secret = k256::SecretKey::from_slice(key_bytes).expect("valid k256 secret key");
     secret
         .public_key()
-        .to_sec1_point(true)
+        .to_encoded_point(true)
         .as_bytes()
         .try_into()
         .expect("compressed k256 point is 33 bytes")
@@ -152,7 +152,7 @@ fn p256_compressed_public_key(key_bytes: &[u8; 32]) -> [u8; 33] {
     let secret = p256::SecretKey::from_slice(key_bytes).expect("valid p256 secret key");
     secret
         .public_key()
-        .to_sec1_point(true)
+        .to_encoded_point(true)
         .as_bytes()
         .try_into()
         .expect("compressed p256 point is 33 bytes")

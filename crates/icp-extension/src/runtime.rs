@@ -6,6 +6,7 @@ use icp_project::calls::{Call, CanisterCalls};
 use icp_project::error;
 use semver::{Version, VersionReq};
 use snafu::prelude::*;
+use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
 
@@ -28,8 +29,8 @@ use v1::icp::extension::types as wit;
 pub trait Terminal: Send + Sync {
     /// Ask a yes/no question; return `default` when nobody is there to ask.
     fn confirm(&self, prompt: &str, default: bool) -> bool;
-    /// Show the user a URL to visit.
-    fn open_url(&self, url: &str);
+    /// Show the user a web page to visit: always an absolute http(s) URL.
+    fn open_url(&self, url: &Url);
 }
 
 /// A terminal that answers nothing: what `describe` runs against, since an
@@ -40,7 +41,7 @@ impl Terminal for Silent {
     fn confirm(&self, _prompt: &str, default: bool) -> bool {
         default
     }
-    fn open_url(&self, _url: &str) {}
+    fn open_url(&self, _url: &Url) {}
 }
 
 struct HostState {
@@ -65,10 +66,15 @@ impl wasmtime_wasi::WasiView for HostState {
 
 impl HostState {
     /// Which canister a request may reach: any on a network that is not
-    /// mainnet, and on mainnet only those the extension declared.
+    /// mainnet, and on mainnet only those the extension declared. Never the
+    /// management canister: a call to it acts on the canister its argument
+    /// names, which neither the allowlist nor the call's routing can see.
     fn permitted(&self, canister: &str) -> Result<Principal, String> {
         let principal = Principal::from_text(canister)
             .map_err(|e| format!("'{canister}' is not a valid principal: {e}"))?;
+        if principal == Principal::management_canister() {
+            return Err("extensions may not call the management canister".into());
+        }
         if self.mainnet && !self.allowed.iter().any(|a| a.id == principal) {
             return Err(format!(
                 "the extension may not call {principal} on mainnet: it is not among the \
@@ -105,8 +111,23 @@ impl v1::ExtensionImports for HostState {
         self.terminal.confirm(&prompt, default)
     }
 
-    fn open_url(&mut self, url: String) {
+    fn open_url(&mut self, url: String) -> Result<(), String> {
+        let url = web_page(&url)?;
         self.terminal.open_url(&url);
+        Ok(())
+    }
+}
+
+/// `url`, if it is an absolute http(s) URL: what `open-url` may show. The
+/// opener behind it would as readily launch a local file or a custom scheme's
+/// handler, which is the user's machine rather than a page.
+fn web_page(url: &str) -> Result<Url, String> {
+    let parsed = Url::parse(url).map_err(|e| format!("'{url}' is not a URL: {e}"))?;
+    match parsed.scheme() {
+        "http" | "https" if parsed.has_host() => Ok(parsed),
+        _ => Err(format!(
+            "'{url}' is not an http(s) URL; only web pages can be opened"
+        )),
     }
 }
 
@@ -370,8 +391,8 @@ mod tests {
         fn confirm(&self, _prompt: &str, _default: bool) -> bool {
             self.answer
         }
-        fn open_url(&self, url: &str) {
-            self.opened.lock().unwrap().push(url.to_owned());
+        fn open_url(&self, url: &Url) {
+            self.opened.lock().unwrap().push(url.to_string());
         }
     }
 
@@ -489,6 +510,52 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(*terminal.opened.lock().unwrap(), ["https://example.com/"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn only_a_web_page_is_opened() {
+        let Some(wasm) = fixture() else { return };
+        let terminal = Arc::new(Recorder {
+            answer: true,
+            ..Default::default()
+        });
+        for url in [
+            "file:///etc/passwd",
+            "/etc/passwd",
+            "vscode://x",
+            "https://",
+        ] {
+            let error = run(
+                wasm.clone(),
+                vec![],
+                matched(&["ask"], &[("url", &[url])]),
+                RunContext::default(),
+                None,
+                terminal.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert!(error.to_string().contains("URL"), "{url}: {error}");
+        }
+        assert!(terminal.opened.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_management_canister_is_never_called() {
+        let Some(wasm) = fixture() else { return };
+        let echo = Arc::new(Echo::default());
+        let error = run(
+            wasm,
+            vec![],
+            call("aaaaa-aa"),
+            RunContext::default(),
+            Some(echo.clone()),
+            Arc::new(Silent),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("management canister"), "{error}");
+        assert!(echo.called.lock().unwrap().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]

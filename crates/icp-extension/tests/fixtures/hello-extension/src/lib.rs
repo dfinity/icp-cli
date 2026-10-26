@@ -52,6 +52,8 @@ const EMPTY_ARGS: &[u8] = b"DIDL\x00\x00";
 
 impl Guest for Hello {
     fn describe() -> Info {
+        let mut page = arg("url", None, ArgKind::Value, "The page to open");
+        page.default_value = Some("https://example.com/".into());
         let mut name = arg("name", None, ArgKind::Value, "Who to greet");
         name.default_value = Some("world".into());
         Info {
@@ -77,7 +79,7 @@ impl Guest for Hello {
                     vec![operand("canister", "Canister ID"), operand("method", "Method name")],
                     vec![StandardOpt::Network],
                 ),
-                command(&["ask"], "Confirm, then open a URL", vec![], vec![]),
+                command(&["ask"], "Confirm, then open a URL", vec![page], vec![]),
                 command(&["fail"], "Fail on purpose", vec![], vec![]),
             ],
             canisters: vec![AllowedCanister {
@@ -126,8 +128,10 @@ impl Guest for Hello {
                 Ok(())
             }
             ["ask"] => {
+                let url = value(&cmd, "url").and_then(|v| v.first());
+                let url = url.map_or("https://example.com/", String::as_str);
                 if confirm("Open the page?", false) {
-                    open_url("https://example.com/");
+                    open_url(url)?;
                     println!("opened");
                 } else {
                     println!("declined");

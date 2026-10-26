@@ -53,6 +53,11 @@ pub enum InvalidInfo {
         source: semver::Error,
     },
 
+    #[snafu(display(
+        "the extension declares the management canister, which extensions may not call"
+    ))]
+    ManagementCanister,
+
     #[snafu(display("'{segment}' in command '{path}' is not a valid command name"))]
     CommandName { path: String, segment: String },
 
@@ -136,6 +141,13 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
     semver::Version::parse(&info.version).context(VersionSnafu {
         version: &info.version,
     })?;
+    ensure!(
+        !info
+            .canisters
+            .iter()
+            .any(|c| c.id == candid::Principal::management_canister()),
+        ManagementCanisterSnafu
+    );
 
     let mut paths = BTreeSet::new();
     for command in &info.commands {
@@ -461,6 +473,19 @@ mod tests {
             command(&["cycles", "buy"], vec![]),
         ]);
         validate(&info).unwrap();
+    }
+
+    #[test]
+    fn the_management_canister_cannot_be_declared() {
+        let mut bad = info(vec![]);
+        bad.canisters = vec![crate::AllowedCanister {
+            id: candid::Principal::management_canister(),
+            label: "management".into(),
+        }];
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::ManagementCanister)
+        ));
     }
 
     #[test]

@@ -62,7 +62,7 @@ interface types {
 
     /// A mainnet canister the extension calls. On mainnet a call to any
     /// canister not listed here is refused; on other networks calls are
-    /// unrestricted.
+    /// unrestricted. The management canister cannot be listed.
     record allowed-canister {
         /// Textual principal.
         id: string,
@@ -139,16 +139,20 @@ world extension {
 
     /// Call a canister as the resolved identity, on the resolved network. The
     /// reply is the raw Candid bytes. Fails when the command did not ask for
-    /// `network`, and, on mainnet, for a canister not in `info.canisters`.
+    /// `network`; on mainnet, for a canister not in `info.canisters`; and for
+    /// the management canister (`aaaaa-aa`), which this version does not
+    /// reach.
     import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
 
     /// Ask the user a yes/no question. Returns `default` without asking when
     /// nobody is at the terminal.
     import confirm: func(prompt: string, default: bool) -> bool;
 
-    /// Show the user a URL to visit: icp-cli opens it in a browser when it
-    /// can, and prints it (with a QR code on a terminal) either way.
-    import open-url: func(url: string);
+    /// Show the user a web page to visit: icp-cli opens it in a browser when
+    /// it can, and prints it (with a QR code on a terminal) either way. Fails,
+    /// without showing anything, for anything but an absolute http(s) URL: a
+    /// local path or another scheme would reach the user's own applications.
+    import open-url: func(url: string) -> result<_, string>;
 
     // The extension's stdout and stderr go straight to the terminal, and it
     // may read the clocks and sleep. It has no filesystem, no environment

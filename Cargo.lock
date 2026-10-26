@@ -3733,6 +3733,7 @@ dependencies = [
  "serde",
  "snafu",
  "tokio",
+ "url",
  "wasmtime",
  "wasmtime-wasi",
 ]

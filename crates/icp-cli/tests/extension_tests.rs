@@ -131,8 +131,8 @@ fn extension_changed_after_install_is_refused() {
         .success();
 
     // Wherever the platform keeps user data.
-    let installed =
-        find(ctx.home_path(), "extensions/hello/extension.wasm").expect("the installed component");
+    let component = format!("extensions/hello/{}.wasm", icp_app_sha256(&wasm));
+    let installed = find(ctx.home_path(), &component).expect("the installed component");
     let mut bytes = std::fs::read(&installed).unwrap();
     bytes.push(0);
     std::fs::write(&installed, bytes).unwrap();
@@ -361,4 +361,55 @@ fn extension_install_checks_the_name_first() {
 fn recorded_source(path: &Path) -> String {
     let canonical = dunce::canonicalize(path).unwrap();
     canonical.to_str().unwrap().to_owned()
+}
+
+#[test]
+fn extension_asking_for_identity_gets_the_anonymous_principal_too() {
+    let ctx = TestContext::new();
+    let wasm = build_hello_extension();
+    ctx.icp()
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
+        .assert()
+        .success();
+    ctx.icp()
+        .args(["hello", "whoami", "-n", "ic", "--identity", "anonymous"])
+        .assert()
+        .success()
+        .stdout(contains("identity=2vxsx-fae"));
+}
+
+#[test]
+fn a_built_in_wins_over_an_extension_of_its_name() {
+    let ctx = TestContext::new();
+    let wasm = build_hello_extension();
+    ctx.icp()
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
+        .assert()
+        .success();
+
+    // As if a later icp had added a built-in `identity`: install refuses the
+    // name, so the record is renamed by hand.
+    let record = find(ctx.home_path(), "extensions/hello/installed.json").unwrap();
+    let mut installed: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&record).unwrap()).unwrap();
+    installed["name"] = "identity".into();
+    let extensions = record.parent().unwrap().parent().unwrap();
+    std::fs::create_dir(extensions.join("identity")).unwrap();
+    std::fs::write(
+        extensions.join("identity/installed.json"),
+        serde_json::to_string(&installed).unwrap(),
+    )
+    .unwrap();
+
+    // The built-in's own subcommands parse, and its handler runs.
+    ctx.icp()
+        .args(["identity", "list"])
+        .assert()
+        .success()
+        .stdout(contains("anonymous"));
+    ctx.icp()
+        .args(["identity", "greet"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'greet'"));
 }

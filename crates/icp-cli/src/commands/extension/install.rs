@@ -121,10 +121,11 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     }
 
     let installed = Installed {
+        wasm: wasm_path(&dir, name, &sha256),
         name: name.clone(),
         source,
         sha256,
-        wasm: wasm_path(&dir, name),
+
         installed_at: OffsetDateTime::now_utc()
             .replace_nanosecond(0)?
             .format(&Rfc3339)?,
@@ -138,10 +139,9 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     Ok(())
 }
 
+/// What the approval prompt points out about a canister the extension calls.
+/// (It cannot be the management canister, which `validate` refuses.)
 fn warning(id: Principal) -> String {
-    if id == Principal::management_canister() {
-        return "  ⚠ the management canister: can act on every canister you control".into();
-    }
     match LEDGERS.iter().find(|(ledger, _)| *ledger == id.to_text()) {
         Some((_, token)) => format!("  ⚠ a ledger: can move your {token}"),
         None => String::new(),

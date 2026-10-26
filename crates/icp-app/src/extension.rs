@@ -7,11 +7,17 @@
 //! itself, so one component can be installed twice, as `cyclepay` and
 //! `cyclepay-beta`):
 //!
-//! - `extension.wasm` — the component;
+//! - `<sha256>.wasm` — the component, named by its hash;
 //! - `installed.json` — an [`Installed`]: where the component came from, the
 //!   sha256 it had when the user approved it, and what it declared. That hash
 //!   is checked before every run, so the component cannot change underneath
 //!   an approval.
+//!
+//! Both are written under a temporary name and renamed into place, so a
+//! reader never sees either half-written. Since components are named by their
+//! hash, two installs racing under one name each write a component of their
+//! own, and whichever record lands last names its own component: the pair a
+//! record and its component make is never mixed.
 
 use icp_extension::Info;
 use icp_project::fs::{self, json};
@@ -22,7 +28,6 @@ use sha2::{Digest, Sha256};
 use snafu::prelude::*;
 use url::Url;
 
-const WASM: &str = "extension.wasm";
 const INSTALLED: &str = "installed.json";
 
 /// An installed extension, as recorded at install.
@@ -49,6 +54,12 @@ pub enum ExtensionError {
 
     #[snafu(transparent)]
     Io { source: fs::IoError },
+
+    #[snafu(transparent)]
+    Rename { source: fs::RenameError },
+
+    #[snafu(display("failed to set up an HTTP client to download the extension"))]
+    HttpClient { source: reqwest::Error },
 
     #[snafu(display("no extension named '{name}' is installed"))]
     NotInstalled { name: String },
@@ -93,9 +104,17 @@ pub fn check_name(name: &str) -> Result<(), ExtensionError> {
     Ok(())
 }
 
-/// Where the component of the extension installed as `name` is kept.
-pub fn wasm_path(dir: &Path, name: &str) -> PathBuf {
-    dir.join(name).join(WASM)
+/// Where the component with `sha256` of the extension installed as `name` is
+/// kept.
+pub fn wasm_path(dir: &Path, name: &str, sha256: &str) -> PathBuf {
+    dir.join(name).join(format!("{sha256}.wasm"))
+}
+
+/// The path a file is written to before it is renamed to `path`: this
+/// process's own, so that two writers do not share one.
+fn temporary(path: &Path) -> PathBuf {
+    let name = path.file_name().unwrap_or_default();
+    path.with_file_name(format!(".{name}.{}.tmp", std::process::id()))
 }
 
 /// Hex sha256 of a component.
@@ -149,13 +168,30 @@ pub fn intact(installed: &Installed) -> bool {
     fs::read(&installed.wasm).is_ok_and(|wasm| sha256(&wasm) == installed.sha256)
 }
 
-/// Install (or replace) an extension under `dir`, at `installed.wasm`.
+/// Install (or replace) an extension under `dir`, its component at
+/// `installed.wasm` (see [`wasm_path`]).
 pub fn install(dir: &Path, wasm: &[u8], installed: &Installed) -> Result<(), ExtensionError> {
     check_name(&installed.name)?;
     let home = dir.join(&installed.name);
     fs::create_dir_all(&home)?;
-    fs::write(&installed.wasm, wasm)?;
-    json::save(&home.join(INSTALLED), installed)?;
+    let previous = get(dir, &installed.name).ok();
+
+    let staged = temporary(&installed.wasm);
+    fs::write(&staged, wasm)?;
+    fs::rename(&staged, &installed.wasm)?;
+    let record = home.join(INSTALLED);
+    let staged = temporary(&record);
+    json::save(&staged, installed)?;
+    fs::rename(&staged, &record)?;
+
+    // The component this replaced. A racing install never needs it: only one
+    // that read this install's record as its previous one would remove this
+    // install's component, and its own record then lands after this one.
+    if let Some(previous) = previous
+        && previous.wasm != installed.wasm
+    {
+        let _ = fs::remove_file(&previous.wasm);
+    }
     Ok(())
 }
 
@@ -172,7 +208,12 @@ pub fn uninstall(dir: &Path, name: &str) -> Result<(), ExtensionError> {
 /// the bytes came from.
 pub async fn download(url: &Url) -> Result<Vec<u8>, ExtensionError> {
     ensure!(url.scheme() == "https", NotHttpsSnafu { url: url.as_str() });
-    let response = Client::new()
+    // https_only also refuses a redirect to plain http.
+    let client = Client::builder()
+        .https_only(true)
+        .build()
+        .context(HttpClientSnafu)?;
+    let response = client
         .get(url.clone())
         .send()
         .await
@@ -201,7 +242,7 @@ mod tests {
             name: name.into(),
             source: "test".into(),
             sha256: sha256(wasm),
-            wasm: wasm_path(dir, name),
+            wasm: wasm_path(dir, name, &sha256(wasm)),
             installed_at: "2026-10-26T00:00:00Z".into(),
             info: Info {
                 name: "demo".into(),
@@ -247,12 +288,35 @@ mod tests {
         let dir = tmp.path();
         let record = installed(dir, "alpha", b"a");
         install(dir, b"a", &record).unwrap();
-        fs::write(&dir.join("alpha").join(WASM), b"evil").unwrap();
+        fs::write(&record.wasm, b"evil").unwrap();
         assert!(matches!(
             wasm(&record),
             Err(ExtensionError::Tampered { .. })
         ));
         assert!(!intact(&record));
+    }
+
+    #[test]
+    fn a_reinstall_switches_to_its_own_component() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let first = installed(dir, "alpha", b"one");
+        let second = installed(dir, "alpha", b"two");
+        assert_ne!(first.wasm, second.wasm);
+
+        install(dir, b"one", &first).unwrap();
+        install(dir, b"two", &second).unwrap();
+        let current = get(dir, "alpha").unwrap();
+        assert_eq!(current.wasm, second.wasm);
+        assert_eq!(wasm(&current).unwrap(), b"two");
+        // The replaced component is gone; nothing is left half-written.
+        assert!(!first.wasm.exists());
+        let mut files: Vec<_> = fs::read_dir(&dir.join("alpha")).unwrap();
+        files.sort();
+        assert_eq!(
+            files,
+            [second.wasm.clone(), dir.join("alpha").join(INSTALLED)]
+        );
     }
 
     #[test]

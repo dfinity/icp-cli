@@ -18,31 +18,38 @@ use icp_extension::{ArgKind, Matched, RunContext, StandardOpt, Terminal};
 use icp_project::host::EnvironmentSelection;
 use icp_project::prelude::*;
 use tracing::{info, warn};
+use url::Url;
 
 use crate::commands::cycles::buy::{black_on_white, browser_is_at_hand, render_qr};
 use crate::options::{EnvironmentOpt, IdentityOpt, NetworkOpt};
 
-/// The installed extensions, or none when the directory they live in cannot
-/// be found: a broken extension store should not stop the built-in commands.
+/// The installed extensions that can run, or none when the directory they
+/// live in cannot be found: a broken extension store should not stop the
+/// built-in commands.
+///
+/// One whose name a built-in command has is left out. Install refuses such a
+/// name, but a later icp may add the built-in; the built-in then wins, both in
+/// the command tree and in dispatch, which both take this list.
 pub(crate) fn installed() -> Vec<Installed> {
-    match Directories::new() {
-        Ok(dirs) => icp_app::extension::list(&dirs.extensions()),
-        Err(_) => vec![],
-    }
+    use clap::CommandFactory as _;
+    let Ok(dirs) = Directories::new() else {
+        return vec![];
+    };
+    let cli = crate::Cli::command();
+    icp_app::extension::list(&dirs.extensions())
+        .into_iter()
+        .filter(|extension| cli.find_subcommand(&extension.name).is_none())
+        .collect()
 }
 
-/// `icp`'s command tree with every installed extension added to it.
+/// `icp`'s command tree with `installed` extensions added to it.
 pub(crate) fn cli_command(installed: &[Installed]) -> clap::Command {
     use clap::CommandFactory as _;
-    let mut cli = crate::Cli::command();
-    for extension in installed {
-        // Install refuses a name a built-in has; this guards against a
-        // built-in added since.
-        if cli.find_subcommand(&extension.name).is_none() {
-            cli = cli.subcommand(command(extension));
-        }
-    }
-    cli
+    installed
+        .iter()
+        .fold(crate::Cli::command(), |cli, extension| {
+            cli.subcommand(command(extension))
+        })
 }
 
 /// The clap command for one extension, built from what it declared.
@@ -165,8 +172,11 @@ pub(crate) async fn exec(
         }
     }
 
-    // What the command asked icp-cli to resolve.
-    let identity: IdentitySelection = match declared.standard.contains(&StandardOpt::Identity) {
+    // What the command asked icp-cli to resolve. A command that asks for
+    // `identity` gets its principal whichever identity it is, the anonymous
+    // one included; one that does not runs as the anonymous identity, unsaid.
+    let asks_identity = declared.standard.contains(&StandardOpt::Identity);
+    let identity: IdentitySelection = match asks_identity {
         true => IdentityOpt::from_arg_matches(leaf)?.into(),
         false => IdentitySelection::Anonymous,
     };
@@ -197,11 +207,11 @@ pub(crate) async fn exec(
                 }
             }
         }
-        if identity != IdentitySelection::Anonymous {
+        if asks_identity {
             run_ctx.identity_principal = Some(agent.get_principal().map_err(|e| anyhow!(e))?);
         }
         calls = Some(icp_app::calls::calls(agent, None)?);
-    } else if identity != IdentitySelection::Anonymous {
+    } else if asks_identity {
         let id = ctx.get_identity(&identity, None).await?;
         run_ctx.identity_principal = Some(id.sender().map_err(|e| anyhow!(e))?);
     }
@@ -234,7 +244,9 @@ impl Terminal for Tty {
             .unwrap_or(default)
     }
 
-    fn open_url(&self, url: &str) {
+    /// `url` is an absolute http(s) URL: the runtime refuses anything else.
+    fn open_url(&self, url: &Url) {
+        let url = url.as_str();
         eprintln!("{url}");
         if !stderr().is_terminal() {
             return;

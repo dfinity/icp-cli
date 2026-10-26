@@ -17,7 +17,7 @@ use k256::Secp256k1;
 use p256::NistP256;
 use pem::Pem;
 use pkcs8::{
-    AssociatedOid, EncryptedPrivateKeyInfo, ObjectIdentifier, PrivateKeyInfo, SecretDocument,
+    AssociatedOid, EncryptedPrivateKeyInfoRef, ObjectIdentifier, PrivateKeyInfoRef, SecretDocument,
     der::{Decode, pem::PemLabel},
 };
 use sec1::{EcParameters, EcPrivateKey};
@@ -175,11 +175,11 @@ async fn import_from_pem(
         .iter()
         .filter(|s| {
             // PKCS#8, unencrypted
-            s.tag() == PrivateKeyInfo::PEM_LABEL
+            s.tag() == PrivateKeyInfoRef::PEM_LABEL
                 // SEC1, unencrypted
                 || s.tag() == EcPrivateKey::PEM_LABEL
                 // PKCS#8, encrypted
-                || s.tag() == EncryptedPrivateKeyInfo::PEM_LABEL
+                || s.tag() == EncryptedPrivateKeyInfoRef::PEM_LABEL
         })
         .exactly_one()
     {
@@ -190,9 +190,9 @@ async fn import_from_pem(
                 UnknownPemFormatSnafu {
                     path,
                     expected: vec![
-                        PrivateKeyInfo::PEM_LABEL,
+                        PrivateKeyInfoRef::PEM_LABEL,
                         EcPrivateKey::PEM_LABEL,
-                        EncryptedPrivateKeyInfo::PEM_LABEL,
+                        EncryptedPrivateKeyInfoRef::PEM_LABEL,
                     ],
                     found: sections.iter().map(|s| s.tag().to_string()).collect_vec(),
                 }
@@ -203,7 +203,7 @@ async fn import_from_pem(
         }
     };
     let key = match section.tag() {
-        PrivateKeyInfo::PEM_LABEL | EncryptedPrivateKeyInfo::PEM_LABEL => {
+        PrivateKeyInfoRef::PEM_LABEL | EncryptedPrivateKeyInfoRef::PEM_LABEL => {
             import_pkcs8(section, path, decryption_password_file, known_key_type)?
         }
         EcPrivateKey::PEM_LABEL => import_sec1(
@@ -232,8 +232,8 @@ fn import_pkcs8(
     // first, grab the actual key structure from the doc, which entails decrypting it if it's encrypted
     let decrypted_doc: SecretDocument;
     let mut truncated: Vec<u8>;
-    let pki = if section.tag() == PrivateKeyInfo::PEM_LABEL {
-        match PrivateKeyInfo::from_der(section.contents()) {
+    let pki = if section.tag() == PrivateKeyInfoRef::PEM_LABEL {
+        match PrivateKeyInfoRef::from_der(section.contents()) {
             Ok(pki) => pki,
             Err(e) => {
                 // Very old versions of dfx generated nonconforming PKCS#8 containers.
@@ -245,7 +245,7 @@ fn import_pkcs8(
                     truncated.truncate(48);
                     truncated[1] = 46;
                     truncated[4] = 0;
-                    PrivateKeyInfo::from_der(&truncated)
+                    PrivateKeyInfoRef::from_der(&truncated)
                         .map_err(|_| e)
                         .context(BadPemContentSnafu { path })?
                 } else {
@@ -254,7 +254,7 @@ fn import_pkcs8(
             }
         }
     } else {
-        let epki = EncryptedPrivateKeyInfo::from_der(section.contents())
+        let epki = EncryptedPrivateKeyInfoRef::from_der(section.contents())
             .context(BadPemContentSnafu { path })?;
         let password = if let Some(path) = decryption_password_file {
             read_to_string(path).context(ReadFileSnafu)?
@@ -268,7 +268,7 @@ fn import_pkcs8(
             .decrypt(&password)
             .context(DecryptionFailedSnafu { path })?;
         decrypted_doc
-            .decode_msg::<PrivateKeyInfo>()
+            .decode_msg::<PrivateKeyInfoRef>()
             .context(BadPemContentSnafu { path })?
     };
     // second, figure out what algorithm the key is for
@@ -276,20 +276,20 @@ fn import_pkcs8(
         // if the user knows what it is, we do not have to check
         match known_key_type {
             IdentityKeyAlgorithm::Secp256k1 => Ok(IdentityKey::Secp256k1(
-                k256::SecretKey::from_sec1_der(pki.private_key)
-                    .context(BadEcPemKeySnafu { path })?,
+                k256::SecretKey::from_sec1_der(pki.private_key.as_bytes())
+                    .context(BadEcDerKeySnafu { path })?,
             )),
             IdentityKeyAlgorithm::Prime256v1 => Ok(IdentityKey::Prime256v1(
-                p256::SecretKey::from_sec1_der(pki.private_key)
-                    .context(BadEcPemKeySnafu { path })?,
+                p256::SecretKey::from_sec1_der(pki.private_key.as_bytes())
+                    .context(BadEcDerKeySnafu { path })?,
             )),
             IdentityKeyAlgorithm::Ed25519 => {
                 ensure!(
-                    pki.private_key[0..2] == [0x04, 0x20],
+                    pki.private_key.as_bytes()[0..2] == [0x04, 0x20],
                     BadP8PemKeySnafu { path },
                 );
                 Ok(IdentityKey::Ed25519(
-                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key[2..])
+                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key.as_bytes()[2..])
                         .context(BadEdPemKeySnafu { path })?,
                 ))
             }
@@ -309,12 +309,12 @@ fn import_pkcs8(
                     })?;
                 match curve {
                     Secp256k1::OID => Ok(IdentityKey::Secp256k1(
-                        k256::SecretKey::from_sec1_der(pki.private_key)
-                            .context(BadEcPemKeySnafu { path })?,
+                        k256::SecretKey::from_sec1_der(pki.private_key.as_bytes())
+                            .context(BadEcDerKeySnafu { path })?,
                     )),
                     NistP256::OID => Ok(IdentityKey::Prime256v1(
-                        p256::SecretKey::from_sec1_der(pki.private_key)
-                            .context(BadEcPemKeySnafu { path })?,
+                        p256::SecretKey::from_sec1_der(pki.private_key.as_bytes())
+                            .context(BadEcDerKeySnafu { path })?,
                     )),
                     _ => UnsupportedAlgorithmSnafu {
                         found: curve,
@@ -326,11 +326,11 @@ fn import_pkcs8(
             }
             ED25519_OID => {
                 ensure!(
-                    pki.private_key[0..2] == [0x04, 0x20],
+                    pki.private_key.as_bytes()[0..2] == [0x04, 0x20],
                     BadP8PemKeySnafu { path },
                 );
                 Ok(IdentityKey::Ed25519(
-                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key[2..])
+                    ic_ed25519::PrivateKey::deserialize_raw(&pki.private_key.as_bytes()[2..])
                         .context(BadEdPemKeySnafu { path })?,
                 ))
             }
@@ -466,6 +466,11 @@ pub(crate) enum LoadKeyError {
     BadEcPemKey {
         path: PathBuf,
         source: elliptic_curve::Error,
+    },
+    #[snafu(display("malformed key material in PEM file `{path}`"))]
+    BadEcDerKey {
+        path: PathBuf,
+        source: elliptic_curve::DecodeError,
     },
     #[snafu(display("malformed key material in PEM file `{path}`"))]
     BadEdPemKey {

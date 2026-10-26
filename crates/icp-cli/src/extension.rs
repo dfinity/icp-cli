@@ -253,3 +253,127 @@ impl Terminal for Tty {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use icp_extension::{AllowedCanister, Arg, Command, Info};
+
+    use super::*;
+
+    fn arg(name: &str, long: Option<&str>, short: Option<char>, kind: ArgKind) -> Arg {
+        Arg {
+            name: name.into(),
+            long: long.map(Into::into),
+            short,
+            kind,
+            required: false,
+            default_value: None,
+            possible_values: vec![],
+            value_name: None,
+            help: String::new(),
+        }
+    }
+
+    fn command(path: &[&str], args: Vec<Arg>, standard: Vec<StandardOpt>) -> Command {
+        Command {
+            path: path.iter().map(|s| s.to_string()).collect(),
+            about: "about".into(),
+            args,
+            standard,
+            default_network: None,
+        }
+    }
+
+    /// Every shape an extension can declare, valid by `validate`.
+    fn every_shape() -> Installed {
+        let mut required = arg("first", None, None, ArgKind::Value);
+        required.required = true;
+        let mut chosen = arg("chosen", Some("chosen"), Some('c'), ArgKind::Value);
+        chosen.possible_values = vec!["a".into(), "b".into()];
+        chosen.default_value = Some("a".into());
+        chosen.value_name = Some("CHOICE".into());
+        let info = Info {
+            name: "demo".into(),
+            version: "1.0.0".into(),
+            summary: "Every shape".into(),
+            commands: vec![
+                command(&["group"], vec![], vec![]),
+                command(
+                    &["group", "leaf"],
+                    vec![
+                        required,
+                        arg("rest", None, None, ArgKind::Values),
+                        chosen,
+                        arg("many", Some("many"), None, ArgKind::Values),
+                        arg("yes", Some("yes"), Some('y'), ArgKind::Flag),
+                    ],
+                    vec![StandardOpt::Identity, StandardOpt::Network],
+                ),
+                command(
+                    &["undeclared-parent", "leaf"],
+                    vec![],
+                    vec![StandardOpt::Network],
+                ),
+                command(&["identity-only"], vec![], vec![StandardOpt::Identity]),
+            ],
+            canisters: vec![AllowedCanister {
+                id: candid::Principal::anonymous(),
+                label: "x".into(),
+            }],
+        };
+        icp_extension::validate(&info).unwrap();
+        Installed {
+            info,
+            sha256: String::new(),
+            source: String::new(),
+        }
+    }
+
+    #[test]
+    fn clap_accepts_every_declarable_shape_beside_icps_own_commands() {
+        // Panics, in a debug build, on anything clap rejects.
+        cli_command(&[every_shape()]).debug_assert();
+    }
+
+    #[test]
+    fn a_parsed_command_reaches_its_leaf() {
+        let matches = cli_command(&[every_shape()])
+            .try_get_matches_from([
+                "icp", "demo", "group", "leaf", "one", "two", "three", "-c", "b", "--many", "x",
+                "--many", "y", "-y", "-e", "staging",
+            ])
+            .unwrap();
+        let (name, sub) = matches.subcommand().unwrap();
+        assert_eq!(name, "demo");
+        let leaf = sub
+            .subcommand_matches("group")
+            .unwrap()
+            .subcommand_matches("leaf")
+            .unwrap();
+        let strings = |id| {
+            leaf.get_many::<String>(id)
+                .unwrap()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(strings("first"), ["one"]);
+        assert_eq!(strings("rest"), ["two", "three"]);
+        assert_eq!(strings("chosen"), ["b"]);
+        assert_eq!(strings("many"), ["x", "y"]);
+        assert!(leaf.get_flag("yes"));
+        let environment: EnvironmentSelection =
+            EnvironmentOpt::from_arg_matches(leaf).unwrap().into();
+        assert_eq!(environment, EnvironmentSelection::Named("staging".into()));
+    }
+
+    #[test]
+    fn a_group_needs_a_subcommand() {
+        let error = cli_command(&[every_shape()])
+            .try_get_matches_from(["icp", "demo", "group"])
+            .unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        );
+    }
+}

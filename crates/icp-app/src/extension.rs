@@ -2,12 +2,16 @@
 //! of one to install.
 //!
 //! Each extension has a directory of its own under
-//! [`crate::directories::Access::extensions`], named after it:
+//! [`crate::directories::Access::extensions`], named after the command the
+//! user installed it as (which need not be the name the extension gives
+//! itself, so one component can be installed twice, as `cyclepay` and
+//! `cyclepay-beta`):
 //!
 //! - `extension.wasm` — the component;
-//! - `installed.json` — what it declared, which the user approved, and the
-//!   sha256 the component had when they did. That hash is checked before every
-//!   run, so the component cannot change underneath an approval.
+//! - `installed.json` — an [`Installed`]: where the component came from, the
+//!   sha256 it had when the user approved it, and what it declared. That hash
+//!   is checked before every run, so the component cannot change underneath
+//!   an approval.
 
 use icp_extension::Info;
 use icp_project::fs::{self, json};
@@ -24,11 +28,18 @@ const INSTALLED: &str = "installed.json";
 /// An installed extension, as recorded at install.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Installed {
-    pub info: Info,
-    /// Hex sha256 of the component the user approved.
-    pub sha256: String,
+    /// The command it is installed as, `icp <name>`, chosen by the user.
+    pub name: String,
     /// Where it was installed from: a URL, or a local path.
     pub source: String,
+    /// Hex sha256 of the component the user approved.
+    pub sha256: String,
+    /// Where the component is kept.
+    pub wasm: PathBuf,
+    /// When it was installed, RFC 3339.
+    pub installed_at: String,
+    /// What the extension declared, its own name and version among it.
+    pub info: Info,
 }
 
 #[derive(Debug, Snafu)]
@@ -41,6 +52,12 @@ pub enum ExtensionError {
 
     #[snafu(display("no extension named '{name}' is installed"))]
     NotInstalled { name: String },
+
+    #[snafu(display(
+        "'{name}' is not a valid command name: use lowercase letters, digits and '-', \
+         starting with a letter"
+    ))]
+    InvalidName { name: String },
 
     #[snafu(display(
         "the installed extension '{name}' at {path} has changed since it was approved \
@@ -66,6 +83,21 @@ pub enum ExtensionError {
     },
 }
 
+/// Check a name to install an extension as: the rule `icp_extension` holds
+/// an extension's own name to, which also keeps it a plain directory name.
+pub fn check_name(name: &str) -> Result<(), ExtensionError> {
+    let mut chars = name.chars();
+    let valid = chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    ensure!(valid, InvalidNameSnafu { name });
+    Ok(())
+}
+
+/// Where the component of the extension installed as `name` is kept.
+pub fn wasm_path(dir: &Path, name: &str) -> PathBuf {
+    dir.join(name).join(WASM)
+}
+
 /// Hex sha256 of a component.
 pub fn sha256(wasm: &[u8]) -> String {
     hex::encode(Sha256::digest(wasm))
@@ -81,12 +113,13 @@ pub fn list(dir: &Path) -> Vec<Installed> {
         .into_iter()
         .filter_map(|entry| json::load(&entry.join(INSTALLED)).ok())
         .collect();
-    installed.sort_by(|a, b| a.info.name.cmp(&b.info.name));
+    installed.sort_by(|a, b| a.name.cmp(&b.name));
     installed
 }
 
-/// The installed extension named `name`.
+/// The extension installed as `name`.
 pub fn get(dir: &Path, name: &str) -> Result<Installed, ExtensionError> {
+    check_name(name)?;
     let path = dir.join(name).join(INSTALLED);
     ensure!(path.is_file(), NotInstalledSnafu { name });
     Ok(json::load(&path)?)
@@ -94,9 +127,9 @@ pub fn get(dir: &Path, name: &str) -> Result<Installed, ExtensionError> {
 
 /// The component of an installed extension, checked against the hash
 /// approved at install.
-pub fn wasm(dir: &Path, installed: &Installed) -> Result<Vec<u8>, ExtensionError> {
-    let name = &installed.info.name;
-    let path = dir.join(name).join(WASM);
+pub fn wasm(installed: &Installed) -> Result<Vec<u8>, ExtensionError> {
+    let name = &installed.name;
+    let path = installed.wasm.clone();
     let wasm = fs::read(&path)?;
     let actual = sha256(&wasm);
     ensure!(
@@ -111,17 +144,24 @@ pub fn wasm(dir: &Path, installed: &Installed) -> Result<Vec<u8>, ExtensionError
     Ok(wasm)
 }
 
-/// Install (or replace) an extension.
+/// Whether the component kept for `installed` is still the one approved.
+pub fn intact(installed: &Installed) -> bool {
+    fs::read(&installed.wasm).is_ok_and(|wasm| sha256(&wasm) == installed.sha256)
+}
+
+/// Install (or replace) an extension under `dir`, at `installed.wasm`.
 pub fn install(dir: &Path, wasm: &[u8], installed: &Installed) -> Result<(), ExtensionError> {
-    let home = dir.join(&installed.info.name);
+    check_name(&installed.name)?;
+    let home = dir.join(&installed.name);
     fs::create_dir_all(&home)?;
-    fs::write(&home.join(WASM), wasm)?;
+    fs::write(&installed.wasm, wasm)?;
     json::save(&home.join(INSTALLED), installed)?;
     Ok(())
 }
 
-/// Remove an installed extension.
+/// Remove the extension installed as `name`.
 pub fn uninstall(dir: &Path, name: &str) -> Result<(), ExtensionError> {
+    check_name(name)?;
     let home = dir.join(name);
     ensure!(home.join(INSTALLED).is_file(), NotInstalledSnafu { name });
     fs::remove_dir_all(&home)?;
@@ -156,17 +196,20 @@ pub async fn download(url: &Url) -> Result<Vec<u8>, ExtensionError> {
 mod tests {
     use super::*;
 
-    fn installed(name: &str, wasm: &[u8]) -> Installed {
+    fn installed(dir: &Path, name: &str, wasm: &[u8]) -> Installed {
         Installed {
+            name: name.into(),
+            source: "test".into(),
+            sha256: sha256(wasm),
+            wasm: wasm_path(dir, name),
+            installed_at: "2026-10-26T00:00:00Z".into(),
             info: Info {
-                name: name.into(),
+                name: "demo".into(),
                 version: "0.1.0".into(),
                 summary: String::new(),
                 commands: vec![],
                 canisters: vec![],
             },
-            sha256: sha256(wasm),
-            source: "test".into(),
         }
     }
 
@@ -176,13 +219,15 @@ mod tests {
         let dir = tmp.path();
         assert!(list(dir).is_empty());
 
-        install(dir, b"b", &installed("bravo", b"b")).unwrap();
-        install(dir, b"a", &installed("alpha", b"a")).unwrap();
-        let names: Vec<_> = list(dir).into_iter().map(|i| i.info.name).collect();
+        // One extension, installed under two names.
+        install(dir, b"b", &installed(dir, "bravo", b"b")).unwrap();
+        install(dir, b"a", &installed(dir, "alpha", b"a")).unwrap();
+        let names: Vec<_> = list(dir).into_iter().map(|i| i.name).collect();
         assert_eq!(names, ["alpha", "bravo"]);
 
         let alpha = get(dir, "alpha").unwrap();
-        assert_eq!(wasm(dir, &alpha).unwrap(), b"a");
+        assert_eq!(wasm(&alpha).unwrap(), b"a");
+        assert!(intact(&alpha));
 
         uninstall(dir, "alpha").unwrap();
         assert!(matches!(
@@ -193,18 +238,34 @@ mod tests {
             uninstall(dir, "alpha"),
             Err(ExtensionError::NotInstalled { .. })
         ));
+        assert_eq!(get(dir, "bravo").unwrap().info.name, "demo");
     }
 
     #[test]
     fn a_changed_component_is_refused() {
         let tmp = camino_tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        let record = installed("alpha", b"a");
+        let record = installed(dir, "alpha", b"a");
         install(dir, b"a", &record).unwrap();
         fs::write(&dir.join("alpha").join(WASM), b"evil").unwrap();
         assert!(matches!(
-            wasm(dir, &record),
+            wasm(&record),
             Err(ExtensionError::Tampered { .. })
         ));
+        assert!(!intact(&record));
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_plain_directory_name_is_refused() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        for name in ["../x", "a/b", "", "Upper", "-x"] {
+            assert!(
+                matches!(
+                    get(tmp.path(), name),
+                    Err(ExtensionError::InvalidName { .. })
+                ),
+                "{name}"
+            );
+        }
     }
 }

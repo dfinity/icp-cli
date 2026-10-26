@@ -124,7 +124,7 @@ async fn run() -> Result<(), Error> {
     let installed = extension::installed();
     let matches = extension::cli_command(&installed).get_matches();
     let extension = matches.subcommand().and_then(|(name, sub)| {
-        let installed = installed.iter().find(|e| e.info.name == name)?;
+        let installed = installed.iter().find(|e| e.name == name)?;
         Some((installed.clone(), sub.clone()))
     });
     let cli = match extension {
@@ -402,6 +402,10 @@ async fn dispatch(ctx: &icp_app::context::Context, command: Command) -> Result<(
 
             commands::extension::Command::List(args) => {
                 commands::extension::list::exec(ctx, &args).await?
+            }
+
+            commands::extension::Command::Show(args) => {
+                commands::extension::show::exec(ctx, &args).await?
             }
 
             commands::extension::Command::Uninstall(args) => {

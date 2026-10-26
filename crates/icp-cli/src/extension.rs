@@ -38,7 +38,7 @@ pub(crate) fn cli_command(installed: &[Installed]) -> clap::Command {
     for extension in installed {
         // Install refuses a name a built-in has; this guards against a
         // built-in added since.
-        if cli.find_subcommand(&extension.info.name).is_none() {
+        if cli.find_subcommand(&extension.name).is_none() {
             cli = cli.subcommand(command(extension));
         }
     }
@@ -48,7 +48,7 @@ pub(crate) fn cli_command(installed: &[Installed]) -> clap::Command {
 /// The clap command for one extension, built from what it declared.
 fn command(installed: &Installed) -> clap::Command {
     let info = &installed.info;
-    node(info, &[], info.name.clone())
+    node(info, &[], installed.name.clone())
         .about(format!("{} [extension {}]", info.summary, info.version))
 }
 
@@ -141,7 +141,13 @@ pub(crate) async fn exec(
         .commands
         .iter()
         .find(|c| c.path == path)
-        .ok_or_else(|| anyhow!("'{}' declares no command '{}'", info.name, path.join(" ")))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "'{}' declares no command '{}'",
+                installed.name,
+                path.join(" ")
+            )
+        })?;
 
     let mut values = vec![];
     for arg in &declared.args {
@@ -200,8 +206,7 @@ pub(crate) async fn exec(
         run_ctx.identity_principal = Some(id.sender().map_err(|e| anyhow!(e))?);
     }
 
-    let dirs = ctx.dirs.extensions();
-    let wasm = icp_app::extension::wasm(&dirs, installed)?;
+    let wasm = icp_app::extension::wasm(installed)?;
     icp_extension::run(
         wasm,
         info.canisters.clone(),
@@ -211,7 +216,7 @@ pub(crate) async fn exec(
         Arc::new(Tty),
     )
     .await
-    .with_context(|| format!("extension '{}' failed", info.name))
+    .with_context(|| format!("extension '{}' failed", installed.name))
 }
 
 /// The terminal an extension talks to the user through.
@@ -323,9 +328,14 @@ mod tests {
         };
         icp_extension::validate(&info).unwrap();
         Installed {
-            info,
-            sha256: String::new(),
+            // Not the name the extension gives itself: it is the installed
+            // name that is the command.
+            name: "renamed".into(),
             source: String::new(),
+            sha256: String::new(),
+            wasm: PathBuf::new(),
+            installed_at: String::new(),
+            info,
         }
     }
 
@@ -339,12 +349,12 @@ mod tests {
     fn a_parsed_command_reaches_its_leaf() {
         let matches = cli_command(&[every_shape()])
             .try_get_matches_from([
-                "icp", "demo", "group", "leaf", "one", "two", "three", "-c", "b", "--many", "x",
+                "icp", "renamed", "group", "leaf", "one", "two", "three", "-c", "b", "--many", "x",
                 "--many", "y", "-y", "-e", "staging",
             ])
             .unwrap();
         let (name, sub) = matches.subcommand().unwrap();
-        assert_eq!(name, "demo");
+        assert_eq!(name, "renamed");
         let leaf = sub
             .subcommand_matches("group")
             .unwrap()
@@ -369,7 +379,7 @@ mod tests {
     #[test]
     fn a_group_needs_a_subcommand() {
         let error = cli_command(&[every_shape()])
-            .try_get_matches_from(["icp", "demo", "group"])
+            .try_get_matches_from(["icp", "renamed", "group"])
             .unwrap_err();
         assert_eq!(
             error.kind(),

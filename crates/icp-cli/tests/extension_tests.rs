@@ -17,7 +17,7 @@ fn extension_install_run_and_uninstall() {
 
     // Nobody is at the terminal to approve it.
     ctx.icp()
-        .args(["extension", "install", wasm.as_str()])
+        .args(["extension", "install", "hello", wasm.as_str()])
         .assert()
         .failure()
         .stderr(contains("Calls as your identity, on mainnet:"))
@@ -25,16 +25,20 @@ fn extension_install_run_and_uninstall() {
         .stderr(contains("pass --yes or --sha256"));
 
     ctx.icp()
-        .args(["extension", "install", wasm.as_str(), "--yes"])
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
         .assert()
         .success()
-        .stderr(contains("Installed hello 0.1.0"));
+        .stderr(contains("Installed hello 0.1.0 as `icp hello`"));
 
     ctx.icp()
         .args(["extension", "list"])
         .assert()
         .success()
-        .stdout(contains("hello 0.1.0"));
+        .stdout(
+            contains("hello")
+                .and(contains("0.1.0"))
+                .and(contains(wasm.as_str())),
+        );
 
     // Its commands are icp's own: listed in help, parsed by clap.
     ctx.icp()
@@ -91,14 +95,28 @@ fn extension_install_checks_the_given_sha256() {
     let ctx = TestContext::new();
     let wasm = build_hello_extension();
     ctx.icp()
-        .args(["extension", "install", wasm.as_str(), "--sha256", "00"])
+        .args([
+            "extension",
+            "install",
+            "hello",
+            wasm.as_str(),
+            "--sha256",
+            "00",
+        ])
         .assert()
         .failure()
         .stderr(contains("not 00 as --sha256 requires"));
 
     let sha256 = icp_app_sha256(&wasm);
     ctx.icp()
-        .args(["extension", "install", wasm.as_str(), "--sha256", &sha256])
+        .args([
+            "extension",
+            "install",
+            "hello",
+            wasm.as_str(),
+            "--sha256",
+            &sha256,
+        ])
         .assert()
         .success();
 }
@@ -108,7 +126,7 @@ fn extension_changed_after_install_is_refused() {
     let ctx = TestContext::new();
     let wasm = build_hello_extension();
     ctx.icp()
-        .args(["extension", "install", wasm.as_str(), "--yes"])
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
         .assert()
         .success();
 
@@ -131,7 +149,7 @@ async fn extension_on_a_local_network() {
     let ctx = TestContext::new();
     let wasm = build_hello_extension();
     ctx.icp()
-        .args(["extension", "install", wasm.as_str(), "--yes"])
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
         .assert()
         .success();
 
@@ -219,4 +237,121 @@ fn find(dir: &Path, suffix: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[test]
+fn extension_installed_under_another_name() {
+    let ctx = TestContext::new();
+    let wasm = build_hello_extension();
+    for name in ["hello", "hello-beta"] {
+        ctx.icp()
+            .args(["extension", "install", name, wasm.as_str(), "--yes"])
+            .assert()
+            .success()
+            .stderr(contains(format!("Install as  icp {name}")));
+    }
+
+    // The name it was installed as is the command; the extension's own is
+    // only shown.
+    ctx.icp()
+        .args(["hello-beta", "greet", "Ann"])
+        .assert()
+        .success()
+        .stdout("hello, Ann\n");
+    ctx.icp()
+        .args(["extension", "list"])
+        .assert()
+        .success()
+        .stdout(contains("hello ").and(contains("hello-beta ")));
+    ctx.icp()
+        .args(["extension", "show", "hello-beta"])
+        .assert()
+        .success()
+        .stdout(contains("Name:       hello-beta"))
+        .stdout(contains("Extension:  hello 0.1.0"))
+        .stdout(contains("icp hello-beta greet"));
+
+    // Uninstalling one leaves the other.
+    ctx.icp()
+        .args(["extension", "uninstall", "hello-beta"])
+        .assert()
+        .success();
+    ctx.icp().args(["hello", "greet"]).assert().success();
+}
+
+#[test]
+fn extension_show_json() {
+    let ctx = TestContext::new();
+    let wasm = build_hello_extension();
+    ctx.icp()
+        .args(["extension", "install", "hello", wasm.as_str(), "--yes"])
+        .assert()
+        .success();
+
+    let output = ctx
+        .icp()
+        .args(["extension", "show", "hello", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let shown: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(shown["name"], "hello");
+    assert_eq!(shown["extension"], "hello");
+    assert_eq!(shown["version"], "0.1.0");
+    assert_eq!(shown["source"], wasm.as_str());
+    assert_eq!(shown["sha256"], icp_app_sha256(&wasm));
+    assert_eq!(shown["intact"], true);
+    assert!(shown["installed_at"].as_str().unwrap().starts_with("20"));
+    assert_eq!(shown["canisters"][0]["id"], "ryjl3-tyaaa-aaaaa-aaaba-cai");
+    assert!(
+        shown["commands"]
+            .as_array()
+            .unwrap()
+            .contains(&"hello greet".into())
+    );
+
+    let output = ctx
+        .icp()
+        .args(["extension", "list", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let listed: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(listed[0]["name"], "hello");
+
+    ctx.icp()
+        .args(["extension", "show", "nope"])
+        .assert()
+        .failure()
+        .stderr(contains("no extension named 'nope' is installed"));
+}
+
+#[test]
+fn extension_install_checks_the_name_first() {
+    let ctx = TestContext::new();
+    // Neither is downloaded: the name is refused before the source is read.
+    ctx.icp()
+        .args([
+            "extension",
+            "install",
+            "canister",
+            "https://example.invalid/x.wasm",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("'canister' is a built-in icp command"));
+    ctx.icp()
+        .args([
+            "extension",
+            "install",
+            "../x",
+            "https://example.invalid/x.wasm",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("not a valid command name"));
 }

@@ -5,14 +5,21 @@ use candid::Principal;
 use clap::{Args, CommandFactory};
 use dialoguer::Confirm;
 use icp_app::context::Context;
-use icp_app::extension::{Installed, download, sha256};
+use icp_app::extension::{Installed, check_name, download, sha256, wasm_path};
 use icp_project::prelude::*;
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 use tracing::info;
 use url::Url;
 
-/// Install an extension, or replace an installed one
+/// Install an extension as a command of icp, or replace an installed one
 #[derive(Args, Debug)]
 pub(crate) struct InstallArgs {
+    /// The command to install it as: `icp <NAME>`. Usually the name the
+    /// extension gives itself, but any name works, e.g. `cyclepay-beta` to
+    /// try a build beside the installed one
+    name: String,
+
     /// The extension's wasm component: an https URL or a local path
     source: String,
 
@@ -36,6 +43,13 @@ const LEDGERS: &[(&str, &str)] = &[
 ];
 
 pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow::Error> {
+    // The name first: a bad one should fail before anything is downloaded.
+    let name = &args.name;
+    check_name(name)?;
+    if crate::Cli::command().find_subcommand(name).is_some() || name == "help" {
+        bail!("'{name}' is a built-in icp command; install the extension under another name");
+    }
+
     let (wasm, source) = if args.source.contains("://") {
         let url = Url::parse(&args.source)?;
         (download(&url).await?, url.to_string())
@@ -54,26 +68,21 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
 
     let info = icp_extension::describe(&wasm)?;
     icp_extension::validate(&info)?;
-    if crate::Cli::command().find_subcommand(&info.name).is_some() {
-        bail!(
-            "the extension is named '{}', which is a built-in icp command",
-            info.name
-        );
-    }
 
     let dir = ctx.dirs.extensions();
-    let previous = icp_app::extension::get(&dir, &info.name).ok();
+    let previous = icp_app::extension::get(&dir, name).ok();
 
+    eprintln!("Install as  icp {name}");
     eprintln!(
-        "Extension  {} {} — {}",
+        "Extension   {} {} — {}",
         info.name, info.version, info.summary
     );
-    eprintln!("Source     {source}");
-    eprintln!("SHA-256    {sha256}");
+    eprintln!("Source      {source}");
+    eprintln!("SHA-256     {sha256}");
     if let Some(previous) = &previous {
         eprintln!(
-            "Replaces   {} {}",
-            previous.info.name, previous.info.version
+            "Replaces    {} {}, from {}",
+            previous.info.name, previous.info.version, previous.source
         );
     }
     if info.canisters.is_empty() {
@@ -108,14 +117,19 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
     }
 
     let installed = Installed {
-        info,
-        sha256,
+        name: name.clone(),
         source,
+        sha256,
+        wasm: wasm_path(&dir, name),
+        installed_at: OffsetDateTime::now_utc()
+            .replace_nanosecond(0)?
+            .format(&Rfc3339)?,
+        info,
     };
     icp_app::extension::install(&dir, &wasm, &installed)?;
     info!(
-        "Installed {} {}. Run `icp {} --help` to see its commands.",
-        installed.info.name, installed.info.version, installed.info.name
+        "Installed {} {} as `icp {name}`. Run `icp {name} --help` to see its commands.",
+        installed.info.name, installed.info.version
     );
     Ok(())
 }

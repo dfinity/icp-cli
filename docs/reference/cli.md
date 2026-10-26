@@ -47,6 +47,7 @@ This document contains the help content for the `icp` command-line program.
 * [`icp extension`↴](#icp-extension)
 * [`icp extension install`↴](#icp-extension-install)
 * [`icp extension list`↴](#icp-extension-list)
+* [`icp extension show`↴](#icp-extension-show)
 * [`icp extension uninstall`↴](#icp-extension-uninstall)
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
@@ -1103,20 +1104,22 @@ Install and manage extensions: third-party commands run in a sandbox
 
 ###### **Subcommands:**
 
-* `install` — Install an extension, or replace an installed one
-* `list` — List installed extensions
+* `install` — Install an extension as a command of icp, or replace an installed one
+* `list` — List installed extensions, one per line: name, version and source
+* `show` — Show an installed extension: where it came from, its sha256 and version, the canisters it may call, and its commands
 * `uninstall` — Uninstall an extension
 
 
 
 ## `icp extension install`
 
-Install an extension, or replace an installed one
+Install an extension as a command of icp, or replace an installed one
 
-**Usage:** `icp extension install [OPTIONS] <SOURCE>`
+**Usage:** `icp extension install [OPTIONS] <NAME> <SOURCE>`
 
 ###### **Arguments:**
 
+* `<NAME>` — The command to install it as: `icp <NAME>`. Usually the name the extension gives itself, but any name works, e.g. `cyclepay-beta` to try a build beside the installed one
 * `<SOURCE>` — The extension's wasm component: an https URL or a local path
 
 ###### **Options:**
@@ -1128,9 +1131,29 @@ Install an extension, or replace an installed one
 
 ## `icp extension list`
 
-List installed extensions
+List installed extensions, one per line: name, version and source
 
-**Usage:** `icp extension list`
+**Usage:** `icp extension list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Output the installed extensions as a JSON array, each as `show --json` prints it
+
+
+
+## `icp extension show`
+
+Show an installed extension: where it came from, its sha256 and version, the canisters it may call, and its commands
+
+**Usage:** `icp extension show [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The name it is installed as
+
+###### **Options:**
+
+* `--json` — Output as JSON
 
 
 

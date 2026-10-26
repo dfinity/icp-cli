@@ -34,6 +34,9 @@ const RESERVED_NAMES: &[&str] = &[
     "environment",
     "network",
     "root_key",
+    // The ids of the groups the standard network flags belong to.
+    "environment-select",
+    "network-select",
 ];
 
 #[derive(Debug, Snafu)]
@@ -86,6 +89,21 @@ pub enum InvalidInfo {
     PositionalNotLast { path: String, arg: String },
 
     #[snafu(display(
+        "the default '{default}' of argument '{arg}' of command '{path}' is not one of its \
+         possible values"
+    ))]
+    DefaultNotPossible {
+        path: String,
+        arg: String,
+        default: String,
+    },
+
+    #[snafu(display(
+        "required positional argument '{arg}' of command '{path}' comes after an optional one"
+    ))]
+    RequiredAfterOptional { path: String, arg: String },
+
+    #[snafu(display(
         "command '{path}' has subcommands, so it is a group: it can take no arguments or \
          standard flags of its own"
     ))]
@@ -98,10 +116,14 @@ fn is_name(s: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// An argument name or long flag: no leading `-`, which clap would strip,
+/// letting `-debug` past the reserved and duplicate checks as `--debug`.
 fn is_arg_name(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+    let mut chars = s.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
 /// Check what an extension declared. Whether its name collides with a
@@ -201,6 +223,16 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
                     }
                 );
             }
+            if let Some(default) = &arg.default_value {
+                ensure!(
+                    arg.possible_values.is_empty() || arg.possible_values.contains(default),
+                    DefaultNotPossibleSnafu {
+                        path: &path,
+                        arg: name,
+                        default
+                    }
+                );
+            }
             if arg.kind == ArgKind::Flag {
                 ensure!(
                     !arg.is_positional() && !arg.required && arg.default_value.is_none(),
@@ -210,6 +242,19 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
                     }
                 );
             }
+        }
+        // clap takes positionals in order, so an optional one cannot come
+        // before one that is required.
+        if let Some(arg) = positionals
+            .iter()
+            .skip_while(|a| a.required)
+            .find(|a| a.required)
+        {
+            return RequiredAfterOptionalSnafu {
+                path: &path,
+                arg: &arg.name,
+            }
+            .fail();
         }
         if let Some((_, init)) = positionals.split_last()
             && let Some(arg) = init.iter().find(|a| a.kind == ArgKind::Values)
@@ -330,6 +375,72 @@ mod tests {
             validate(&info),
             Err(InvalidInfo::DuplicateFlag { .. })
         ));
+    }
+
+    #[test]
+    fn a_network_group_id_is_reserved() {
+        for name in ["network-select", "environment-select"] {
+            let info = info(vec![command(
+                &["x"],
+                vec![option(name, None, None, ArgKind::Value)],
+            )]);
+            assert!(matches!(
+                validate(&info),
+                Err(InvalidInfo::ReservedArgName { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn a_leading_hyphen_is_refused() {
+        // `-debug` would become `--debug`, past the reserved check.
+        let info = info(vec![command(
+            &["x"],
+            vec![option("d", Some("-debug"), None, ArgKind::Flag)],
+        )]);
+        assert!(matches!(validate(&info), Err(InvalidInfo::ArgName { .. })));
+        let info = self::info(vec![command(
+            &["x"],
+            vec![option("-d", None, None, ArgKind::Value)],
+        )]);
+        assert!(matches!(validate(&info), Err(InvalidInfo::ArgName { .. })));
+    }
+
+    #[test]
+    fn a_default_must_be_a_possible_value() {
+        let mut env = option("env", Some("env"), None, ArgKind::Value);
+        env.possible_values = vec!["local".into(), "ic".into()];
+        env.default_value = Some("prod".into());
+        let info = info(vec![command(&["x"], vec![env.clone()])]);
+        assert!(matches!(
+            validate(&info),
+            Err(InvalidInfo::DefaultNotPossible { .. })
+        ));
+
+        env.default_value = Some("ic".into());
+        validate(&self::info(vec![command(&["x"], vec![env])])).unwrap();
+    }
+
+    #[test]
+    fn a_required_positional_cannot_follow_an_optional_one() {
+        let source = option("source", None, None, ArgKind::Value);
+        let mut destination = option("destination", None, None, ArgKind::Value);
+        destination.required = true;
+        let info = info(vec![command(
+            &["x"],
+            vec![source.clone(), destination.clone()],
+        )]);
+        assert!(matches!(
+            validate(&info),
+            Err(InvalidInfo::RequiredAfterOptional { .. })
+        ));
+
+        // The other way round is how clap reads them.
+        validate(&self::info(vec![command(
+            &["x"],
+            vec![destination, source],
+        )]))
+        .unwrap();
     }
 
     #[test]

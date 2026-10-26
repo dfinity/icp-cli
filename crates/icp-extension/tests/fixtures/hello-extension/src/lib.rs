@@ -23,6 +23,13 @@ fn arg(name: &str, long: Option<&str>, kind: ArgKind, help: &str) -> Arg {
     }
 }
 
+fn operand(name: &str, help: &str) -> Arg {
+    Arg {
+        required: true,
+        ..arg(name, None, ArgKind::Value, help)
+    }
+}
+
 fn command(path: &[&str], about: &str, args: Vec<Arg>, standard: Vec<StandardOpt>) -> Command {
     Command {
         path: path.iter().map(|s| s.to_string()).collect(),
@@ -67,10 +74,7 @@ impl Guest for Hello {
                 command(
                     &["call"],
                     "Query a canister method that takes no arguments",
-                    vec![
-                        arg("canister", None, ArgKind::Value, "Canister ID"),
-                        arg("method", None, ArgKind::Value, "Method name"),
-                    ],
+                    vec![operand("canister", "Canister ID"), operand("method", "Method name")],
                     vec![StandardOpt::Network],
                 ),
                 command(&["ask"], "Confirm, then open a URL", vec![], vec![]),

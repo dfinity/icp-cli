@@ -55,7 +55,11 @@ pub(crate) async fn exec(ctx: &Context, args: &InstallArgs) -> Result<(), anyhow
         (download(&url).await?, url.to_string())
     } else {
         let path = PathBuf::from(&args.source);
-        let path = path.canonicalize_utf8().unwrap_or(path);
+        // `dunce`, so that Windows records `C:\...` rather than `\\?\C:\...`.
+        let path = dunce::canonicalize(&path)
+            .ok()
+            .and_then(|p| PathBuf::from_path_buf(p).ok())
+            .unwrap_or(path);
         (icp_project::fs::read(&path)?, path.to_string())
     };
 

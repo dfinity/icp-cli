@@ -37,7 +37,7 @@ fn extension_install_run_and_uninstall() {
         .stdout(
             contains("hello")
                 .and(contains("0.1.0"))
-                .and(contains(wasm.as_str())),
+                .and(contains(recorded_source(&wasm))),
         );
 
     // Its commands are icp's own: listed in help, parsed by clap.
@@ -300,7 +300,7 @@ fn extension_show_json() {
     assert_eq!(shown["name"], "hello");
     assert_eq!(shown["extension"], "hello");
     assert_eq!(shown["version"], "0.1.0");
-    assert_eq!(shown["source"], wasm.as_str());
+    assert_eq!(shown["source"], recorded_source(&wasm));
     assert_eq!(shown["sha256"], icp_app_sha256(&wasm));
     assert_eq!(shown["intact"], true);
     assert!(shown["installed_at"].as_str().unwrap().starts_with("20"));
@@ -354,4 +354,11 @@ fn extension_install_checks_the_name_first() {
         .assert()
         .failure()
         .stderr(contains("not a valid command name"));
+}
+
+/// The source install records for a local path: canonical, and on Windows
+/// without the `\\?\` prefix.
+fn recorded_source(path: &Path) -> String {
+    let canonical = dunce::canonicalize(path).unwrap();
+    canonical.to_str().unwrap().to_owned()
 }

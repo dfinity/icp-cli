@@ -8,13 +8,21 @@
 exclude-dev = true
 
 [advisories]
-# Vulnerabilities are always denied. Informational advisories are transitive
-# crates we do not pick, usually with no patched version, and GHSA omits them so
-# Dependabot never raises them either. Replaces the stale hand-maintained ignore
-# list in .cargo/audit.toml.
+# Vulnerabilities are denied, except one listed in `ignore` below, which needs
+# a fix already in progress and a link to it. Informational advisories are
+# transitive crates we do not pick, usually with no patched version, and GHSA
+# omits them so Dependabot never raises them either. Replaces the stale
+# hand-maintained ignore list in .cargo/audit.toml.
 unmaintained = "none"
 # Not a vulnerability, and usually clears on the next `cargo update`.
 yanked = "warn"
+ignore = [
+  # crypto-bigint 0.5 has no patched release, and ic-agent's elliptic-curve
+  # 0.13 stack pins it. A timing side channel is a remote risk for a local CLI
+  # that signs only with the user's own keys. Remove once ic-agent ships the
+  # 0.14 stack (dfinity/agent-rs#745) and icp-cli moves to it.
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by ic-agent; fix in dfinity/agent-rs#745" },
+]
 
 [licenses]
 # Binary distribution, so: attribution-only terms, plus MPL-2.0, whose copyleft

@@ -1,0 +1,171 @@
+package icp:extension@0.1.0;
+
+/// Types shared between icp-cli and extensions.
+interface types {
+    /// Whether a canister call is an update or a query.
+    enum call-type { update, query }
+
+    /// A flag icp-cli owns and attaches to a command that asks for it. The
+    /// extension never parses these; it receives what they resolved to in
+    /// `context`.
+    enum standard-opt {
+        /// `--identity`. Without it a command runs as the anonymous identity.
+        identity,
+        /// `-e/--environment`, `-n/--network` and `-k/--root-key`. Without it
+        /// a command has no network, and every canister call fails.
+        network,
+    }
+
+    /// How many values an argument takes.
+    enum arg-kind {
+        /// A switch: present or absent, no value.
+        %flag,
+        /// One value.
+        value,
+        /// Any number of values; an option may be repeated.
+        values,
+    }
+
+    /// One argument of a command. Neither `long` nor `short` makes it
+    /// positional, in the order declared.
+    record arg {
+        /// The key the parsed value comes back under in `matched.values`.
+        name: string,
+        long: option<string>,
+        short: option<char>,
+        kind: arg-kind,
+        required: bool,
+        default-value: option<string>,
+        /// When non-empty, the only values accepted.
+        possible-values: list<string>,
+        /// The placeholder help shows for the value, e.g. `USD`.
+        value-name: option<string>,
+        help: string,
+    }
+
+    /// A command of the extension, addressed by its path under `icp <name>`.
+    /// The empty path is `icp <name>` itself. A command with commands beneath
+    /// it is a group: it is never run itself, takes no arguments, and is
+    /// declared only to give it an `about`. Undeclared parents are groups with
+    /// none.
+    record command {
+        path: list<string>,
+        about: string,
+        args: list<arg>,
+        standard: list<standard-opt>,
+        /// The network a command that asks for `network` uses when neither
+        /// `-e` nor `-n` is given, e.g. `ic` for a mainnet-only service. When
+        /// absent, the project's default environment is used, as for the
+        /// built-in commands.
+        default-network: option<string>,
+    }
+
+    /// A mainnet canister the extension calls. On mainnet a call to any
+    /// canister not listed here is refused; on other networks calls are
+    /// unrestricted. The management canister cannot be listed.
+    record allowed-canister {
+        /// Textual principal.
+        id: string,
+        /// What it is, shown to the user when they approve the install.
+        label: string,
+    }
+
+    /// What an extension is. Read once, at install.
+    record info {
+        /// The subcommand the extension is installed under: `icp <name>`.
+        name: string,
+        /// The extension's own version (semver). Informational.
+        version: string,
+        /// One line, shown in `icp --help` and `icp extension list`.
+        summary: string,
+        commands: list<command>,
+        canisters: list<allowed-canister>,
+    }
+
+    /// One parsed argument. A flag that is set has no values; one that is not
+    /// set is absent.
+    record arg-value {
+        name: string,
+        values: list<string>,
+    }
+
+    /// The command the user invoked, parsed by icp-cli.
+    record matched {
+        path: list<string>,
+        values: list<arg-value>,
+    }
+
+    /// An entry in the project's canister ID table.
+    record canister-id-entry {
+        name: string,
+        id: string,
+    }
+
+    /// What icp-cli resolved for the invoked command.
+    record context {
+        /// The caller principal; absent unless the command asked for
+        /// `identity` (it then runs as the anonymous identity).
+        identity-principal: option<string>,
+        /// The network calls go to; absent unless the command asked for
+        /// `network`.
+        network: option<string>,
+        /// Whether that network is the IC mainnet, decided by its root key.
+        mainnet: bool,
+        /// The environment, when the network came from one.
+        environment: option<string>,
+        /// The project's canister IDs in that environment; empty outside a
+        /// project or without an environment.
+        canister-ids: list<canister-id-entry>,
+        /// Whether a person is at the terminal (stdin and stdout are a TTY).
+        interactive: bool,
+    }
+
+    record canister-call-request {
+        /// Textual principal of the canister to call.
+        canister: string,
+        method: string,
+        /// Candid-encoded argument; the host forwards it unchanged.
+        arg: list<u8>,
+        call-type: call-type,
+    }
+}
+
+world extension {
+    use types.{info, matched, context, canister-call-request};
+
+    // -------------------------------------------------------------------------
+    // Host functions (imports) — provided by icp-cli, called by the extension
+    // -------------------------------------------------------------------------
+
+    /// Call a canister as the resolved identity, on the resolved network. The
+    /// reply is the raw Candid bytes. Fails when the command did not ask for
+    /// `network`; on mainnet, for a canister not in `info.canisters`; and for
+    /// the management canister (`aaaaa-aa`), which this version does not
+    /// reach.
+    import canister-call: func(req: canister-call-request) -> result<list<u8>, string>;
+
+    /// Ask the user a yes/no question. Returns `default` without asking when
+    /// nobody is at the terminal.
+    import confirm: func(prompt: string, default: bool) -> bool;
+
+    /// Show the user a web page to visit: icp-cli opens it in a browser when
+    /// it can, and prints it (with a QR code on a terminal) either way. Fails,
+    /// without showing anything, for anything but an absolute http(s) URL: a
+    /// local path or another scheme would reach the user's own applications.
+    import open-url: func(url: string) -> result<_, string>;
+
+    // The extension's stdout and stderr go straight to the terminal, and it
+    // may read the clocks and sleep. It has no filesystem, no environment
+    // variables, no sockets and no processes.
+
+    // -------------------------------------------------------------------------
+    // Extension exports — implemented by the extension, called by icp-cli
+    // -------------------------------------------------------------------------
+
+    /// What the extension is and which commands it has. Called at install,
+    /// with every import refusing.
+    export describe: func() -> info;
+
+    /// Run one command.
+    export run: func(cmd: matched, ctx: context) -> result<_, string>;
+}

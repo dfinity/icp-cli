@@ -61,6 +61,7 @@ ic-utils = { version = "0.49.1" }
 icp-app = { path = "crates/icp-app" }
 icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
 icp-events = { path = "crates/icp-events" }
+icp-extension = { path = "crates/icp-extension" }
 icp-project = { path = "crates/icp-project" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin" }
 ic-identity-hsm = "0.49.1"

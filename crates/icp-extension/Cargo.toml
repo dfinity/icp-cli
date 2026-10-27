@@ -1,0 +1,32 @@
+[package]
+name = "icp-extension"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+candid.workspace = true
+# Only for the canister-call seam an extension's calls go through.
+icp-project = { path = "../icp-project", default-features = false }
+semver.workspace = true
+serde.workspace = true
+snafu.workspace = true
+# `rt-multi-thread` for `block_in_place`, which the runtime needs because a
+# wasm import cannot suspend while a canister call is in flight.
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+url.workspace = true
+wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+
+[build-dependencies]
+camino.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+camino.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

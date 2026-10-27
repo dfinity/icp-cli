@@ -94,6 +94,36 @@ pub(crate) fn build_sync_plugin_example() -> (camino::Utf8PathBuf, camino::Utf8P
     )
 }
 
+/// Compiles the test extension from `crates/icp-extension/tests/fixtures/` and
+/// returns the path of its wasm component.
+pub(crate) fn build_hello_extension() -> camino::Utf8PathBuf {
+    let manifest = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../icp-extension/tests/fixtures/hello-extension/Cargo.toml");
+    let target_dir = camino::Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("hello-extension");
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let status = Command::new(&cargo)
+        .args([
+            "build",
+            "--target",
+            "wasm32-wasip2",
+            "--release",
+            "--locked",
+        ])
+        .args([
+            "--manifest-path",
+            manifest.as_str(),
+            "--target-dir",
+            target_dir.as_str(),
+        ])
+        .status()
+        .expect("failed to spawn cargo build for the test extension");
+    assert!(
+        status.success(),
+        "cargo build --target wasm32-wasip2 failed"
+    );
+    target_dir.join("wasm32-wasip2/release/hello_extension.wasm")
+}
+
 /// The target directory cargo uses for builds run in `workspace_dir`, as cargo itself
 /// resolves it from the environment and the config hierarchy.
 fn cargo_target_dir(cargo: &str, workspace_dir: &camino::Utf8Path) -> camino::Utf8PathBuf {

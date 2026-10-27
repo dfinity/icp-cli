@@ -25,7 +25,7 @@ axum = "0.8"
 base64 = "0.22"
 backoff = { version = "0.4", features = ["tokio"] }
 bigdecimal = "0.4.10"
-bip32 = "0.5.0"
+bip32 = { version = "0.6.0", features = ["alloc"] }
 bollard = "0.20.2"
 byte-unit = "5.1.6"
 bytes = "1.11"
@@ -43,8 +43,8 @@ dialoguer = "0.12.0"
 directories = "6.0.0"
 dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
-crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
-elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
+crypto-bigint = { version = "0.7.10", features = ["zeroize"] }
+elliptic-curve = { version = "0.14.3", features = ["std", "pkcs8"] }
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
 futures = "0.3.31"
 glob = "0.3.2"
@@ -70,7 +70,7 @@ indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"
 jsonschema = "0.45.0"
-k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
+k256 = { version = "0.14.0", features = ["pem", "pkcs8", "std"] }
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 lazy_static = "1.5.0"
 mockall = "0.14.0"
@@ -81,18 +81,18 @@ open = "5"
 qrcode = { version = "0.14.1", default-features = false }
 num-integer = "0.1.46"
 num-traits = "0.2.19"
-p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
+p256 = { version = "0.14.0", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 predicates = "3"
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
-pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
+pkcs8 = { version = "0.11.0", features = ["encryption", "std"] }
 rand = "0.10.1"
 regex = "1.12.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "stream"] }
 schemars = { version = "1.0.4", features = ["derive", "indexmap2", "url2"] }
-scrypt = "0.11.0"
-sec1 = { version = "0.7.3", features = ["pkcs8"] }
+scrypt = "0.12.0"
+sec1 = { version = "0.8.1", features = ["der", "std"] }
 send_ctrlc = "0.6"
 semver = "1"
 serial_test = { version = "3.2.0", features = ["file_locks"] }
@@ -146,3 +146,10 @@ wast = { opt-level = 1 }
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Temporary: the RustCrypto 0.14 stack (RUSTSEC-2026-0387) until an ic-agent release carries it.
+[patch.crates-io]
+ic-agent = { git = "https://github.com/dfinity/agent-rs", branch = "chore/rustcrypto-elliptic-curve-0.14" }
+ic-identity-hsm = { git = "https://github.com/dfinity/agent-rs", branch = "chore/rustcrypto-elliptic-curve-0.14" }
+ic-transport-types = { git = "https://github.com/dfinity/agent-rs", branch = "chore/rustcrypto-elliptic-curve-0.14" }
+ic-utils = { git = "https://github.com/dfinity/agent-rs", branch = "chore/rustcrypto-elliptic-curve-0.14" }

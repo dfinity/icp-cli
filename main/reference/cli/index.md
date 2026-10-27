@@ -10,6 +10,7 @@
 * [`cycles`](cycles.md) — Mint and manage cycles
 * [`deploy`](deploy.md) — Deploy a project to an environment
 * [`environment`](environment.md) — Show information about the current project environments
+* [`extension`](extension.md) — Install and manage extensions: third-party commands run in a sandbox
 * [`identity`](identity.md) — Manage your identities
 * [`message`](message.md) — Work with signed messages
 * [`network`](network.md) — Launch and manage local test networks

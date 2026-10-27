@@ -41,6 +41,11 @@ This document contains the help content for the `icp` command-line program.
 * [`icp deploy`↴](#icp-deploy)
 * [`icp environment`↴](#icp-environment)
 * [`icp environment list`↴](#icp-environment-list)
+* [`icp extension`↴](#icp-extension)
+* [`icp extension install`↴](#icp-extension-install)
+* [`icp extension list`↴](#icp-extension-list)
+* [`icp extension show`↴](#icp-extension-show)
+* [`icp extension uninstall`↴](#icp-extension-uninstall)
 * [`icp identity`↴](#icp-identity)
 * [`icp identity account-id`↴](#icp-identity-account-id)
 * [`icp identity default`↴](#icp-identity-default)
@@ -95,6 +100,7 @@ This document contains the help content for the `icp` command-line program.
 * `cycles` — Mint and manage cycles
 * `deploy` — Deploy a project to an environment
 * `environment` — Show information about the current project environments
+* `extension` — Install and manage extensions: third-party commands run in a sandbox
 * `identity` — Manage your identities
 * `message` — Work with signed messages
 * `network` — Launch and manage local test networks
@@ -1084,6 +1090,79 @@ List the environments defined in this project, one per line.
 Use `icp project show` to see the fully expanded configuration including implicit environments (local, ic) and their network and canister assignments.
 
 **Usage:** `icp environment list`
+
+
+
+## `icp extension`
+
+Install and manage extensions: third-party commands run in a sandbox
+
+**Usage:** `icp extension <COMMAND>`
+
+###### **Subcommands:**
+
+* `install` — Install an extension as a command of icp, or replace an installed one
+* `list` — List installed extensions, one per line: name, version and source
+* `show` — Show an installed extension: where it came from, its sha256 and version, the canisters it may call, and its commands
+* `uninstall` — Uninstall an extension
+
+
+
+## `icp extension install`
+
+Install an extension as a command of icp, or replace an installed one
+
+**Usage:** `icp extension install [OPTIONS] <NAME> <SOURCE>`
+
+###### **Arguments:**
+
+* `<NAME>` — The command to install it as: `icp <NAME>`. Usually the name the extension gives itself, but any name works, e.g. `cyclepay-beta` to try a build beside the installed one
+* `<SOURCE>` — The extension's wasm component: an https URL or a local path
+
+###### **Options:**
+
+* `--sha256 <SHA256>` — Refuse the install unless the component has this sha256 (hex)
+* `-y`, `--yes` — Approve the install without asking
+
+
+
+## `icp extension list`
+
+List installed extensions, one per line: name, version and source
+
+**Usage:** `icp extension list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Output the installed extensions as a JSON array, each as `show --json` prints it
+
+
+
+## `icp extension show`
+
+Show an installed extension: where it came from, its sha256 and version, the canisters it may call, and its commands
+
+**Usage:** `icp extension show [OPTIONS] <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The name it is installed as
+
+###### **Options:**
+
+* `--json` — Output as JSON
+
+
+
+## `icp extension uninstall`
+
+Uninstall an extension
+
+**Usage:** `icp extension uninstall <NAME>`
+
+###### **Arguments:**
+
+* `<NAME>` — The extension's name
 
 
 

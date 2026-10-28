@@ -109,7 +109,8 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
                 .map_err(|e| {
                     anyhow!(
                         "{e}; asset sync requires it to be Running. If it is stopped, \
-                         start it with `icp canister start {cid}` and retry."
+                         start it with `icp canister start {cid}` and retry; if it was \
+                         deleted, this environment's id for it is stale."
                     )
                 })
         }

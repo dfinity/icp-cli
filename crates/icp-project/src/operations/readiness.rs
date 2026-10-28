@@ -13,7 +13,7 @@ use snafu::Snafu;
 use crate::calls::{Call, CallError, CanisterCalls};
 
 /// No probe observed the canister serving queries within the wait's budget:
-/// either every replica that answered saw it stopped or stopping, or none
+/// every replica that answered saw it stopped, stopping or absent, or none
 /// answered at all.
 #[derive(Debug, Snafu)]
 #[snafu(display("canister {canister_id} did not serve queries within {seconds}s"))]
@@ -107,7 +107,9 @@ pub async fn wait_until_serving_queries(
 /// A rejection means the replica processed the request to a verdict (e.g. "no
 /// such query method"), so the canister is up — unless the rejection says it is
 /// stopped/stopping (IC0508/IC0509, with a message-substring fallback), which is
-/// a replica still lagging behind the restart. A call that reached no verdict at
+/// a replica still lagging behind the restart, or that it does not exist
+/// (IC0301), which is either a replica lagging behind its creation or a stale
+/// id for a canister since deleted. A call that reached no verdict at
 /// all is inconclusive — not evidence the canister is serving — and returns
 /// false so the caller retries rather than proceeding.
 fn is_serving_reject(err: &CallError) -> bool {
@@ -118,7 +120,7 @@ fn is_serving_reject(err: &CallError) -> bool {
     let stopped = matches!(err.code(), Some("IC0508") | Some("IC0509"))
         || message.contains("is stopped")
         || message.contains("is stopping");
-    !stopped
+    !stopped && !err.is_canister_not_found()
 }
 
 #[cfg(test)]
@@ -145,6 +147,16 @@ mod tests {
             None,
             "Canister abc is stopping"
         )));
+    }
+
+    #[test]
+    fn not_found_rejects_are_not_a_readiness_signal() {
+        // A replica lagging behind the creation, or a canister since deleted.
+        assert!(!is_serving_reject(&reject(
+            Some("IC0301"),
+            "Canister abc not found"
+        )));
+        assert!(!is_serving_reject(&reject(None, "Canister abc not found")));
     }
 
     #[test]

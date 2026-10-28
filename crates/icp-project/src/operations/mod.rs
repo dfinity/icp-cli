@@ -10,6 +10,7 @@ pub mod create;
 pub mod deploy;
 pub mod install;
 pub mod proxy_management;
+pub mod readiness;
 pub mod recover_cycles;
 pub mod settings;
 pub mod sync;

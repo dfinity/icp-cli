@@ -225,6 +225,70 @@ async fn sync_aborts_when_canister_not_running() {
         );
 }
 
+/// Syncing does not need controller rights: a developer may sync a canister that
+/// merely authorizes them, as with a frontend owned by an SNS. The up-front
+/// readiness check must therefore not rely on `canister_status`, which only a
+/// controller may read.
+#[tokio::test]
+async fn sync_as_non_controller() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    let wasm = ctx.make_asset("example_icp_mo.wasm");
+
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: script
+                  command: echo "syncing"
+
+        {NETWORK_RANDOM_PORT}
+        {ENVIRONMENT_RANDOM_PORT}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+
+    let _g = ctx.start_network_in(&project_dir, "random-network").await;
+    ctx.ping_until_healthy(&project_dir, "random-network");
+
+    clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
+        .mint_cycles(10 * TRILLION);
+
+    // Deployed, and so controlled, by the default identity only.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["deploy", "--environment", "random-environment"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["identity", "new", "not-a-controller"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .env("NO_COLOR", "1")
+        .args([
+            "--debug",
+            "sync",
+            "my-canister",
+            "--environment",
+            "random-environment",
+            "--identity",
+            "not-a-controller",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("DEBUG icp::render::plain: [my-canister] syncing"));
+}
+
 /// The `assets` sync step type was removed. A manifest that still uses it must
 /// fail to load with a helpful, targeted message (and must not name a specific
 /// recipe).

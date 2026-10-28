@@ -1,16 +1,15 @@
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use candid::Principal;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use futures::future::try_join_all;
-use ic_management_canister_types::{CanisterId, CanisterIdRecord, CanisterStatusType};
 use icp_app::context::Context;
 use icp_app::identity::IdentitySelection;
 use icp_project::host::{CanisterSelection, EnvironmentSelection};
 use std::collections::BTreeMap;
 use tracing::info;
 
-use icp_project::operations::{proxy_management, sync::sync_many};
+use icp_project::operations::{readiness::wait_until_serving_queries, sync::sync_many};
 
 use crate::{
     options::{EnvironmentOpt, IdentityOpt},
@@ -96,26 +95,24 @@ pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::E
     // so detect a non-Running canister up front and abort with an actionable error
     // instead of letting the plugin's first call fail with a cryptic IC0508
     // ("canister is stopped ... does not have a CallContextManager").
+    //
+    // Judged by a query probe rather than `canister_status`, which only a
+    // controller (or a listed status viewer) may read: syncing is also done by
+    // identities the canister merely authorizes, such as a developer preparing
+    // a frontend owned by an SNS.
     try_join_all(sync_canisters.iter().map(|(cid, _, _)| {
         let calls = calls.clone();
         let cid = *cid;
         async move {
-            let status = proxy_management::canister_status(
-                calls.as_ref(),
-                CanisterIdRecord {
-                    canister_id: CanisterId::from(cid),
-                },
-            )
-            .await
-            .map_err(|e| anyhow!(e))?
-            .status;
-            if !matches!(status, CanisterStatusType::Running) {
-                bail!(
-                    "Canister {cid} is {status:?}; asset sync requires it to be Running. \
-                     Start it with `icp canister start {cid}` and retry."
-                );
-            }
-            Ok::<_, anyhow::Error>(())
+            wait_until_serving_queries(calls.as_ref(), cid)
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "{e}; asset sync requires it to be Running. If it is stopped, \
+                         start it with `icp canister start {cid}` and retry; if it was \
+                         deleted, this environment's id for it is stale."
+                    )
+                })
         }
     }))
     .await?;

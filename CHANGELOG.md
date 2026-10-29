@@ -3,7 +3,7 @@ Convention: changes to experimental features live in a dedicated
 `## Experimental` subsection under each version. Experimental features
 may receive breaking changes between releases without a major version
 bump. Currently experimental: project bundling, project dependencies,
-air-gapped signing
+air-gapped signing, extensions
 -->
 
 # Unreleased
@@ -13,6 +13,13 @@ air-gapped signing
 * fix: `icp cycles buy` says, with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag
 * fix: `icp cycles buy` says in words what is wrong with a `--gateway` that is not a canister id, a canister that serves no gateway, and one a boundary node cannot route to, where it printed the replica's IC0536 or the HTTP gateway's routing error; CyclePay and Stripe are named only for CyclePay's gateway, any other is "the gateway"
 * fix: `icp cycles buy` draws the payment QR code black on white on any terminal theme. It used to take the terminal's own colours, which a light theme inverts and a dark theme often renders grey on near-black, and many phone cameras read neither. A terminal without colour support gets the plain drawing as before.
+
+## Experimental
+
+* feat(extension): extensions add third-party commands to icp. An extension is a WebAssembly component that runs sandboxed: it has no filesystem, environment variables, sockets or processes, and reaches the outside only through what icp hands it, namely canister calls as the resolved identity on the resolved network, a yes/no prompt, and showing the user an http(s) URL to visit. On mainnet it may call only the canisters it declares, and never the management canister; on other networks its calls are unrestricted, so it can be tried against a local network.
+  * `icp extension install <NAME> <SOURCE>` installs one from an https URL or a local path as the command `icp <NAME>`; `--sha256` refuses a component with a different hash. Install shows the extension, its sha256 and the mainnet canisters it will call, flagging ledgers, and asks for approval (`--yes` skips the prompt). The sha256 is recorded and checked before every run. Installing under a name already installed replaces it, and any name works, so a build can be tried beside the installed one (`cyclepay-beta` beside `cyclepay`).
+  * `icp extension list`, `icp extension show <NAME>` (both with `--json`) and `icp extension uninstall <NAME>` manage what is installed.
+  * An extension declares its commands, and they become ordinary icp subcommands: help, parse errors and shell completion work as for built-ins, and `--identity`, `-e`/`-n` and the like are icp's own, resolved before the extension runs. A built-in command always wins over an extension of the same name.
 
 # v1.7.0
 

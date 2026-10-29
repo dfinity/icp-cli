@@ -489,7 +489,7 @@ DAO-controlled projects, typically SNSes, used `dfx deploy --by-proposal` with
 dfx's asset canister: a developer uploads a batch, and an SNS proposal commits
 it. icp-cli has no such flag. Deploying by proposal is a mode of the
 [certified-assets](https://github.com/dfinity/certified-assets) canister, which
-the `@dfinity/static-site` recipe (v0.4.1 or later) deploys. Once the canister
+the `@dfinity/static-site` recipe (v0.4.2 or later) deploys. Once the canister
 has a governance approver, every sync *prepares* instead of publishing, and only
 the approver can make the prepared content live. The `@dfinity/asset-canister`
 recipe, which keeps dfx's asset canister, has no by-proposal support.

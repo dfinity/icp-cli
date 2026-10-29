@@ -6350,6 +6350,7 @@ Some dfx features work differently or aren't directly available:
 | `dfx ledger` | `icp token` and `icp cycles` commands |
 | `dfx wallet` | Use the [proxy canister pattern](../guides/proxy-canister.md) for forwarding calls with cycles; use `icp canister top-up` to fund a canister and `icp canister status` to check its balance |
 | `dfx upgrade` | Reinstall icp-cli |
+| `dfx deploy --by-proposal` / `--compute-evidence` | Governance mode of the certified-assets canister; see [Deploying Frontends by Proposal](#deploying-frontends-by-proposal-sns) |
 
 ## Replacing the dfx Wallet Canister
 
@@ -6494,6 +6495,65 @@ dfx identity get-principal --identity my-identity
 icp identity principal --identity my-identity
 # Both should print the same value
 ```
+
+## Deploying Frontends by Proposal (SNS)
+
+DAO-controlled projects, typically SNSes, used `dfx deploy --by-proposal` with
+dfx's asset canister: a developer uploads a batch, and an SNS proposal commits
+it. icp-cli has no such flag. Deploying by proposal is a mode of the
+[certified-assets](https://github.com/dfinity/certified-assets) canister, which
+the `@dfinity/static-site` recipe (v0.4.2 or later) deploys. Once the canister
+has a governance approver, every sync *prepares* instead of publishing, and only
+the approver can make the prepared content live. The `@dfinity/asset-canister`
+recipe, which keeps dfx's asset canister, has no by-proposal support.
+
+| Step | dfx + dfx's asset canister | icp-cli + certified-assets |
+|------|----------------------------|----------------------------|
+| Let a developer upload | `grant_permission` (`Prepare`) by proposal | `authorize` by proposal (validator `validate_authorize`) |
+| Prepare | `dfx deploy --network ic --by-proposal frontend` | `icp sync frontend -e ic` |
+| Proposal payload | `record { batch_id; evidence }` | the 64-hex-character state hash, as `text` |
+| Generic function target / validator | `commit_proposed_batch` / `validate_commit_proposed_batch` | `commit_proposed_state` / `validate_commit_proposed_state` |
+| Voters verify | `dfx deploy --network ic --compute-evidence frontend` | `state-hash ./dist`, offline, from a reproduced build |
+| Clear a rejected batch | `delete_batch` | `icp canister call frontend discard_proposed_state '()' -e ic` |
+| Submit the proposal | `quill sns make-proposal` (dfx never did this) | `icp canister call <sns-governance> manage_neuron …`, or keep using quill |
+
+Prepare with `icp sync`, not `icp deploy`. Once SNS root is the canister's only
+controller, the developer is merely authorized to sync, and `icp deploy` also
+installs code and updates canister settings, which only a controller may do.
+
+The proposal payload is a state hash that covers the canister's whole served
+content after the commit, not a digest of a batch of changes. Voters reproduce
+it from source with `state-hash`, without reading the canister, so your
+frontend build has to be reproducible for the proposal to be verifiable.
+
+The certified-assets documentation covers the details:
+
+- [Deploy by proposal](https://github.com/dfinity/certified-assets/blob/main/docs/governance.md): setup, the release flow, and how to
+  submit the proposal with `icp canister call`, including air-gapped signing.
+- [Verifying contents](https://github.com/dfinity/certified-assets/blob/main/docs/verifying-contents.md): how voters reproduce the
+  state hash.
+
+### Migrating an SNS Frontend
+
+Moving to certified-assets is a change of canister, not an upgrade of dfx's
+asset canister, so plan it as its own series of proposals:
+
+- **New generic functions.** Register `commit_proposed_state` with
+  `validate_commit_proposed_state`, plus any of `authorize`, `deauthorize` and
+  `set_governance` the DAO should call, each with the validator of the same name.
+  An existing function can't be edited, and a removed function's id can't be
+  reused, so these get new ids. Remove the old functions once the old canister
+  is retired.
+- **In place or a new canister.** Reinstalling the existing canister keeps its
+  id, but leaves the frontend empty until the first commit proposal executes. A
+  new canister keeps the old one serving throughout, but changes the canister id,
+  which changes every Internet Identity principal if users sign in on the
+  canister's own origin rather than a custom domain. See
+  [Which shape to choose](https://github.com/dfinity/certified-assets/blob/main/docs/governance.md#which-shape-to-choose).
+- **Asset configuration.** certified-assets syncs exactly one asset directory,
+  so a dfx canister with several `source` directories needs a build step that
+  merges them. It takes response headers and redirects from [`_headers`](https://github.com/dfinity/certified-assets/blob/main/docs/headers.md) and
+  [`_redirects`](https://github.com/dfinity/certified-assets/blob/main/docs/redirects.md) files in it, not from `.ic-assets.json5`.
 
 ## Migrating Identities
 

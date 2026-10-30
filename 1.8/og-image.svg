@@ -1,0 +1,81 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Single subtle amber glow, top-left, matching site's warm accent -->
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(0,0) scale(700,500)">
+      <stop offset="0%" stop-color="#f15a24" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#f15a24" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Logo orange gradient -->
+    <linearGradient id="logoOrange" gradientUnits="userSpaceOnUse"
+      x1="515.27" y1="201.93" x2="705.48" y2="398.90">
+      <stop offset="0.21" stop-color="#f15a24"/>
+      <stop offset="0.68" stop-color="#fbb03b"/>
+    </linearGradient>
+
+    <!-- Logo pink gradient -->
+    <linearGradient id="logoPink" gradientUnits="userSpaceOnUse"
+      x1="-877.30" y1="-1122.68" x2="-687.09" y2="-925.71"
+      gradientTransform="matrix(-1 0 0 -1 -512.58 -684.62)">
+      <stop offset="0.21" stop-color="#ed1e79"/>
+      <stop offset="0.89" stop-color="#522785"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background: site's dark bg -->
+  <rect width="1200" height="630" fill="#181818"/>
+
+  <!-- Subtle warm glow top-left -->
+  <ellipse cx="0" cy="0" rx="700" ry="500" fill="url(#glow)"/>
+
+  <!-- ICP logo watermark, top-right, very subtle -->
+  <g transform="translate(790, 55) scale(0.42)" opacity="0.07">
+    <path fill="url(#logoOrange)" d="M588.1,184c-32.16,0-67.28,16.49-104.38,49c-17.57,15.4-32.8,31.88-44.23,45.1
+      c0.02,0.02,0.04,0.04,0.06,0.07c0.03-0.04,0.05-0.06,0.05-0.06s18.03,19.63,37.87,40.64
+      c10.68-12.69,26.11-30.01,43.85-45.55c32.98-28.91,54.52-34.97,66.78-34.97c46.26,0,83.89,36.69,83.89,81.78
+      c0,44.84-37.65,81.5-83.95,81.78c-2.11,0-4.82-0.26-8.16-1c13.49,5.84,27.99,10.04,41.8,10.04
+      c84.79,0,101.36-55.33,102.49-59.25c2.51-10.14,3.84-20.7,3.84-31.56C728,245.01,665.24,184,588.1,184z"/>
+    <path fill="url(#logoPink)" d="M291.9,456c32.16,0,67.28-16.49,104.38-49c17.57-15.4,32.8-31.88,44.23-45.1
+      c-0.02-0.02-0.04-0.04-0.06-0.07c-0.03,0.04-0.05,0.06-0.05,0.06s-18.03-19.63-37.87-40.64
+      c-10.68,12.69-26.11,30.01-43.85,45.55c-32.98,28.91-54.52,34.97-66.78,34.97c-46.26,0-83.89-36.69-83.89-81.78
+      c0-44.84,37.65-81.5,83.95-81.78c2.11,0,4.82,0.26,8.16,1c-13.49-5.84-27.99-10.04-41.8-10.04
+      c-84.79,0-101.36,55.33-102.49,59.25c-2.51,10.14-3.84,20.7-3.84,31.56C152,394.99,214.76,456,291.9,456z"/>
+    <path fill="#29abe2" d="M621.52,409.45c-43.41-1.07-88.53-35.3-97.74-43.81c-23.78-21.99-78.66-81.53-82.97-86.2
+      C400.58,234.4,346.07,184,291.9,184h-0.07h-0.07c-65.85,0.33-121.19,44.92-135.91,104.44
+      c1.13-3.92,22.76-60.3,102.42-58.34c43.41,1.07,88.75,35.76,97.95,44.27c23.78,21.99,78.68,81.54,82.97,86.21
+      C479.42,405.61,533.93,456,588.1,456h0.07h0.07c65.85-0.33,121.19-44.92,135.91-104.44
+      C723.03,355.48,701.18,411.41,621.52,409.45z"/>
+  </g>
+
+  <!-- Outer border card -->
+  <rect x="40" y="40" width="1120" height="550" rx="16" fill="none"
+    stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+  <!-- Amber accent rule -->
+  <rect x="80" y="104" width="48" height="4" rx="2" fill="#fbb03b"/>
+
+  <!-- Eyebrow: amber, matching sidebar section-heading color on the site -->
+  <text x="80" y="152"
+    font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+    font-size="13" font-weight="500" letter-spacing="4" fill="#fbb03b">DOCUMENTATION</text>
+
+  <!-- Main headline: white, matching site's page title color -->
+  <text x="80" y="282"
+    font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+    font-size="112" font-weight="700" fill="#ffffff">ICP CLI</text>
+
+  <!-- Tagline: muted white, matching site's body text feel -->
+  <text x="80" y="352"
+    font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+    font-size="25" font-weight="400" fill="rgba(255,255,255,0.50)">Build and deploy Internet Computer apps from the terminal.</text>
+
+  <!-- Divider -->
+  <line x1="80" y1="512" x2="1120" y2="512" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+
+  <!-- Footer -->
+  <circle cx="80" cy="558" r="5" fill="#fbb03b"/>
+  <text x="96" y="564"
+    font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+    font-size="16" font-weight="400" fill="rgba(255,255,255,0.32)">DFINITY Foundation  ·  cli.internetcomputer.org</text>
+</svg>

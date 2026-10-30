@@ -22,7 +22,9 @@
 # (version on npm, formula bumped, docs entry present, tag pushed, PR merged) and
 # skips it if so; if a workflow run or PR is already in flight it watches that one
 # instead of starting a new one. So re-running with the same version after a
-# failure picks up exactly where it left off.
+# failure picks up exactly where it left off. npm counts as done once a
+# release-npm.yml run for the tag has succeeded, even before the registry lists
+# the version, which can take minutes.
 #
 # PR merges use auto-merge: once you approve, the merge happens the moment the
 # required checks go green — you don't have to wait for CI before approving, and
@@ -44,6 +46,9 @@ POLL_SECONDS=15
 # MERGE_TIMEOUT_SECONDS is an absolute backstop against a check stuck 'pending'.
 MERGE_STALL_SECONDS=300
 MERGE_TIMEOUT_SECONDS=7200
+# npm can take minutes to list a version it has accepted. Past this the script
+# warns and goes on, since no later step needs the package on the registry.
+NPM_VISIBLE_TIMEOUT_SECONDS=600
 
 # --- output helpers ---------------------------------------------------------
 info()  { printf '   %s\n' "$*"; }
@@ -58,6 +63,16 @@ npm_published() {  # <version>
   local code
   code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NPM_PKG/$1" 2>/dev/null)
   [[ "$code" == "200" ]]
+}
+
+# "<databaseId> <status> <conclusion>" of the newest release-npm.yml run for
+# <tag>, or "" if there is none. Matched on the run-name the workflow gives
+# itself, since a workflow_dispatch run's inputs aren't listed.
+npm_run_for_tag() {  # <tag>
+  gh run list --repo "$REPO" --workflow release-npm.yml --limit 20 \
+    --json databaseId,displayTitle,status,conclusion \
+    | jq -r --arg title "Publish $1 to npm" \
+      'map(select(.displayTitle == $title)) | .[0] // empty | "\(.databaseId) \(.status) \(.conclusion)"'
 }
 
 # Current version pinned in the homebrew formula (empty if it can't be read).
@@ -318,16 +333,30 @@ step "Step 4/6 — Publish to npm"
 if npm_published "$VERSION"; then
   info "$NPM_PKG@$VERSION is already on npm — skipping publish."
 else
-  ensure_workflow_run release-npm.yml "$REPO" "version=$TAG" "npm_package_version=$VERSION"
-  # ensure_workflow_run may have watched a pre-existing run (it matches on
-  # workflow, not version), so confirm the version actually landed on npm.
-  # Allow a few seconds for the registry to reflect the publish.
-  for _ in $(seq 1 6); do
-    npm_published "$VERSION" && break
-    sleep 5
+  read -r npm_run npm_status npm_conclusion <<<"$(npm_run_for_tag "$TAG")"
+  if [[ "$npm_conclusion" == "success" ]]; then
+    info "release-npm.yml already published $TAG: https://github.com/$REPO/actions/runs/$npm_run"
+  elif [[ -n "$npm_run" && "$npm_status" != "completed" ]]; then
+    info "A release-npm.yml run for $TAG is already in flight — watching it instead of dispatching a new one."
+    info "Watching: https://github.com/$REPO/actions/runs/$npm_run"
+    gh run watch --repo "$REPO" "$npm_run" --exit-status \
+      || fail "'release-npm.yml' failed: https://github.com/$REPO/actions/runs/$npm_run"
+  else
+    dispatch_and_watch release-npm.yml "$REPO" "version=$TAG" "npm_package_version=$VERSION"
+  fi
+  # The run succeeding means npm accepted the packages, but the registry can take
+  # minutes to list a new version. Nothing after this step depends on npm, so a
+  # registry that is slow to catch up only warns.
+  info "Waiting up to $((NPM_VISIBLE_TIMEOUT_SECONDS / 60))m for the registry to list $NPM_PKG@$VERSION..."
+  waited=0
+  until npm_published "$VERSION"; do
+    if (( waited >= NPM_VISIBLE_TIMEOUT_SECONDS )); then
+      warn "release-npm.yml succeeded but the registry doesn't list $NPM_PKG@$VERSION yet. Check it later; carrying on."
+      break
+    fi
+    sleep "$POLL_SECONDS"
+    waited=$((waited + POLL_SECONDS))
   done
-  npm_published "$VERSION" \
-    || fail "release-npm.yml finished but $NPM_PKG@$VERSION is still not on npm. Check the run, then re-run this script."
 fi
 info "NPM: https://www.npmjs.com/package/$NPM_PKG/v/$VERSION"
 

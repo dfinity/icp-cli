@@ -14,7 +14,6 @@ const arch = process.arch;
 
 const platformMap = {
   'darwin-arm64': '@icp-sdk/icp-cli-darwin-arm64',
-  'darwin-x64': '@icp-sdk/icp-cli-darwin-x64',
   'linux-arm64': '@icp-sdk/icp-cli-linux-arm64',
   'linux-x64': '@icp-sdk/icp-cli-linux-x64',
   'win32-x64': '@icp-sdk/icp-cli-win32-x64'
@@ -31,7 +30,6 @@ if (!packageName) {
 ║                                                           ║
 ║   Supported platforms:                                    ║
 ║   - macOS ARM64 (Apple Silicon)                          ║
-║   - macOS x64 (Intel)                                    ║
 ║   - Linux ARM64                                          ║
 ║   - Linux x64                                            ║
 ║   - Windows x64                                          ║

@@ -8,6 +8,8 @@ air-gapped signing, extensions
 
 # Unreleased
 
+* chore: macOS on Intel (`x86_64-apple-darwin`) is no longer a release target. Releases ship no Intel macOS archive, the shell installer refuses that platform, and npm no longer publishes `@icp-sdk/icp-cli-darwin-x64`, so installing `@icp-sdk/icp-cli` on an Intel Mac warns of an unsupported platform. Homebrew dropped Intel macOS in September 2026, and GitHub is retiring its Intel macOS runners. v1.8.0 is the last release with an Intel macOS build.
+
 # v1.8.0
 
 * fix: `icp sync` no longer needs controller rights. Its check that each canister is running used `canister_status`, which only a controller or a listed status viewer may read, so an identity the canister merely authorizes (a developer preparing an SNS-owned frontend for a commit proposal, say) was refused before anything was uploaded. It now probes with a query, as `icp deploy` already does after starting a canister. A stopped canister is still refused with the same advice, after the probe's 30-second wait rather than at once.

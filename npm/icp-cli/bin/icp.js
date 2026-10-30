@@ -14,7 +14,6 @@ function findBinary() {
   // Map Node.js platform/arch to package names
   const platformMap = {
     'darwin-arm64': '@icp-sdk/icp-cli-darwin-arm64',
-    'darwin-x64': '@icp-sdk/icp-cli-darwin-x64',
     'linux-arm64': '@icp-sdk/icp-cli-linux-arm64',
     'linux-x64': '@icp-sdk/icp-cli-linux-x64',
     'win32-x64': '@icp-sdk/icp-cli-win32-x64'

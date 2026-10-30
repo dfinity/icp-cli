@@ -28,7 +28,6 @@ echo ""
 
 # Create bin directories if they don't exist
 mkdir -p icp-cli-darwin-arm64/bin
-mkdir -p icp-cli-darwin-x64/bin
 mkdir -p icp-cli-linux-arm64/bin
 mkdir -p icp-cli-linux-x64/bin
 mkdir -p icp-cli-win32-x64/bin
@@ -45,17 +44,6 @@ find tmp-darwin-arm64 -name 'icp' -type f -exec mv {} icp-cli-darwin-arm64/bin/i
 chmod +x icp-cli-darwin-arm64/bin/icp
 rm -rf darwin-arm64.tar.xz tmp-darwin-arm64
 echo "✓ macOS ARM64 downloaded"
-echo ""
-
-# macOS x64 (Intel)
-echo "Downloading macOS x64..."
-curl -L "${BASE_URL}/icp-cli-x86_64-apple-darwin.tar.xz" -o darwin-x64.tar.xz
-mkdir -p tmp-darwin-x64
-tar -xJf darwin-x64.tar.xz -C tmp-darwin-x64
-find tmp-darwin-x64 -name 'icp' -type f -exec mv {} icp-cli-darwin-x64/bin/icp \;
-chmod +x icp-cli-darwin-x64/bin/icp
-rm -rf darwin-x64.tar.xz tmp-darwin-x64
-echo "✓ macOS x64 downloaded"
 echo ""
 
 # Linux ARM64
@@ -96,7 +84,6 @@ echo "=========================================="
 echo ""
 echo "Binary locations:"
 echo "  • icp-cli-darwin-arm64/bin/icp"
-echo "  • icp-cli-darwin-x64/bin/icp"
 echo "  • icp-cli-linux-arm64/bin/icp"
 echo "  • icp-cli-linux-x64/bin/icp"
 echo "  • icp-cli-win32-x64/bin/icp.exe"

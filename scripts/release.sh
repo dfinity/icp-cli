@@ -61,17 +61,18 @@ fail()  { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 # Is <version> already published on the npm registry?
 npm_published() {  # <version>
   local code
-  code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NPM_PKG/$1" 2>/dev/null)
+  code=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NPM_PKG/$1" 2>/dev/null)
   [[ "$code" == "200" ]]
 }
 
-# "<databaseId> <status> <conclusion>" of the newest release-npm.yml run for
-# <tag>, or "" if there is none. Matched on the run-name the workflow gives
-# itself, since a workflow_dispatch run's inputs aren't listed.
-npm_run_for_tag() {  # <tag>
+# "<databaseId> <status> <conclusion>" of the newest non-beta release-npm.yml
+# run publishing <npm-version> from <tag>, or "" if there is none. Matched on
+# the run-name the workflow gives itself, since a workflow_dispatch run's inputs
+# aren't listed.
+npm_run() {  # <npm-version> <tag>
   gh run list --repo "$REPO" --workflow release-npm.yml --limit 20 \
     --json databaseId,displayTitle,status,conclusion \
-    | jq -r --arg title "Publish $1 to npm" \
+    | jq -r --arg title "Publish $1 to npm from $2" \
       'map(select(.displayTitle == $title)) | .[0] // empty | "\(.databaseId) \(.status) \(.conclusion)"'
 }
 
@@ -333,29 +334,40 @@ step "Step 4/6 — Publish to npm"
 if npm_published "$VERSION"; then
   info "$NPM_PKG@$VERSION is already on npm — skipping publish."
 else
-  read -r npm_run npm_status npm_conclusion <<<"$(npm_run_for_tag "$TAG")"
+  read -r npm_run_id npm_status npm_conclusion <<<"$(npm_run "$VERSION" "$TAG")"
   if [[ "$npm_conclusion" == "success" ]]; then
-    info "release-npm.yml already published $TAG: https://github.com/$REPO/actions/runs/$npm_run"
-  elif [[ -n "$npm_run" && "$npm_status" != "completed" ]]; then
-    info "A release-npm.yml run for $TAG is already in flight — watching it instead of dispatching a new one."
-    info "Watching: https://github.com/$REPO/actions/runs/$npm_run"
-    gh run watch --repo "$REPO" "$npm_run" --exit-status \
-      || fail "'release-npm.yml' failed: https://github.com/$REPO/actions/runs/$npm_run"
+    info "release-npm.yml already published $TAG: https://github.com/$REPO/actions/runs/$npm_run_id"
   else
-    dispatch_and_watch release-npm.yml "$REPO" "version=$TAG" "npm_package_version=$VERSION"
+    if [[ -n "$npm_run_id" && "$npm_status" != "completed" ]]; then
+      info "A release-npm.yml run for $TAG is already in flight — watching it instead of dispatching a new one."
+    else
+      # Find the new run by its title rather than as the workflow's latest, which
+      # could be a concurrent dispatch for another release.
+      prev_run_id="$npm_run_id"
+      gh workflow run release-npm.yml --repo "$REPO" --field "version=$TAG" --field "npm_package_version=$VERSION" \
+        || fail "Failed to dispatch 'release-npm.yml' in $REPO."
+      for _ in $(seq 1 12); do
+        read -r npm_run_id _ _ <<<"$(npm_run "$VERSION" "$TAG")"
+        [[ -n "$npm_run_id" && "$npm_run_id" != "$prev_run_id" ]] && break
+        npm_run_id=""; sleep 5
+      done
+      [[ -n "$npm_run_id" ]] || fail "Dispatched 'release-npm.yml' but no run for $TAG appeared. Check https://github.com/$REPO/actions"
+    fi
+    info "Watching: https://github.com/$REPO/actions/runs/$npm_run_id"
+    gh run watch --repo "$REPO" "$npm_run_id" --exit-status \
+      || fail "'release-npm.yml' failed: https://github.com/$REPO/actions/runs/$npm_run_id"
   fi
   # The run succeeding means npm accepted the packages, but the registry can take
   # minutes to list a new version. Nothing after this step depends on npm, so a
   # registry that is slow to catch up only warns.
   info "Waiting up to $((NPM_VISIBLE_TIMEOUT_SECONDS / 60))m for the registry to list $NPM_PKG@$VERSION..."
-  waited=0
+  npm_deadline=$((SECONDS + NPM_VISIBLE_TIMEOUT_SECONDS))
   until npm_published "$VERSION"; do
-    if (( waited >= NPM_VISIBLE_TIMEOUT_SECONDS )); then
+    if (( SECONDS >= npm_deadline )); then
       warn "release-npm.yml succeeded but the registry doesn't list $NPM_PKG@$VERSION yet. Check it later; carrying on."
       break
     fi
     sleep "$POLL_SECONDS"
-    waited=$((waited + POLL_SECONDS))
   done
 fi
 info "NPM: https://www.npmjs.com/package/$NPM_PKG/v/$VERSION"

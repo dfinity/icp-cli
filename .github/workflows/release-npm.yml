@@ -1,6 +1,6 @@
 name: Publish to npm
 # scripts/release.sh finds the run for a release by this title.
-run-name: Publish ${{ inputs.version }} to npm
+run-name: Publish ${{ inputs.npm_package_version || inputs.version }} to npm from ${{ inputs.version }}${{ inputs.beta && ' (beta)' || '' }}
 
 on:
   workflow_dispatch:

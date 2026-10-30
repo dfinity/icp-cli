@@ -3550,7 +3550,7 @@ dependencies = [
 
 [[package]]
 name = "icp-app"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-dropper",
  "async-trait",
@@ -3624,7 +3624,7 @@ dependencies = [
 
 [[package]]
 name = "icp-canister-interfaces"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "bigdecimal",
  "candid",
@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "icp-cli"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anstyle",
  "anyhow",
@@ -3716,7 +3716,7 @@ dependencies = [
 
 [[package]]
 name = "icp-events"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3725,7 +3725,7 @@ dependencies = [
 
 [[package]]
 name = "icp-extension"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "camino",
@@ -3742,7 +3742,7 @@ dependencies = [
 
 [[package]]
 name = "icp-project"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "bigdecimal",
@@ -3792,7 +3792,7 @@ dependencies = [
 
 [[package]]
 name = "icp-sync-plugin"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4519,9 +4519,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.29"
+version = "1.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
+checksum = "ff20308ecabd635a2dc1dd5834a86c462cca20efba1d5d3ddab1f8aea3455cb2"
 dependencies = [
  "cc",
  "libc",
@@ -6316,7 +6316,7 @@ dependencies = [
 
 [[package]]
 name = "schema-gen"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "icp-project",
  "schemars",

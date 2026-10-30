@@ -8,6 +8,8 @@ air-gapped signing, extensions
 
 # Unreleased
 
+# v1.8.0
+
 * fix: `icp sync` no longer needs controller rights. Its check that each canister is running used `canister_status`, which only a controller or a listed status viewer may read, so an identity the canister merely authorizes (a developer preparing an SNS-owned frontend for a commit proposal, say) was refused before anything was uploaded. It now probes with a query, as `icp deploy` already does after starting a canister. A stopped canister is still refused with the same advice, after the probe's 30-second wait rather than at once.
 * fix: `icp cycles buy --json` and `icp cycles buy -q` imply `--yes`: a machine-readable run has nobody to ask, so neither prompts for confirmation on a terminal nor refuses without one, and the quote stays off stderr.
 * fix: `icp cycles buy` says, with neither `--amount` nor `--cycles`, that one of the two is needed; and that a negative `--amount` or `--cycles` (`-1`, `-5t`) is negative, in the same words and with exit status 2 for both, where clap read `-5t` as an unknown flag

@@ -41,7 +41,6 @@ This package uses platform-specific optional dependencies to install the correct
 ### Supported Platforms
 
 - macOS ARM64 (Apple Silicon)
-- macOS x64 (Intel)
 - Linux ARM64
 - Linux x64
 - Windows x64

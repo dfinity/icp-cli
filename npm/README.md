@@ -98,9 +98,8 @@ All scripts are located in the `scripts/` directory and should be run from the `
 ### Package Structure
 
 - **Main package**: `@icp-sdk/icp-cli` - Contains the wrapper script and API, depends on platform packages
-- **Platform packages**: 5 packages for different OS/architecture combinations
+- **Platform packages**: 4 packages for different OS/architecture combinations
   - `@icp-sdk/icp-cli-darwin-arm64` (macOS Apple Silicon)
-  - `@icp-sdk/icp-cli-darwin-x64` (macOS Intel)
   - `@icp-sdk/icp-cli-linux-arm64` (Linux ARM64)
   - `@icp-sdk/icp-cli-linux-x64` (Linux x64)
   - `@icp-sdk/icp-cli-win32-x64` (Windows x64)

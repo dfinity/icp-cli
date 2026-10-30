@@ -27,7 +27,6 @@ echo "Publishing version $VERSION"
 # Array of platform packages
 PLATFORMS=(
   "icp-cli-darwin-arm64"
-  "icp-cli-darwin-x64"
   "icp-cli-linux-arm64"
   "icp-cli-linux-x64"
   "icp-cli-win32-x64"

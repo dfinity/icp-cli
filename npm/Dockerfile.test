@@ -17,14 +17,12 @@ RUN apt-get update && apt-get install -y \
 # Copy all package directories
 COPY icp-cli/ ./icp-cli/
 COPY icp-cli-darwin-arm64/ ./icp-cli-darwin-arm64/
-COPY icp-cli-darwin-x64/ ./icp-cli-darwin-x64/
 COPY icp-cli-linux-arm64/ ./icp-cli-linux-arm64/
 COPY icp-cli-linux-x64/ ./icp-cli-linux-x64/
 COPY icp-cli-win32-x64/ ./icp-cli-win32-x64/
 
 # Ensure binaries have execute permissions
 RUN chmod +x icp-cli-darwin-arm64/bin/icp || true && \
-    chmod +x icp-cli-darwin-x64/bin/icp || true && \
     chmod +x icp-cli-linux-arm64/bin/icp || true && \
     chmod +x icp-cli-linux-x64/bin/icp || true && \
     chmod +x icp-cli-win32-x64/bin/icp.exe || true

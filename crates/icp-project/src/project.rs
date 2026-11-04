@@ -1691,8 +1691,10 @@ pub async fn consolidate_manifest(
 }
 
 /// A project loaded through a [`Confined`] filesystem reads nothing outside
-/// its root, whatever its manifest names: the loader resolves every path
-/// through the filesystem it is given, so the one rule holds them all.
+/// its root, whatever path its manifest names: the loader resolves every
+/// path it reads itself through the filesystem it is given, so the one rule
+/// holds them all. (A local recipe template is read by the [`Resolve`]
+/// implementation instead, which is why these tests supply none.)
 #[cfg(all(test, feature = "host"))]
 mod confined_tests {
     use super::*;
@@ -1771,7 +1773,7 @@ mod confined_tests {
             Some(CanisterArgs::Binary(b"secret".to_vec()))
         );
 
-        let confined = Confined::new(&pdir).expect("confine");
+        let confined = Confined::new(&pdir);
         let err = load(&confined, &pdir)
             .await
             .expect_err("confined, the read is refused");
@@ -1789,7 +1791,7 @@ mod confined_tests {
             .expect("the host reads anywhere");
         assert!(project.canisters.contains_key("stray"));
 
-        let confined = Confined::new(&pdir).expect("confine");
+        let confined = Confined::new(&pdir);
         let err = load(&confined, &pdir)
             .await
             .expect_err("confined, the directory is not there");

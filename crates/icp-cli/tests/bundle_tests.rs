@@ -1132,6 +1132,85 @@ fn bundle_rejects_symlink_cycle() {
         .stderr(contains("back").and(contains("cycle")));
 }
 
+/// A symlink that loops cannot be resolved at all, and that is the reason
+/// given, rather than the link being called dangling.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_symlink_loop() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    std::os::unix::fs::symlink("self", project_dir.join("data/self"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("cannot resolve")
+                .and(contains("data/self"))
+                .and(contains("does not exist").not()),
+        );
+}
+
+/// The output path is checked against the copied directories by its spelling,
+/// which a symlink inside one of them can get around: the walk then meets the
+/// bundle it is writing, and refuses it rather than copying a partial archive
+/// into itself.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_output_reached_through_symlink() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "assets");
+
+    create_dir_all(&project_dir.join("assets")).expect("failed to create dir");
+    create_dir_all(&project_dir.join("shared")).expect("failed to create dir");
+    write_string(&project_dir.join("shared/s.txt"), "s").expect("failed to write file");
+    std::os::unix::fs::symlink("../shared", project_dir.join("assets/shared"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "shared/bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("assets/shared/bundle.tar.gz")
+                .and(contains("own output file"))
+                .and(contains("still being written")),
+        );
+}
+
+/// A file whose name is not UTF-8 cannot be named in the archive. The bundle
+/// says so rather than leaving the file out, as the glob machinery elsewhere
+/// does when it lists a directory.
+#[cfg(target_os = "linux")]
+#[test]
+fn bundle_rejects_a_name_that_is_not_utf8() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    let stray = project_dir
+        .join("data")
+        .into_std_path_buf()
+        .join(OsStr::from_bytes(b"caf\xe9.txt"));
+    fs::write(&stray, b"x").expect("failed to write file");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("not UTF-8").and(contains("data")));
+}
+
 /// A `files:` entry that is itself a symlink to a file outside the project is
 /// refused like any other source outside the project, where the lexical check
 /// before the build would have let it through and the read followed it.

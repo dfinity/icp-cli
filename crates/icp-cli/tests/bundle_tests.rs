@@ -964,6 +964,196 @@ fn bundle_rejects_source_outside_project() {
         .stderr(contains("my-canister").and(contains("outside the project directory")));
 }
 
+/// A project with one canister whose plugin sync step declares `files:
+/// seed: <entry>`, for the symlink tests: what `data/` holds is up to each.
+#[cfg(unix)]
+fn plugin_project_with_files_entry(ctx: &TestContext, entry: &str) -> PathBuf {
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+    write(&project_dir.join("plugin.wasm"), b"\x00asm\x01\x00\x00\x00")
+        .expect("failed to write plugin wasm");
+    let pm = formatdoc! {r#"
+        canisters:
+          - name: my-canister
+            build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  files:
+                    seed: {entry}
+    "#};
+    write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
+    project_dir
+}
+
+/// Every entry of the archive at `path`, as its archive path, entry type and
+/// contents.
+#[cfg(unix)]
+fn archive_entries(path: &Path) -> Vec<(String, tar::EntryType, Vec<u8>)> {
+    let bytes = fs::read(path.as_std_path()).expect("failed to read bundle");
+    let gz = GzDecoder::new(BufReader::new(bytes.as_slice()));
+    let mut archive = Archive::new(gz);
+    let mut out = Vec::new();
+    for entry in archive.entries().expect("failed to read archive entries") {
+        let mut entry = entry.expect("failed to read archive entry");
+        let path = entry
+            .path()
+            .expect("failed to get entry path")
+            .to_string_lossy()
+            .into_owned();
+        let kind = entry.header().entry_type();
+        let mut data = Vec::new();
+        entry.read_to_end(&mut data).expect("failed to read entry");
+        out.push((path, kind, data));
+    }
+    out
+}
+
+/// A symlink inside a plugin directory that points somewhere inside the
+/// project is copied into the bundle as what it points at — a file, or a whole
+/// directory — so the archive holds regular files only and a project may link
+/// to its own files freely.
+#[cfg(unix)]
+#[test]
+fn bundle_copies_symlinks_inside_the_project_as_what_they_point_at() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    create_dir_all(&project_dir.join("common")).expect("failed to create dir");
+    write_string(&project_dir.join("data/real.txt"), "real").expect("failed to write file");
+    write_string(&project_dir.join("common/c.txt"), "common").expect("failed to write file");
+    std::os::unix::fs::symlink("real.txt", project_dir.join("data/link.txt"))
+        .expect("failed to create symlink");
+    std::os::unix::fs::symlink("../common", project_dir.join("data/shared"))
+        .expect("failed to create symlink");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let entries = archive_entries(&bundle_path);
+    assert!(
+        entries
+            .iter()
+            .all(|(_, kind, _)| !kind.is_symlink() && !kind.is_hard_link()),
+        "the archive holds a link: {:?}",
+        entries.iter().map(|(p, k, _)| (p, *k)).collect::<Vec<_>>()
+    );
+    for (path, contents) in [
+        ("plugins/my-canister/0/files/data/real.txt", "real"),
+        ("plugins/my-canister/0/files/data/link.txt", "real"),
+        ("plugins/my-canister/0/files/data/shared/c.txt", "common"),
+    ] {
+        let (_, kind, data) = entries
+            .iter()
+            .find(|(p, _, _)| p == path)
+            .unwrap_or_else(|| panic!("{path} missing from {entries:?}"));
+        assert!(kind.is_file(), "{path} is a {kind:?}");
+        assert_eq!(data, contents.as_bytes(), "{path}");
+    }
+}
+
+/// A symlink inside a plugin directory that leads outside the project fails
+/// the bundle, naming the link and where it leads, rather than being recorded
+/// as a link for the unpacking machine to follow.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_symlink_pointing_outside_the_project() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    let outside = ctx.home_path().join("outside-secret.txt");
+    write_string(&outside, "secret").expect("failed to write outside file");
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    std::os::unix::fs::symlink(&outside, project_dir.join("data/leak.txt"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("leak.txt")
+                .and(contains("outside-secret.txt"))
+                .and(contains("outside the project directory")),
+        );
+}
+
+/// A symlink to nothing cannot be copied as what it points at, and is named
+/// rather than skipped.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_dangling_symlink() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    std::os::unix::fs::symlink("nowhere.txt", project_dir.join("data/gone.txt"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("gone.txt")
+                .and(contains("nowhere.txt"))
+                .and(contains("does not exist")),
+        );
+}
+
+/// A symlink back to a directory the bundle is in the middle of copying would
+/// copy it without end; it is refused, naming the link.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_symlink_cycle() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    create_dir_all(&project_dir.join("data/inner")).expect("failed to create dir");
+    std::os::unix::fs::symlink("../../data", project_dir.join("data/inner/back"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("back").and(contains("cycle")));
+}
+
+/// A `files:` entry that is itself a symlink to a file outside the project is
+/// refused like any other source outside the project, where the lexical check
+/// before the build would have let it through and the read followed it.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_symlinked_plugin_file_outside_the_project() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "config.txt");
+
+    let outside = ctx.home_path().join("outside-secret.txt");
+    write_string(&outside, "secret").expect("failed to write outside file");
+    std::os::unix::fs::symlink(&outside, project_dir.join("config.txt"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("my-canister").and(contains("outside the project directory")));
+}
+
 /// The environment reaching build steps as `ICP_CLI_ENVIRONMENT` defaults to `ic`
 /// for a bundle, rather than the `local` the rest of the CLI defaults to.
 #[test]

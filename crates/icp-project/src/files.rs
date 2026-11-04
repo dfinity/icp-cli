@@ -88,6 +88,199 @@ pub trait Scratch: Send + Sync {
     fn path(&self) -> &Path;
 }
 
+/// This machine's filesystem, held to one directory.
+///
+/// Every path is resolved against the root before the disk sees it: a
+/// relative path is joined to the root, `.` is dropped, `..` is applied, and a
+/// path that comes to rest outside the root — by climbing above it, by being
+/// absolute somewhere else, or through a symlink inside the root that points
+/// out — is refused with [`OutsideRoot`]. The predicates answer `false` for
+/// such a path, as they do for any other failure, and scratch directories are
+/// made under the root, so what a build writes and reads back stays inside.
+///
+/// For a project whose files are not the user's own tree: a bundle handed
+/// over by someone else, which `icp project bundle` wrote with every path
+/// held to the project it came from, but which the loader would otherwise
+/// take at its word. The loader resolves every path a manifest names
+/// through the [`FileSystem`] it is given, so confining that one seam holds
+/// all of them — the canister directories, the manifests in them, the
+/// argument and variable files, the dependency projects — without the
+/// loader enumerating its fields.
+#[cfg(feature = "host")]
+#[derive(Debug, Clone)]
+pub struct Confined {
+    /// Canonical, so a canonicalized path compares against it.
+    root: PathBuf,
+}
+
+/// A path a [`Confined`] filesystem was asked for that is not under its root.
+#[cfg(feature = "host")]
+#[derive(Debug, Snafu)]
+#[snafu(display("'{path}' is outside '{root}', the directory this project is confined to"))]
+pub struct OutsideRoot {
+    pub path: PathBuf,
+    pub root: PathBuf,
+}
+
+/// Why a directory cannot be confined to.
+#[cfg(feature = "host")]
+#[derive(Debug, Snafu)]
+pub enum ConfineError {
+    #[snafu(display("cannot resolve '{path}' to confine the project to it"))]
+    Resolve {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("'{path}' resolves to a path that is not UTF-8"))]
+    NotUtf8 { path: PathBuf },
+}
+
+#[cfg(feature = "host")]
+impl Confined {
+    /// Confine the host filesystem to `root`, which must exist.
+    pub fn new(root: &Path) -> Result<Self, ConfineError> {
+        let real = dunce::canonicalize(root).context(ResolveSnafu { path: root })?;
+        let root = PathBuf::from_path_buf(real).map_err(|_| ConfineError::NotUtf8 {
+            path: root.to_path_buf(),
+        })?;
+        Ok(Self { root })
+    }
+
+    /// The directory everything is held to.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Where `path` lies under the root, by its spelling alone: joined to the
+    /// root if relative, with `.` dropped and `..` applied, and refused if it
+    /// would come to rest outside. What a caller that needs a real path for
+    /// something that does not read through the trait — a runtime mounting a
+    /// directory — asks for; the trait's own reads also follow symlinks
+    /// before trusting the answer.
+    pub fn resolve(&self, path: &Path) -> Result<PathBuf, FsError> {
+        let outside = || {
+            FsError::new(OutsideRoot {
+                path: path.to_path_buf(),
+                root: self.root.clone(),
+            })
+        };
+        let relative = if path.is_absolute() {
+            path.strip_prefix(&self.root).map_err(|_| outside())?
+        } else {
+            path
+        };
+        let mut resolved = self.root.clone();
+        for component in relative.components() {
+            match component {
+                Utf8Component::Normal(part) => resolved.push(part),
+                Utf8Component::CurDir => {}
+                Utf8Component::ParentDir => {
+                    if resolved == self.root || !resolved.pop() {
+                        return Err(outside());
+                    }
+                }
+                Utf8Component::RootDir | Utf8Component::Prefix(_) => return Err(outside()),
+            }
+        }
+        Ok(resolved)
+    }
+
+    /// [`resolve`](Self::resolve), then follow the symlinks of as much of the
+    /// path as exists and check where that leads: a link inside the root to
+    /// a place outside it resolves outside, however it is spelled.
+    fn resolve_real(&self, path: &Path) -> Result<PathBuf, FsError> {
+        let resolved = self.resolve(path)?;
+        let mut probe = resolved.as_path();
+        loop {
+            if let Ok(real) = dunce::canonicalize(probe) {
+                if !real.starts_with(&self.root) {
+                    return Err(FsError::new(OutsideRoot {
+                        path: path.to_path_buf(),
+                        root: self.root.clone(),
+                    }));
+                }
+                return Ok(resolved);
+            }
+            match probe.parent() {
+                Some(parent) => probe = parent,
+                None => return Ok(resolved),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "host")]
+#[async_trait]
+impl FileSystem for Confined {
+    async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
+        HostFileSystem.read(&self.resolve_real(path)?).await
+    }
+
+    async fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
+        HostFileSystem
+            .read_to_string(&self.resolve_real(path)?)
+            .await
+    }
+
+    async fn write(&self, path: &Path, contents: &[u8]) -> Result<(), FsError> {
+        HostFileSystem
+            .write(&self.resolve_real(path)?, contents)
+            .await
+    }
+
+    async fn create_dir_all(&self, path: &Path) -> Result<(), FsError> {
+        HostFileSystem
+            .create_dir_all(&self.resolve_real(path)?)
+            .await
+    }
+
+    async fn copy(&self, from: &Path, to: &Path) -> Result<(), FsError> {
+        HostFileSystem
+            .copy(&self.resolve_real(from)?, &self.resolve_real(to)?)
+            .await
+    }
+
+    async fn exists(&self, path: &Path) -> bool {
+        match self.resolve_real(path) {
+            Ok(real) => HostFileSystem.exists(&real).await,
+            Err(_) => false,
+        }
+    }
+
+    async fn is_file(&self, path: &Path) -> bool {
+        match self.resolve_real(path) {
+            Ok(real) => HostFileSystem.is_file(&real).await,
+            Err(_) => false,
+        }
+    }
+
+    async fn is_dir(&self, path: &Path) -> bool {
+        match self.resolve_real(path) {
+            Ok(real) => HostFileSystem.is_dir(&real).await,
+            Err(_) => false,
+        }
+    }
+
+    async fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, FsError> {
+        HostFileSystem.read_dir(&self.resolve_real(path)?).await
+    }
+
+    async fn canonicalize(&self, path: &Path) -> Option<PathBuf> {
+        HostFileSystem
+            .canonicalize(&self.resolve_real(path).ok()?)
+            .await
+            .filter(|real| real.starts_with(&self.root))
+    }
+
+    async fn scratch_dir(&self) -> Result<Box<dyn Scratch>, FsError> {
+        let dir = camino_tempfile::Builder::new()
+            .prefix(".scratch-")
+            .tempdir_in(&self.root)
+            .map_err(FsError::new)?;
+        Ok(Box::new(HostScratch(dir)))
+    }
+}
+
 #[cfg(feature = "host")]
 /// The [`FileSystem`] backed by this machine's filesystem.
 #[derive(Debug, Default, Clone, Copy)]
@@ -384,6 +577,136 @@ async fn list(
 #[cfg(all(test, feature = "host"))]
 mod tests {
     use super::*;
+
+    /// Every spelling of a path resolves under the root or is refused: a
+    /// relative one is joined, `.` and `..` are applied, an absolute one is
+    /// taken only under the root, and a symlink inside the root that points
+    /// out leads nowhere.
+    #[cfg(feature = "host")]
+    mod confined {
+        use super::*;
+
+        fn root() -> (camino_tempfile::Utf8TempDir, Confined) {
+            let dir = camino_tempfile::Utf8TempDir::new().expect("temp dir");
+            std::fs::create_dir_all(dir.path().join("project/canisters")).expect("mkdir");
+            std::fs::write(dir.path().join("project/icp.yaml"), b"canisters: []").expect("write");
+            std::fs::write(dir.path().join("project/canisters/a.wasm"), b"wasm").expect("write");
+            std::fs::write(dir.path().join("outside.txt"), b"secret").expect("write");
+            let fs = Confined::new(&dir.path().join("project")).expect("confine");
+            (dir, fs)
+        }
+
+        #[tokio::test]
+        async fn paths_resolve_under_the_root_by_any_spelling_inside_it() {
+            let (_dir, fs) = root();
+            let root = fs.root().to_path_buf();
+            for spelling in [
+                "canisters/a.wasm",
+                "./canisters/a.wasm",
+                "canisters/../canisters/a.wasm",
+                root.join("canisters/a.wasm").as_str(),
+            ] {
+                assert_eq!(fs.read(Path::new(spelling)).await.expect(spelling), b"wasm");
+                assert!(fs.is_file(Path::new(spelling)).await, "{spelling}");
+                assert_eq!(
+                    fs.canonicalize(Path::new(spelling)).await,
+                    Some(root.join("canisters/a.wasm")),
+                    "{spelling}"
+                );
+            }
+            assert!(fs.is_dir(Path::new("canisters")).await);
+            assert!(fs.is_dir(&root).await);
+            assert_eq!(
+                fs.read_dir(&root).await.expect("list"),
+                vec![root.join("canisters"), root.join("icp.yaml")]
+            );
+            assert!(
+                fs.resolve(Path::new("made/later"))
+                    .unwrap()
+                    .starts_with(&root)
+            );
+        }
+
+        #[tokio::test]
+        async fn paths_outside_the_root_are_refused_however_spelled() {
+            let (dir, fs) = root();
+            let outside = dir.path().join("outside.txt");
+            assert!(
+                outside.is_file(),
+                "the file exists, for the host filesystem to read"
+            );
+            for spelling in [
+                "../outside.txt",
+                "canisters/../../outside.txt",
+                outside.as_str(),
+                "/etc/hostname",
+                "../../../../../../etc/hostname",
+            ] {
+                let err = fs
+                    .read(Path::new(spelling))
+                    .await
+                    .expect_err(spelling)
+                    .to_string();
+                assert!(err.contains("is outside"), "{spelling}: {err}");
+                assert!(!fs.exists(Path::new(spelling)).await, "{spelling}");
+                assert!(!fs.is_file(Path::new(spelling)).await, "{spelling}");
+                assert!(
+                    fs.canonicalize(Path::new(spelling)).await.is_none(),
+                    "{spelling}"
+                );
+                assert!(fs.resolve(Path::new(spelling)).is_err(), "{spelling}");
+            }
+            // Nor may anything be written there.
+            let err = fs
+                .write(Path::new("../planted"), b"x")
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("is outside"), "{err}");
+            assert!(!dir.path().join("planted").exists());
+        }
+
+        #[cfg(unix)]
+        #[tokio::test]
+        async fn a_symlink_inside_pointing_out_is_refused() {
+            let (dir, fs) = root();
+            let root = fs.root().to_path_buf();
+            std::os::unix::fs::symlink(dir.path().join("outside.txt"), root.join("link.txt"))
+                .expect("symlink");
+            std::os::unix::fs::symlink(dir.path(), root.join("up")).expect("symlink");
+            for spelling in ["link.txt", "up/outside.txt"] {
+                let err = fs
+                    .read(Path::new(spelling))
+                    .await
+                    .expect_err(spelling)
+                    .to_string();
+                assert!(err.contains("is outside"), "{spelling}: {err}");
+                assert!(!fs.exists(Path::new(spelling)).await, "{spelling}");
+            }
+            // A link that leads back inside is inside: what matters is where
+            // the path comes to rest, not how it got there.
+            assert_eq!(
+                fs.read(Path::new("up/project/icp.yaml")).await.unwrap(),
+                b"canisters: []"
+            );
+        }
+
+        #[tokio::test]
+        async fn scratch_is_made_under_the_root() {
+            let (_dir, fs) = root();
+            let scratch = fs.scratch_dir().await.expect("scratch");
+            assert!(scratch.path().starts_with(fs.root()));
+            let out = scratch.path().join("out/module.wasm");
+            fs.create_dir_all(&scratch.path().join("out"))
+                .await
+                .expect("mkdir");
+            fs.write(&out, b"built").await.expect("write");
+            assert_eq!(fs.read(&out).await.unwrap(), b"built");
+            let path = scratch.path().to_path_buf();
+            drop(scratch);
+            assert!(!path.exists());
+        }
+    }
 
     /// Builds a tree of empty files, creating parents as needed, and returns its
     /// root.

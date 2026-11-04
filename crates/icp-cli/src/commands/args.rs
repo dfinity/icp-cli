@@ -135,6 +135,121 @@ impl TokenCommandArgs {
     }
 }
 
+/// Flags for a command printed to be pasted.
+pub(crate) struct PasteFlags {
+    /// Each flag with a leading space.
+    pub(crate) text: String,
+    /// The placeholders in `text`, such as `<your identity>`, standing for
+    /// values no quoting writes safely for every shell (see [`shell_word`]).
+    pub(crate) blanks: Vec<&'static str>,
+}
+
+impl PasteFlags {
+    /// A line for each placeholder, asking to fill it in, to print after the
+    /// command it is in.
+    pub(crate) fn notes(&self) -> Vec<String> {
+        self.blanks
+            .iter()
+            .map(|blank| {
+                format!("Fill in {blank} yourself: no quoting of it works in every shell.")
+            })
+            .collect()
+    }
+}
+
+/// The flags that select `identity`, `network` and `environment` again, for
+/// a command printed to be pasted: the short form where there is one, and
+/// `--flag=value` for a value starting with `-`, which would read as a flag.
+pub(crate) fn selection_flags(
+    identity: &IdentitySelection,
+    network: &NetworkSelection,
+    environment: &EnvironmentSelection,
+) -> PasteFlags {
+    let mut flags = PasteFlags {
+        text: String::new(),
+        blanks: Vec::new(),
+    };
+    let mut push = |short: &str, long: &str, value: &str, blank: &'static str| {
+        let word = if value.starts_with('-') {
+            shell_word(&format!("{long}={value}"))
+        } else {
+            shell_word(value).map(|value| format!("{short} {value}"))
+        };
+        match word {
+            Some(word) => flags.text.push_str(&format!(" {word}")),
+            // The placeholder keeps the form the value needs, so that what
+            // is filled in reads as a value and not a flag.
+            None if value.starts_with('-') => {
+                flags.text.push_str(&format!(" {long}={blank}"));
+                flags.blanks.push(blank);
+            }
+            None => {
+                flags.text.push_str(&format!(" {short} {blank}"));
+                flags.blanks.push(blank);
+            }
+        }
+    };
+    match identity {
+        IdentitySelection::Default => {}
+        IdentitySelection::Anonymous => {
+            push("--identity", "--identity", "anonymous", "<your identity>");
+        }
+        IdentitySelection::Named(name) => {
+            push("--identity", "--identity", name, "<your identity>");
+        }
+    }
+    match network {
+        NetworkSelection::Default => {}
+        NetworkSelection::Named(name) => push("-n", "--network", name, "<your network>"),
+        NetworkSelection::Url(url, root_key) => {
+            push("-n", "--network", url.as_str(), "<your network>");
+            push(
+                "-k",
+                "--root-key",
+                &String::from(root_key.clone()),
+                "<your root key>",
+            );
+        }
+    }
+    if let EnvironmentSelection::Named(name) = environment {
+        push("-e", "--environment", name, "<your environment>");
+    }
+    flags
+}
+
+/// `value` as one word that reads back as it is in every shell icp-cli
+/// completes for (the POSIX shells, fish, elvish and PowerShell): bare when
+/// nothing in it is special to any of them, else in single quotes, else, for
+/// a value with a single quote in it, in double quotes when nothing else in
+/// it is special there. `None` when none of those will do.
+pub(crate) fn shell_word(value: &str) -> Option<String> {
+    // Control characters do not paste, and PowerShell ends a quoted string
+    // at any of its curly quotes.
+    if value
+        .chars()
+        .any(|c| c.is_control() || ('\u{2018}'..='\u{201E}').contains(&c))
+    {
+        return None;
+    }
+    // zsh reads a leading `=` as a path lookup, and PowerShell a leading `@`
+    // as splatting.
+    let bare = !value.is_empty()
+        && !value.starts_with('=')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./:=+".contains(c));
+    if bare {
+        Some(value.to_owned())
+    } else if !value.contains(['\'', '\\']) {
+        // fish reads `\\` and `\'` even between single quotes.
+        Some(format!("'{value}'"))
+    } else if !value.contains(['\\', '"', '$', '`', '!']) {
+        Some(format!("\"{value}\""))
+    } else {
+        None
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Canister {
     Name(String),
@@ -258,6 +373,105 @@ mod tests {
         assert_eq!(
             Canister::from("my-canister"),
             Canister::Name("my-canister".to_string()),
+        );
+    }
+
+    #[test]
+    fn words_are_quoted_only_as_every_shell_needs() {
+        for (value, word) in [
+            ("alice", Some("alice")),
+            ("my-id_2.dev:x+y", Some("my-id_2.dev:x+y")),
+            ("http://localhost:8000/", Some("http://localhost:8000/")),
+            ("--identity=-dash", Some("--identity=-dash")),
+            ("my id", Some("'my id'")),
+            ("@team", Some("'@team'")),
+            ("=eq", Some("'=eq'")),
+            ("a$b", Some("'a$b'")),
+            ("a!b", Some("'a!b'")),
+            ("naïve", Some("'naïve'")),
+            ("", Some("''")),
+            ("o'neil", Some("\"o'neil\"")),
+            ("o'neil $x", None),
+            ("o'neil!", None),
+            ("a\\b", None),
+            ("tab\there", None),
+            ("o\u{2019}neil", None),
+        ] {
+            assert_eq!(shell_word(value).as_deref(), word, "{value}");
+        }
+    }
+
+    #[test]
+    fn selections_become_the_flags_that_select_them() {
+        let flags = |identity, network, environment: EnvironmentSelection| {
+            let flags = selection_flags(&identity, &network, &environment);
+            (flags.text, flags.blanks)
+        };
+        let named = |name: &str| IdentitySelection::Named(name.into());
+        let env = |name: &str| EnvironmentSelection::Named(name.into());
+        let none: Vec<&str> = vec![];
+        assert_eq!(
+            flags(
+                IdentitySelection::Default,
+                NetworkSelection::Default,
+                EnvironmentSelection::Default
+            ),
+            (String::new(), none.clone())
+        );
+        assert_eq!(
+            flags(named("alice"), NetworkSelection::Default, env("ic")),
+            (" --identity alice -e ic".into(), none.clone())
+        );
+        assert_eq!(
+            flags(
+                IdentitySelection::Anonymous,
+                NetworkSelection::Named("ic".into()),
+                EnvironmentSelection::Default
+            ),
+            (" --identity anonymous -n ic".into(), none.clone())
+        );
+        assert_eq!(
+            flags(
+                named("-dash"),
+                NetworkSelection::Named("-net".into()),
+                env("-env")
+            ),
+            (
+                " --identity=-dash --network=-net --environment=-env".into(),
+                none.clone()
+            )
+        );
+        assert_eq!(
+            flags(named("-my id"), NetworkSelection::Default, env("ic")),
+            (" '--identity=-my id' -e ic".into(), none.clone())
+        );
+        assert_eq!(
+            flags(
+                named("o'neil"),
+                NetworkSelection::Url(
+                    "http://localhost:8000".parse().unwrap(),
+                    icp_project::network::RootKeySpec::Fetch
+                ),
+                EnvironmentSelection::Default
+            ),
+            (
+                " --identity \"o'neil\" -n http://localhost:8000/ -k fetch".into(),
+                none.clone()
+            )
+        );
+        assert_eq!(
+            flags(named("o'neil $x"), NetworkSelection::Default, env("ic")),
+            (
+                " --identity <your identity> -e ic".into(),
+                vec!["<your identity>"]
+            )
+        );
+        assert_eq!(
+            flags(named("-o'neil $x"), NetworkSelection::Default, env("ic")),
+            (
+                " --identity=<your identity> -e ic".into(),
+                vec!["<your identity>"]
+            )
         );
     }
 

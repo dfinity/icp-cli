@@ -8,6 +8,10 @@ air-gapped signing, extensions
 
 # Unreleased
 
+## Experimental
+
+* fix(bundle): `icp project bundle` holds only regular files and directories. A symlink inside a plugin's `files:` or `dirs:` directory used to be recorded as a link with its target unchecked, so a link to a file outside the project reached that file on whatever machine unpacked the bundle. A link to somewhere inside the project is now copied as what it points at, so a project may link to its own files freely; one that leads outside the project, dangles, or leads back to a directory being copied fails the bundle, naming the link and where it leads. A `files:` entry that is itself a symlink to a file outside the project is refused the same way, where it used to be read into the bundle.
+
 * chore: macOS on Intel (`x86_64-apple-darwin`) is no longer a release target. Releases ship no Intel macOS archive, the shell installer refuses that platform, and npm no longer publishes `@icp-sdk/icp-cli-darwin-x64`, so installing `@icp-sdk/icp-cli` on an Intel Mac warns of an unsupported platform. Homebrew dropped Intel macOS in September 2026, and GitHub is retiring its Intel macOS runners. v1.8.0 is the last release with an Intel macOS build.
 
 # v1.8.0

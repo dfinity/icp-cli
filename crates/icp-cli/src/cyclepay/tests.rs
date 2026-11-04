@@ -119,6 +119,10 @@ fn rejected(message: &str) -> CallError {
     }
 }
 
+/// What an `order_status` poll gets: the order, if any, or the network
+/// failing to answer, or rejecting.
+type Poll = Result<Option<OrderStatusView>, CallError>;
+
 /// A CyclePay backend whose replies are scripted per method.
 #[derive(Default)]
 struct FakeBackend {
@@ -130,7 +134,7 @@ struct FakeBackend {
     create: Mutex<VecDeque<CreateOrderResult>>,
     /// One reply per `order_status` poll, in order. An `Err` is the network
     /// failing to answer, or rejecting.
-    status: Mutex<VecDeque<Result<Option<OrderStatusView>, CallError>>>,
+    status: Mutex<VecDeque<Poll>>,
     /// Every call made, as (method, candid argument).
     calls_seen: Mutex<Vec<(String, Vec<u8>)>>,
     /// Rejects every call as if the canister did not exist.
@@ -139,6 +143,8 @@ struct FakeBackend {
     refusal: Mutex<Option<CallError>>,
     /// Never answers `order_status`, as a backend behind a stalled connection.
     stall_polls: bool,
+    /// What every `order_status` poll past the scripted ones answers.
+    then_polls: Option<fn() -> Poll>,
 }
 
 impl FakeBackend {
@@ -149,7 +155,7 @@ impl FakeBackend {
         }
     }
 
-    fn polls(self, replies: Vec<Result<Option<OrderStatusView>, CallError>>) -> Self {
+    fn polls(self, replies: Vec<Poll>) -> Self {
         *self.status.lock().unwrap() = replies.into();
         self
     }
@@ -240,11 +246,9 @@ impl CanisterCalls for FakeBackend {
                 if self.stall_polls {
                     pending::<()>().await;
                 }
-                let reply = self
-                    .status
-                    .lock()
-                    .unwrap()
-                    .pop_front()
+                let scripted = self.status.lock().unwrap().pop_front();
+                let reply = scripted
+                    .or_else(|| self.then_polls.map(|then| then()))
                     .expect("ran out of scripted order_status replies")?;
                 Ok(Encode!(&reply).unwrap())
             }
@@ -756,6 +760,22 @@ async fn wait(
     initial: Option<OrderView>,
     options: &WaitOptions,
 ) -> (Result<OrderView, CyclesPurchaseError>, Vec<PurchasePhase>) {
+    let (result, phases, _) = wait_timed(fake, initial, options).await;
+    (result, phases)
+}
+
+/// Run the wait and collect the phases it told of, and how long it took: on
+/// a paused clock, as the wait counted it.
+async fn wait_timed(
+    fake: &FakeBackend,
+    initial: Option<OrderView>,
+    options: &WaitOptions,
+) -> (
+    Result<OrderView, CyclesPurchaseError>,
+    Vec<PurchasePhase>,
+    Duration,
+) {
+    let started = tokio::time::Instant::now();
     let mut phases = Vec::new();
     let result = wait_for_order(
         fake,
@@ -767,7 +787,7 @@ async fn wait(
         |phase| phases.push(phase),
     )
     .await;
-    (result, phases)
+    (result, phases, started.elapsed())
 }
 
 /// An order as the wait last saw it.
@@ -858,48 +878,99 @@ async fn wait_retries_a_poll_that_said_nothing() {
         Err(unanswered()),
         Ok(Some(view("co-1", CardOrderStatus::Delivered))),
     ]);
-    let options = WaitOptions {
-        max_consecutive_misses: 3,
-        ..fast()
-    };
-    let (result, _) = wait(&fake, None, &options).await;
+    let (result, _) = wait(&fake, None, &fast()).await;
     assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
     assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 8);
 }
 
-#[tokio::test]
-async fn wait_gives_up_after_consecutive_failed_polls() {
-    let fake = FakeBackend::default().polls(vec![
-        Err(unanswered()),
-        Err(unanswered()),
-        Err(unanswered()),
-    ]);
-    let options = WaitOptions {
-        max_consecutive_misses: 2,
-        ..fast()
+/// On a network that stalls every poll, each poll is given up on at 10
+/// seconds, and the wait 5 minutes after the order was last heard of: by
+/// the clock, not by a count of polls, which a stall makes slow. The order
+/// is handed back as last seen, over the last poll's failure.
+#[tokio::test(start_paused = true)]
+async fn a_stalled_network_is_given_up_on_after_5_minutes() {
+    let fake = FakeBackend {
+        stall_polls: true,
+        ..FakeBackend::default()
     };
-    let (result, phases) = wait(&fake, None, &options).await;
-    let err = result.unwrap_err();
-    assert!(matches!(err, CyclesPurchaseError::GetOrder { .. }), "{err}");
-    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
+    let (result, phases, took) = wait_timed(&fake, None, &WaitOptions::default()).await;
+    // A poll every 13 seconds, 10 to time out and 3 to the next, judged as
+    // each one ends: the first to end past 5 minutes.
+    assert_eq!(took, Duration::from_secs(23 * 13 + 10));
+    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 24);
+    match result.unwrap_err() {
+        CyclesPurchaseError::ContactLost { order, source, .. } => {
+            assert_eq!(order.id, "co-1");
+            assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));
+            assert!(
+                matches!(*source, CyclesPurchaseError::PollTimedOut { .. }),
+                "{source}"
+            );
+        }
+        other => panic!("unexpected {other:?}"),
+    }
     assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
 }
 
-/// An order gone for longer than a replica lags is not the caller's, or
-/// was forgotten after expiring unpaid: either way, not found.
-#[tokio::test]
-async fn wait_calls_an_order_gone_for_long_not_found() {
-    let fake = FakeBackend::default().polls(vec![Ok(None), Ok(None), Ok(None)]);
-    let options = WaitOptions {
-        max_consecutive_misses: 2,
-        ..fast()
+/// On a network that refuses every poll at once, the same 5 minutes, with
+/// the last poll's failure.
+#[tokio::test(start_paused = true)]
+async fn a_refusing_network_is_given_up_on_after_5_minutes() {
+    let fake = FakeBackend {
+        then_polls: Some(|| Err(unanswered())),
+        ..FakeBackend::default()
     };
-    let (result, phases) = wait(&fake, None, &options).await;
+    let (result, phases, took) = wait_timed(&fake, None, &WaitOptions::default()).await;
+    // A poll every 3 seconds: the first to end past 5 minutes.
+    assert_eq!(took, Duration::from_secs(101 * 3));
+    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 102);
+    match result.unwrap_err() {
+        CyclesPurchaseError::ContactLost { source, .. } => assert!(
+            matches!(*source, CyclesPurchaseError::GetOrder { .. }),
+            "{source}"
+        ),
+        other => panic!("unexpected {other:?}"),
+    }
+    assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
+}
+
+/// A gateway that is back within 5 minutes was never given up on: the wait
+/// goes on as if nothing had happened.
+#[tokio::test(start_paused = true)]
+async fn wait_carries_on_once_the_gateway_answers_again() {
+    let fake = FakeBackend::default().polls(vec![
+        Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment))),
+        Err(unanswered()),
+        Ok(None),
+        Err(unanswered()),
+        Err(rejected("Canister is stopped")),
+        Err(unanswered()),
+        Ok(Some(view("co-1", CardOrderStatus::Processing))),
+        Ok(Some(view("co-1", CardOrderStatus::Delivered))),
+    ]);
+    let (result, phases) = wait(&fake, None, &WaitOptions::default()).await;
+    assert_eq!(result.unwrap().status, Some(CardOrderStatus::Delivered));
+    assert_eq!(
+        phases,
+        vec![PurchasePhase::AwaitingPayment, PurchasePhase::Delivering]
+    );
+}
+
+/// An order the gateway keeps answering it has no such order for, for 5
+/// minutes, is not the caller's, or was forgotten after expiring unpaid:
+/// either way, not found.
+#[tokio::test(start_paused = true)]
+async fn wait_calls_an_order_gone_for_5_minutes_not_found() {
+    let fake = FakeBackend {
+        then_polls: Some(|| Ok(None)),
+        ..FakeBackend::default()
+    };
+    let (result, phases, took) = wait_timed(&fake, None, &WaitOptions::default()).await;
+    assert_eq!(took, Duration::from_secs(101 * 3));
     assert!(matches!(
         result.unwrap_err(),
         CyclesPurchaseError::OrderNotFound { .. }
     ));
-    assert_eq!(fake.count_of(ORDER_STATUS_METHOD), 3);
     assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
 }
 
@@ -966,6 +1037,27 @@ async fn wait_times_out() {
         ..fast()
     };
     let (result, phases) = wait(&fake, None, &options).await;
+    match result.unwrap_err() {
+        CyclesPurchaseError::WaitTimedOut { order } => {
+            assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    assert_eq!(phases, vec![PurchasePhase::AwaitingPayment]);
+}
+
+/// A gateway that answers all along, with an order nobody pays, is waited
+/// on for the hour and no longer: the first poll past it ends the wait.
+#[tokio::test(start_paused = true)]
+async fn wait_gives_up_on_an_unpaid_order_after_an_hour() {
+    let fake = FakeBackend {
+        then_polls: Some(|| Ok(Some(view("co-1", CardOrderStatus::AwaitingPayment)))),
+        ..FakeBackend::default()
+    };
+    let (result, phases, took) = wait_timed(&fake, None, &WaitOptions::default()).await;
+    let hour = Duration::from_secs(60 * 60);
+    assert!(took > hour, "{took:?}");
+    assert!(took <= hour + POLL_INTERVAL, "{took:?}");
     match result.unwrap_err() {
         CyclesPurchaseError::WaitTimedOut { order } => {
             assert_eq!(order.status, Some(CardOrderStatus::AwaitingPayment));

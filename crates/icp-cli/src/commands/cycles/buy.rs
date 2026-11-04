@@ -588,6 +588,23 @@ async fn wait_and_report(
             }
             return Err(CyclesPurchaseError::WaitTimedOut { order }.into());
         }
+        // The gateway stopped answering for five minutes: the order is said
+        // as last seen, which is all that is known of it.
+        Err(CyclesPurchaseError::ContactLost {
+            gateway,
+            order,
+            source,
+        }) => {
+            if output != Output::Quiet {
+                info!("{} {AFTER_HINT}", standing(&order, false));
+            }
+            return Err(CyclesPurchaseError::ContactLost {
+                gateway,
+                order,
+                source,
+            }
+            .into());
+        }
         Err(error) => return Err(error.into()),
     };
 

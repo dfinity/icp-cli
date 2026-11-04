@@ -81,6 +81,9 @@ zeroize = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 winreg = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true }
+
 [dev-dependencies]
 httptest = { workspace = true }
 icp-project = { workspace = true, features = ["test-util"] }

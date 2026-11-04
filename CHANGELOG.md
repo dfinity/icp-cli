@@ -8,6 +8,7 @@ air-gapped signing, extensions
 
 # Unreleased
 
+* fix: `icp network start` on Linux no longer fails with "failed to watch status directory ... Too many open files" when the user's inotify instance quota is used up by other programs (editors and file-sync clients hold instances for as long as they run). It warns instead, naming the limit, this process's open-file figures and the `sysctl` that raises the quota, and finds the launcher's status file by polling as it already does on WSL2. The same goes for an exhausted inotify watch quota.
 * chore: macOS on Intel (`x86_64-apple-darwin`) is no longer a release target. Releases ship no Intel macOS archive, the shell installer refuses that platform, and npm no longer publishes `@icp-sdk/icp-cli-darwin-x64`, so installing `@icp-sdk/icp-cli` on an Intel Mac warns of an unsupported platform. Homebrew dropped Intel macOS in September 2026, and GitHub is retiring its Intel macOS runners. v1.8.0 is the last release with an Intel macOS build.
 
 # v1.8.0

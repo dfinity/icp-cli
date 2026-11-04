@@ -3591,6 +3591,7 @@ dependencies = [
  "itertools 0.14.0",
  "k256",
  "keyring",
+ "nix 0.31.3",
  "notify",
  "num-bigint 0.4.8",
  "num-traits",

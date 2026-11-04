@@ -310,6 +310,16 @@ icp network stop
 icp network start -d
 ```
 
+**Network start warns that the native file watcher is unavailable**
+
+On Linux, `icp network start` watches the network's status directory with inotify, which the kernel rations per user. If the warning says the inotify instance quota is exhausted, other programs, typically editors and file-sync clients, are holding every instance the user may have. The network still starts, found by polling instead, so the warning can be ignored. To make it go away, raise the quota:
+
+```bash
+sudo sysctl fs.inotify.max_user_instances=1024
+```
+
+Persist that across reboots in a file under `/etc/sysctl.d/`, or close the programs holding the instances. A warning about the inotify watch quota names `fs.inotify.max_user_watches` instead, and is raised the same way.
+
 **Deployment fails**
 
 1. Verify the build succeeded: `icp build`

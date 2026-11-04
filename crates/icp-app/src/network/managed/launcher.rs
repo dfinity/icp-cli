@@ -1,15 +1,20 @@
 use async_dropper::{AsyncDrop, AsyncDropper};
 use async_trait::async_trait;
 use candid::Principal;
-use notify::{EventHandler, Watcher};
+use notify::{EventHandler, RecommendedWatcher, Watcher};
 use serde::Deserialize;
 use snafu::prelude::*;
 use std::{io::ErrorKind, process::Stdio, time::Duration};
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
-use tokio::{process::Child, select, sync::mpsc::Sender, time::Instant};
+use tokio::{
+    process::Child,
+    select,
+    sync::mpsc::{Receiver, Sender},
+    time::Instant,
+};
 use tracing::{info, warn};
 
-use crate::network::config::ChildLocator;
+use crate::network::{config::ChildLocator, managed::inotify::WatcherLimit};
 use icp_project::{
     network::{ManagedLauncherConfig, Port},
     prelude::*,
@@ -343,10 +348,47 @@ pub fn wait_for_single_line_file(
     path: &Path,
 ) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
     let dir = path.parent().unwrap();
-    // notify will get here faster
-    let (rec_tx, mut rec_rx) = tokio::sync::mpsc::channel(10);
-    let mut rec_watcher =
-        notify::recommended_watcher(WatchRecv(rec_tx)).context(WatchSnafu { path: &dir })?;
+    // notify will get here faster, when the host lets it. On Linux a native
+    // watcher is an inotify instance, which the kernel rations per user, and
+    // the editors and sync clients on a desktop can have used the quota up
+    // before we ask. That is no reason not to start the network: the poll
+    // watcher finds the file on its own, a tick later. So a watcher refused
+    // for a limit is given up with a warning that names the limit and what
+    // would raise it; a watcher refused for any other reason is still an error.
+    let (rec_tx, rec_rx) = tokio::sync::mpsc::channel(10);
+    let rec_watcher = match native_watcher(dir, rec_tx) {
+        Ok(watcher) => Some(watcher),
+        Err(err) => match WatcherLimit::of(&err) {
+            Some(limit) => {
+                warn!(
+                    "native file watcher unavailable; polling for the network status file instead: {limit}"
+                );
+                None
+            }
+            None => return Err(err).context(WatchSnafu { path: &dir }),
+        },
+    };
+    watch_for_single_line_file(path, rec_watcher, rec_rx)
+}
+
+/// The host's own watcher on `dir`, delivering to `tx`.
+fn native_watcher(
+    dir: &Path,
+    tx: Sender<notify::Result<notify::Event>>,
+) -> notify::Result<RecommendedWatcher> {
+    let mut watcher = notify::recommended_watcher(WatchRecv(tx))?;
+    watcher.watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)?;
+    Ok(watcher)
+}
+
+/// [`wait_for_single_line_file`] past the native watcher, which it takes as
+/// given, or as absent, in which case polling alone finds the file.
+fn watch_for_single_line_file(
+    path: &Path,
+    rec_watcher: Option<RecommendedWatcher>,
+    mut rec_rx: Receiver<notify::Result<notify::Event>>,
+) -> Result<impl Future<Output = Result<String, WaitForFileError>> + use<>, WaitForFileError> {
+    let dir = path.parent().unwrap();
     // poll is more reliable when dealing with vfs like 9p, notably in WSL2
     let (poll_tx, mut poll_rx) = tokio::sync::mpsc::channel(10);
     let mut poll_watcher = notify::PollWatcher::new(
@@ -356,9 +398,6 @@ pub fn wait_for_single_line_file(
             .with_compare_contents(true),
     )
     .context(WatchSnafu { path: &dir })?;
-    rec_watcher
-        .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
-        .context(WatchSnafu { path: &dir })?;
     poll_watcher
         .watch(dir.as_std_path(), notify::RecursiveMode::NonRecursive)
         .context(WatchSnafu { path: &dir })?;
@@ -366,11 +405,14 @@ pub fn wait_for_single_line_file(
     let path = path.to_path_buf();
     let dir = dir.to_path_buf();
     Ok(async move {
+        let native = rec_watcher.is_some();
         let _rec_watcher = rec_watcher;
         let _poll_watcher = poll_watcher;
         loop {
             let evt = select! {
-                rec = rec_rx.recv() => rec,
+                // Without a native watcher its channel has no sender, and
+                // would answer at once with nothing.
+                rec = rec_rx.recv(), if native => rec,
                 poll = poll_rx.recv() => poll,
             };
             let Some(res) = evt else {
@@ -448,6 +490,52 @@ impl EventHandler for WatchRecv {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file written after the wait began is found by polling alone, which
+    /// is what the wait falls back to when the host refuses a native watcher.
+    #[tokio::test]
+    async fn polling_alone_finds_the_file() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let status = dir.path().join("status.json");
+        let (no_native, rec_rx) = tokio::sync::mpsc::channel(10);
+        drop(no_native);
+        let wait = watch_for_single_line_file(&status, None, rec_rx).unwrap();
+        let writer = {
+            let status = status.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                std::fs::write(&status, "{\"v\":\"1\"}\n").unwrap();
+            })
+        };
+        let content = tokio::time::timeout(Duration::from_secs(10), wait)
+            .await
+            .expect("polling should find the file")
+            .unwrap();
+        assert_eq!(content, "{\"v\":\"1\"}\n");
+        writer.await.unwrap();
+    }
+
+    /// With both watchers up, the wait still ends on the file, whichever
+    /// watcher saw it first.
+    #[tokio::test]
+    async fn both_watchers_find_the_file() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let status = dir.path().join("status.json");
+        let wait = wait_for_single_line_file(&status).unwrap();
+        let writer = {
+            let status = status.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                std::fs::write(&status, "ready\n").unwrap();
+            })
+        };
+        let content = tokio::time::timeout(Duration::from_secs(10), wait)
+            .await
+            .expect("a watcher should find the file")
+            .unwrap();
+        assert_eq!(content, "ready\n");
+        writer.await.unwrap();
+    }
 
     #[test]
     fn output_tail_keeps_short_content_verbatim() {

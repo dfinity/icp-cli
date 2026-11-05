@@ -73,7 +73,10 @@ fn a_script_step_is_refused_as_untrusted_but_not_otherwise() {
         .failure()
         .stderr(
             contains("more than an untrusted project may")
-                .and(contains("canister 'backend' has a script build step")),
+                .and(contains(
+                    "canister 'backend' has a build step that is not a pre-built module",
+                ))
+                .and(contains("(script) cp backend.wasm")),
         );
 }
 

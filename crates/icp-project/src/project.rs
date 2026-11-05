@@ -1690,6 +1690,115 @@ pub async fn consolidate_manifest(
     })
 }
 
+/// A project loaded through a [`Confined`] filesystem reads nothing outside
+/// its root, whatever path its manifest names: the loader resolves every
+/// path it reads itself through the filesystem it is given, so the one rule
+/// holds them all. (A local recipe template is read by the [`Resolve`]
+/// implementation instead, which is why these tests supply none.)
+#[cfg(all(test, feature = "host"))]
+mod confined_tests {
+    use super::*;
+    use crate::canister::recipe::{Fetched, Resolve, ResolveError};
+    use crate::files::{Confined, HostFileSystem};
+    use crate::manifest::recipe::Recipe;
+    use camino_tempfile::Utf8TempDir;
+
+    struct NoRecipes;
+
+    #[async_trait::async_trait]
+    impl Resolve for NoRecipes {
+        async fn resolve(&self, _recipe: &Recipe) -> Result<Fetched, ResolveError> {
+            unreachable!("no manifest here names a recipe")
+        }
+    }
+
+    /// A tree with a project directory and, beside it, what the project must
+    /// not reach: an argument file, and a canister directory of its own.
+    fn tree(manifest: &str) -> Utf8TempDir {
+        let dir = Utf8TempDir::new().expect("temp dir");
+        let project = dir.path().join("project");
+        std::fs::create_dir_all(&project).expect("mkdir");
+        std::fs::write(project.join(PROJECT_MANIFEST), manifest).expect("write");
+        std::fs::write(dir.path().join("outside.bin"), b"secret").expect("write");
+        std::fs::create_dir_all(dir.path().join("elsewhere")).expect("mkdir");
+        std::fs::write(
+            dir.path().join("elsewhere").join(CANISTER_MANIFEST),
+            "name: stray\nbuild:\n  steps:\n    - type: pre-built\n      path: stray.wasm\n",
+        )
+        .expect("write");
+        dir
+    }
+
+    async fn load(files: &dyn FileSystem, pdir: &Path) -> Result<Project, String> {
+        let m: ProjectManifest = load_manifest_from_path(files, &pdir.join(PROJECT_MANIFEST))
+            .await
+            .map_err(|e| chain(&e))?;
+        consolidate_manifest(files, pdir, &NoRecipes, &m)
+            .await
+            .map_err(|e| chain(&e))
+    }
+
+    fn chain(e: &(dyn std::error::Error + 'static)) -> String {
+        let mut text = e.to_string();
+        let mut source = e.source();
+        while let Some(cause) = source {
+            text.push_str(": ");
+            text.push_str(&cause.to_string());
+            source = cause.source();
+        }
+        text
+    }
+
+    #[tokio::test]
+    async fn an_argument_file_outside_the_root_is_read_by_the_host_and_refused_confined() {
+        let dir = tree(indoc::indoc! {"
+            canisters:
+              - name: backend
+                init_args:
+                  path: ../outside.bin
+                  format: bin
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "});
+        let pdir = dir.path().join("project");
+
+        let project = load(&HostFileSystem, &pdir)
+            .await
+            .expect("the host reads anywhere");
+        let (_, backend) = &project.canisters["backend"];
+        assert_eq!(
+            backend.init_args,
+            Some(CanisterArgs::Binary(b"secret".to_vec()))
+        );
+
+        let confined = Confined::new(&pdir);
+        let err = load(&confined, &pdir)
+            .await
+            .expect_err("confined, the read is refused");
+        assert!(err.contains("init_args"), "{err}");
+        assert!(err.contains("is outside"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_canister_directory_outside_the_root_is_found_by_the_host_and_not_confined() {
+        let dir = tree("canisters:\n  - ../elsewhere\n");
+        let pdir = dir.path().join("project");
+
+        let project = load(&HostFileSystem, &pdir)
+            .await
+            .expect("the host reads anywhere");
+        assert!(project.canisters.contains_key("stray"));
+
+        let confined = Confined::new(&pdir);
+        let err = load(&confined, &pdir)
+            .await
+            .expect_err("confined, the directory is not there");
+        assert!(err.contains("../elsewhere"), "{err}");
+    }
+}
+
 #[cfg(all(test, feature = "host"))]
 mod recipe_sync_tests {
     use super::*;

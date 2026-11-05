@@ -1,7 +1,7 @@
 use indoc::formatdoc;
 use predicates::{
     prelude::PredicateBooleanExt,
-    str::{contains, starts_with},
+    str::{contains, is_match, starts_with},
 };
 
 use crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients};
@@ -86,7 +86,7 @@ async fn canister_uninstall() {
         ])
         .assert()
         .failure()
-        .stderr(contains("no wasm module"));
+        .stderr(is_match("(?i)no wasm module").unwrap());
 }
 
 #[tokio::test]

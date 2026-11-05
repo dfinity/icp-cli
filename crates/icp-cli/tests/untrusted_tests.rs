@@ -186,6 +186,115 @@ fn a_symlink_under_the_project_is_refused_as_untrusted() {
         );
 }
 
+/// The module a step names goes through the confined filesystem too, before
+/// its path is handed to whatever opens it, so a module outside the project
+/// is refused as its own path and not merely once the build tries to copy it.
+#[test]
+fn a_module_outside_the_project_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: ../outside.wasm
+        "#},
+    );
+    std::fs::copy(
+        ctx.make_asset("example_icp_mo.wasm"),
+        project_dir.parent().unwrap().join("outside.wasm"),
+    )
+    .expect("copy wasm outside");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("outside.wasm").and(contains("is outside")));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_module_through_a_symlink_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: linked.wasm
+        "#},
+    );
+    std::os::unix::fs::symlink(
+        project_dir.join("backend.wasm"),
+        project_dir.join("linked.wasm"),
+    )
+    .expect("symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("linked.wasm")
+                .and(contains("passes through"))
+                .and(contains("symlink")),
+        );
+}
+
+/// A relative project root is taken from the working directory. The confined
+/// filesystem holds paths to the root by its spelling, so a root spelled
+/// `icp` would hold `icp/icp.yaml` to `icp/icp/icp.yaml` if it were not.
+#[test]
+fn a_relative_project_root_is_taken_from_the_working_directory() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#},
+    );
+    let parent = project_dir.parent().unwrap();
+
+    ctx.icp()
+        .current_dir(parent)
+        .args(["build", "--untrusted", "--project-root-override", "icp"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(parent)
+        .env("ICP_PROJECT_ROOT", "icp")
+        .args(["build", "--untrusted"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn untrusted_needs_a_project_to_hold_to() {
     let ctx = TestContext::new();

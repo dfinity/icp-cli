@@ -26,8 +26,11 @@
 //! asks it for the template, and [`NoRecipes`] says no. The steps can be seen
 //! in the loaded project, and [`vet`] holds them to the list there.
 //! [`Vetted`] wraps a loader so that every load is vetted before the project
-//! is handed out, and a consumer composing its own host holds the three
-//! together:
+//! is handed out. The module a step names is the business of the
+//! [`wasm::Fetch`] seam, since a step hands the path it gets back to whatever
+//! opens the module — the plugin runtime opens it for itself — so
+//! [`LocalModules`] reads each one through the confined filesystem first. A
+//! consumer composing its own host holds the four together:
 //!
 //! ```ignore
 //! let files = Arc::new(Confined::refusing_links(&root));
@@ -36,18 +39,27 @@
 //!     recipe: Arc::new(NoRecipes),
 //!     files: files.clone(),
 //! });
+//! let wasm = LocalModules::new(files.clone());
 //! ```
 //!
 //! A checksum on a module is not asked for. It is the bundler's promise about
 //! its own archive, and the same untrusted hand wrote both, so it says nothing
 //! about what the project can reach.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
-use snafu::{ResultExt, Snafu};
+use icp_events::StepReporter;
+use sha2::{Digest, Sha256};
+use snafu::{ResultExt, Snafu, ensure};
 
 use crate::{
     Project, ProjectLoad, ProjectLoadError, UntrustedSnafu,
-    canister::recipe::{Fetched, Resolve, ResolveError},
+    canister::{
+        recipe::{Fetched, Resolve, ResolveError},
+        wasm,
+    },
+    files::{FileSystem, FsError},
     manifest::{
         adapter::prebuilt::SourceField,
         canister::{BuildStep, SyncStep},
@@ -162,6 +174,96 @@ impl Resolve for NoRecipes {
         Err(ResolveError::new(RecipeRefused {
             recipe: recipe.recipe_type.to_string(),
         }))
+    }
+}
+
+/// The [`wasm::Fetch`] of an untrusted project: every module is a file in it.
+///
+/// A module is read through the project's filesystem — the [`Confined`] that
+/// refuses links — so one outside the root, or reached through a symlink, is
+/// refused here: before a checksum is taken of it, and before its path goes
+/// back to a step that hands it to something that opens the file for itself,
+/// as the plugin runtime does. A module named by URL is not fetched. [`vet`]
+/// has already refused the step that names one; this is the seam saying the
+/// same to a caller that never loaded the project.
+///
+/// [`Confined`]: crate::files::Confined
+pub struct LocalModules {
+    files: Arc<dyn FileSystem>,
+}
+
+impl LocalModules {
+    pub fn new(files: Arc<dyn FileSystem>) -> Self {
+        Self { files }
+    }
+
+    async fn module(
+        &self,
+        source: &SourceField,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        reporter: &StepReporter,
+    ) -> Result<PathBuf, ModuleRefused> {
+        let local = match source {
+            SourceField::Local(local) => local,
+            SourceField::Remote(remote) => return RemoteSnafu { url: &remote.url }.fail(),
+        };
+        let path = base_dir.join(&local.path);
+        reporter.info(format!("Reading wasm: {}", local.path));
+        let bytes = self.files.read(&path).await?;
+        if let Some(expected) = sha256 {
+            reporter.info("Verifying checksum");
+            let actual = hex::encode(Sha256::digest(&bytes));
+            ensure!(
+                actual == expected,
+                ChecksumSnafu {
+                    path,
+                    expected,
+                    actual,
+                }
+            );
+        }
+        Ok(path)
+    }
+}
+
+/// A module an untrusted project names that it is not given.
+#[derive(Debug, Snafu)]
+pub enum ModuleRefused {
+    #[snafu(display(
+        "module '{url}' is not fetched: an untrusted project's modules are files in it, as a \
+         bundle's are"
+    ))]
+    Remote { url: String },
+
+    /// The filesystem the project is confined to would not read it: it lies
+    /// outside the root, passes through a link, or is not there. Its message
+    /// names the path and says which, so it is passed through as it is.
+    #[snafu(transparent)]
+    ReadModule { source: FsError },
+
+    #[snafu(display(
+        "module '{path}' is not the one the manifest names: its sha256 is {actual}, not {expected}"
+    ))]
+    Checksum {
+        path: PathBuf,
+        expected: String,
+        actual: String,
+    },
+}
+
+#[async_trait]
+impl wasm::Fetch for LocalModules {
+    async fn wasm(
+        &self,
+        source: &SourceField,
+        base_dir: &Path,
+        sha256: Option<&str>,
+        reporter: &StepReporter,
+    ) -> Result<PathBuf, wasm::FetchError> {
+        self.module(source, base_dir, sha256, reporter)
+            .await
+            .map_err(wasm::FetchError::new)
     }
 }
 
@@ -335,5 +437,117 @@ mod tests {
             .load()
             .await
             .expect("the minimal project is pre-built");
+    }
+
+    /// The modules go through a [`Confined`](crate::files::Confined) that
+    /// refuses links, which is a host filesystem, so this is held to the
+    /// `host` feature as that is.
+    #[cfg(feature = "host")]
+    mod modules {
+        use super::*;
+        use crate::canister::wasm::Fetch as _;
+        use crate::files::Confined;
+        use crate::manifest::adapter::prebuilt::{LocalSource, RemoteSource};
+
+        /// A project holding `backend.wasm`, beside a file it must not
+        /// reach, and on unix a link in the project to that file.
+        fn project() -> (camino_tempfile::Utf8TempDir, LocalModules, PathBuf) {
+            let dir = camino_tempfile::tempdir().unwrap();
+            let root = dir.path().join("project");
+            std::fs::create_dir(&root).unwrap();
+            std::fs::write(root.join("backend.wasm"), b"module").unwrap();
+            std::fs::write(dir.path().join("outside.wasm"), b"secret").unwrap();
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(dir.path().join("outside.wasm"), root.join("link.wasm"))
+                .unwrap();
+            let files = Arc::new(Confined::refusing_links(&root));
+            (dir, LocalModules::new(files), root)
+        }
+
+        async fn fetch(
+            modules: &LocalModules,
+            base_dir: &Path,
+            source: SourceField,
+            sha256: Option<&str>,
+        ) -> Result<PathBuf, String> {
+            modules
+                .wasm(&source, base_dir, sha256, &StepReporter::null())
+                .await
+                .map_err(|err| err.to_string())
+        }
+
+        fn local(path: &str) -> SourceField {
+            SourceField::Local(LocalSource { path: path.into() })
+        }
+
+        #[tokio::test]
+        async fn a_module_in_the_project_is_read_and_its_checksum_checked() {
+            let (_dir, modules, root) = project();
+            let sha = hex::encode(Sha256::digest(b"module"));
+
+            let path = fetch(&modules, &root, local("backend.wasm"), None)
+                .await
+                .expect("no checksum to check");
+            assert_eq!(path, root.join("backend.wasm"));
+            fetch(&modules, &root, local("backend.wasm"), Some(&sha))
+                .await
+                .expect("the right checksum");
+
+            let err = fetch(&modules, &root, local("backend.wasm"), Some("00"))
+                .await
+                .unwrap_err();
+            assert!(err.contains("backend.wasm"), "{err}");
+            assert!(err.contains(&sha), "{err}");
+            assert!(err.contains("not 00"), "{err}");
+        }
+
+        /// Refused on the read, before any checksum is taken and before the
+        /// path is returned to be opened by something else.
+        #[tokio::test]
+        async fn a_module_outside_the_project_is_refused() {
+            let (dir, modules, root) = project();
+            for source in [
+                local("../outside.wasm"),
+                local(dir.path().join("outside.wasm").as_str()),
+            ] {
+                let err = fetch(&modules, &root, source, None).await.unwrap_err();
+                assert!(err.contains("is outside"), "{err}");
+                assert!(err.contains("outside.wasm"), "{err}");
+            }
+            // Nor does naming it from a canister directory below the root help.
+            let err = fetch(
+                &modules,
+                &root.join("src"),
+                local("../../outside.wasm"),
+                None,
+            )
+            .await
+            .unwrap_err();
+            assert!(err.contains("outside.wasm"), "{err}");
+        }
+
+        #[cfg(unix)]
+        #[tokio::test]
+        async fn a_module_through_a_link_is_refused() {
+            let (_dir, modules, root) = project();
+            let err = fetch(&modules, &root, local("link.wasm"), None)
+                .await
+                .unwrap_err();
+            assert!(err.contains("passes through"), "{err}");
+            assert!(err.contains("link.wasm"), "{err}");
+        }
+
+        #[tokio::test]
+        async fn a_module_named_by_url_is_not_fetched() {
+            let (_dir, modules, root) = project();
+            let remote = SourceField::Remote(RemoteSource {
+                url: "https://example.com/backend.wasm".into(),
+            });
+            let err = fetch(&modules, &root, remote, Some("abc"))
+                .await
+                .unwrap_err();
+            assert!(err.contains("is not fetched"), "{err}");
+            assert!(err.contains("example.com/backend.wasm"), "{err}");
+        }
     }
 }

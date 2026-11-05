@@ -1888,8 +1888,6 @@ fn resolve_within_project(
     Ok(resolved)
 }
 
-/// Refuse to write the bundle output into a directory we are about to recursively archive —
-/// otherwise the partial bundle file would be included in itself.
 /// Refuse an output path inside a directory the bundle copies, and hand back
 /// its canonical form for the walk, which can reach the output through a
 /// symlink that this lexical check cannot see.

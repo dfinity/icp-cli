@@ -12,7 +12,14 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
+use icp_project::{
+    Lazy, ProjectLoad, ProjectLoadImpl,
+    canister::recipe::Resolve,
+    files::{Confined, FileSystem, HostFileSystem},
+    host::Host,
+    manifest::{self, ProjectRootLocate as _},
+    store_id, untrusted,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -36,13 +43,25 @@ pub enum ContextInitError {
     PackageCache {
         source: icp_project::fs::lock::LockError,
     },
+
+    #[snafu(display("failed to locate the project to treat as untrusted"))]
+    UntrustedRoot {
+        source: manifest::ProjectRootLocateError,
+    },
 }
 
+/// `untrusted` treats the project as one someone else handed over: it is
+/// loaded through a filesystem confined to its root that refuses symlinks, no
+/// recipe is fetched, and a project with a script step or a remote module or
+/// plugin is refused before any command acts on it. See
+/// [`icp_project::untrusted`]. The root is located up front, since the
+/// filesystem is held to it from the start, so there has to be a project.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
+    untrusted: bool,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -100,14 +119,25 @@ pub fn initialize(
         pkg_cache.clone(),
     ));
 
-    // Recipes
-    let recipe = Arc::new(RecipeFetcher {
-        http_client,
-        pkg_cache,
-    });
+    // Recipes: fetched from wherever the manifest points, unless the project
+    // is untrusted, in which case none is.
+    let recipe: Arc<dyn Resolve> = if untrusted {
+        Arc::new(untrusted::NoRecipes)
+    } else {
+        Arc::new(RecipeFetcher {
+            http_client,
+            pkg_cache,
+        })
+    };
 
-    // The project's files come from this machine.
-    let files = Arc::new(icp_project::files::HostFileSystem);
+    // The project's files come from this machine: the whole of it for the
+    // user's own project, the project directory alone for an untrusted one.
+    let files: Arc<dyn FileSystem> = if untrusted {
+        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
+        Arc::new(Confined::refusing_links(&root))
+    } else {
+        Arc::new(HostFileSystem)
+    };
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
@@ -125,8 +155,11 @@ pub fn initialize(
         files: files.clone(),
     };
 
-    let pload = Lazy::new(pload);
-    let pload = Arc::new(pload);
+    let pload: Arc<dyn ProjectLoad> = if untrusted {
+        Arc::new(Lazy::new(untrusted::Vetted::new(pload)))
+    } else {
+        Arc::new(Lazy::new(pload))
+    };
 
     // Telemetry data bag (written by subsystems, read at session finish)
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());

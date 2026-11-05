@@ -43,6 +43,7 @@ pub mod random;
 pub mod signal;
 pub mod store_artifact;
 pub mod store_id;
+pub mod untrusted;
 
 /// The per-project state directory. `cache` holds what can be thrown away and
 /// rebuilt (ids for managed networks, build artifacts); `data` holds what
@@ -219,6 +220,9 @@ pub enum ProjectLoadError {
     Project {
         source: project::ConsolidateManifestError,
     },
+
+    #[snafu(display("the project asks for more than an untrusted project may"))]
+    Untrusted { source: untrusted::Refused },
 }
 
 #[async_trait]

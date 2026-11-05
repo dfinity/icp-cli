@@ -120,6 +120,9 @@ This document contains the help content for the `icp` command-line program.
 
   Default value: `false`
 * `--identity-password-file <FILE>` — Read identity password from a file instead of prompting
+* `--untrusted` — Treat the project as one someone else handed over: refuse a script build or sync step, a recipe, a module or plugin fetched from a URL, a path outside the project root, and a symlink under it
+
+  Default value: `false`
 
 
 

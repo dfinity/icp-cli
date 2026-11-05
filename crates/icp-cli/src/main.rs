@@ -88,6 +88,12 @@ struct Cli {
     #[arg(long, global = true, value_name = "FILE", help_heading = heading::GLOBAL_PARAMETERS, value_hint = ValueHint::FilePath)]
     identity_password_file: Option<PathBuf>,
 
+    /// Treat the project as one someone else handed over: refuse a script
+    /// build or sync step, a recipe, a module or plugin fetched from a URL,
+    /// a path outside the project root, and a symlink under it
+    #[arg(long, default_value = "false", global = true, help_heading = heading::GLOBAL_PARAMETERS)]
+    untrusted: bool,
+
     /// Generate markdown documentation for all commands and exit
     #[arg(long, hide = true)]
     markdown_help: bool,
@@ -135,6 +141,7 @@ async fn run() -> Result<(), Error> {
             identity_password_file: matches
                 .get_one::<PathBuf>("identity_password_file")
                 .cloned(),
+            untrusted: matches.get_flag("untrusted"),
             markdown_help: false,
             command: None,
         },
@@ -214,6 +221,7 @@ async fn run() -> Result<(), Error> {
         cli.debug,
         password_func,
         pem_session_duration,
+        cli.untrusted,
     )?;
 
     // Extension commands are left out of telemetry: telemetry parses against

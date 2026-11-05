@@ -248,6 +248,53 @@ pub enum BundleError {
         path: PathBuf,
         source: crate::files::FsError,
     },
+
+    #[snafu(display(
+        "'{path}' resolves to '{target}', outside the project directory '{root}'; a symlink \
+         there points out of the project, and a bundle holds only what is inside it"
+    ))]
+    LinkEscapesProject {
+        path: PathBuf,
+        target: PathBuf,
+        root: PathBuf,
+    },
+
+    #[snafu(display("'{path}' is a symlink to '{target}', which does not exist"))]
+    DanglingLink { path: PathBuf, target: String },
+
+    #[snafu(display(
+        "'{path}' is a symlink back to '{target}', a directory the bundle is already copying; \
+         a bundle cannot hold a cycle"
+    ))]
+    LinkCycle { path: PathBuf, target: PathBuf },
+
+    #[snafu(display("cannot resolve '{path}' to add it to the bundle"))]
+    ResolveArchiveEntry {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[snafu(display(
+        "'{path}' is neither a file nor a directory, which are all a bundle can hold"
+    ))]
+    UnsupportedEntry { path: PathBuf },
+
+    #[snafu(display("failed to list '{path}' to add it to the bundle"))]
+    ListDir {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[snafu(display(
+        "'{dir}' holds an entry named '{name}' that is not UTF-8, which a bundle cannot carry"
+    ))]
+    NameNotUtf8 { dir: PathBuf, name: String },
+
+    #[snafu(display(
+        "'{path}' is the bundle's own output file '{output}', reached through a symlink, and \
+         it is still being written; choose an output path outside what the bundle copies"
+    ))]
+    OutputReachedThroughLink { path: PathBuf, output: PathBuf },
 }
 
 /// In-memory bytes destined for a single tar entry.
@@ -431,7 +478,7 @@ pub async fn create_bundle(
     let canonical_sync_dirs =
         validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
     validate_env_var_files(files, &canisters, &canonical_project_dir).await?;
-    validate_output_path(files, output, &canonical_sync_dirs).await?;
+    let canonical_output = validate_output_path(files, output, &canonical_sync_dirs).await?;
 
     build_many(
         canisters.clone(),
@@ -510,6 +557,8 @@ pub async fn create_bundle(
     write_archive(
         files,
         output,
+        &canonical_project_dir,
+        &canonical_output,
         &manifests,
         &bundle_artifacts,
         &args_files,
@@ -1444,13 +1493,13 @@ struct ArchiveWriter<W: Write> {
 impl<W: Write> ArchiveWriter<W> {
     fn new(inner: W) -> Self {
         let mut builder = Builder::new(inner);
-        // Record symlinks as Symlink entries rather than slurping their targets — keeps secrets
-        // outside the project from leaking via a symlinked asset dir.
+        // Every path handed to the builder is canonical, so there is no link left for it to
+        // follow; this is the backstop that keeps a link out of the archive should one get
+        // through, where it would otherwise be slurped as whatever it reaches.
         builder.follow_symlinks(false);
-        // Strip mtime/uid/gid from entry headers so they are metadata-normalized across machines.
-        // Note this does not make the archive fully byte-reproducible: `append_dir` relies on
-        // `append_dir_all`, which walks `read_dir` in the filesystem's order, so entry ordering
-        // within a directory can still differ between machines.
+        // Strip mtime/uid/gid from entry headers so they are metadata-normalized across
+        // machines, and `dir` appends a directory's entries in sorted order, so the same tree
+        // gives the same archive wherever it is bundled.
         builder.mode(tar::HeaderMode::Deterministic);
         Self { builder }
     }
@@ -1468,19 +1517,86 @@ impl<W: Write> ArchiveWriter<W> {
     }
 
     /// Appends a directory's whole contents, walking the host filesystem rather
-    /// than the [`FileSystem`] seam the rest of bundling reads through.
+    /// than the [`FileSystem`] seam the rest of bundling reads through: the seam
+    /// reports a link's target as the file it points at and has no way to say
+    /// otherwise, and a bundle holds only regular files and directories.
+    /// Bundling from anything but a host filesystem needs the seam to describe
+    /// links first.
     ///
-    /// `tar`'s walk is what keeps a symlink a symlink, per
-    /// [`new`](ArchiveWriter::new); the seam reports a link's target as the file
-    /// it points at and has no way to say otherwise, so reading through it would
-    /// slurp whatever the link reaches instead. Bundling from anything but a
-    /// host filesystem needs the seam to describe links first.
-    fn dir(&mut self, src_path: &Path, archive_prefix: &str) -> Result<(), BundleError> {
+    /// Every entry met is resolved through its symlinks and must land under
+    /// `root`, the canonical project directory. One that does is appended as
+    /// what it points at, so a project may link to its own files freely; one
+    /// that does not is refused, naming the link and where it leads, as is a
+    /// link that dangles, leads back to a directory already being copied, or
+    /// reaches `output`, the bundle itself, which is being written meanwhile.
+    /// Entries go in sorted order, so the same tree gives the same archive.
+    fn dir(
+        &mut self,
+        src_path: &Path,
+        archive_prefix: &str,
+        root: &Path,
+        output: &Path,
+    ) -> Result<(), BundleError> {
+        self.walk(src_path, archive_prefix, root, output, &mut Vec::new())
+    }
+
+    /// `open` holds the canonical directories on the way down from `dir`'s
+    /// start, which is how a link back to one of them is told from a second
+    /// link to a directory already copied and finished with.
+    fn walk(
+        &mut self,
+        src_path: &Path,
+        archive_path: &str,
+        root: &Path,
+        output: &Path,
+        open: &mut Vec<PathBuf>,
+    ) -> Result<(), BundleError> {
+        let real = resolve_within_root(src_path, root)?;
+        if open.contains(&real) {
+            return LinkCycleSnafu {
+                path: src_path.to_path_buf(),
+                target: real,
+            }
+            .fail();
+        }
         self.builder
-            .append_dir_all(archive_prefix, src_path.as_std_path())
+            .append_dir(archive_path, real.as_std_path())
             .context(WriteArchiveEntrySnafu {
-                path: PathBuf::from(archive_prefix),
-            })
+                path: PathBuf::from(archive_path),
+            })?;
+        open.push(real.clone());
+        // Listed where the directory really is, but each entry is named by the
+        // path it was reached by, which is what a message about it should say.
+        for listed in list_dir(&real)? {
+            let Some(name) = listed.file_name() else {
+                continue;
+            };
+            let entry = src_path.join(name);
+            let entry_archive_path = format!("{archive_path}/{name}");
+            let target = resolve_within_root(&entry, root)?;
+            let meta = std::fs::metadata(&target).context(ResolveArchiveEntrySnafu {
+                path: entry.clone(),
+            })?;
+            if meta.is_dir() {
+                self.walk(&entry, &entry_archive_path, root, output, open)?;
+            } else if target == output {
+                return OutputReachedThroughLinkSnafu {
+                    path: entry,
+                    output: output.to_path_buf(),
+                }
+                .fail();
+            } else if meta.is_file() {
+                self.builder
+                    .append_path_with_name(target.as_std_path(), &entry_archive_path)
+                    .context(WriteArchiveEntrySnafu {
+                        path: PathBuf::from(entry_archive_path),
+                    })?;
+            } else {
+                return UnsupportedEntrySnafu { path: entry }.fail();
+            }
+        }
+        open.pop();
+        Ok(())
     }
 
     fn into_inner(self) -> Result<W, BundleError> {
@@ -1491,6 +1607,8 @@ impl<W: Write> ArchiveWriter<W> {
 async fn write_archive(
     files: &dyn FileSystem,
     output: &Path,
+    canonical_project_dir: &Path,
+    canonical_output: &Path,
     manifests: &[InstanceManifest],
     artifacts: &BundleArtifacts,
     args_files: &[ArgsFile],
@@ -1564,17 +1682,29 @@ async fn write_archive(
     }
 
     for d in &artifacts.plugin_dirs {
-        archive.dir(&d.src_path, &d.archive_prefix)?;
+        archive.dir(
+            &d.src_path,
+            &d.archive_prefix,
+            canonical_project_dir,
+            canonical_output,
+        )?;
     }
 
     for pf in &artifacts.plugin_files {
-        let data = files
-            .read(&pf.src_path)
-            .await
-            .context(ReadPluginFileSnafu {
-                canister: pf.canister_name.clone(),
-                file: pf.orig_file.clone(),
-            })?;
+        // Validated lexically before the build, when it need not have existed;
+        // now it does, so a symlink in it is followed and held to the project
+        // like every other entry.
+        let src = canonicalize_within_project(
+            files,
+            &pf.src_path,
+            canonical_project_dir,
+            &pf.canister_name,
+        )
+        .await?;
+        let data = files.read(&src).await.context(ReadPluginFileSnafu {
+            canister: pf.canister_name.clone(),
+            file: pf.orig_file.clone(),
+        })?;
         archive.bytes(&pf.archive_path, &data)?;
     }
 
@@ -1758,13 +1888,14 @@ fn resolve_within_project(
     Ok(resolved)
 }
 
-/// Refuse to write the bundle output into a directory we are about to recursively archive —
-/// otherwise the partial bundle file would be included in itself.
+/// Refuse an output path inside a directory the bundle copies, and hand back
+/// its canonical form for the walk, which can reach the output through a
+/// symlink that this lexical check cannot see.
 async fn validate_output_path(
     files: &dyn FileSystem,
     output: &Path,
     canonical_sync_dirs: &[PathBuf],
-) -> Result<(), BundleError> {
+) -> Result<PathBuf, BundleError> {
     let canonical_output = canonicalize_output(files, output).await?;
     for sync_dir in canonical_sync_dirs {
         if canonical_output.starts_with(sync_dir) {
@@ -1775,7 +1906,7 @@ async fn validate_output_path(
             .fail();
         }
     }
-    Ok(())
+    Ok(canonical_output)
 }
 
 fn validate_network_for_bundle(net: &NetworkManifest) -> Result<(), BundleError> {
@@ -1817,6 +1948,62 @@ fn is_absolute_bind_mount_host(mount: &str) -> bool {
     let host = mount.split(':').next().unwrap_or("");
     let h = host.as_bytes();
     !h.is_empty() && (h[0] == b'/' || h[0] == b'\\')
+}
+
+/// A directory's entries as full paths, sorted. [`crate::fs::read_dir`] skips a
+/// name that is not UTF-8, which for a bundle would mean a file silently left
+/// out; here it is refused instead, since the archive cannot name it.
+fn list_dir(dir: &Path) -> Result<Vec<PathBuf>, BundleError> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).context(ListDirSnafu { path: dir })? {
+        let entry = entry.context(ListDirSnafu { path: dir })?;
+        let path = PathBuf::from_path_buf(entry.path()).map_err(|_| BundleError::NameNotUtf8 {
+            dir: dir.to_path_buf(),
+            name: entry.file_name().to_string_lossy().into_owned(),
+        })?;
+        out.push(path);
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Where `path` comes to rest with every symlink followed, which must be under
+/// `root`. Walks the host directly, as [`ArchiveWriter::dir`] does: it is the
+/// one place bundling has to know whether a path is a link, and the
+/// [`FileSystem`] seam cannot say.
+fn resolve_within_root(path: &Path, root: &Path) -> Result<PathBuf, BundleError> {
+    let real = match dunce::canonicalize(path) {
+        Ok(real) => real,
+        Err(source) => {
+            // A link whose target is missing is dangling; a link that loops,
+            // or leads somewhere unreadable, fails for its own reason, kept.
+            if source.kind() == std::io::ErrorKind::NotFound
+                && let Ok(target) = std::fs::read_link(path)
+            {
+                return DanglingLinkSnafu {
+                    path: path.to_path_buf(),
+                    target: target.display().to_string(),
+                }
+                .fail();
+            }
+            return Err(BundleError::ResolveArchiveEntry {
+                path: path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    let real = PathBuf::from_path_buf(real).map_err(|_| BundleError::CanonicalizePath {
+        path: path.to_path_buf(),
+    })?;
+    if !real.starts_with(root) {
+        return LinkEscapesProjectSnafu {
+            path: path.to_path_buf(),
+            target: real,
+            root: root.to_path_buf(),
+        }
+        .fail();
+    }
+    Ok(real)
 }
 
 async fn canonicalize(files: &dyn FileSystem, path: &Path) -> Result<PathBuf, BundleError> {

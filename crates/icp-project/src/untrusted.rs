@@ -451,31 +451,53 @@ mod tests {
     }
 
     /// On a real disk the links are followed by the host, which is what the
-    /// CLI resolves through.
+    /// CLI resolves through: to the end of a chain of them, and through a
+    /// linked directory on the way.
     #[cfg(all(unix, feature = "host"))]
     #[tokio::test]
     async fn on_disk_a_link_is_followed_to_where_it_leads() {
         use crate::files::HostFileSystem;
+        use std::os::unix::fs::symlink;
 
         let dir = camino_tempfile::tempdir().unwrap();
         let root = dir.path().join("project");
         std::fs::create_dir(&root).unwrap();
         std::fs::write(root.join("backend.wasm"), b"module").unwrap();
         std::fs::write(dir.path().join("secret.wasm"), b"secret").unwrap();
-        std::os::unix::fs::symlink(dir.path().join("secret.wasm"), root.join("out.wasm")).unwrap();
-        std::os::unix::fs::symlink(root.join("backend.wasm"), root.join("in.wasm")).unwrap();
+        symlink(root.join("backend.wasm"), root.join("in.wasm")).unwrap();
+        // out.wasm -> hop.wasm -> ../secret.wasm
+        symlink(dir.path().join("secret.wasm"), root.join("hop.wasm")).unwrap();
+        symlink(root.join("hop.wasm"), root.join("out.wasm")).unwrap();
+        // outdir -> .. so that outdir/secret.wasm is the file outside
+        symlink(dir.path(), root.join("outdir")).unwrap();
+        // chain of three inside: a -> b -> c -> backend.wasm
+        symlink(root.join("backend.wasm"), root.join("c.wasm")).unwrap();
+        symlink(root.join("c.wasm"), root.join("b.wasm")).unwrap();
+        symlink(root.join("b.wasm"), root.join("a.wasm")).unwrap();
 
-        let mut project = project_with(vec![local("in.wasm")], vec![]).await;
+        let mut project = project_with(vec![], vec![]).await;
         project.dir = root.clone();
         project.canisters.get_mut("backend").unwrap().0 = root.clone();
-        vet(&project, &HostFileSystem)
-            .await
-            .expect("a link to the project's own module");
 
-        project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
-            steps: vec![local("out.wasm")],
-        };
-        let err = vet(&project, &HostFileSystem).await.unwrap_err();
-        assert!(matches!(err, Refused::OutsidePath { .. }), "{err}");
+        for path in ["in.wasm", "a.wasm"] {
+            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
+                steps: vec![local(path)],
+            };
+            vet(&project, &HostFileSystem)
+                .await
+                .unwrap_or_else(|err| panic!("{path} leads to the project's own module: {err}"));
+        }
+
+        for path in ["out.wasm", "outdir/secret.wasm"] {
+            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
+                steps: vec![local(path)],
+            };
+            let err = vet(&project, &HostFileSystem).await.unwrap_err();
+            assert!(
+                matches!(err, Refused::OutsidePath { ref resolved, .. }
+                    if resolved.file_name() == Some("secret.wasm")),
+                "{path}: {err}"
+            );
+        }
     }
 }

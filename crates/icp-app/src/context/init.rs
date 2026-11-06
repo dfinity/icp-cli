@@ -13,12 +13,8 @@ use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
 use icp_project::{
-    Lazy, ProjectLoad, ProjectLoadImpl,
-    canister::{recipe::Resolve, wasm},
-    files::{Confined, FileSystem, HostFileSystem},
-    host::Host,
-    manifest::{self, ProjectRootLocate as _},
-    store_id, untrusted,
+    Lazy, ProjectLoad, ProjectLoadImpl, files::HostFileSystem, host::Host, manifest, store_id,
+    untrusted,
 };
 
 #[derive(Debug, Snafu)]
@@ -43,21 +39,13 @@ pub enum ContextInitError {
     PackageCache {
         source: icp_project::fs::lock::LockError,
     },
-
-    #[snafu(display("failed to locate the project to treat as untrusted"))]
-    UntrustedRoot {
-        source: manifest::ProjectRootLocateError,
-    },
 }
 
 /// `untrusted` holds the project to what one someone else handed over may
-/// have, the shape a bundle has — see [`icp_project::untrusted`] for the
-/// list: it is loaded through a filesystem confined to its root on which
-/// every path is a regular file or directory, no recipe is used, every
-/// module is read from the project through that filesystem, and the loaded
-/// project is vetted for the steps on the list before any command acts on
-/// it. The root is located up front, since the filesystem is held to it from
-/// the start, so there has to be a project.
+/// run — see [`icp_project::untrusted`] for the list: the loaded project is
+/// vetted for its steps and for where the file each names resolves, before
+/// any command acts on it. Reading is not restricted, so the project is
+/// loaded through the same filesystem and fetchers as the user's own.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
@@ -96,12 +84,6 @@ pub fn initialize(
     let cwd: PathBuf =
         PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
 
-    // A relative override is taken from that working directory, spelled as
-    // the user spelled it. Everything below joins paths to the root the
-    // locator hands back, and the filesystem an untrusted project is confined
-    // to holds them to that root by its spelling, so the root has to be a
-    // whole path before anything is built on it.
-    let project_root_override = project_root_override.map(|dir| cwd.join(dir));
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,
         project_root_override,
@@ -121,37 +103,20 @@ pub fn initialize(
     // holder.
     let pkg_cache = Arc::new(dirs.package_cache().context(PackageCacheSnafu)?);
 
-    // The project's files come from this machine: the whole of it for the
-    // user's own project, the project directory alone for an untrusted one.
-    let files: Arc<dyn FileSystem> = if untrusted {
-        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
-        Arc::new(Confined::refusing_links(&root))
-    } else {
-        Arc::new(HostFileSystem)
-    };
+    // The project's files come from this machine
+    let files = Arc::new(HostFileSystem);
 
-    // Wasm modules named by a manifest: fetched and cached when not contained
-    // in the project, unless the project is untrusted, in which case each is
-    // read from the project through the filesystem confined to it.
-    let wasm: Arc<dyn wasm::Fetch> = if untrusted {
-        Arc::new(untrusted::LocalModules::new(files.clone()))
-    } else {
-        Arc::new(crate::wasm::Fetcher::new(
-            http_client.clone(),
-            pkg_cache.clone(),
-        ))
-    };
+    // Wasm modules named by a manifest but not contained in the project
+    let wasm = Arc::new(crate::wasm::Fetcher::new(
+        http_client.clone(),
+        pkg_cache.clone(),
+    ));
 
-    // Recipes: fetched from wherever the manifest points, unless the project
-    // is untrusted, in which case none is.
-    let recipe: Arc<dyn Resolve> = if untrusted {
-        Arc::new(untrusted::NoRecipes)
-    } else {
-        Arc::new(RecipeFetcher {
-            http_client,
-            pkg_cache,
-        })
-    };
+    // Recipes, fetched from wherever the manifest points
+    let recipe = Arc::new(RecipeFetcher {
+        http_client,
+        pkg_cache,
+    });
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
@@ -170,7 +135,7 @@ pub fn initialize(
     };
 
     let pload: Arc<dyn ProjectLoad> = if untrusted {
-        Arc::new(Lazy::new(untrusted::Vetted::new(pload)))
+        Arc::new(Lazy::new(untrusted::Vetted::new(pload, files.clone())))
     } else {
         Arc::new(Lazy::new(pload))
     };

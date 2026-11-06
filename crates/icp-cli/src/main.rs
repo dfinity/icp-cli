@@ -214,6 +214,7 @@ async fn run() -> Result<(), Error> {
         cli.debug,
         password_func,
         pem_session_duration,
+        command.untrusted(),
     )?;
 
     // Extension commands are left out of telemetry: telemetry parses against
@@ -264,6 +265,21 @@ enum Invocation {
     BuiltIn(Command),
     /// An installed extension, and the matches of its subcommand.
     Extension(icp_app::extension::Installed, ArgMatches),
+}
+
+impl Invocation {
+    /// Whether the command was asked to treat the project as untrusted. The
+    /// flag belongs to the commands that act on what a project says — build,
+    /// deploy, sync — but it is the context every command runs in that
+    /// applies it, so it is read off the command before that is composed.
+    fn untrusted(&self) -> bool {
+        match self {
+            Invocation::BuiltIn(Command::Build(args)) => args.untrusted.untrusted,
+            Invocation::BuiltIn(Command::Deploy(args)) => args.untrusted.untrusted,
+            Invocation::BuiltIn(Command::Sync(args)) => args.untrusted.untrusted,
+            Invocation::BuiltIn(_) | Invocation::Extension(..) => false,
+        }
+    }
 }
 
 /// Dispatch the command to its handler.

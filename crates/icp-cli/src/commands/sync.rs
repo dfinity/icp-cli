@@ -12,7 +12,7 @@ use tracing::info;
 use icp_project::operations::{readiness::wait_until_serving_queries, sync::sync_many};
 
 use crate::{
-    options::{EnvironmentOpt, IdentityOpt},
+    options::{EnvironmentOpt, IdentityOpt, UntrustedOpt},
     render::rendered,
 };
 
@@ -32,6 +32,9 @@ pub(crate) struct SyncArgs {
 
     #[command(flatten)]
     pub(crate) identity: IdentityOpt,
+
+    #[command(flatten)]
+    pub(crate) untrusted: UntrustedOpt,
 }
 
 pub(crate) async fn exec(ctx: &Context, args: &SyncArgs) -> Result<(), anyhow::Error> {

@@ -12,7 +12,10 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
+use icp_project::{
+    Lazy, ProjectLoad, ProjectLoadImpl, files::HostFileSystem, host::Host, manifest, store_id,
+    untrusted,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -38,11 +41,17 @@ pub enum ContextInitError {
     },
 }
 
+/// `untrusted` holds the project to what one someone else handed over may
+/// run — see [`icp_project::untrusted`] for the list: the loaded project is
+/// vetted for its steps and for where the file each names resolves, before
+/// any command acts on it. Reading is not restricted, so the project is
+/// loaded through the same filesystem and fetchers as the user's own.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
+    untrusted: bool,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -94,20 +103,20 @@ pub fn initialize(
     // holder.
     let pkg_cache = Arc::new(dirs.package_cache().context(PackageCacheSnafu)?);
 
+    // The project's files come from this machine
+    let files = Arc::new(HostFileSystem);
+
     // Wasm modules named by a manifest but not contained in the project
     let wasm = Arc::new(crate::wasm::Fetcher::new(
         http_client.clone(),
         pkg_cache.clone(),
     ));
 
-    // Recipes
+    // Recipes, fetched from wherever the manifest points
     let recipe = Arc::new(RecipeFetcher {
         http_client,
         pkg_cache,
     });
-
-    // The project's files come from this machine.
-    let files = Arc::new(icp_project::files::HostFileSystem);
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
@@ -125,8 +134,11 @@ pub fn initialize(
         files: files.clone(),
     };
 
-    let pload = Lazy::new(pload);
-    let pload = Arc::new(pload);
+    let pload: Arc<dyn ProjectLoad> = if untrusted {
+        Arc::new(Lazy::new(untrusted::Vetted::new(pload, files.clone())))
+    } else {
+        Arc::new(Lazy::new(pload))
+    };
 
     // Telemetry data bag (written by subsystems, read at session finish)
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());

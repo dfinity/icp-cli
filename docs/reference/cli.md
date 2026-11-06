@@ -120,9 +120,6 @@ This document contains the help content for the `icp` command-line program.
 
   Default value: `false`
 * `--identity-password-file <FILE>` — Read identity password from a file instead of prompting
-* `--untrusted` — Treat the project as one someone else handed over: refuse a script build or sync step, a recipe, a module or plugin fetched from a URL, a path outside the project root, and a symlink under it
-
-  Default value: `false`
 
 
 
@@ -139,6 +136,7 @@ Build canisters
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for. By default, the local environment is used
+* `--untrusted` — Treat the project as one someone else handed over: refuse a script build or sync step, a recipe, a module or plugin fetched from a URL, a path outside the project root, and a symlink under it
 
 
 
@@ -1074,6 +1072,7 @@ using --args or --args-file:
   - `bin`:
     Raw binary (only valid for file references)
 
+* `--untrusted` — Treat the project as one someone else handed over: refuse a script build or sync step, a recipe, a module or plugin fetched from a URL, a path outside the project root, and a symlink under it
 
 
 
@@ -1922,6 +1921,7 @@ Synchronize canisters
 * `--proxy <PROXY>` — Principal of a proxy canister to route sync plugin calls to the target canister through
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--untrusted` — Treat the project as one someone else handed over: refuse a script build or sync step, a recipe, a module or plugin fetched from a URL, a path outside the project root, and a symlink under it
 
 
 

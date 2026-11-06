@@ -45,11 +45,10 @@ impl From<IdentityOpt> for IdentitySelection {
 /// for it, and those are the commands it runs.
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct UntrustedOpt {
-    /// Hold the project to what one someone else handed over may have, which
-    /// is the shape `icp project bundle` writes: each build step a pre-built
-    /// module from a file in the project, each sync step a plugin from a file
-    /// in the project, no recipe, and every path a regular file or directory
-    /// under the project root. Anything else is refused
+    /// Hold the project to what one someone else handed over may run: each
+    /// build step a pre-built module, each sync step a plugin, and the file
+    /// each names within the project once links are followed. Anything else
+    /// is refused. Reading is not restricted
     #[arg(long)]
     pub(crate) untrusted: bool,
 }

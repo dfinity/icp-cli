@@ -124,33 +124,10 @@ pub trait Scratch: Send + Sync {
 /// canonicalizes, so a caller that names the root through a symlink (macOS
 /// keeps `/var` as a link to `/private/var`) or by its short name (Windows'
 /// `RUNNER~1`) is understood as long as it keeps to the same spelling.
-///
-/// A tree that nobody has held to that shape — a directory on disk that
-/// someone else wrote, rather than an archive unpacked by a consumer that
-/// refused its links — is asked for through
-/// [`refusing_links`](Self::refusing_links) instead. Each component of a
-/// path below the root is then looked at as it is on disk, and a path that
-/// passes through a symlink anywhere under the root is refused with
-/// [`ThroughLink`], wherever the link leads: one that points inside the root
-/// is as unwelcome as one that points out, since the rule is the shape of the
-/// tree rather than where any one link goes. The root itself and everything
-/// above it are the caller's, and are not looked at.
 #[cfg(feature = "host")]
 #[derive(Debug, Clone)]
 pub struct Confined {
     root: PathBuf,
-    links: Links,
-}
-
-/// What a [`Confined`] filesystem does with a symlink under its root.
-#[cfg(feature = "host")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Links {
-    /// Follow it, as the host does. For a tree that has none, or whose links
-    /// are the caller's own.
-    Follow,
-    /// Refuse any path that passes through one.
-    Refuse,
 }
 
 /// A path a [`Confined`] filesystem was asked for that is not under its root.
@@ -162,36 +139,12 @@ pub struct OutsideRoot {
     pub root: PathBuf,
 }
 
-/// A path a [`Confined`] filesystem that refuses links was asked for that
-/// passes through one.
-#[cfg(feature = "host")]
-#[derive(Debug, Snafu)]
-#[snafu(display(
-    "'{path}' passes through '{link}', which is a symlink, and every path in this project must \
-     name a regular file or directory under its root"
-))]
-pub struct ThroughLink {
-    pub path: PathBuf,
-    pub link: PathBuf,
-}
-
 #[cfg(feature = "host")]
 impl Confined {
-    /// Confine the host filesystem to `root`, following any symlink under it
-    /// as the host does.
+    /// Confine the host filesystem to `root`.
     pub fn new(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
-            links: Links::Follow,
-        }
-    }
-
-    /// Confine the host filesystem to `root`, and refuse any path that passes
-    /// through a symlink under it.
-    pub fn refusing_links(root: &Path) -> Self {
-        Self {
-            root: root.to_path_buf(),
-            links: Links::Refuse,
         }
     }
 
@@ -202,10 +155,9 @@ impl Confined {
 
     /// Where `path` lies under the root: joined to the root if relative,
     /// with `.` dropped and `..` applied, and refused if it would come to
-    /// rest outside — or, for a filesystem that refuses links, if it passes
-    /// through one on the way there. What a caller that needs a real path
-    /// for something that does not read through the trait — a runtime
-    /// mounting a directory — asks for.
+    /// rest outside. What a caller that needs a real path for something that
+    /// does not read through the trait — a runtime mounting a directory —
+    /// asks for.
     pub fn resolve(&self, path: &Path) -> Result<PathBuf, FsError> {
         let outside = || {
             FsError::new(OutsideRoot {
@@ -231,39 +183,7 @@ impl Confined {
                 Utf8Component::RootDir | Utf8Component::Prefix(_) => return Err(outside()),
             }
         }
-        if self.links == Links::Refuse {
-            self.refuse_links(path, &resolved)?;
-        }
         Ok(resolved)
-    }
-
-    /// Refuse `resolved` if any component of it below the root is a symlink.
-    ///
-    /// Each component is looked at as it is on disk rather than through
-    /// what it points at, so a link is seen wherever it leads, and a dangling
-    /// one is seen too. The walk stops at the first component that is not
-    /// there: nothing beyond it can be a link, and whether the path exists
-    /// is for the operation itself to find out and report.
-    fn refuse_links(&self, path: &Path, resolved: &Path) -> Result<(), FsError> {
-        let mut at = self.root.clone();
-        for component in resolved
-            .strip_prefix(&self.root)
-            .expect("resolved under the root")
-            .components()
-        {
-            at.push(component.as_str());
-            match std::fs::symlink_metadata(&at) {
-                Ok(meta) if meta.file_type().is_symlink() => {
-                    return Err(FsError::new(ThroughLink {
-                        path: path.to_path_buf(),
-                        link: at,
-                    }));
-                }
-                Ok(_) => {}
-                Err(_) => break,
-            }
-        }
-        Ok(())
     }
 }
 
@@ -751,87 +671,6 @@ mod tests {
             std::os::unix::fs::symlink(dir.path().join("outside.txt"), fs.root().join("link.txt"))
                 .expect("symlink");
             assert_eq!(fs.read(Path::new("link.txt")).await.unwrap(), b"secret");
-        }
-
-        /// Asked to refuse links, the filesystem refuses a path through one
-        /// wherever it leads: out of the root, back inside it, or nowhere.
-        /// A link in the middle of a path counts as much as one at its end.
-        #[cfg(unix)]
-        #[tokio::test]
-        async fn refusing_links_refuses_a_path_through_one_wherever_it_leads() {
-            use std::os::unix::fs::symlink;
-            let (dir, _) = root();
-            let project = dir.path().join("project");
-            symlink(dir.path().join("outside.txt"), project.join("out.txt")).expect("symlink");
-            symlink(project.join("icp.yaml"), project.join("in.yaml")).expect("symlink");
-            symlink(project.join("nowhere"), project.join("dangling")).expect("symlink");
-            symlink(project.join("canisters"), project.join("dir-link")).expect("symlink");
-            let fs = Confined::refusing_links(&project);
-
-            for (spelling, link) in [
-                ("out.txt", "out.txt"),
-                ("in.yaml", "in.yaml"),
-                ("dangling", "dangling"),
-                ("dir-link/a.wasm", "dir-link"),
-                ("./dir-link/../dir-link/a.wasm", "dir-link"),
-            ] {
-                let err = fs
-                    .read(Path::new(spelling))
-                    .await
-                    .expect_err(spelling)
-                    .to_string();
-                assert!(err.contains("passes through"), "{spelling}: {err}");
-                assert!(err.contains(link), "{spelling}: {err}");
-                assert!(!fs.exists(Path::new(spelling)).await, "{spelling}");
-                assert!(!fs.is_file(Path::new(spelling)).await, "{spelling}");
-                assert!(!fs.is_dir(Path::new(spelling)).await, "{spelling}");
-                assert!(fs.resolve(Path::new(spelling)).is_err(), "{spelling}");
-            }
-            // Nor may a link be written through.
-            let err = fs
-                .write(Path::new("out.txt"), b"x")
-                .await
-                .unwrap_err()
-                .to_string();
-            assert!(err.contains("passes through"), "{err}");
-            assert_eq!(
-                std::fs::read(dir.path().join("outside.txt")).unwrap(),
-                b"secret"
-            );
-
-            // Regular files and directories are read as before, and a path
-            // that is not there yet resolves, since nothing on it is a link.
-            assert_eq!(
-                fs.read(Path::new("canisters/a.wasm")).await.unwrap(),
-                b"wasm"
-            );
-            assert!(fs.is_dir(Path::new("canisters")).await);
-            assert!(fs.resolve(Path::new("made/later")).is_ok());
-            assert_eq!(
-                fs.read_dir(&project).await.expect("list").len(),
-                6,
-                "listing shows the links; reading through them is what is refused"
-            );
-        }
-
-        /// The root itself may be reached through a link: it is the caller's
-        /// spelling, and only what lies below it is held to shape.
-        #[cfg(unix)]
-        #[tokio::test]
-        async fn refusing_links_still_takes_the_root_as_the_caller_spells_it() {
-            let (dir, _) = root();
-            std::os::unix::fs::symlink(dir.path().join("project"), dir.path().join("alias"))
-                .expect("symlink");
-            let spelled = dir.path().join("alias");
-            let fs = Confined::refusing_links(&spelled);
-            assert_eq!(
-                fs.read(&spelled.join("icp.yaml")).await.unwrap(),
-                b"canisters: []"
-            );
-            assert_eq!(
-                fs.read(Path::new("canisters/a.wasm")).await.unwrap(),
-                b"wasm"
-            );
         }
 
         #[tokio::test]

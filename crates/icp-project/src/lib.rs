@@ -222,7 +222,10 @@ pub enum ProjectLoadError {
     },
 
     #[snafu(display("the project asks for more than an untrusted project may"))]
-    Untrusted { source: untrusted::Refused },
+    Untrusted {
+        #[snafu(source(from(untrusted::Refused, Box::new)))]
+        source: Box<untrusted::Refused>,
+    },
 }
 
 #[async_trait]

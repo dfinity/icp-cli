@@ -303,7 +303,7 @@ fn untrusted_needs_a_project_to_hold_to() {
 
     ctx.icp()
         .current_dir(&empty)
-        .args(["identity", "list", "--untrusted"])
+        .args(["build", "--untrusted"])
         .assert()
         .failure()
         .stderr(contains(
@@ -311,8 +311,10 @@ fn untrusted_needs_a_project_to_hold_to() {
         ));
 }
 
+/// The flag is on the three commands that act on what a project says, and
+/// each refuses before it reaches any network. It is on no other command.
 #[test]
-fn the_flag_is_global() {
+fn the_flag_is_on_build_deploy_and_sync_alone() {
     let ctx = TestContext::new();
     let project_dir = project(
         &ctx,
@@ -321,14 +323,24 @@ fn the_flag_is_global() {
               - name: backend
                 build:
                   steps:
-                    - type: pre-built
-                      path: backend.wasm
+                    - type: script
+                      command: cp backend.wasm "$ICP_WASM_OUTPUT_PATH"
         "#},
     );
 
+    for command in ["build", "deploy", "sync"] {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args([command, "--untrusted"])
+            .assert()
+            .failure()
+            .stderr(contains("more than an untrusted project may"));
+    }
+
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["--untrusted", "build", "backend"])
+        .args(["identity", "list", "--untrusted"])
         .assert()
-        .success();
+        .failure()
+        .stderr(contains("unexpected argument '--untrusted'"));
 }

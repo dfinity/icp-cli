@@ -167,7 +167,8 @@ pub struct OutsideRoot {
 #[cfg(feature = "host")]
 #[derive(Debug, Snafu)]
 #[snafu(display(
-    "'{path}' passes through '{link}', which is a symlink, and this project may not have any"
+    "'{path}' passes through '{link}', which is a symlink, and every path in this project must \
+     name a regular file or directory under its root"
 ))]
 pub struct ThroughLink {
     pub path: PathBuf,

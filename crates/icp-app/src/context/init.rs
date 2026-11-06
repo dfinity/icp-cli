@@ -50,13 +50,14 @@ pub enum ContextInitError {
     },
 }
 
-/// `untrusted` treats the project as one someone else handed over: it is
-/// loaded through a filesystem confined to its root that refuses symlinks, no
-/// recipe is fetched, every module is read from the project through that
-/// filesystem, and a project with a script step or a remote module or plugin
-/// is refused before any command acts on it. See [`icp_project::untrusted`].
-/// The root is located up front, since the filesystem is held to it from the
-/// start, so there has to be a project.
+/// `untrusted` holds the project to what one someone else handed over may
+/// have, the shape a bundle has — see [`icp_project::untrusted`] for the
+/// list: it is loaded through a filesystem confined to its root on which
+/// every path is a regular file or directory, no recipe is used, every
+/// module is read from the project through that filesystem, and the loaded
+/// project is vetted for the steps on the list before any command acts on
+/// it. The root is located up front, since the filesystem is held to it from
+/// the start, so there has to be a project.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,

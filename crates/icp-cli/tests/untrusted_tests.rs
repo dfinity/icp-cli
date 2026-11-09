@@ -226,6 +226,51 @@ fn a_module_linked_out_of_the_project_is_refused_and_one_linked_within_is_not() 
         .success();
 }
 
+/// What a step names must be a regular file: a directory is refused, and on
+/// unix so is a named pipe, before the build would try to read it and wait
+/// on a writer that never comes.
+#[test]
+fn a_module_that_is_not_a_regular_file_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: module.wasm
+        "#},
+    );
+    let module = project_dir.join("module.wasm");
+
+    std::fs::create_dir(&module).expect("directory");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("module.wasm").and(contains("not a regular file")));
+
+    #[cfg(unix)]
+    {
+        std::fs::remove_dir(&module).expect("remove directory");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&module)
+            .status()
+            .expect("mkfifo");
+        assert!(made.success(), "mkfifo");
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["build", "--untrusted"])
+            .timeout(std::time::Duration::from_secs(60))
+            .assert()
+            .failure()
+            .stderr(contains("module.wasm").and(contains("not a regular file")));
+    }
+}
+
 /// Where the file really is decides, so the root may be spelled relatively.
 #[test]
 fn a_relative_project_root_is_taken_from_the_working_directory() {

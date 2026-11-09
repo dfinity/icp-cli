@@ -13,9 +13,10 @@
 //!
 //! - a build step is a pre-built module ([`build_step_allowed`]);
 //! - a sync step is a plugin ([`sync_step_allowed`]);
-//! - the module or plugin a step names is a file within the project: its
-//!   path, with every link followed and every `..` applied, lies under the
-//!   project root resolved the same way ([`vet`]).
+//! - the module or plugin a step names is a regular file within the
+//!   project: its path, with every link followed and every `..` applied,
+//!   lies under the project root resolved the same way, and what is there is
+//!   a file rather than a directory or a pipe ([`vet`]).
 //!
 //! A recipe is read and rendered as the project loads, and the steps it
 //! produces are on the list or not like any other. A module or plugin named
@@ -74,7 +75,17 @@ pub enum Refused {
         root: PathBuf,
     },
 
-    #[snafu(display("canister '{canister}' names '{path}', which does not resolve to a file"))]
+    #[snafu(display(
+        "canister '{canister}' names '{path}', which is '{resolved}', not a regular file: an \
+         untrusted project runs only a file within it"
+    ))]
+    NotAFile {
+        canister: String,
+        path: PathBuf,
+        resolved: PathBuf,
+    },
+
+    #[snafu(display("canister '{canister}' names '{path}', which does not resolve to anything"))]
     UnresolvedPath { canister: String, path: PathBuf },
 
     #[snafu(display("the project root '{root}' does not resolve to a directory"))]
@@ -96,13 +107,17 @@ pub fn sync_step_allowed(step: &SyncStep) -> bool {
 }
 
 /// Hold a loaded project to the list: every step [`build_step_allowed`] or
-/// [`sync_step_allowed`], and the file each names within the project.
+/// [`sync_step_allowed`], and the file each names a regular file within the
+/// project.
 ///
 /// Within is decided on the real paths: the file's and the root's, each with
 /// every link followed and every `..` applied by `files`, so a link out of
 /// the project is seen for where it leads and a link within it is let be. A
 /// path that does not resolve is refused too, since nothing can be said
-/// about where it would lead.
+/// about where it would lead. So is one that resolves to something other
+/// than a regular file: a directory cannot be read as a module, and a pipe
+/// is read from whoever is writing to it, which is not the project — and
+/// a read of one that nobody writes to waits forever.
 pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refused> {
     let root = files
         .canonicalize(&project.dir)
@@ -146,7 +161,8 @@ pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refuse
     Ok(())
 }
 
-/// Refuse `path` unless it resolves to somewhere under the resolved `root`.
+/// Refuse `path` unless it resolves to a regular file under the resolved
+/// `root`.
 async fn within(
     files: &dyn FileSystem,
     root: &Path,
@@ -166,6 +182,14 @@ async fn within(
             path,
             resolved,
             root,
+        }
+        .fail();
+    }
+    if !files.is_file(&resolved).await {
+        return NotAFileSnafu {
+            canister: &canister.name,
+            path,
+            resolved,
         }
         .fail();
     }
@@ -222,7 +246,7 @@ impl<L: ProjectLoad> ProjectLoad for Vetted<L> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use super::*;
     use crate::{
@@ -235,14 +259,21 @@ mod tests {
     };
 
     /// A filesystem that resolves the paths it is told to and nothing else,
-    /// standing in for links and `..` on disk: the vet asks for nothing but
-    /// where a path really is.
-    struct Resolves(HashMap<PathBuf, PathBuf>);
+    /// standing in for links and `..` on disk, and says which of the places
+    /// they resolve to hold a regular file: the vet asks for nothing but
+    /// where a path really is and what is there.
+    struct Resolves {
+        paths: HashMap<PathBuf, PathBuf>,
+        files: HashSet<PathBuf>,
+    }
 
     #[async_trait]
     impl FileSystem for Resolves {
         async fn canonicalize(&self, path: &Path) -> Option<PathBuf> {
-            self.0.get(path).cloned()
+            self.paths.get(path).cloned()
+        }
+        async fn is_file(&self, path: &Path) -> bool {
+            self.files.contains(path)
         }
         async fn read(&self, _: &Path) -> Result<Vec<u8>, FsError> {
             unreachable!("the vet reads nothing")
@@ -262,9 +293,6 @@ mod tests {
         async fn exists(&self, _: &Path) -> bool {
             unreachable!("the vet looks at nothing but where a path is")
         }
-        async fn is_file(&self, _: &Path) -> bool {
-            unreachable!("the vet looks at nothing but where a path is")
-        }
         async fn is_dir(&self, _: &Path) -> bool {
             unreachable!("the vet looks at nothing but where a path is")
         }
@@ -278,22 +306,31 @@ mod tests {
 
     /// The minimal project is at `/project`, and this is its disk: a module
     /// of its own, a plugin, a link out to `/elsewhere/secret.wasm`, a link
-    /// within to the module, and a climb that lands outside.
+    /// within to the module, a climb that lands outside, and a directory
+    /// `dir` of its own.
     fn disk() -> Arc<Resolves> {
-        Arc::new(Resolves(HashMap::from([
-            ("/project".into(), "/project".into()),
-            (
+        Arc::new(Resolves {
+            paths: HashMap::from([
+                ("/project".into(), "/project".into()),
+                (
+                    "/project/backend.wasm".into(),
+                    "/project/backend.wasm".into(),
+                ),
+                ("/project/p.wasm".into(), "/project/p.wasm".into()),
+                ("/project/out.wasm".into(), "/elsewhere/secret.wasm".into()),
+                ("/project/in.wasm".into(), "/project/backend.wasm".into()),
+                (
+                    "/project/../elsewhere/secret.wasm".into(),
+                    "/elsewhere/secret.wasm".into(),
+                ),
+                ("/project/dir".into(), "/project/dir".into()),
+            ]),
+            files: HashSet::from([
                 "/project/backend.wasm".into(),
-                "/project/backend.wasm".into(),
-            ),
-            ("/project/p.wasm".into(), "/project/p.wasm".into()),
-            ("/project/out.wasm".into(), "/elsewhere/secret.wasm".into()),
-            ("/project/in.wasm".into(), "/project/backend.wasm".into()),
-            (
-                "/project/../elsewhere/secret.wasm".into(),
+                "/project/p.wasm".into(),
                 "/elsewhere/secret.wasm".into(),
-            ),
-        ])))
+            ]),
+        })
     }
 
     async fn project_with(build: Vec<BuildStep>, sync: Vec<SyncStep>) -> Project {
@@ -435,6 +472,24 @@ mod tests {
         assert!(err.to_string().contains("missing.wasm"), "{err}");
     }
 
+    /// Where a path leads must hold a regular file: a directory within the
+    /// project is refused as a module and as a plugin, and the message says
+    /// what was there instead.
+    #[tokio::test]
+    async fn what_a_step_names_must_be_a_regular_file() {
+        let err = vetted(vec![local("dir")], vec![]).await.unwrap_err();
+        assert!(
+            matches!(err, Refused::NotAFile { ref resolved, .. } if resolved == "/project/dir"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("not a regular file"), "{err}");
+
+        let err = vetted(vec![local("backend.wasm")], vec![plugin("path: dir")])
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Refused::NotAFile { .. }), "{err}");
+    }
+
     #[tokio::test]
     async fn a_vetted_loader_refuses_what_vet_refuses() {
         let project = project_with(vec![BuildStep::Script(script("make"))], vec![]).await;
@@ -452,7 +507,9 @@ mod tests {
 
     /// On a real disk the links are followed by the host, which is what the
     /// CLI resolves through: to the end of a chain of them, and through a
-    /// linked directory on the way.
+    /// linked directory on the way. And what is at the end must be a
+    /// regular file: a directory and a named pipe are refused, the pipe
+    /// before anything tries to read it.
     #[cfg(all(unix, feature = "host"))]
     #[tokio::test]
     async fn on_disk_a_link_is_followed_to_where_it_leads() {
@@ -474,6 +531,15 @@ mod tests {
         symlink(root.join("backend.wasm"), root.join("c.wasm")).unwrap();
         symlink(root.join("c.wasm"), root.join("b.wasm")).unwrap();
         symlink(root.join("b.wasm"), root.join("a.wasm")).unwrap();
+        // a directory, and a pipe nobody writes to, each with a link to it
+        std::fs::create_dir(root.join("dir.wasm")).unwrap();
+        symlink(root.join("dir.wasm"), root.join("to-dir.wasm")).unwrap();
+        let made = std::process::Command::new("mkfifo")
+            .arg(root.join("pipe.wasm"))
+            .status()
+            .unwrap();
+        assert!(made.success(), "mkfifo");
+        symlink(root.join("pipe.wasm"), root.join("to-pipe.wasm")).unwrap();
 
         let mut project = project_with(vec![], vec![]).await;
         project.dir = root.clone();
@@ -496,6 +562,23 @@ mod tests {
             assert!(
                 matches!(err, Refused::OutsidePath { ref resolved, .. }
                     if resolved.file_name() == Some("secret.wasm")),
+                "{path}: {err}"
+            );
+        }
+
+        for (path, at) in [
+            ("dir.wasm", "dir.wasm"),
+            ("to-dir.wasm", "dir.wasm"),
+            ("pipe.wasm", "pipe.wasm"),
+            ("to-pipe.wasm", "pipe.wasm"),
+        ] {
+            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
+                steps: vec![local(path)],
+            };
+            let err = vet(&project, &HostFileSystem).await.unwrap_err();
+            assert!(
+                matches!(err, Refused::NotAFile { ref resolved, .. }
+                    if resolved.file_name() == Some(at)),
                 "{path}: {err}"
             );
         }

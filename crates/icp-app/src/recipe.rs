@@ -14,7 +14,7 @@ use crate::package::{
     read_cached_uri_recipe,
 };
 use icp_project::{
-    files::{FileSystem, FsError},
+    fs::read,
     manifest::recipe::{Recipe, RecipeType},
     prelude::*,
 };
@@ -30,11 +30,6 @@ pub struct RecipeFetcher {
     pub http_client: reqwest::Client,
     /// Package cache for caching downloaded recipe templates
     pub pkg_cache: std::sync::Arc<PackageCache>,
-    /// The project's files, which a local template is read through
-    pub files: std::sync::Arc<dyn FileSystem>,
-    /// Where a relative local template path is taken from: the working
-    /// directory, whatever `files` would otherwise join it to
-    pub cwd: PathBuf,
 }
 
 /// The result of the fetch stage, as this resolver sees it.
@@ -81,7 +76,7 @@ enum TemplateSource {
 #[derive(Debug, Snafu)]
 pub enum RecipeFetchError {
     #[snafu(display("failed to read local recipe template file"))]
-    ReadFile { source: FsError },
+    ReadFile { source: icp_project::fs::IoError },
 
     #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
@@ -138,8 +133,7 @@ impl RecipeFetcher {
         // Retrieve the template, using cache for remote/registry sources
         let (tmpl, should_cache) = match &tmpl_source {
             TemplateSource::LocalPath(path) => {
-                let path = self.cwd.join(path);
-                let bytes = self.files.read(&path).await.context(ReadFileSnafu)?;
+                let bytes = read(path).context(ReadFileSnafu)?;
                 (parse_bytes_to_string(bytes)?, false)
             }
 
@@ -366,8 +360,6 @@ mod tests {
         RecipeFetcher {
             http_client: reqwest::Client::new(),
             pkg_cache: std::sync::Arc::new(crate::package::open(cache_dir.to_owned()).unwrap()),
-            files: std::sync::Arc::new(icp_project::files::HostFileSystem),
-            cwd: PathBuf::new(),
         }
     }
 
@@ -400,39 +392,6 @@ mod tests {
             fetched.pending_cache.is_none(),
             "local files are never cached"
         );
-    }
-
-    /// A relative local path is taken from the working directory, the same
-    /// for a project read through a filesystem confined to its root as for
-    /// the user's own: not joined to that root instead.
-    #[tokio::test]
-    async fn a_relative_local_recipe_is_taken_from_the_working_directory() {
-        let tmp = camino_tempfile::Utf8TempDir::new().unwrap();
-        let root = tmp.path().join("project");
-        std::fs::create_dir(&root).unwrap();
-        std::fs::write(root.join("recipe.hbs"), "inside").unwrap();
-        std::fs::write(tmp.path().join("recipe.hbs"), "outside").unwrap();
-
-        let fetch = async |path: &str| {
-            let recipe = Recipe {
-                recipe_type: RecipeType::File(path.to_owned()),
-                configuration: Default::default(),
-                sha256: None,
-            };
-            RecipeFetcher {
-                files: std::sync::Arc::new(icp_project::files::Confined::new(&root).unwrap()),
-                cwd: tmp.path().to_owned(),
-                ..fetcher(&tmp.path().join("pkg"))
-            }
-            .fetch_recipe(&recipe)
-            .await
-        };
-        assert_eq!(
-            fetch("project/recipe.hbs").await.unwrap().template,
-            "inside"
-        );
-        let err = icp_project::error::flatten(&fetch("recipe.hbs").await.err().unwrap());
-        assert!(err.contains("is outside"), "{err}");
     }
 
     /// A sha256 that does not match the template contents is rejected.

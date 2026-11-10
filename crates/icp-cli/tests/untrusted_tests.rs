@@ -3,7 +3,7 @@
 //! would act on as the user's own, and shows the flag refusing it, naming
 //! what it refused.
 
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
 
 use crate::common::TestContext;
@@ -79,44 +79,34 @@ fn a_script_step_is_refused_as_untrusted_but_not_otherwise() {
         );
 }
 
-/// A recipe is read and rendered like any other; it is the steps it renders
-/// to that are held to the list.
+/// A recipe is build instructions read while the project loads, so one is
+/// refused before it is read, wherever it is from and whatever it renders to.
 #[test]
-fn a_recipe_is_rendered_and_its_steps_held_to_the_list() {
+fn a_recipe_is_refused_as_untrusted() {
     let ctx = TestContext::new();
-    let project_dir = project(
-        &ctx,
-        indoc! {r#"
-            canisters:
-              - name: backend
-                recipe:
-                  type: file://recipe.hbs
-        "#},
-    );
-    let recipe = project_dir.join("recipe.hbs");
+    for recipe_type in ["file://recipe.hbs", "https://example.invalid/recipe.hbs"] {
+        let project_dir = project(
+            &ctx,
+            &formatdoc! {r#"
+                canisters:
+                  - name: backend
+                    recipe:
+                      type: {recipe_type}
+            "#},
+        );
+        std::fs::write(
+            project_dir.join("recipe.hbs"),
+            "build:\n  steps:\n    - type: pre-built\n      path: backend.wasm\n",
+        )
+        .expect("write recipe");
 
-    std::fs::write(
-        &recipe,
-        "build:\n  steps:\n    - type: pre-built\n      path: backend.wasm\n",
-    )
-    .expect("write recipe");
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["build", "--untrusted"])
-        .assert()
-        .success();
-
-    std::fs::write(
-        &recipe,
-        "build:\n  steps:\n    - type: script\n      command: cp backend.wasm \"$ICP_WASM_OUTPUT_PATH\"\n",
-    )
-    .expect("write recipe");
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["build", "--untrusted"])
-        .assert()
-        .failure()
-        .stderr(contains("not a pre-built module").and(contains("(script) cp backend.wasm")));
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["build", "--untrusted"])
+            .assert()
+            .failure()
+            .stderr(contains(recipe_type).and(contains("may not use a recipe")));
+    }
 }
 
 /// What the project reads is held to its root: an argument file outside it
@@ -151,33 +141,6 @@ fn a_file_read_from_outside_the_project_is_refused_as_untrusted() {
         .assert()
         .failure()
         .stderr(contains("outside.bin").and(contains("is outside")));
-}
-
-/// A local recipe template is read through the same filesystem.
-#[test]
-fn a_recipe_template_outside_the_project_is_refused_as_untrusted() {
-    let ctx = TestContext::new();
-    let project_dir = project(
-        &ctx,
-        indoc! {r#"
-            canisters:
-              - name: backend
-                recipe:
-                  type: file://../recipe.hbs
-        "#},
-    );
-    std::fs::write(
-        project_dir.parent().unwrap().join("recipe.hbs"),
-        "build:\n  steps:\n    - type: pre-built\n      path: backend.wasm\n",
-    )
-    .expect("write recipe");
-
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["build", "--untrusted"])
-        .assert()
-        .failure()
-        .stderr(contains("recipe.hbs").and(contains("is outside")));
 }
 
 #[test]

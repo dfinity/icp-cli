@@ -4,11 +4,15 @@
 //! build step may run any command, a sync step any script, and a manifest
 //! may name any path on the machine. A project from elsewhere — an archive
 //! an agent passed to a deploy service, a checkout the user has not read —
-//! may not. Two things hold it:
+//! may not. Three things hold it:
 //!
 //! - what it reads goes through a filesystem confined to the project root —
 //!   on a host, [`Confined`](crate::files::Confined) — so that every path a
 //!   manifest names is under the root and reached through no symlink;
+//! - it names no recipe. A recipe is build instructions read from a file or
+//!   fetched from a URL while the project loads, before anyone can look at
+//!   what they say, so the loader is given [`NoRecipes`] to ask and the load
+//!   fails;
 //! - what it runs is on a list, stated as what is allowed so that a kind of
 //!   step added later is refused until someone decides otherwise: a build
 //!   step is a pre-built module, a sync step is a plugin, and the file either
@@ -25,11 +29,23 @@
 //! not the guarantee a read through the confined filesystem has: a tree
 //! rewritten between the look and the open is not caught.
 //!
-//! A module or plugin named by URL is not on the list, and the steps a recipe
-//! renders to are held to it like any other. A checksum is not asked for: the
-//! same untrusted hand wrote it and the module. [`vet`] applies the list to a
-//! loaded [`Project`], and [`Vetted`] wraps a loader so that every load is
-//! vetted before the project is handed out.
+//! A module or plugin named by URL is not on the list. A checksum is not
+//! asked for: the same untrusted hand wrote it and the module. [`vet`]
+//! applies the list to a loaded [`Project`], and [`Vetted`] wraps a loader so
+//! that every load is vetted before the project is handed out. A consumer
+//! composing its own loader holds the three together:
+//!
+//! ```ignore
+//! let files = Arc::new(Confined::new(&root)?);
+//! let project = Vetted::new(
+//!     ProjectLoadImpl {
+//!         project_root_locate,
+//!         recipe: Arc::new(NoRecipes),
+//!         files: files.clone(),
+//!     },
+//!     files,
+//! );
+//! ```
 
 use std::sync::Arc;
 
@@ -38,6 +54,7 @@ use snafu::{ResultExt, Snafu, ensure};
 
 use crate::{
     Project, ProjectLoad, ProjectLoadError, UntrustedSnafu,
+    canister::recipe::{Fetched, Resolve, ResolveError},
     files::FileSystem,
     manifest::{
         adapter::{
@@ -45,9 +62,34 @@ use crate::{
             prebuilt::{LocalSource, SourceField},
         },
         canister::{BuildStep, SyncStep},
+        recipe::Recipe,
     },
     prelude::*,
 };
+
+/// The [`Resolve`] for an untrusted project: it fetches nothing, so a
+/// project that names a recipe fails to load.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoRecipes;
+
+/// A recipe an untrusted project named.
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "recipe '{recipe}' is refused: an untrusted project may not use a recipe, and states its \
+     build and sync steps itself"
+))]
+pub struct RecipeRefused {
+    pub recipe: String,
+}
+
+#[async_trait]
+impl Resolve for NoRecipes {
+    async fn resolve(&self, recipe: &Recipe) -> Result<Fetched, ResolveError> {
+        Err(ResolveError::new(RecipeRefused {
+            recipe: recipe.recipe_type.to_string(),
+        }))
+    }
+}
 
 /// Why a loaded project may not be acted on as untrusted.
 #[derive(Debug, Snafu)]
@@ -309,6 +351,20 @@ mod tests {
         SyncStep::Plugin(Box::new(
             serde_yaml::from_str(&format!("{source}\nsha256: abc")).unwrap(),
         ))
+    }
+
+    #[tokio::test]
+    async fn no_recipe_is_fetched_wherever_it_is_from() {
+        for recipe_type in [
+            "file://recipe.hbs",
+            "https://example.com/recipe.hbs",
+            "@dfinity/rust@v3.0.0",
+        ] {
+            let recipe: Recipe = serde_yaml::from_str(&format!("type: \"{recipe_type}\"")).unwrap();
+            let err = NoRecipes.resolve(&recipe).await.err().unwrap().to_string();
+            assert!(err.contains(recipe_type), "{err}");
+            assert!(err.contains("may not use a recipe"), "{err}");
+        }
     }
 
     #[tokio::test]

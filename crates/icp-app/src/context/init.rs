@@ -14,6 +14,7 @@ use std::time::Duration;
 use crate::{agent, identity, identity::PasswordFunc};
 use icp_project::{
     Lazy, ProjectLoad, ProjectLoadImpl,
+    canister::recipe::Resolve,
     files::{Confined, FileSystem, HostFileSystem, RootError},
     host::Host,
     manifest::{self, ProjectRootLocate as _},
@@ -98,7 +99,7 @@ pub fn initialize(
     // against the root as spelled, so the root has to be a whole path.
     let project_root_override = project_root_override.map(|dir| cwd.join(dir));
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        cwd.clone(),
+        cwd,
         project_root_override,
     ));
 
@@ -137,13 +138,16 @@ pub fn initialize(
         None => Arc::new(HostFileSystem),
     };
 
-    // Recipes
-    let recipe = Arc::new(RecipeFetcher {
-        http_client,
-        pkg_cache,
-        files: files.clone(),
-        cwd,
-    });
+    // Recipes: fetched for the user's own project, refused for an untrusted
+    // one, which states its steps itself.
+    let recipe: Arc<dyn Resolve> = if untrusted {
+        Arc::new(untrusted::NoRecipes)
+    } else {
+        Arc::new(RecipeFetcher {
+            http_client,
+            pkg_cache,
+        })
+    };
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));

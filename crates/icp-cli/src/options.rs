@@ -48,7 +48,7 @@ pub(crate) struct UntrustedOpt {
     /// Hold the project to what one someone else handed over may do: every
     /// file it reads is under the project root and reached through no
     /// symlink, each build step is a pre-built module and each sync step a
-    /// plugin. Anything else is refused
+    /// plugin, and it uses no recipe. Anything else is refused
     #[arg(long)]
     pub(crate) untrusted: bool,
 }

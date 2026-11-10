@@ -118,7 +118,8 @@ pub trait Scratch: Send + Sync {
 /// The loader reads every path through the [`FileSystem`] it is given, so
 /// this holds all of them. A local recipe template is the exception: the
 /// [`Resolve`](crate::canister::recipe::Resolve) implementation reads it, and
-/// must read it through this filesystem or refuse it.
+/// must read it through this filesystem or refuse it, as
+/// [`NoRecipes`](crate::untrusted::NoRecipes) does.
 ///
 /// Known issue: a predicate can only answer `true` or `false`, so the reason
 /// a path was refused is lost there, and a caller that checks before it

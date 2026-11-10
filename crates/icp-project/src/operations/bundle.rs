@@ -1530,7 +1530,7 @@ impl<W: Write> ArchiveWriter<W> {
         root: &Path,
         output: &Path,
     ) -> Result<(), BundleError> {
-        let real = resolve_within_root(src_path, root)?;
+        let real = resolve_within_root(src_path, src_path, root)?;
         self.walk(
             src_path,
             real,
@@ -1565,14 +1565,17 @@ impl<W: Write> ArchiveWriter<W> {
             .context(WriteArchiveEntrySnafu {
                 path: PathBuf::from(archive_path),
             })?;
-        // Listed where the directory really is, but each entry is named by the
-        // path it was reached by, which is what a message about it should say.
+        // Listed and resolved from where the directory really is, so the links
+        // crossed to get here are not followed again for every entry — a long
+        // enough chain of them is more than the host follows in one path. Each
+        // entry is still named by the path it was reached by, which is what a
+        // message about it should say.
         let names = list_dir(&real)?;
-        open.push(real);
+        open.push(real.clone());
         for name in names {
             let entry = src_path.join(&name);
             let entry_archive_path = format!("{archive_path}/{name}");
-            let target = resolve_within_root(&entry, root)?;
+            let target = resolve_within_root(&real.join(&name), &entry, root)?;
             let meta = std::fs::metadata(&target).context(ResolveArchiveEntrySnafu {
                 path: entry.clone(),
             })?;
@@ -1703,6 +1706,21 @@ async fn write_archive(
             &pf.canister_name,
         )
         .await?;
+        // Held to what the walk holds an entry to: not the bundle itself, and
+        // a regular file, since a pipe nobody writes to is read forever.
+        if src == canonical_output {
+            return OutputReachedThroughLinkSnafu {
+                path: pf.src_path.clone(),
+                output: canonical_output,
+            }
+            .fail();
+        }
+        if !files.is_file(&src).await {
+            return UnsupportedEntrySnafu {
+                path: pf.src_path.clone(),
+            }
+            .fail();
+        }
         let data = files.read(&src).await.context(ReadPluginFileSnafu {
             canister: pf.canister_name.clone(),
             file: pf.orig_file.clone(),
@@ -1971,10 +1989,11 @@ fn list_dir(dir: &Path) -> Result<Vec<String>, BundleError> {
 }
 
 /// Where `path` comes to rest with every symlink followed, which must be under
-/// `root`. Walks the host directly, as [`ArchiveWriter::dir`] does: it is the
+/// `root`. `named` is the path a message about it gives: the one it was reached
+/// by. Walks the host directly, as [`ArchiveWriter::dir`] does: it is the
 /// one place bundling has to know whether a path is a link, and the
 /// [`FileSystem`] seam cannot say.
-fn resolve_within_root(path: &Path, root: &Path) -> Result<PathBuf, BundleError> {
+fn resolve_within_root(path: &Path, named: &Path, root: &Path) -> Result<PathBuf, BundleError> {
     let real = match dunce::canonicalize(path) {
         Ok(real) => real,
         Err(source) => {
@@ -1984,23 +2003,23 @@ fn resolve_within_root(path: &Path, root: &Path) -> Result<PathBuf, BundleError>
                 && let Ok(target) = std::fs::read_link(path)
             {
                 return DanglingLinkSnafu {
-                    path: path.to_path_buf(),
+                    path: named.to_path_buf(),
                     target: target.display().to_string(),
                 }
                 .fail();
             }
             return Err(BundleError::ResolveArchiveEntry {
-                path: path.to_path_buf(),
+                path: named.to_path_buf(),
                 source,
             });
         }
     };
     let real = PathBuf::from_path_buf(real).map_err(|_| BundleError::CanonicalizePath {
-        path: path.to_path_buf(),
+        path: named.to_path_buf(),
     })?;
     if !real.starts_with(root) {
         return LinkEscapesProjectSnafu {
-            path: path.to_path_buf(),
+            path: named.to_path_buf(),
             target: real,
             root: root.to_path_buf(),
         }

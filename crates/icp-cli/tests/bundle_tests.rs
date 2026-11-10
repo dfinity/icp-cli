@@ -1208,6 +1208,97 @@ fn bundle_rejects_output_that_is_a_link_into_a_copied_directory() {
         .stderr(contains("assets/shared/actual.tar.gz").and(contains("own output file")));
 }
 
+/// A `files:` entry that is itself a link to the output is refused like one
+/// met on the walk, rather than read into the bundle half-written.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_a_files_entry_that_links_to_the_output() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "config.txt");
+
+    std::os::unix::fs::symlink("bundle.tar.gz", project_dir.join("config.txt"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("config.txt").and(contains("own output file")));
+}
+
+/// Nor is a `files:` entry that is not a regular file read: a named pipe
+/// nobody writes to would hold the bundle up forever.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_a_files_entry_that_is_not_a_regular_file() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "config.txt");
+
+    let made = std::process::Command::new("mkfifo")
+        .arg(project_dir.join("config.txt"))
+        .status()
+        .expect("mkfifo");
+    assert!(made.success(), "mkfifo");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .timeout(std::time::Duration::from_secs(60))
+        .assert()
+        .failure()
+        .stderr(contains("config.txt").and(contains("neither a file nor a directory")));
+}
+
+/// Each directory link is resolved from where the last one led, not from the
+/// start again, so a chain of them longer than the host follows in one path
+/// (40 on Linux) is still copied.
+#[cfg(unix)]
+#[test]
+fn bundle_follows_a_long_chain_of_directory_links() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "data");
+
+    const LINKS: usize = 45;
+    create_dir_all(&project_dir.join("data")).expect("failed to create dir");
+    for i in 0..=LINKS {
+        create_dir_all(&project_dir.join(format!("chain/d{i}"))).expect("failed to create dir");
+    }
+    std::os::unix::fs::symlink("../chain/d0", project_dir.join("data/next"))
+        .expect("failed to create symlink");
+    for i in 0..LINKS {
+        std::os::unix::fs::symlink(
+            format!("../d{}", i + 1),
+            project_dir.join(format!("chain/d{i}/next")),
+        )
+        .expect("failed to create symlink");
+    }
+    write_string(
+        &project_dir.join(format!("chain/d{LINKS}/leaf.txt")),
+        "leaf",
+    )
+    .expect("failed to write file");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let leaf = format!(
+        "plugins/my-canister/0/files/data/{}leaf.txt",
+        "next/".repeat(LINKS + 1)
+    );
+    let entries = archive_entries(&bundle_path);
+    assert!(
+        entries
+            .iter()
+            .any(|(path, _, data)| *path == leaf && data == b"leaf"),
+        "{leaf} missing"
+    );
+}
+
 /// A file whose name is not UTF-8 cannot be named in the archive. The bundle
 /// says so rather than leaving the file out, as the glob machinery elsewhere
 /// does when it lists a directory.

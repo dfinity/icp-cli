@@ -12,7 +12,7 @@ air-gapped signing, extensions
 
 ## Experimental
 
-* fix(bundle): `icp project bundle` holds only regular files and directories. A symlink inside a plugin's `files:` or `dirs:` directory used to be recorded as a link with its target unchecked, so a link to a file outside the project reached that file on whatever machine unpacked the bundle. A link to somewhere inside the project is now copied as what it points at, so a project may link to its own files freely; one that leads outside the project, dangles, or leads back to a directory being copied fails the bundle, naming the link and where it leads. A `files:` entry that is itself a symlink to a file outside the project is refused the same way, where it used to be read into the bundle.
+* fix(bundle): `icp project bundle` holds only regular files and directories. A symlink inside a plugin's `files:` or `dirs:` directory used to be recorded as a link with its target unchecked, so one pointing outside the project reached that file on whatever machine unpacked the bundle. A link to somewhere inside the project is now copied as what it points at; one that leads outside the project, dangles, or leads back to a directory being copied fails the bundle, naming the link and where it leads. The same holds for a `files:` entry that is itself a symlink.
 
 # v1.8.0
 

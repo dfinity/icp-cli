@@ -1517,19 +1517,13 @@ impl<W: Write> ArchiveWriter<W> {
     }
 
     /// Appends a directory's whole contents, walking the host filesystem rather
-    /// than the [`FileSystem`] seam the rest of bundling reads through: the seam
-    /// reports a link's target as the file it points at and has no way to say
-    /// otherwise, and a bundle holds only regular files and directories.
-    /// Bundling from anything but a host filesystem needs the seam to describe
-    /// links first.
+    /// than the [`FileSystem`] seam the rest of bundling reads through, which
+    /// cannot say whether a path is a link.
     ///
-    /// Every entry met is resolved through its symlinks and must land under
-    /// `root`, the canonical project directory. One that does is appended as
-    /// what it points at, so a project may link to its own files freely; one
-    /// that does not is refused, naming the link and where it leads, as is a
-    /// link that dangles, leads back to a directory already being copied, or
-    /// reaches `output`, the bundle itself, which is being written meanwhile.
-    /// Entries go in sorted order, so the same tree gives the same archive.
+    /// Every entry is resolved through its symlinks and must land under `root`,
+    /// the canonical project directory: it is then appended as what it points
+    /// at, in sorted order. A link that leads outside, dangles, leads back to
+    /// a directory being copied, or reaches `output` is refused by name.
     fn dir(
         &mut self,
         src_path: &Path,
@@ -1537,21 +1531,29 @@ impl<W: Write> ArchiveWriter<W> {
         root: &Path,
         output: &Path,
     ) -> Result<(), BundleError> {
-        self.walk(src_path, archive_prefix, root, output, &mut Vec::new())
+        let real = resolve_within_root(src_path, root)?;
+        self.walk(
+            src_path,
+            real,
+            archive_prefix,
+            root,
+            output,
+            &mut Vec::new(),
+        )
     }
 
-    /// `open` holds the canonical directories on the way down from `dir`'s
-    /// start, which is how a link back to one of them is told from a second
-    /// link to a directory already copied and finished with.
+    /// `real` is where `src_path` resolves, and `open` the canonical
+    /// directories on the way down to it, which tells a link back to one of
+    /// them from a second link to a directory already copied.
     fn walk(
         &mut self,
         src_path: &Path,
+        real: PathBuf,
         archive_path: &str,
         root: &Path,
         output: &Path,
         open: &mut Vec<PathBuf>,
     ) -> Result<(), BundleError> {
-        let real = resolve_within_root(src_path, root)?;
         if open.contains(&real) {
             return LinkCycleSnafu {
                 path: src_path.to_path_buf(),
@@ -1564,21 +1566,19 @@ impl<W: Write> ArchiveWriter<W> {
             .context(WriteArchiveEntrySnafu {
                 path: PathBuf::from(archive_path),
             })?;
-        open.push(real.clone());
         // Listed where the directory really is, but each entry is named by the
         // path it was reached by, which is what a message about it should say.
-        for listed in list_dir(&real)? {
-            let Some(name) = listed.file_name() else {
-                continue;
-            };
-            let entry = src_path.join(name);
+        let names = list_dir(&real)?;
+        open.push(real);
+        for name in names {
+            let entry = src_path.join(&name);
             let entry_archive_path = format!("{archive_path}/{name}");
             let target = resolve_within_root(&entry, root)?;
             let meta = std::fs::metadata(&target).context(ResolveArchiveEntrySnafu {
                 path: entry.clone(),
             })?;
             if meta.is_dir() {
-                self.walk(&entry, &entry_archive_path, root, output, open)?;
+                self.walk(&entry, target, &entry_archive_path, root, output, open)?;
             } else if target == output {
                 return OutputReachedThroughLinkSnafu {
                     path: entry,
@@ -1950,21 +1950,23 @@ fn is_absolute_bind_mount_host(mount: &str) -> bool {
     !h.is_empty() && (h[0] == b'/' || h[0] == b'\\')
 }
 
-/// A directory's entries as full paths, sorted. [`crate::fs::read_dir`] skips a
-/// name that is not UTF-8, which for a bundle would mean a file silently left
-/// out; here it is refused instead, since the archive cannot name it.
-fn list_dir(dir: &Path) -> Result<Vec<PathBuf>, BundleError> {
-    let mut out = Vec::new();
+/// The names in a directory, sorted. [`crate::fs::read_dir`] skips a name that
+/// is not UTF-8, which would leave a file out of the bundle; here it is refused.
+fn list_dir(dir: &Path) -> Result<Vec<String>, BundleError> {
+    let mut names = Vec::new();
     for entry in std::fs::read_dir(dir).context(ListDirSnafu { path: dir })? {
         let entry = entry.context(ListDirSnafu { path: dir })?;
-        let path = PathBuf::from_path_buf(entry.path()).map_err(|_| BundleError::NameNotUtf8 {
-            dir: dir.to_path_buf(),
-            name: entry.file_name().to_string_lossy().into_owned(),
-        })?;
-        out.push(path);
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|name| BundleError::NameNotUtf8 {
+                dir: dir.to_path_buf(),
+                name: name.to_string_lossy().into_owned(),
+            })?;
+        names.push(name);
     }
-    out.sort();
-    Ok(out)
+    names.sort();
+    Ok(names)
 }
 
 /// Where `path` comes to rest with every symlink followed, which must be under

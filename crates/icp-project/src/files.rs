@@ -238,7 +238,7 @@ impl Confined {
     /// come to rest outside, or passes through a symlink on the way.
     ///
     /// What a caller that needs a path for something that does not read
-    /// through the trait — a lock file, a runtime mounting a directory —
+    /// through the trait — a runtime mounting a directory —
     /// asks for. Such a caller opens the path itself, after this has looked,
     /// so it has this filesystem's rule but not the handle's guarantee.
     pub fn resolve(&self, path: &Path) -> Result<PathBuf, FsError> {

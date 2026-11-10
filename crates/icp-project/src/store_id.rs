@@ -7,7 +7,6 @@ use crate::manifest::ProjectRootLocateError;
 #[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, DATA_DIR, ICP_BASE,
-    files::Confined,
     fs::{create_dir_all, json, remove_file},
     manifest::ProjectRootLocate,
     prelude::*,
@@ -162,33 +161,16 @@ impl std::error::Error for StoreCause {
 #[cfg(feature = "host")]
 pub struct AccessImpl {
     project_root_locate: Arc<dyn ProjectRootLocate>,
-    confined: Option<Confined>,
     lock: Mutex<()>,
 }
 
 #[cfg(feature = "host")]
 impl AccessImpl {
-    /// `confined` is given for a project that is not trusted: the store's
-    /// files are then held to it, so a symlink planted where the store keeps
-    /// one is refused rather than written or read through.
-    pub fn new(
-        project_root_locate: Arc<dyn ProjectRootLocate>,
-        confined: Option<Confined>,
-    ) -> Self {
+    pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
         Self {
             project_root_locate,
-            confined,
             lock: Mutex::new(()),
         }
-    }
-
-    /// Refuse `fpath` unless the filesystem the project is confined to, if
-    /// it is, would give it.
-    fn held(&self, fpath: &Path) -> Result<(), StoreCause> {
-        if let Some(confined) = &self.confined {
-            confined.resolve(fpath).map_err(StoreCause::new)?;
-        }
-        Ok(())
     }
 }
 
@@ -205,11 +187,6 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        self.held(&fpath)
-            .map_err(|source| RegisterError::RegisterStore {
-                source,
-                env: env.to_owned(),
-            })?;
         create_dir_all(fpath.parent().unwrap()).map_err(|e| RegisterError::RegisterStore {
             source: StoreCause::new(e),
             env: env.to_owned(),
@@ -250,11 +227,6 @@ impl Access for AccessImpl {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
 
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        self.held(&fpath)
-            .map_err(|source| UnregisterError::UnregisterStore {
-                source,
-                env: env.to_owned(),
-            })?;
 
         // Load the file
         let mut mapping = load_mapping(&fpath).map_err(|e| UnregisterError::UnregisterStore {
@@ -282,11 +254,6 @@ impl Access for AccessImpl {
     ) -> Result<Principal, LookupIdError> {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        self.held(&fpath)
-            .map_err(|source| LookupIdError::LookupStore {
-                source,
-                env: env.to_owned(),
-            })?;
         load_mapping(&fpath)
             .map_err(|e| LookupIdError::LookupStore {
                 source: StoreCause::new(e),
@@ -303,11 +270,6 @@ impl Access for AccessImpl {
     fn lookup_by_environment(&self, is_cache: bool, env: &str) -> Result<IdMapping, LookupIdError> {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        self.held(&fpath)
-            .map_err(|source| LookupIdError::LookupStore {
-                source,
-                env: env.to_owned(),
-            })?;
         load_mapping(&fpath).map_err(|e| LookupIdError::LookupStore {
             source: StoreCause::new(e),
             env: env.to_owned(),
@@ -317,11 +279,6 @@ impl Access for AccessImpl {
     fn cleanup(&self, is_cache: bool, env: &str) -> Result<(), CleanupError> {
         let _g = self.lock.lock().expect("failed to acquire id store lock");
         let fpath = self.get_fpath_for_env(is_cache, env)?;
-        self.held(&fpath)
-            .map_err(|source| CleanupError::CleanupStore {
-                source,
-                env: env.to_owned(),
-            })?;
         if fpath.exists() {
             remove_file(&fpath).map_err(|e| CleanupError::CleanupStore {
                 source: StoreCause::new(e),
@@ -487,36 +444,5 @@ pub mod mock {
             store.remove(env);
             Ok(())
         }
-    }
-}
-
-#[cfg(all(test, unix, feature = "host"))]
-mod confined_tests {
-    use super::*;
-    use crate::manifest::ProjectRootLocateImpl;
-
-    /// A link planted where the store keeps a mapping is refused when the
-    /// project is confined, rather than read or written through.
-    #[test]
-    fn a_mapping_behind_a_symlink_is_refused_when_confined() {
-        let dir = camino_tempfile::tempdir().unwrap();
-        let root = dir.path().join("project");
-        let mappings = root.join(ICP_BASE).join(DATA_DIR).join("mappings");
-        std::fs::create_dir_all(&mappings).unwrap();
-        std::fs::write(root.join("icp.yaml"), "canisters: []").unwrap();
-        let victim = dir.path().join("victim.json");
-        std::fs::write(&victim, "{}").unwrap();
-        std::os::unix::fs::symlink(&victim, mappings.join("ic.ids.json")).unwrap();
-
-        let locate = Arc::new(ProjectRootLocateImpl::new(root.clone(), Some(root.clone())));
-        let store = AccessImpl::new(locate, Some(Confined::new(&root).unwrap()));
-
-        let err = store
-            .register(false, "ic", "backend", Principal::anonymous())
-            .unwrap_err();
-        assert!(matches!(err, RegisterError::RegisterStore { .. }), "{err}");
-        let err = store.lookup(false, "ic", "backend").unwrap_err();
-        assert!(matches!(err, LookupIdError::LookupStore { .. }), "{err}");
-        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "{}");
     }
 }

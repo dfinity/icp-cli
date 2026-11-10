@@ -163,6 +163,12 @@ pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refuse
 
 /// Refuse `path` unless it resolves to a regular file under the resolved
 /// `root`.
+///
+/// Where the path leads is judged on the resolved path; what is there is
+/// asked of the path as spelled. The two answers agree, since a link is
+/// followed either way, and a filesystem that knows paths by how its
+/// caller spells them — one confined to a root reached through a link —
+/// has no answer for the resolved one.
 async fn within(
     files: &dyn FileSystem,
     root: &Path,
@@ -185,7 +191,7 @@ async fn within(
         }
         .fail();
     }
-    if !files.is_file(&resolved).await {
+    if !files.is_file(path).await {
         return NotAFileSnafu {
             canister: &canister.name,
             path,
@@ -260,8 +266,9 @@ mod tests {
 
     /// A filesystem that resolves the paths it is told to and nothing else,
     /// standing in for links and `..` on disk, and says which of the places
-    /// they resolve to hold a regular file: the vet asks for nothing but
-    /// where a path really is and what is there.
+    /// they resolve to hold a regular file — asked of a path by any
+    /// spelling, followed to where it resolves, as the host follows a link.
+    /// The vet asks for nothing but where a path really is and what is there.
     struct Resolves {
         paths: HashMap<PathBuf, PathBuf>,
         files: HashSet<PathBuf>,
@@ -273,7 +280,9 @@ mod tests {
             self.paths.get(path).cloned()
         }
         async fn is_file(&self, path: &Path) -> bool {
-            self.files.contains(path)
+            self.paths
+                .get(path)
+                .is_some_and(|resolved| self.files.contains(resolved))
         }
         async fn read(&self, _: &Path) -> Result<Vec<u8>, FsError> {
             unreachable!("the vet reads nothing")
@@ -582,5 +591,40 @@ mod tests {
                 "{path}: {err}"
             );
         }
+    }
+
+    /// A filesystem that holds paths to a root as the caller spells it — the
+    /// confined one, with the project reached through a link, as a macOS
+    /// temp dir is through `/var` — resolves a module to its real place,
+    /// which is not under that spelling. The vet must not then ask it what
+    /// is at the real place: a module within the project is accepted, and
+    /// what is not a file is still refused.
+    #[cfg(all(unix, feature = "host"))]
+    #[tokio::test]
+    async fn on_disk_a_root_spelled_through_a_link_is_asked_by_that_spelling() {
+        use crate::files::Confined;
+        use std::os::unix::fs::symlink;
+
+        let dir = camino_tempfile::tempdir().unwrap();
+        let real = dir.path().join("project");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::write(real.join("backend.wasm"), b"module").unwrap();
+        std::fs::create_dir(real.join("dir.wasm")).unwrap();
+        let spelled = dir.path().join("alias");
+        symlink(&real, &spelled).unwrap();
+        let files = Confined::new(&spelled);
+
+        let mut project = project_with(vec![local("backend.wasm")], vec![]).await;
+        project.dir = spelled.clone();
+        project.canisters.get_mut("backend").unwrap().0 = spelled.clone();
+        vet(&project, &files)
+            .await
+            .expect("the project's own module, with the root spelled through a link");
+
+        project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
+            steps: vec![local("dir.wasm")],
+        };
+        let err = vet(&project, &files).await.unwrap_err();
+        assert!(matches!(err, Refused::NotAFile { .. }), "{err}");
     }
 }

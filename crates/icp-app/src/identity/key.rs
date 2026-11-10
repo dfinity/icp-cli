@@ -16,8 +16,8 @@ use ic_identity_hsm::HardwareIdentity;
 use keyring::Entry;
 use pem::Pem;
 use pkcs8::{
-    DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
-    pkcs5::pbes2::Parameters,
+    DecodePrivateKey, EncodePrivateKey, EncryptedPrivateKeyInfoRef, PrivateKeyInfoRef,
+    SecretDocument, pkcs5::pbes2::Parameters,
 };
 use rand::Rng;
 use scrypt::Params;
@@ -259,7 +259,7 @@ fn load_pbes2_identity(
     origin: &PemOrigin,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
-        doc.tag() == pkcs8::EncryptedPrivateKeyInfo::PEM_LABEL,
+        doc.tag() == pkcs8::EncryptedPrivateKeyInfoRef::PEM_LABEL,
         "internal error: wrong identity format found"
     );
 
@@ -279,7 +279,7 @@ fn load_pbes2_identity(
             Ok(Arc::new(Prime256v1Identity::from_private_key(key)))
         }
         IdentityKeyAlgorithm::Ed25519 => {
-            let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
+            let encrypted = EncryptedPrivateKeyInfoRef::from_der(doc.contents())
                 .context(ParseDerSnafu { origin })?;
             let decrypted: SecretDocument =
                 encrypted.decrypt(&pw).context(ParsePkcs8Snafu { origin })?;
@@ -296,7 +296,7 @@ fn load_plaintext_identity(
     origin: &PemOrigin,
 ) -> Result<Arc<dyn Identity>, LoadIdentityError> {
     assert!(
-        doc.tag() == PrivateKeyInfo::PEM_LABEL,
+        doc.tag() == PrivateKeyInfoRef::PEM_LABEL,
         "internal error: wrong identity format found"
     );
 
@@ -528,7 +528,7 @@ fn create_pem_session_and_build_identity(
     // Store session key in keyring.
     let doc = session_key.to_pkcs8_der().expect("infallible PKI encoding");
     let pem_str: Zeroizing<String> = doc
-        .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+        .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
         .expect("infallible PKI encoding");
     let entry =
         Entry::new(SERVICE_NAME, &dlg_keyring_key(name)).context(CreateSessionKeyringEntrySnafu)?;
@@ -816,7 +816,7 @@ fn load_webauth_public_key_pbes2(
 ) -> Result<Vec<u8>, LoadIdentityError> {
     match algorithm {
         IdentityKeyAlgorithm::Ed25519 => {
-            let encrypted = EncryptedPrivateKeyInfo::from_der(doc.contents())
+            let encrypted = EncryptedPrivateKeyInfoRef::from_der(doc.contents())
                 .context(ParseDerSnafu { origin })?;
             let decrypted: SecretDocument =
                 encrypted.decrypt(pw).context(ParsePkcs8Snafu { origin })?;
@@ -1020,7 +1020,7 @@ pub fn create_identity(
     match &format {
         CreateFormat::Plaintext => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             write_identity(dirs, name, &pem)?;
         }
@@ -1030,7 +1030,7 @@ pub fn create_identity(
         }
         CreateFormat::Keyring => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let username = if delegation.is_some() {
                 dlg_keyring_key(name)
@@ -1753,7 +1753,7 @@ pub fn link_webauth_identity(
     let webauth_storage = match &create_format {
         CreateFormat::Keyring => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                 .context(DlgCreateKeyringEntrySnafu)?;
@@ -1769,7 +1769,7 @@ pub fn link_webauth_identity(
         }
         CreateFormat::Plaintext => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let pem_path = dirs
                 .ensure_key_pem_path(name)
@@ -1887,7 +1887,7 @@ pub fn create_pending_delegation(
     let storage = match &create_format {
         CreateFormat::Keyring => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let entry = Entry::new(SERVICE_NAME, &dlg_keyring_key(name))
                 .context(DlgCreateKeyringEntrySnafu)?;
@@ -1903,7 +1903,7 @@ pub fn create_pending_delegation(
         }
         CreateFormat::Plaintext => {
             let pem = doc
-                .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                 .expect("infallible PKI encoding");
             let pem_path = dirs
                 .ensure_key_pem_path(name)
@@ -2004,7 +2004,7 @@ pub fn complete_delegation(
     Ok(storage)
 }
 
-fn encrypt_pki(pki: &PrivateKeyInfo<'_>, password: &str) -> Zeroizing<String> {
+fn encrypt_pki(pki: &PrivateKeyInfoRef<'_>, password: &str) -> Zeroizing<String> {
     let mut salt = [0; 16];
     let mut iv = [0; 16];
 
@@ -2014,10 +2014,10 @@ fn encrypt_pki(pki: &PrivateKeyInfo<'_>, password: &str) -> Zeroizing<String> {
 
     let encrypted_doc = pki
         .encrypt_with_params(
-            Parameters::scrypt_aes256cbc(
-                Params::new(17, 8, 1, 32).expect("valid scrypt params"),
+            Parameters::generate_scrypt_aes256cbc(
+                Params::new(17, 8, 1).expect("valid scrypt params"),
                 &salt,
-                &iv,
+                iv,
             )
             .expect("valid pbes2 params"),
             password,
@@ -2025,12 +2025,12 @@ fn encrypt_pki(pki: &PrivateKeyInfo<'_>, password: &str) -> Zeroizing<String> {
         .expect("infallible PKI encryption");
 
     encrypted_doc
-        .to_pem(EncryptedPrivateKeyInfo::PEM_LABEL, Default::default())
+        .to_pem(EncryptedPrivateKeyInfoRef::PEM_LABEL, Default::default())
         .expect("infallible EPKI encoding")
 }
 
 fn make_pkcs5_encrypted_pem(doc: &SecretDocument, password: &str) -> Zeroizing<String> {
-    let pki = PrivateKeyInfo::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
+    let pki = PrivateKeyInfoRef::from_der(doc.as_bytes()).expect("infallible PKI roundtrip");
     encrypt_pki(&pki, password)
 }
 
@@ -2137,7 +2137,7 @@ pub fn export_identity(
                         .map_err(|message| ExportIdentityError::GetPasswordForExport { message })?;
 
                     // Decrypt to get the plaintext private key info
-                    let encrypted = EncryptedPrivateKeyInfo::from_der(pem.contents())
+                    let encrypted = EncryptedPrivateKeyInfoRef::from_der(pem.contents())
                         .context(ParseDecryptedForExportSnafu)?;
                     let decrypted: SecretDocument = encrypted
                         .decrypt(&password)
@@ -2145,7 +2145,7 @@ pub fn export_identity(
 
                     // Convert to plaintext PEM string
                     decrypted
-                        .to_pem(PrivateKeyInfo::PEM_LABEL, Default::default())
+                        .to_pem(PrivateKeyInfoRef::PEM_LABEL, Default::default())
                         .expect("infallible PEM encoding")
                         .to_string()
                 }
@@ -2173,7 +2173,7 @@ pub fn export_identity(
             let pem: Pem = plaintext_pem
                 .parse()
                 .expect("internal error: exported PEM is invalid");
-            let pki = PrivateKeyInfo::from_der(pem.contents())
+            let pki = PrivateKeyInfoRef::from_der(pem.contents())
                 .expect("internal error: exported key is not valid PKCS#8");
             // Encrypt the key with the provided password
             Ok(encrypt_pki(&pki, &password).to_string())

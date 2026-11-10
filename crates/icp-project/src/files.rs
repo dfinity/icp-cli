@@ -104,6 +104,12 @@ pub trait Scratch: Send + Sync {
 /// [`Resolve`](crate::canister::recipe::Resolve) implementation reads it, and
 /// must read it through this filesystem or refuse it.
 ///
+/// Known issue: a predicate can only answer `true` or `false`, so the reason
+/// a path was refused is lost there, and a caller that checks before it
+/// reads reports a refused path as missing. The loader does this for a
+/// canister directory and for a dependency's manifest: `canisters:
+/// [../elsewhere]` fails as "not found" rather than as outside the root.
+///
 /// The root is absolute, and is matched as the caller spelled it, not as it
 /// canonicalizes. It and everything above it are the caller's, and may be
 /// reached through a link; only what lies below is held to shape. The tree

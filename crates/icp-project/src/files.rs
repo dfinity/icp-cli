@@ -96,8 +96,13 @@ pub trait Scratch: Send + Sync {
 /// applied, and a path that comes to rest outside the root is refused with
 /// [`OutsideRoot`]. Each component below the root is then looked at as it is
 /// on disk, and a path that passes through a symlink is refused with
-/// [`ThroughLink`], wherever the link leads. The predicates answer `false`
-/// for a refused path, and scratch directories are made under the root.
+/// [`ThroughLink`], wherever the link leads, even where a later `..` steps
+/// back out of it. The predicates answer `false` for a refused path, and
+/// scratch directories are made under the root.
+///
+/// This confines what is read and written through it, and nothing else: a
+/// `script` build step in a manifest still runs any command, so whoever
+/// holds a tree they do not trust must also refuse such steps or sandbox them.
 ///
 /// The loader reads every path through the [`FileSystem`] it is given, so
 /// this holds all of them. A local recipe template is the exception: the
@@ -185,10 +190,24 @@ impl Confined {
         } else {
             path
         };
+        // Each component is looked at as it is on disk the moment it is
+        // named, before any `..` after it is applied: the host would follow a
+        // link and take `..` from where it leads, so a path that so much as
+        // mentions one is refused, dangling or not.
         let mut resolved = self.root.clone();
         for component in relative.components() {
             match component {
-                Utf8Component::Normal(part) => resolved.push(part),
+                Utf8Component::Normal(part) => {
+                    resolved.push(part);
+                    if std::fs::symlink_metadata(&resolved)
+                        .is_ok_and(|m| m.file_type().is_symlink())
+                    {
+                        return Err(FsError::new(ThroughLink {
+                            path: path.to_path_buf(),
+                            link: resolved,
+                        }));
+                    }
+                }
                 Utf8Component::CurDir => {}
                 Utf8Component::ParentDir => {
                     if resolved == self.root || !resolved.pop() {
@@ -196,28 +215,6 @@ impl Confined {
                     }
                 }
                 Utf8Component::RootDir | Utf8Component::Prefix(_) => return Err(outside()),
-            }
-        }
-
-        // Each component as it is on disk, not what it points at, so a link
-        // is seen wherever it leads, dangling or not. The first component
-        // that is not there ends the walk: nothing beyond it can be a link.
-        let mut at = self.root.clone();
-        for component in resolved
-            .strip_prefix(&self.root)
-            .expect("resolved under the root")
-            .components()
-        {
-            at.push(component.as_str());
-            match std::fs::symlink_metadata(&at) {
-                Ok(meta) if meta.file_type().is_symlink() => {
-                    return Err(FsError::new(ThroughLink {
-                        path: path.to_path_buf(),
-                        link: at,
-                    }));
-                }
-                Ok(_) => {}
-                Err(_) => break,
             }
         }
         Ok(resolved)
@@ -721,6 +718,10 @@ mod tests {
                 ("dangling", "dangling"),
                 ("dir-link/a.wasm", "dir-link"),
                 ("./dir-link/../dir-link/a.wasm", "dir-link"),
+                // The host would take `..` from where the link leads; the
+                // spelling alone would cancel the link out and find the file.
+                ("dir-link/../canisters/a.wasm", "dir-link"),
+                ("dangling/../icp.yaml", "dangling"),
             ] {
                 let err = fs
                     .read(Path::new(spelling))

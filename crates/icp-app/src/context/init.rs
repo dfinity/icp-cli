@@ -98,7 +98,7 @@ pub fn initialize(
     // against the root as spelled, so the root has to be a whole path.
     let project_root_override = project_root_override.map(|dir| cwd.join(dir));
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
-        cwd,
+        cwd.clone(),
         project_root_override,
     ));
 
@@ -149,6 +149,7 @@ pub fn initialize(
         http_client,
         pkg_cache,
         files: files.clone(),
+        cwd,
     });
 
     // Canister builder

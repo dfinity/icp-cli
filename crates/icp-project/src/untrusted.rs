@@ -15,6 +15,17 @@
 //!   step is a pre-built module, a sync step is a plugin, and the file either
 //!   names is a regular file that filesystem will give.
 //!
+//! What the tool keeps under `.icp` is not part of the project: it is state
+//! an earlier run wrote and a later one reads back as its own, a network's
+//! descriptor among it, which says where that network's files are. Whoever
+//! takes a project from elsewhere discards any `.icp` that came with it, and
+//! nothing here vets what one holds.
+//!
+//! A plugin's runtime opens the plugin, and each file and directory the step
+//! hands it, by path, after [`vet`] has looked. So those have the rule but
+//! not the guarantee a read through the confined filesystem has: a tree
+//! rewritten between the look and the open is not caught.
+//!
 //! A module or plugin named by URL is not on the list, and the steps a recipe
 //! renders to are held to it like any other. A checksum is not asked for: the
 //! same untrusted hand wrote it and the module. [`vet`] applies the list to a
@@ -30,7 +41,10 @@ use crate::{
     Project, ProjectLoad, ProjectLoadError, UntrustedSnafu,
     files::FileSystem,
     manifest::{
-        adapter::prebuilt::{LocalSource, SourceField},
+        adapter::{
+            plugin::NamedPaths,
+            prebuilt::{LocalSource, SourceField},
+        },
         canister::{BuildStep, SyncStep},
     },
     prelude::*,
@@ -56,6 +70,13 @@ pub enum Refused {
          untrusted project runs only a file under its root, reached through no symlink"
     ))]
     NotAFile { canister: String, path: PathBuf },
+
+    #[snafu(display(
+        "canister '{canister}' gives its sync plugin '{path}', which is not a regular file or \
+         directory in the project: an untrusted project hands a plugin only what is under its \
+         root, reached through no symlink"
+    ))]
+    PluginInput { canister: String, path: PathBuf },
 }
 
 /// The file `step` names, if it is the one build step an untrusted project
@@ -90,6 +111,9 @@ fn local_source(source: &SourceField) -> Option<&LocalSource> {
 /// symlink, and a regular file. A plugin is opened by its runtime rather
 /// than read through `files`, and a read of a pipe nobody writes to waits
 /// forever, so the question is asked here, before anything opens the file.
+/// The same is asked of what a plugin step hands its plugin, which the
+/// runtime also opens itself: a `dirs` entry is a directory, and a `files`
+/// entry a regular file or a directory.
 pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refused> {
     for (_, (canister_dir, canister)) in &project.canisters {
         let build = canister.build.steps.iter().map(|step| {
@@ -119,6 +143,28 @@ pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refuse
                     path,
                 }
             );
+        }
+        for step in &canister.sync.steps {
+            let SyncStep::Plugin(adapter) = step else {
+                continue;
+            };
+            let dirs = adapter.dirs.iter().flat_map(NamedPaths::entries);
+            let named = adapter.files.iter().flat_map(NamedPaths::entries);
+            let inputs = dirs
+                .map(|entry| (entry.path, false))
+                .chain(named.map(|entry| (entry.path, true)));
+            for (declared, may_be_a_file) in inputs {
+                let path = canister_dir.join(declared);
+                let held =
+                    (may_be_a_file && files.is_file(&path).await) || files.is_dir(&path).await;
+                ensure!(
+                    held,
+                    PluginInputSnafu {
+                        canister: &canister.name,
+                        path,
+                    }
+                );
+            }
         }
     }
     Ok(())
@@ -213,7 +259,7 @@ mod tests {
             unreachable!("the vet asks only for a regular file")
         }
         async fn is_dir(&self, _: &Path) -> bool {
-            unreachable!("the vet asks only for a regular file")
+            false
         }
         async fn read_dir(&self, _: &Path) -> Result<Vec<PathBuf>, FsError> {
             unreachable!("the vet reads nothing")
@@ -423,6 +469,38 @@ mod tests {
             };
             let err = vet(&project, &files).await.unwrap_err();
             assert!(matches!(err, Refused::NotAFile { .. }), "{path}: {err}");
+        }
+
+        // What a plugin is handed is held the same way: its runtime opens
+        // each entry itself, and would wait on the pipe.
+        std::fs::write(root.join("p.wasm"), b"plugin").unwrap();
+        std::fs::write(root.join("seed.txt"), b"seed").unwrap();
+        std::fs::create_dir(root.join("assets")).unwrap();
+        let with_inputs = |inputs: &str| SyncSteps {
+            steps: vec![plugin(&format!("path: p.wasm\n{inputs}"))],
+        };
+        let canister = &mut project.canisters.get_mut("backend").unwrap().1;
+        canister.build = BuildSteps {
+            steps: vec![local("backend.wasm")],
+        };
+        canister.sync = with_inputs("files:\n  seed: seed.txt\n  assets: assets");
+        vet(&project, &files)
+            .await
+            .expect("the project's own files");
+        for inputs in [
+            "files:\n  seed: pipe.wasm",
+            "files:\n  seed: out.wasm",
+            "files:\n  seed: ../secret.wasm",
+            "files:\n  seed: gone",
+            "dirs: [outdir]",
+            "dirs: [seed.txt]",
+        ] {
+            project.canisters.get_mut("backend").unwrap().1.sync = with_inputs(inputs);
+            let err = vet(&project, &files).await.unwrap_err();
+            assert!(
+                matches!(err, Refused::PluginInput { .. }),
+                "{inputs}: {err}"
+            );
         }
     }
 }

@@ -184,6 +184,11 @@ pub enum ConfinedError {
         path: PathBuf,
     },
 
+    #[snafu(display(
+        "'{path}' is not a regular file, which is all that is read from this project"
+    ))]
+    NotAFile { path: PathBuf },
+
     #[snafu(display("failed to write '{path}'"))]
     Write {
         source: std::io::Error,
@@ -287,6 +292,18 @@ impl Confined {
         Ok(beneath)
     }
 
+    /// As [`at`](Self::at), for a path about to be read: refused unless what
+    /// is there is a regular file. Opening a pipe nobody writes to waits
+    /// forever, so the question is asked before the open. A path with
+    /// nothing at it goes through, for the read to report as missing.
+    fn file_at(&self, path: &Path) -> Result<PathBuf, FsError> {
+        let at = self.at(path)?;
+        if self.dir.metadata(&at).is_ok_and(|m| !m.is_file()) {
+            return Err(FsError::new(NotAFileSnafu { path }.build()));
+        }
+        Ok(at)
+    }
+
     /// As [`beneath`](Self::beneath), spelled the way the directory handle
     /// takes it: it has no name for itself but `.`.
     fn at(&self, path: &Path) -> Result<PathBuf, FsError> {
@@ -304,14 +321,14 @@ impl Confined {
 impl FileSystem for Confined {
     async fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
         self.dir
-            .read(self.at(path)?)
+            .read(self.file_at(path)?)
             .context(ReadSnafu { path })
             .map_err(FsError::new)
     }
 
     async fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
         self.dir
-            .read_to_string(self.at(path)?)
+            .read_to_string(self.file_at(path)?)
             .context(ReadSnafu { path })
             .map_err(FsError::new)
     }
@@ -886,6 +903,32 @@ mod tests {
                 std::fs::read(dir.path().join("outside.txt")).unwrap(),
                 b"secret"
             );
+        }
+
+        /// A pipe passes for a path under the root through no link, and a
+        /// read of one nobody writes to would never come back.
+        #[cfg(unix)]
+        #[tokio::test]
+        async fn a_read_of_what_is_not_a_regular_file_is_refused_before_it_opens() {
+            let (_dir, fs) = root();
+            let made = std::process::Command::new("mkfifo")
+                .arg(fs.root().join("pipe"))
+                .status()
+                .expect("mkfifo");
+            assert!(made.success(), "mkfifo");
+            for path in ["pipe", "canisters"] {
+                let err = fs.read(Path::new(path)).await.expect_err(path).to_string();
+                assert!(err.contains("not a regular file"), "{path}: {err}");
+                let err = fs
+                    .read_to_string(Path::new(path))
+                    .await
+                    .expect_err(path)
+                    .to_string();
+                assert!(err.contains("not a regular file"), "{path}: {err}");
+            }
+            // What is not there is still reported as that.
+            let err = fs.read(Path::new("gone")).await.unwrap_err().to_string();
+            assert!(err.contains("failed to read"), "{err}");
         }
 
         #[tokio::test]

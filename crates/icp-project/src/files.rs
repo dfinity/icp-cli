@@ -89,41 +89,21 @@ pub trait Scratch: Send + Sync {
 }
 
 /// This machine's filesystem, held to one directory by the spelling of each
-/// path alone.
+/// path alone, for a project that is not the user's own tree: a bundle
+/// handed over by someone else.
 ///
-/// Every path is resolved against the root before the disk sees it: a
-/// relative path is joined to the root, `.` is dropped, `..` is applied, and
-/// a path that comes to rest outside the root — by climbing above it, or by
-/// being absolute somewhere else — is refused with [`OutsideRoot`]. The
-/// predicates answer `false` for such a path, as they do for any other
-/// failure, and scratch directories are made under the root, so what a build
-/// writes and reads back stays inside.
+/// A relative path is joined to the root, `.` is dropped, `..` is applied,
+/// and a path that comes to rest outside the root is refused with
+/// [`OutsideRoot`]; the predicates answer `false` for one, and scratch
+/// directories are made under the root. The loader reads every path through
+/// the [`FileSystem`] it is given, so this holds all of them. A local recipe
+/// template is the exception: the
+/// [`Resolve`](crate::canister::recipe::Resolve) implementation reads it, and
+/// must confine or refuse it itself.
 ///
-/// For a project whose files are not the user's own tree: a bundle handed
-/// over by someone else, which `icp project bundle` wrote with every path
-/// held to the project it came from, but which the loader would otherwise
-/// take at its word. The loader resolves every path it reads itself through
-/// the [`FileSystem`] it is given, so confining that one seam holds all of
-/// them — the canister directories, the manifests in them, the argument and
-/// variable files, the dependency projects — without the loader enumerating
-/// its fields. A local recipe template is the one file the loader has read
-/// for it rather than reading: the [`Resolve`](crate::canister::recipe::Resolve)
-/// implementation fetches it, and one holding a tree it does not trust must
-/// confine or refuse that itself.
-///
-/// The check is lexical, so it holds only for a tree without symlinks. That
-/// is the shape a bundle has: `icp project bundle` writes an archive of
-/// regular files and directories, and a consumer unpacking one it does not
-/// trust refuses any entry that is not, so nothing in the tree can lead
-/// elsewhere. A tree that does carry symlinks is followed as the host
-/// follows them, and that is deliberate — the user's own project may link
-/// wherever it likes. The tree is also taken to be the caller's own while
-/// the project is loaded, with nothing else rewriting it underneath.
-///
-/// Paths are matched against the root as the caller spelled it, not as it
-/// canonicalizes, so a caller that names the root through a symlink (macOS
-/// keeps `/var` as a link to `/private/var`) or by its short name (Windows'
-/// `RUNNER~1`) is understood as long as it keeps to the same spelling.
+/// The check is lexical, so it holds only for a tree without symlinks, which
+/// is what a bundle is; a link is followed as the host follows it. The root
+/// is matched as the caller spelled it, not as it canonicalizes.
 #[cfg(feature = "host")]
 #[derive(Debug, Clone)]
 pub struct Confined {
@@ -637,9 +617,8 @@ mod tests {
             assert!(!dir.path().join("planted").exists());
         }
 
-        /// What broke on macOS and Windows: the temp dir is reached through
-        /// a symlink (`/var` to `/private/var`) or a short name (`RUNNER~1`),
-        /// so a root compared by what it canonicalizes to refused every
+        /// A temp dir on macOS is reached through a symlink (`/var`), so a
+        /// root compared by what it canonicalizes to would refuse every
         /// absolute path spelled the way the caller got it.
         #[cfg(unix)]
         #[tokio::test]

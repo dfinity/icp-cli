@@ -478,7 +478,7 @@ pub async fn create_bundle(
     let canonical_sync_dirs =
         validate_source_paths(project_dir, &canisters, &canonical_project_dir)?;
     validate_env_var_files(files, &canisters, &canonical_project_dir).await?;
-    let canonical_output = validate_output_path(files, output, &canonical_sync_dirs).await?;
+    validate_output_path(files, output, &canonical_sync_dirs).await?;
 
     build_many(
         canisters.clone(),
@@ -558,7 +558,6 @@ pub async fn create_bundle(
         files,
         output,
         &canonical_project_dir,
-        &canonical_output,
         &manifests,
         &bundle_artifacts,
         &args_files,
@@ -1608,7 +1607,6 @@ async fn write_archive(
     files: &dyn FileSystem,
     output: &Path,
     canonical_project_dir: &Path,
-    canonical_output: &Path,
     manifests: &[InstanceManifest],
     artifacts: &BundleArtifacts,
     args_files: &[ArgsFile],
@@ -1646,6 +1644,10 @@ async fn write_archive(
     let file = File::create(output.as_std_path()).context(CreateOutputSnafu {
         path: output.to_path_buf(),
     })?;
+    // Resolved now that it exists, for the walk, which can reach the output
+    // through a symlink: before this it may itself have been a dangling link,
+    // whose target only creating it brought about.
+    let canonical_output = canonicalize(files, output).await?;
     let gz = GzEncoder::new(BufWriter::new(file), Compression::default());
     let mut archive = ArchiveWriter::new(gz);
 
@@ -1686,7 +1688,7 @@ async fn write_archive(
             &d.src_path,
             &d.archive_prefix,
             canonical_project_dir,
-            canonical_output,
+            &canonical_output,
         )?;
     }
 
@@ -1888,14 +1890,13 @@ fn resolve_within_project(
     Ok(resolved)
 }
 
-/// Refuse an output path inside a directory the bundle copies, and hand back
-/// its canonical form for the walk, which can reach the output through a
-/// symlink that this lexical check cannot see.
+/// Refuse to write the bundle output into a directory we are about to recursively archive —
+/// otherwise the partial bundle file would be included in itself.
 async fn validate_output_path(
     files: &dyn FileSystem,
     output: &Path,
     canonical_sync_dirs: &[PathBuf],
-) -> Result<PathBuf, BundleError> {
+) -> Result<(), BundleError> {
     let canonical_output = canonicalize_output(files, output).await?;
     for sync_dir in canonical_sync_dirs {
         if canonical_output.starts_with(sync_dir) {
@@ -1906,7 +1907,7 @@ async fn validate_output_path(
             .fail();
         }
     }
-    Ok(canonical_output)
+    Ok(())
 }
 
 fn validate_network_for_bundle(net: &NetworkManifest) -> Result<(), BundleError> {

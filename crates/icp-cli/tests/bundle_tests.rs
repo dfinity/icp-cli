@@ -1184,6 +1184,30 @@ fn bundle_rejects_output_reached_through_symlink() {
         );
 }
 
+/// The same when the output path is itself a dangling symlink into such a
+/// directory: where the bundle is really written is known only once it is
+/// created, and that is what the walk is told to refuse.
+#[cfg(unix)]
+#[test]
+fn bundle_rejects_output_that_is_a_link_into_a_copied_directory() {
+    let ctx = TestContext::new();
+    let project_dir = plugin_project_with_files_entry(&ctx, "assets");
+
+    create_dir_all(&project_dir.join("assets")).expect("failed to create dir");
+    create_dir_all(&project_dir.join("shared")).expect("failed to create dir");
+    std::os::unix::fs::symlink("../shared", project_dir.join("assets/shared"))
+        .expect("failed to create symlink");
+    std::os::unix::fs::symlink("shared/actual.tar.gz", project_dir.join("bundle.tar.gz"))
+        .expect("failed to create symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", "bundle.tar.gz"])
+        .assert()
+        .failure()
+        .stderr(contains("assets/shared/actual.tar.gz").and(contains("own output file")));
+}
+
 /// A file whose name is not UTF-8 cannot be named in the archive. The bundle
 /// says so rather than leaving the file out, as the glob machinery elsewhere
 /// does when it lists a directory.

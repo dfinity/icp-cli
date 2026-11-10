@@ -66,6 +66,7 @@ fn context() -> Option<&'static Context> {
                 false,
                 Arc::new(|| Err("cannot prompt while completing".to_string())),
                 None,
+                false,
             )
             .ok()
         })

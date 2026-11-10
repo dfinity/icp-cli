@@ -12,7 +12,13 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
+use icp_project::{
+    Lazy, ProjectLoad, ProjectLoadImpl,
+    files::{Confined, FileSystem, HostFileSystem, RootError},
+    host::Host,
+    manifest::{self, ProjectRootLocate as _},
+    store_id, untrusted,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -36,13 +42,25 @@ pub enum ContextInitError {
     PackageCache {
         source: icp_project::fs::lock::LockError,
     },
+
+    #[snafu(display("failed to locate the project to treat as untrusted"))]
+    UntrustedRoot {
+        source: manifest::ProjectRootLocateError,
+    },
+
+    #[snafu(display("failed to confine the untrusted project to its directory"))]
+    Confine { source: RootError },
 }
 
+/// With `untrusted`, the project is read through a filesystem confined to
+/// its root and vetted by [`icp_project::untrusted`] before any command acts
+/// on it. The root is located up front for that, so there has to be a project.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
+    untrusted: bool,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -75,16 +93,35 @@ pub fn initialize(
     let cwd: PathBuf =
         PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
 
+    // A relative override is taken from the working directory: the
+    // filesystem an untrusted project is confined to matches every path
+    // against the root as spelled, so the root has to be a whole path.
+    let project_root_override = project_root_override.map(|dir| cwd.join(dir));
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,
         project_root_override,
     ));
 
+    // An untrusted project is confined to its directory: what it reads, and
+    // what the CLI keeps under `.icp` on its behalf.
+    let confined = if untrusted {
+        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
+        Some(Confined::new(&root).context(ConfineSnafu)?)
+    } else {
+        None
+    };
+
     // Canister ID Store
-    let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
+    let ids = Arc::new(store_id::AccessImpl::new(
+        project_root_locate.clone(),
+        confined.clone(),
+    ));
 
     // Canister Artifact Store (wasm)
-    let artifacts = Arc::new(ArtifactStore::new(project_root_locate.clone()));
+    let artifacts = Arc::new(ArtifactStore::new(
+        project_root_locate.clone(),
+        confined.clone(),
+    ));
 
     // Prepare http client
     let http_client = reqwest::Client::new();
@@ -100,14 +137,19 @@ pub fn initialize(
         pkg_cache.clone(),
     ));
 
+    // The project's files come from this machine: the whole of it for the
+    // user's own project, the project directory alone for an untrusted one.
+    let files: Arc<dyn FileSystem> = match &confined {
+        Some(confined) => Arc::new(confined.clone()),
+        None => Arc::new(HostFileSystem),
+    };
+
     // Recipes
     let recipe = Arc::new(RecipeFetcher {
         http_client,
         pkg_cache,
+        files: files.clone(),
     });
-
-    // The project's files come from this machine.
-    let files = Arc::new(icp_project::files::HostFileSystem);
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
@@ -125,8 +167,11 @@ pub fn initialize(
         files: files.clone(),
     };
 
-    let pload = Lazy::new(pload);
-    let pload = Arc::new(pload);
+    let pload: Arc<dyn ProjectLoad> = if untrusted {
+        Arc::new(Lazy::new(untrusted::Vetted::new(pload, files.clone())))
+    } else {
+        Arc::new(Lazy::new(pload))
+    };
 
     // Telemetry data bag (written by subsystems, read at session finish)
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());
@@ -152,6 +197,7 @@ pub fn initialize(
     // Network accessor
     let netaccess = Arc::new(crate::network::Accessor {
         project_root_locate: project_root_locate.clone(),
+        confined,
         descriptors: dirs.port_descriptor(),
         agent: agent_creator.clone(),
     });

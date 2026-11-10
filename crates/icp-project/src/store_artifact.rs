@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Mutex};
 #[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, ICP_BASE,
+    files::{Confined, FsError},
     fs::{
         lock::{DirectoryStructureLock, PathsAccess},
         read, write,
@@ -66,6 +67,7 @@ pub enum LookupArtifactError {
 #[cfg(feature = "host")]
 pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
+    confined: Option<Confined>,
 }
 
 #[cfg(feature = "host")]
@@ -124,23 +126,46 @@ impl PathsAccess for ArtifactPaths {
 
 #[cfg(feature = "host")]
 impl ArtifactStore {
-    pub fn new(project_root_locate: Arc<dyn ProjectRootLocate>) -> Self {
+    /// `confined` is given for a project that is not trusted: the store's
+    /// files are then held to it, so a symlink planted where the store keeps
+    /// one is refused rather than written or read through.
+    pub fn new(
+        project_root_locate: Arc<dyn ProjectRootLocate>,
+        confined: Option<Confined>,
+    ) -> Self {
         Self {
             project_root_locate,
+            confined,
         }
     }
 
-    /// Locked directory access for the artifact store. It will create the directory if it does not exist.
-    fn lock(&self) -> Result<DirectoryStructureLock<ArtifactPaths>, crate::fs::lock::LockError> {
+    fn paths(&self) -> ArtifactPaths {
         let project_root = self
             .project_root_locate
             .locate()
             .expect("failed to locate project root");
-        let artifact_dir = project_root
-            .join(ICP_BASE)
-            .join(CACHE_DIR)
-            .join("artifacts");
-        DirectoryStructureLock::open_or_create(ArtifactPaths { dir: artifact_dir })
+        ArtifactPaths {
+            dir: project_root
+                .join(ICP_BASE)
+                .join(CACHE_DIR)
+                .join("artifacts"),
+        }
+    }
+
+    /// Refuse the lock file and `name`'s artifact unless the filesystem the
+    /// project is confined to, if it is, would give them.
+    fn held(&self, name: &str) -> Result<(), FsError> {
+        if let Some(confined) = &self.confined {
+            let paths = self.paths();
+            confined.resolve(&paths.lock_file())?;
+            confined.resolve(&paths.artifact_by_name(name))?;
+        }
+        Ok(())
+    }
+
+    /// Locked directory access for the artifact store. It will create the directory if it does not exist.
+    fn lock(&self) -> Result<DirectoryStructureLock<ArtifactPaths>, crate::fs::lock::LockError> {
+        DirectoryStructureLock::open_or_create(self.paths())
     }
 }
 
@@ -181,6 +206,7 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
+        self.held(name).map_err(|e| save_store(name, e))?;
         self.lock()
             .map_err(|e| save_store(name, e))?
             .with_write(async |store| {
@@ -198,6 +224,7 @@ impl Access for ArtifactStore {
             }
             .fail();
         }
+        self.held(name).map_err(|e| lookup_store(name, e))?;
         self.lock()
             .map_err(|e| lookup_store(name, e))?
             .with_read(async |store| {
@@ -299,5 +326,53 @@ mod tests {
         // its single encoded segment exceeds NAME_MAX once separators are encoded.
         let deep = format!("{}:leaf", vec!["dir"; 80].join("/"));
         assert!(artifact_name_overflow(&deep).is_some());
+    }
+}
+
+#[cfg(all(test, unix, feature = "host"))]
+mod confined_tests {
+    use super::*;
+    use crate::manifest::ProjectRootLocateImpl;
+
+    /// A link planted where the store keeps an artifact, or its lock, is
+    /// refused when the project is confined, rather than written through.
+    #[tokio::test]
+    async fn an_artifact_behind_a_symlink_is_refused_when_confined() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let root = dir.path().join("project");
+        let artifacts = root.join(ICP_BASE).join(CACHE_DIR).join("artifacts");
+        std::fs::create_dir_all(&artifacts).unwrap();
+        std::fs::write(root.join("icp.yaml"), "canisters: []").unwrap();
+        let victim = dir.path().join("victim");
+        std::fs::write(&victim, "mine").unwrap();
+        let locate = Arc::new(ProjectRootLocateImpl::new(root.clone(), Some(root.clone())));
+        let store = ArtifactStore::new(locate, Some(Confined::new(&root).unwrap()));
+
+        for planted in ["backend", ".lock"] {
+            let link = artifacts.join(planted);
+            std::os::unix::fs::symlink(&victim, &link).unwrap();
+            let err = store.save("backend", b"wasm").await.unwrap_err();
+            assert!(
+                matches!(err, SaveError::SaveStore { .. }),
+                "{planted}: {err}"
+            );
+            let err = store.lookup("backend").await.unwrap_err();
+            assert!(
+                matches!(err, LookupArtifactError::LookupStore { .. }),
+                "{planted}: {err}"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&victim).unwrap(),
+                "mine",
+                "{planted}"
+            );
+            std::fs::remove_file(&link).unwrap();
+        }
+
+        store
+            .save("backend", b"wasm")
+            .await
+            .expect("no link, saved");
+        assert_eq!(store.lookup("backend").await.unwrap(), b"wasm");
     }
 }

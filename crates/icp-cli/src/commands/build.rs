@@ -9,7 +9,7 @@ use tracing::info;
 use icp_project::operations::build::build_many;
 
 use crate::{
-    options::{EnvironmentOpt, arg_struct_change_help},
+    options::{EnvironmentOpt, UntrustedOpt, arg_struct_change_help},
     render::rendered,
 };
 
@@ -22,6 +22,9 @@ pub(crate) struct BuildArgs {
 
     #[command(flatten)]
     pub(crate) environment: BuildEnvironmentOpt,
+
+    #[command(flatten)]
+    pub(crate) untrusted: UntrustedOpt,
 }
 
 arg_struct_change_help!(

@@ -20,7 +20,7 @@ use tracing::info;
 use crate::options::EnvironmentOpt;
 use crate::{
     commands::{args::ArgsOpt, canister::create},
-    options::{IdentityOpt, arg_struct_change_help},
+    options::{IdentityOpt, UntrustedOpt, arg_struct_change_help},
     render::rendered,
 };
 
@@ -97,6 +97,9 @@ pub(crate) struct DeployArgs {
     /// `upgrade_args` in the manifest.
     #[command(flatten)]
     pub(crate) args_opt: ArgsOpt,
+
+    #[command(flatten)]
+    pub(crate) untrusted: UntrustedOpt,
 }
 
 arg_struct_change_help!(

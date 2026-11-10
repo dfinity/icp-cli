@@ -40,6 +40,19 @@ impl From<IdentityOpt> for IdentitySelection {
     }
 }
 
+/// `--untrusted`, for a command that acts on what a project says: build,
+/// deploy, sync. A deploy service handed a project by an agent is what asks
+/// for it, and those are the commands it runs.
+#[derive(Args, Clone, Debug, Default)]
+pub(crate) struct UntrustedOpt {
+    /// Hold the project to what one someone else handed over may do: every
+    /// file it reads is under the project root and reached through no
+    /// symlink, each build step is a pre-built module and each sync step a
+    /// plugin. Anything else is refused
+    #[arg(long)]
+    pub(crate) untrusted: bool,
+}
+
 #[derive(Args, Clone, Debug, Default)]
 #[clap(group(ArgGroup::new("environment-select").multiple(false)))]
 pub(crate) struct EnvironmentOpt {

@@ -168,6 +168,21 @@ impl NetworkDirectory {
         Ok(())
     }
 
+    /// Refuse the files this directory is read through — its lock and its
+    /// descriptor — unless `confined`, the filesystem an untrusted project is
+    /// held to, would give them.
+    pub(crate) fn held_by(
+        &self,
+        confined: &icp_project::files::Confined,
+    ) -> Result<(), icp_project::files::FsError> {
+        let paths = NetworkRootPaths {
+            network_root: self.network_root.clone(),
+        };
+        confined.resolve(&paths.lock_file())?;
+        confined.resolve(&paths.network_descriptor_path())?;
+        Ok(())
+    }
+
     /// Locked directory access for the local network root.
     pub fn root(&self) -> Result<DirectoryStructureLock<NetworkRootPaths>, LockError> {
         DirectoryStructureLock::open_or_create(NetworkRootPaths {

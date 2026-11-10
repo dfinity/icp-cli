@@ -8,6 +8,7 @@ use candid::Principal;
 use snafu::{ResultExt, Snafu};
 use url::Url;
 
+use icp_project::files::{Confined, FsError};
 use icp_project::manifest::{ProjectRootLocate, ProjectRootLocateError};
 use icp_project::network::{
     Access, AccessError, CollectFriendlyDomains, Configuration, NetworkAccess, NetworkUrls,
@@ -26,6 +27,9 @@ use crate::network::{
 pub enum LocateNetworkDirectoryError {
     #[snafu(display("failed to find project root"))]
     ProjectRootLocate { source: ProjectRootLocateError },
+
+    #[snafu(display("network '{network}' keeps its state where an untrusted project may not"))]
+    Confine { source: FsError, network: String },
 }
 
 /// Where a network keeps its on-disk state.
@@ -57,6 +61,10 @@ pub struct Accessor {
     // Project root
     pub project_root_locate: Arc<dyn ProjectRootLocate>,
 
+    // What an untrusted project is confined to, which its network
+    // directories are then held to as well
+    pub confined: Option<Confined>,
+
     // Port descriptors dir
     pub descriptors: PathBuf,
 
@@ -74,14 +82,20 @@ impl Accessor {
             .project_root_locate
             .locate()
             .context(ProjectRootLocateSnafu)?;
-        Ok(NetworkDirectory::new(
+        let nd = NetworkDirectory::new(
             &network.name,
             &dir.join(ICP_BASE)
                 .join(CACHE_DIR)
                 .join("networks")
                 .join(&network.name),
             &self.descriptors,
-        ))
+        );
+        if let Some(confined) = &self.confined {
+            nd.held_by(confined).context(ConfineSnafu {
+                network: &network.name,
+            })?;
+        }
+        Ok(nd)
     }
 }
 

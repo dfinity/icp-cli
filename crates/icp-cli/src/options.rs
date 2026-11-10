@@ -51,7 +51,9 @@ pub(crate) struct UntrustedOpt {
     /// plugin, and it uses no recipe. Anything else is refused. Run it from
     /// the directory that holds `icp.yaml`: that directory is the project
     /// root, and no root is looked for in the directories above it. Name
-    /// another directory with `--project-root-override`
+    /// another directory with `--project-root-override`. The `.icp`
+    /// directory is the tool's own state and is neither confined nor
+    /// checked: delete one that came with the project before running
     #[arg(long)]
     pub(crate) untrusted: bool,
 }

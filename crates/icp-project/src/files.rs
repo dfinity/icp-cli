@@ -88,26 +88,41 @@ pub trait Scratch: Send + Sync {
     fn path(&self) -> &Path;
 }
 
-/// This machine's filesystem, held to one directory by the spelling of each
-/// path alone, for a project that is not the user's own tree: a bundle
-/// handed over by someone else.
+/// This machine's filesystem, held to one directory, for a project that is
+/// not the user's own tree: one handed over by someone else.
 ///
-/// A relative path is joined to the root, `.` is dropped, `..` is applied,
-/// and a path that comes to rest outside the root is refused with
-/// [`OutsideRoot`]; the predicates answer `false` for one, and scratch
-/// directories are made under the root. The loader reads every path through
-/// the [`FileSystem`] it is given, so this holds all of them. A local recipe
-/// template is the exception: the
+/// Every path must name something under the root, reached through no
+/// symlink. A relative path is joined to the root, `.` is dropped, `..` is
+/// applied, and a path that comes to rest outside the root is refused with
+/// [`OutsideRoot`]. Each component below the root is then looked at as it is
+/// on disk, and a path that passes through a symlink is refused with
+/// [`ThroughLink`], wherever the link leads. The predicates answer `false`
+/// for a refused path, and scratch directories are made under the root.
+///
+/// The loader reads every path through the [`FileSystem`] it is given, so
+/// this holds all of them. A local recipe template is the exception: the
 /// [`Resolve`](crate::canister::recipe::Resolve) implementation reads it, and
-/// must confine or refuse it itself.
+/// must read it through this filesystem or refuse it.
 ///
-/// The check is lexical, so it holds only for a tree without symlinks, which
-/// is what a bundle is; a link is followed as the host follows it. The root
-/// is matched as the caller spelled it, not as it canonicalizes.
+/// The root is absolute, and is matched as the caller spelled it, not as it
+/// canonicalizes. It and everything above it are the caller's, and may be
+/// reached through a link; only what lies below is held to shape. The tree
+/// is taken to be the caller's own while it is used, with nothing else
+/// rewriting it between the look and the read.
 #[cfg(feature = "host")]
 #[derive(Debug, Clone)]
 pub struct Confined {
     root: PathBuf,
+}
+
+/// A root a [`Confined`] filesystem was asked to hold to that is not absolute.
+#[cfg(feature = "host")]
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "'{root}' is not an absolute path, which the directory a project is confined to must be"
+))]
+pub struct RootNotAbsolute {
+    pub root: PathBuf,
 }
 
 /// A path a [`Confined`] filesystem was asked for that is not under its root.
@@ -119,13 +134,27 @@ pub struct OutsideRoot {
     pub root: PathBuf,
 }
 
+/// A path a [`Confined`] filesystem was asked for that passes through a
+/// symlink.
+#[cfg(feature = "host")]
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "'{path}' passes through '{link}', which is a symlink, and every path in this project must \
+     name a regular file or directory under its root"
+))]
+pub struct ThroughLink {
+    pub path: PathBuf,
+    pub link: PathBuf,
+}
+
 #[cfg(feature = "host")]
 impl Confined {
-    /// Confine the host filesystem to `root`.
-    pub fn new(root: &Path) -> Self {
-        Self {
+    /// Confine the host filesystem to `root`, which must be absolute.
+    pub fn new(root: &Path) -> Result<Self, RootNotAbsolute> {
+        snafu::ensure!(root.is_absolute(), RootNotAbsoluteSnafu { root });
+        Ok(Self {
             root: root.to_path_buf(),
-        }
+        })
     }
 
     /// The directory everything is held to.
@@ -135,9 +164,9 @@ impl Confined {
 
     /// Where `path` lies under the root: joined to the root if relative,
     /// with `.` dropped and `..` applied, and refused if it would come to
-    /// rest outside. What a caller that needs a real path for something that
-    /// does not read through the trait — a runtime mounting a directory —
-    /// asks for.
+    /// rest outside, or passes through a symlink on the way. What a caller
+    /// that needs a real path for something that does not read through the
+    /// trait — a runtime mounting a directory — asks for.
     pub fn resolve(&self, path: &Path) -> Result<PathBuf, FsError> {
         let outside = || {
             FsError::new(OutsideRoot {
@@ -161,6 +190,28 @@ impl Confined {
                     }
                 }
                 Utf8Component::RootDir | Utf8Component::Prefix(_) => return Err(outside()),
+            }
+        }
+
+        // Each component as it is on disk, not what it points at, so a link
+        // is seen wherever it leads, dangling or not. The first component
+        // that is not there ends the walk: nothing beyond it can be a link.
+        let mut at = self.root.clone();
+        for component in resolved
+            .strip_prefix(&self.root)
+            .expect("resolved under the root")
+            .components()
+        {
+            at.push(component.as_str());
+            match std::fs::symlink_metadata(&at) {
+                Ok(meta) if meta.file_type().is_symlink() => {
+                    return Err(FsError::new(ThroughLink {
+                        path: path.to_path_buf(),
+                        link: at,
+                    }));
+                }
+                Ok(_) => {}
+                Err(_) => break,
             }
         }
         Ok(resolved)
@@ -528,9 +579,8 @@ mod tests {
     use super::*;
 
     /// Every spelling of a path resolves under the root or is refused: a
-    /// relative one is joined, `.` and `..` are applied, and an absolute one
-    /// is taken only under the root. By its spelling alone: a symlink is the
-    /// extractor's business, not this type's.
+    /// relative one is joined, `.` and `..` are applied, an absolute one is
+    /// taken only under the root, and none may pass through a symlink.
     #[cfg(feature = "host")]
     mod confined {
         use super::*;
@@ -541,7 +591,7 @@ mod tests {
             std::fs::write(dir.path().join("project/icp.yaml"), b"canisters: []").expect("write");
             std::fs::write(dir.path().join("project/canisters/a.wasm"), b"wasm").expect("write");
             std::fs::write(dir.path().join("outside.txt"), b"secret").expect("write");
-            let fs = Confined::new(&dir.path().join("project"));
+            let fs = Confined::new(&dir.path().join("project")).expect("absolute");
             (dir, fs)
         }
 
@@ -627,7 +677,7 @@ mod tests {
             std::os::unix::fs::symlink(dir.path().join("project"), dir.path().join("alias"))
                 .expect("symlink");
             let spelled = dir.path().join("alias");
-            let fs = Confined::new(&spelled);
+            let fs = Confined::new(&spelled).expect("absolute");
             assert_eq!(
                 fs.read(&spelled.join("icp.yaml")).await.unwrap(),
                 b"canisters: []"
@@ -639,17 +689,59 @@ mod tests {
             assert!(fs.is_dir(&spelled).await);
         }
 
-        /// The check is lexical: a symlink is followed as the host follows
-        /// it. A tree someone else handed over must have had its links
-        /// refused on the way in; the user's own tree may link where it
-        /// likes.
+        #[test]
+        fn a_root_that_is_not_absolute_is_refused() {
+            let err = Confined::new(Path::new("project")).unwrap_err();
+            assert!(err.to_string().contains("not an absolute path"), "{err}");
+        }
+
+        /// A path through a symlink is refused wherever the link leads: out
+        /// of the root, back inside it, or nowhere. A link in the middle of
+        /// a path counts as much as one at its end.
         #[cfg(unix)]
         #[tokio::test]
-        async fn a_symlink_is_followed_as_the_host_follows_it() {
+        async fn a_path_through_a_symlink_is_refused_wherever_it_leads() {
+            use std::os::unix::fs::symlink;
             let (dir, fs) = root();
-            std::os::unix::fs::symlink(dir.path().join("outside.txt"), fs.root().join("link.txt"))
-                .expect("symlink");
-            assert_eq!(fs.read(Path::new("link.txt")).await.unwrap(), b"secret");
+            let project = fs.root().to_path_buf();
+            symlink(dir.path().join("outside.txt"), project.join("out.txt")).expect("symlink");
+            symlink(project.join("icp.yaml"), project.join("in.yaml")).expect("symlink");
+            symlink(project.join("nowhere"), project.join("dangling")).expect("symlink");
+            symlink(project.join("canisters"), project.join("dir-link")).expect("symlink");
+
+            for (spelling, link) in [
+                ("out.txt", "out.txt"),
+                ("in.yaml", "in.yaml"),
+                ("dangling", "dangling"),
+                ("dir-link/a.wasm", "dir-link"),
+                ("./dir-link/../dir-link/a.wasm", "dir-link"),
+            ] {
+                let err = fs
+                    .read(Path::new(spelling))
+                    .await
+                    .expect_err(spelling)
+                    .to_string();
+                assert!(err.contains("passes through"), "{spelling}: {err}");
+                assert!(err.contains(link), "{spelling}: {err}");
+                assert!(!fs.exists(Path::new(spelling)).await, "{spelling}");
+                assert!(!fs.is_file(Path::new(spelling)).await, "{spelling}");
+                assert!(!fs.is_dir(Path::new(spelling)).await, "{spelling}");
+                assert!(
+                    fs.canonicalize(Path::new(spelling)).await.is_none(),
+                    "{spelling}"
+                );
+            }
+            // Nor may a link be written through.
+            let err = fs
+                .write(Path::new("out.txt"), b"x")
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("passes through"), "{err}");
+            assert_eq!(
+                std::fs::read(dir.path().join("outside.txt")).unwrap(),
+                b"secret"
+            );
         }
 
         #[tokio::test]

@@ -1773,7 +1773,7 @@ mod confined_tests {
             Some(CanisterArgs::Binary(b"secret".to_vec()))
         );
 
-        let confined = Confined::new(&pdir);
+        let confined = Confined::new(&pdir).expect("absolute");
         let err = load(&confined, &pdir)
             .await
             .expect_err("confined, the read is refused");
@@ -1791,7 +1791,7 @@ mod confined_tests {
             .expect("the host reads anywhere");
         assert!(project.canisters.contains_key("stray"));
 
-        let confined = Confined::new(&pdir);
+        let confined = Confined::new(&pdir).expect("absolute");
         let err = load(&confined, &pdir)
             .await
             .expect_err("confined, the directory is not there");

@@ -14,7 +14,7 @@ use crate::package::{
     read_cached_uri_recipe,
 };
 use icp_project::{
-    fs::read,
+    files::{FileSystem, FsError},
     manifest::recipe::{Recipe, RecipeType},
     prelude::*,
 };
@@ -30,6 +30,8 @@ pub struct RecipeFetcher {
     pub http_client: reqwest::Client,
     /// Package cache for caching downloaded recipe templates
     pub pkg_cache: std::sync::Arc<PackageCache>,
+    /// The project's files, which a local template is read through
+    pub files: std::sync::Arc<dyn FileSystem>,
 }
 
 /// The result of the fetch stage, as this resolver sees it.
@@ -76,7 +78,7 @@ enum TemplateSource {
 #[derive(Debug, Snafu)]
 pub enum RecipeFetchError {
     #[snafu(display("failed to read local recipe template file"))]
-    ReadFile { source: icp_project::fs::IoError },
+    ReadFile { source: FsError },
 
     #[snafu(display("failed to decode UTF-8 string"))]
     DecodeUtf8 { source: FromUtf8Error },
@@ -133,7 +135,7 @@ impl RecipeFetcher {
         // Retrieve the template, using cache for remote/registry sources
         let (tmpl, should_cache) = match &tmpl_source {
             TemplateSource::LocalPath(path) => {
-                let bytes = read(path).context(ReadFileSnafu)?;
+                let bytes = self.files.read(path).await.context(ReadFileSnafu)?;
                 (parse_bytes_to_string(bytes)?, false)
             }
 
@@ -360,6 +362,7 @@ mod tests {
         RecipeFetcher {
             http_client: reqwest::Client::new(),
             pkg_cache: std::sync::Arc::new(crate::package::open(cache_dir.to_owned()).unwrap()),
+            files: std::sync::Arc::new(icp_project::files::HostFileSystem),
         }
     }
 

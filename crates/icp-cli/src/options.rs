@@ -45,10 +45,10 @@ impl From<IdentityOpt> for IdentitySelection {
 /// for it, and those are the commands it runs.
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct UntrustedOpt {
-    /// Hold the project to what one someone else handed over may run: each
-    /// build step a pre-built module, each sync step a plugin, and what each
-    /// names a regular file within the project once links are followed.
-    /// Anything else is refused. Reading is not restricted
+    /// Hold the project to what one someone else handed over may do: every
+    /// file it reads is under the project root and reached through no
+    /// symlink, each build step is a pre-built module and each sync step a
+    /// plugin. Anything else is refused
     #[arg(long)]
     pub(crate) untrusted: bool,
 }

@@ -1,7 +1,7 @@
-//! `--untrusted` holds a project to what one from elsewhere may run: see
-//! `icp_project::untrusted`. Each test here sets up a tree the CLI would act
-//! on as the user's own, and shows the flag refusing it, naming what it
-//! refused — or letting it be, where the project only reads.
+//! `--untrusted` holds a project to what one from elsewhere may read and
+//! run: see `icp_project::untrusted`. Each test here sets up a tree the CLI
+//! would act on as the user's own, and shows the flag refusing it, naming
+//! what it refused.
 
 use indoc::indoc;
 use predicates::{prelude::PredicateBooleanExt, str::contains};
@@ -119,10 +119,10 @@ fn a_recipe_is_rendered_and_its_steps_held_to_the_list() {
         .stderr(contains("not a pre-built module").and(contains("(script) cp backend.wasm")));
 }
 
-/// Reading is not restricted: an argument file outside the project is read
-/// as it would be for the user's own project.
+/// What the project reads is held to its root: an argument file outside it
+/// is read for the user's own project and refused for an untrusted one.
 #[test]
-fn reading_outside_the_project_is_not_restricted() {
+fn a_file_read_from_outside_the_project_is_refused_as_untrusted() {
     let ctx = TestContext::new();
     let project_dir = project(
         &ctx,
@@ -141,9 +141,43 @@ fn reading_outside_the_project_is_not_restricted() {
 
     ctx.icp()
         .current_dir(&project_dir)
-        .args(["build", "--untrusted"])
+        .args(["build"])
         .assert()
         .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("outside.bin").and(contains("is outside")));
+}
+
+/// A local recipe template is read through the same filesystem.
+#[test]
+fn a_recipe_template_outside_the_project_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                recipe:
+                  type: file://../recipe.hbs
+        "#},
+    );
+    std::fs::write(
+        project_dir.parent().unwrap().join("recipe.hbs"),
+        "build:\n  steps:\n    - type: pre-built\n      path: backend.wasm\n",
+    )
+    .expect("write recipe");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("recipe.hbs").and(contains("is outside")));
 }
 
 #[test]
@@ -175,49 +209,66 @@ fn a_module_outside_the_project_is_refused_as_untrusted() {
         .stderr(
             contains("names '")
                 .and(contains("outside.wasm"))
-                .and(contains("outside the project")),
+                .and(contains("not a regular file in the project")),
         );
 }
 
-/// A link is judged by where it leads: out of the project is refused.
+/// A symlink is refused wherever it leads, out of the project or within it:
+/// as the module a step names, and as a file the project reads.
 #[cfg(unix)]
 #[test]
-fn a_module_linked_out_of_the_project_is_refused_as_untrusted() {
+fn a_symlink_is_refused_as_untrusted_wherever_it_leads() {
     let ctx = TestContext::new();
     let project_dir = project(
         &ctx,
         indoc! {r#"
             canisters:
               - name: backend
+                init_args:
+                  path: args.bin
+                  format: bin
                 build:
                   steps:
                     - type: pre-built
                       path: linked.wasm
         "#},
     );
-    let link = project_dir.join("linked.wasm");
+    let module = project_dir.join("linked.wasm");
+    let args = project_dir.join("args.bin");
+    let outside = project_dir.parent().unwrap().to_path_buf();
+    std::fs::write(&args, b"args").expect("write args");
 
-    std::os::unix::fs::symlink(project_dir.parent().unwrap().join("outside.wasm"), &link)
-        .expect("symlink out");
-    ctx.icp()
-        .current_dir(&project_dir)
-        .args(["build"])
-        .assert()
-        .success();
+    for target in [
+        outside.join("outside.wasm"),
+        project_dir.join("backend.wasm"),
+    ] {
+        std::os::unix::fs::symlink(&target, &module).expect("symlink");
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["build"])
+            .assert()
+            .success();
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["build", "--untrusted"])
+            .assert()
+            .failure()
+            .stderr(contains("linked.wasm").and(contains("not a regular file in the project")));
+        std::fs::remove_file(&module).expect("remove link");
+    }
+
+    std::fs::copy(project_dir.join("backend.wasm"), &module).expect("copy module");
+    std::fs::remove_file(&args).expect("remove args");
+    std::os::unix::fs::symlink(outside.join("outside.bin"), &args).expect("symlink");
     ctx.icp()
         .current_dir(&project_dir)
         .args(["build", "--untrusted"])
         .assert()
         .failure()
-        .stderr(
-            contains("linked.wasm")
-                .and(contains("resolves to"))
-                .and(contains("outside.wasm"))
-                .and(contains("outside the project")),
-        );
+        .stderr(contains("args.bin").and(contains("is a symlink")));
 }
 
-/// Where the file really is decides, so the root may be spelled relatively.
+/// The root may be spelled relatively: it is taken from the working directory.
 #[test]
 fn a_relative_project_root_is_taken_from_the_working_directory() {
     let ctx = TestContext::new();

@@ -1,19 +1,18 @@
-//! Holding a project someone else handed over to what it may run.
+//! Holding a project someone else handed over to what it may read and run.
 //!
 //! The CLI trusts a project the way it trusts the user's own checkout: a
-//! build step may run any command, a sync step any script, and either may
-//! take its module or plugin from anywhere on the machine. A project from
-//! elsewhere — an archive an agent passed to a deploy service, a checkout the
-//! user has not read — may not. The line is between reading and running.
-//! Reading is not restricted: argument files, manifests and recipe templates
-//! are read from wherever the manifest points. What runs is held to a list,
-//! stated as what is allowed so that a kind of step added later is refused
-//! until someone decides otherwise:
+//! build step may run any command, a sync step any script, and a manifest
+//! may name any path on the machine. A project from elsewhere — an archive
+//! an agent passed to a deploy service, a checkout the user has not read —
+//! may not. Two things hold it:
 //!
-//! - a build step is a pre-built module, and a sync step is a plugin;
-//! - the file either names is a regular file within the project: its path,
-//!   with every link followed and every `..` applied, lies under the project
-//!   root resolved the same way.
+//! - what it reads goes through a filesystem confined to the project root —
+//!   on a host, [`Confined`](crate::files::Confined) — so that every path a
+//!   manifest names is under the root and reached through no symlink;
+//! - what it runs is on a list, stated as what is allowed so that a kind of
+//!   step added later is refused until someone decides otherwise: a build
+//!   step is a pre-built module, a sync step is a plugin, and the file either
+//!   names is a regular file that filesystem will give.
 //!
 //! A module or plugin named by URL is not on the list, and the steps a recipe
 //! renders to are held to it like any other. A checksum is not asked for: the
@@ -24,7 +23,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use snafu::{ResultExt, Snafu};
+use snafu::{ResultExt, Snafu, ensure};
 
 use crate::{
     Project, ProjectLoad, ProjectLoadError, UntrustedSnafu,
@@ -52,31 +51,10 @@ pub enum Refused {
     SyncStep { canister: String, step: String },
 
     #[snafu(display(
-        "canister '{canister}' names '{path}', which resolves to '{resolved}', outside the \
-         project at '{root}': an untrusted project runs only what is within it"
+        "canister '{canister}' names '{path}', which is not a regular file in the project: an \
+         untrusted project runs only a file under its root, reached through no symlink"
     ))]
-    OutsidePath {
-        canister: String,
-        path: PathBuf,
-        resolved: PathBuf,
-        root: PathBuf,
-    },
-
-    #[snafu(display(
-        "canister '{canister}' names '{path}', which is '{resolved}', not a regular file: an \
-         untrusted project runs only a file within it"
-    ))]
-    NotAFile {
-        canister: String,
-        path: PathBuf,
-        resolved: PathBuf,
-    },
-
-    #[snafu(display("canister '{canister}' names '{path}', which does not resolve to anything"))]
-    UnresolvedPath { canister: String, path: PathBuf },
-
-    #[snafu(display("the project root '{root}' does not resolve to a directory"))]
-    UnresolvedRoot { root: PathBuf },
+    NotAFile { canister: String, path: PathBuf },
 }
 
 /// The file `step` names, if it is the one build step an untrusted project
@@ -106,74 +84,41 @@ fn local_source(source: &SourceField) -> Option<&LocalSource> {
 
 /// Hold a loaded project to the list.
 ///
-/// Within is decided on the real paths, the file's and the root's, as
-/// `files` canonicalizes them, so a link is judged by where it leads. A path
-/// that does not resolve is refused, and so is one that is not a regular
-/// file: a read of a pipe nobody writes to waits forever.
+/// `files` is the filesystem the project is confined to, and it is what
+/// says whether the file a step names is one: under the root, through no
+/// symlink, and a regular file. A plugin is opened by its runtime rather
+/// than read through `files`, and a read of a pipe nobody writes to waits
+/// forever, so the question is asked here, before anything opens the file.
 pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refused> {
-    let root = files
-        .canonicalize(&project.dir)
-        .await
-        .ok_or_else(|| UnresolvedRootSnafu { root: &project.dir }.build())?;
-
     for (_, (canister_dir, canister)) in &project.canisters {
-        for step in &canister.build.steps {
-            let Some(local) = local_module(step) else {
-                return BuildStepSnafu {
+        let build = canister.build.steps.iter().map(|step| {
+            local_module(step).ok_or_else(|| {
+                BuildStepSnafu {
                     canister: &canister.name,
                     step: one_line(step),
                 }
-                .fail();
-            };
-            within(files, &root, canister, &canister_dir.join(&local.path)).await?;
-        }
-        for step in &canister.sync.steps {
-            let Some(local) = local_plugin(step) else {
-                return SyncStepSnafu {
+                .build()
+            })
+        });
+        let sync = canister.sync.steps.iter().map(|step| {
+            local_plugin(step).ok_or_else(|| {
+                SyncStepSnafu {
                     canister: &canister.name,
                     step: one_line(step),
                 }
-                .fail();
-            };
-            within(files, &root, canister, &canister_dir.join(&local.path)).await?;
+                .build()
+            })
+        });
+        for local in build.chain(sync) {
+            let path = canister_dir.join(&local?.path);
+            ensure!(
+                files.is_file(&path).await,
+                NotAFileSnafu {
+                    canister: &canister.name,
+                    path,
+                }
+            );
         }
-    }
-    Ok(())
-}
-
-/// Refuse `path` unless it resolves to a regular file under the resolved
-/// `root`. What is there is asked of the path as spelled, not as resolved: a
-/// link is followed either way, and a filesystem confined to a root reached
-/// through a link has no answer for the resolved one.
-async fn within(
-    files: &dyn FileSystem,
-    root: &Path,
-    canister: &crate::Canister,
-    path: &Path,
-) -> Result<(), Refused> {
-    let resolved = files.canonicalize(path).await.ok_or_else(|| {
-        UnresolvedPathSnafu {
-            canister: &canister.name,
-            path,
-        }
-        .build()
-    })?;
-    if !resolved.starts_with(root) {
-        return OutsidePathSnafu {
-            canister: &canister.name,
-            path,
-            resolved,
-            root,
-        }
-        .fail();
-    }
-    if !files.is_file(path).await {
-        return NotAFileSnafu {
-            canister: &canister.name,
-            path,
-            resolved,
-        }
-        .fail();
     }
     Ok(())
 }
@@ -227,7 +172,7 @@ impl<L: ProjectLoad> ProjectLoad for Vetted<L> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
     use super::*;
     use crate::{
@@ -239,25 +184,14 @@ mod tests {
         },
     };
 
-    /// A filesystem that resolves the paths it is told to and nothing else,
-    /// standing in for links and `..` on disk, and says which of the places
-    /// they resolve to hold a regular file — asked of a path by any
-    /// spelling, followed to where it resolves, as the host follows a link.
-    /// The vet asks for nothing but where a path really is and what is there.
-    struct Resolves {
-        paths: HashMap<PathBuf, PathBuf>,
-        files: HashSet<PathBuf>,
-    }
+    /// A filesystem that knows which paths are regular files, which is all
+    /// the vet asks of one.
+    struct Disk(HashSet<PathBuf>);
 
     #[async_trait]
-    impl FileSystem for Resolves {
-        async fn canonicalize(&self, path: &Path) -> Option<PathBuf> {
-            self.paths.get(path).cloned()
-        }
+    impl FileSystem for Disk {
         async fn is_file(&self, path: &Path) -> bool {
-            self.paths
-                .get(path)
-                .is_some_and(|resolved| self.files.contains(resolved))
+            self.0.contains(path)
         }
         async fn read(&self, _: &Path) -> Result<Vec<u8>, FsError> {
             unreachable!("the vet reads nothing")
@@ -275,13 +209,16 @@ mod tests {
             unreachable!("the vet writes nothing")
         }
         async fn exists(&self, _: &Path) -> bool {
-            unreachable!("the vet looks at nothing but where a path is")
+            unreachable!("the vet asks only for a regular file")
         }
         async fn is_dir(&self, _: &Path) -> bool {
-            unreachable!("the vet looks at nothing but where a path is")
+            unreachable!("the vet asks only for a regular file")
         }
         async fn read_dir(&self, _: &Path) -> Result<Vec<PathBuf>, FsError> {
             unreachable!("the vet reads nothing")
+        }
+        async fn canonicalize(&self, _: &Path) -> Option<PathBuf> {
+            unreachable!("the vet asks only for a regular file")
         }
         async fn scratch_dir(&self) -> Result<Box<dyn Scratch>, FsError> {
             unreachable!("the vet writes nothing")
@@ -289,32 +226,12 @@ mod tests {
     }
 
     /// The minimal project is at `/project`, and this is its disk: a module
-    /// of its own, a plugin, a link out to `/elsewhere/secret.wasm`, a link
-    /// within to the module, a climb that lands outside, and a directory
-    /// `dir` of its own.
-    fn disk() -> Arc<Resolves> {
-        Arc::new(Resolves {
-            paths: HashMap::from([
-                ("/project".into(), "/project".into()),
-                (
-                    "/project/backend.wasm".into(),
-                    "/project/backend.wasm".into(),
-                ),
-                ("/project/p.wasm".into(), "/project/p.wasm".into()),
-                ("/project/out.wasm".into(), "/elsewhere/secret.wasm".into()),
-                ("/project/in.wasm".into(), "/project/backend.wasm".into()),
-                (
-                    "/project/../elsewhere/secret.wasm".into(),
-                    "/elsewhere/secret.wasm".into(),
-                ),
-                ("/project/dir".into(), "/project/dir".into()),
-            ]),
-            files: HashSet::from([
-                "/project/backend.wasm".into(),
-                "/project/p.wasm".into(),
-                "/elsewhere/secret.wasm".into(),
-            ]),
-        })
+    /// and a plugin.
+    fn disk() -> Arc<Disk> {
+        Arc::new(Disk(HashSet::from([
+            "/project/backend.wasm".into(),
+            "/project/p.wasm".into(),
+        ])))
     }
 
     async fn project_with(build: Vec<BuildStep>, sync: Vec<SyncStep>) -> Project {
@@ -422,58 +339,6 @@ mod tests {
         assert!(err.to_string().contains("example.com/plugin.wasm"), "{err}");
     }
 
-    /// Where a path leads is what counts, not how it is spelled: a link out
-    /// is refused for where it lands, a link within is fine, and a climb
-    /// out is refused.
-    #[tokio::test]
-    async fn the_file_a_step_names_is_held_to_where_it_resolves() {
-        vetted(vec![local("in.wasm")], vec![])
-            .await
-            .expect("a link within the project");
-
-        for path in ["out.wasm", "../elsewhere/secret.wasm"] {
-            let err = vetted(vec![local(path)], vec![]).await.unwrap_err();
-            assert!(
-                matches!(err, Refused::OutsidePath { ref resolved, ref root, .. }
-                    if resolved == "/elsewhere/secret.wasm" && root == "/project"),
-                "{path}: {err}"
-            );
-            assert!(
-                err.to_string().contains("outside the project"),
-                "{path}: {err}"
-            );
-        }
-
-        let err = vetted(vec![local("backend.wasm")], vec![plugin("path: out.wasm")])
-            .await
-            .unwrap_err();
-        assert!(matches!(err, Refused::OutsidePath { .. }), "{err}");
-
-        let err = vetted(vec![local("missing.wasm")], vec![])
-            .await
-            .unwrap_err();
-        assert!(matches!(err, Refused::UnresolvedPath { .. }), "{err}");
-        assert!(err.to_string().contains("missing.wasm"), "{err}");
-    }
-
-    /// Where a path leads must hold a regular file: a directory within the
-    /// project is refused as a module and as a plugin, and the message says
-    /// what was there instead.
-    #[tokio::test]
-    async fn what_a_step_names_must_be_a_regular_file() {
-        let err = vetted(vec![local("dir")], vec![]).await.unwrap_err();
-        assert!(
-            matches!(err, Refused::NotAFile { ref resolved, .. } if resolved == "/project/dir"),
-            "{err}"
-        );
-        assert!(err.to_string().contains("not a regular file"), "{err}");
-
-        let err = vetted(vec![local("backend.wasm")], vec![plugin("path: dir")])
-            .await
-            .unwrap_err();
-        assert!(matches!(err, Refused::NotAFile { .. }), "{err}");
-    }
-
     #[tokio::test]
     async fn a_vetted_loader_refuses_what_vet_refuses() {
         let project = project_with(vec![BuildStep::Script(script("make"))], vec![]).await;
@@ -489,117 +354,74 @@ mod tests {
             .expect("the minimal project is pre-built from its own file");
     }
 
-    /// On a real disk the links are followed by the host, which is what the
-    /// CLI resolves through: to the end of a chain of them, and through a
-    /// linked directory on the way. And what is at the end must be a
-    /// regular file: a directory and a named pipe are refused, the pipe
-    /// before anything tries to read it.
-    #[cfg(all(unix, feature = "host"))]
+    /// What a step names must be a regular file the filesystem will give,
+    /// for a module and for a plugin alike.
     #[tokio::test]
-    async fn on_disk_a_link_is_followed_to_where_it_leads() {
-        use crate::files::HostFileSystem;
-        use std::os::unix::fs::symlink;
+    async fn what_a_step_names_must_be_a_regular_file() {
+        let err = vetted(vec![local("missing.wasm")], vec![])
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Refused::NotAFile { ref path, .. } if path == "/project/missing.wasm"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("not a regular file"), "{err}");
 
-        let dir = camino_tempfile::tempdir().unwrap();
-        let root = dir.path().join("project");
-        std::fs::create_dir(&root).unwrap();
-        std::fs::write(root.join("backend.wasm"), b"module").unwrap();
-        std::fs::write(dir.path().join("secret.wasm"), b"secret").unwrap();
-        symlink(root.join("backend.wasm"), root.join("in.wasm")).unwrap();
-        // out.wasm -> hop.wasm -> ../secret.wasm
-        symlink(dir.path().join("secret.wasm"), root.join("hop.wasm")).unwrap();
-        symlink(root.join("hop.wasm"), root.join("out.wasm")).unwrap();
-        // outdir -> .. so that outdir/secret.wasm is the file outside
-        symlink(dir.path(), root.join("outdir")).unwrap();
-        // chain of three inside: a -> b -> c -> backend.wasm
-        symlink(root.join("backend.wasm"), root.join("c.wasm")).unwrap();
-        symlink(root.join("c.wasm"), root.join("b.wasm")).unwrap();
-        symlink(root.join("b.wasm"), root.join("a.wasm")).unwrap();
-        // a directory, and a pipe nobody writes to, each with a link to it
-        std::fs::create_dir(root.join("dir.wasm")).unwrap();
-        symlink(root.join("dir.wasm"), root.join("to-dir.wasm")).unwrap();
-        let made = std::process::Command::new("mkfifo")
-            .arg(root.join("pipe.wasm"))
-            .status()
-            .unwrap();
-        assert!(made.success(), "mkfifo");
-        symlink(root.join("pipe.wasm"), root.join("to-pipe.wasm")).unwrap();
-
-        let mut project = project_with(vec![], vec![]).await;
-        project.dir = root.clone();
-        project.canisters.get_mut("backend").unwrap().0 = root.clone();
-
-        for path in ["in.wasm", "a.wasm"] {
-            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
-                steps: vec![local(path)],
-            };
-            vet(&project, &HostFileSystem)
-                .await
-                .unwrap_or_else(|err| panic!("{path} leads to the project's own module: {err}"));
-        }
-
-        for path in ["out.wasm", "outdir/secret.wasm"] {
-            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
-                steps: vec![local(path)],
-            };
-            let err = vet(&project, &HostFileSystem).await.unwrap_err();
-            assert!(
-                matches!(err, Refused::OutsidePath { ref resolved, .. }
-                    if resolved.file_name() == Some("secret.wasm")),
-                "{path}: {err}"
-            );
-        }
-
-        for (path, at) in [
-            ("dir.wasm", "dir.wasm"),
-            ("to-dir.wasm", "dir.wasm"),
-            ("pipe.wasm", "pipe.wasm"),
-            ("to-pipe.wasm", "pipe.wasm"),
-        ] {
-            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
-                steps: vec![local(path)],
-            };
-            let err = vet(&project, &HostFileSystem).await.unwrap_err();
-            assert!(
-                matches!(err, Refused::NotAFile { ref resolved, .. }
-                    if resolved.file_name() == Some(at)),
-                "{path}: {err}"
-            );
-        }
+        let err = vetted(vec![local("backend.wasm")], vec![plugin("path: gone.wasm")])
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Refused::NotAFile { .. }), "{err}");
     }
 
-    /// A filesystem that holds paths to a root as the caller spells it — the
-    /// confined one, with the project reached through a link, as a macOS
-    /// temp dir is through `/var` — resolves a module to its real place,
-    /// which is not under that spelling. The vet must not then ask it what
-    /// is at the real place: a module within the project is accepted, and
-    /// what is not a file is still refused.
+    /// On a real disk, through the filesystem the CLI confines an untrusted
+    /// project to: a module of the project's own is accepted, with the root
+    /// spelled through a link as a macOS temp dir is, and one outside the
+    /// root, behind a link wherever it leads, or not a regular file is
+    /// refused, the pipe before anything tries to read it.
     #[cfg(all(unix, feature = "host"))]
     #[tokio::test]
-    async fn on_disk_a_root_spelled_through_a_link_is_asked_by_that_spelling() {
+    async fn on_disk_a_step_names_a_regular_file_under_the_root_through_no_link() {
         use crate::files::Confined;
         use std::os::unix::fs::symlink;
 
         let dir = camino_tempfile::tempdir().unwrap();
         let real = dir.path().join("project");
         std::fs::create_dir(&real).unwrap();
-        std::fs::write(real.join("backend.wasm"), b"module").unwrap();
-        std::fs::create_dir(real.join("dir.wasm")).unwrap();
-        let spelled = dir.path().join("alias");
-        symlink(&real, &spelled).unwrap();
-        let files = Confined::new(&spelled);
+        let root = dir.path().join("alias");
+        symlink(&real, &root).unwrap();
+        std::fs::write(root.join("backend.wasm"), b"module").unwrap();
+        std::fs::write(dir.path().join("secret.wasm"), b"secret").unwrap();
+        symlink(root.join("backend.wasm"), root.join("in.wasm")).unwrap();
+        symlink(dir.path().join("secret.wasm"), root.join("out.wasm")).unwrap();
+        symlink(dir.path(), root.join("outdir")).unwrap();
+        std::fs::create_dir(root.join("dir.wasm")).unwrap();
+        let made = std::process::Command::new("mkfifo")
+            .arg(root.join("pipe.wasm"))
+            .status()
+            .unwrap();
+        assert!(made.success(), "mkfifo");
+        let files = Confined::new(&root).unwrap();
 
         let mut project = project_with(vec![local("backend.wasm")], vec![]).await;
-        project.dir = spelled.clone();
-        project.canisters.get_mut("backend").unwrap().0 = spelled.clone();
+        project.dir = root.clone();
+        project.canisters.get_mut("backend").unwrap().0 = root.clone();
         vet(&project, &files)
             .await
-            .expect("the project's own module, with the root spelled through a link");
+            .expect("the project's own module");
 
-        project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
-            steps: vec![local("dir.wasm")],
-        };
-        let err = vet(&project, &files).await.unwrap_err();
-        assert!(matches!(err, Refused::NotAFile { .. }), "{err}");
+        for path in [
+            "../secret.wasm",
+            "in.wasm",
+            "out.wasm",
+            "outdir/secret.wasm",
+            "dir.wasm",
+            "pipe.wasm",
+        ] {
+            project.canisters.get_mut("backend").unwrap().1.build = BuildSteps {
+                steps: vec![local(path)],
+            };
+            let err = vet(&project, &files).await.unwrap_err();
+            assert!(matches!(err, Refused::NotAFile { .. }), "{path}: {err}");
+        }
     }
 }

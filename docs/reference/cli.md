@@ -136,7 +136,7 @@ Build canisters
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for. By default, the local environment is used
-* `--untrusted` — Hold the project to what one someone else handed over may run: each build step a pre-built module, each sync step a plugin, and what each names a regular file within the project once links are followed. Anything else is refused. Reading is not restricted
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin. Anything else is refused
 
 
 
@@ -1072,7 +1072,7 @@ using --args or --args-file:
   - `bin`:
     Raw binary (only valid for file references)
 
-* `--untrusted` — Hold the project to what one someone else handed over may run: each build step a pre-built module, each sync step a plugin, and what each names a regular file within the project once links are followed. Anything else is refused. Reading is not restricted
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin. Anything else is refused
 
 
 
@@ -1921,7 +1921,7 @@ Synchronize canisters
 * `--proxy <PROXY>` — Principal of a proxy canister to route sync plugin calls to the target canister through
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
-* `--untrusted` — Hold the project to what one someone else handed over may run: each build step a pre-built module, each sync step a plugin, and what each names a regular file within the project once links are followed. Anything else is refused. Reading is not restricted
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin. Anything else is refused
 
 
 

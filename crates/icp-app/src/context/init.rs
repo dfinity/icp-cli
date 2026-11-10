@@ -12,7 +12,13 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{Lazy, ProjectLoad, ProjectLoadImpl, host::Host, manifest, store_id, untrusted};
+use icp_project::{
+    Lazy, ProjectLoad, ProjectLoadImpl,
+    files::{Confined, FileSystem, HostFileSystem, RootNotAbsolute},
+    host::Host,
+    manifest::{self, ProjectRootLocate as _},
+    store_id, untrusted,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -36,10 +42,19 @@ pub enum ContextInitError {
     PackageCache {
         source: icp_project::fs::lock::LockError,
     },
+
+    #[snafu(display("failed to locate the project to treat as untrusted"))]
+    UntrustedRoot {
+        source: manifest::ProjectRootLocateError,
+    },
+
+    #[snafu(display("failed to confine the untrusted project to its directory"))]
+    Confine { source: RootNotAbsolute },
 }
 
-/// With `untrusted`, the loaded project is vetted by [`icp_project::untrusted`]
-/// before any command acts on it.
+/// With `untrusted`, the project is read through a filesystem confined to
+/// its root and vetted by [`icp_project::untrusted`] before any command acts
+/// on it. The root is located up front for that, so there has to be a project.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
@@ -78,6 +93,10 @@ pub fn initialize(
     let cwd: PathBuf =
         PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
 
+    // A relative override is taken from the working directory: the
+    // filesystem an untrusted project is confined to matches every path
+    // against the root as spelled, so the root has to be a whole path.
+    let project_root_override = project_root_override.map(|dir| cwd.join(dir));
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,
         project_root_override,
@@ -103,14 +122,21 @@ pub fn initialize(
         pkg_cache.clone(),
     ));
 
+    // The project's files come from this machine: the whole of it for the
+    // user's own project, the project directory alone for an untrusted one.
+    let files: Arc<dyn FileSystem> = if untrusted {
+        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
+        Arc::new(Confined::new(&root).context(ConfineSnafu)?)
+    } else {
+        Arc::new(HostFileSystem)
+    };
+
     // Recipes
     let recipe = Arc::new(RecipeFetcher {
         http_client,
         pkg_cache,
+        files: files.clone(),
     });
-
-    // The project's files come from this machine.
-    let files = Arc::new(icp_project::files::HostFileSystem);
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));

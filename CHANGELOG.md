@@ -8,7 +8,7 @@ air-gapped signing, extensions
 
 # Unreleased
 
-* feat: `--untrusted`, on `build`, `deploy` and `sync`, holds a project someone else handed over to what it may run: each build step is a pre-built module, each sync step is a plugin, and the file each names is a regular file within the project once every link is followed. Anything else is refused before the command acts on it, naming what was found. Reading is not restricted: argument files, manifests and recipes are read from wherever the manifest points, and the steps a recipe renders to are held to the same list.
+* feat: `--untrusted`, on `build`, `deploy` and `sync`, holds a project someone else handed over to what it may read and run. Every file the project reads — manifests, argument and environment files, local recipe templates, modules — must be under the project root and reached through no symlink. Each build step must be a pre-built module and each sync step a plugin, taken from a regular file in the project; the steps a recipe renders to are held to the same list. Anything else is refused before the command acts on it, naming what was found.
 * chore: macOS on Intel (`x86_64-apple-darwin`) is no longer a release target. Releases ship no Intel macOS archive, the shell installer refuses that platform, and npm no longer publishes `@icp-sdk/icp-cli-darwin-x64`, so installing `@icp-sdk/icp-cli` on an Intel Mac warns of an unsupported platform. Homebrew dropped Intel macOS in September 2026, and GitHub is retiring its Intel macOS runners. v1.8.0 is the last release with an Intel macOS build.
 
 ## Experimental

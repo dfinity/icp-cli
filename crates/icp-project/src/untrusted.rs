@@ -5,34 +5,21 @@
 //! take its module or plugin from anywhere on the machine. A project from
 //! elsewhere — an archive an agent passed to a deploy service, a checkout the
 //! user has not read — may not. The line is between reading and running.
-//! Reading is not restricted: the loader reads argument files, environment
-//! files, manifests and recipe templates from wherever the manifest points,
-//! and a plugin reads the files it declares, through the ordinary filesystem.
-//! What runs is held to a list, stated as what is allowed so that a kind of
-//! step added later is refused until someone decides otherwise:
+//! Reading is not restricted: argument files, manifests and recipe templates
+//! are read from wherever the manifest points. What runs is held to a list,
+//! stated as what is allowed so that a kind of step added later is refused
+//! until someone decides otherwise:
 //!
-//! - a build step is a pre-built module ([`build_step_allowed`]);
-//! - a sync step is a plugin ([`sync_step_allowed`]);
-//! - the module or plugin a step names is a regular file within the
-//!   project: its path, with every link followed and every `..` applied,
-//!   lies under the project root resolved the same way, and what is there is
-//!   a file rather than a directory or a pipe ([`vet`]).
+//! - a build step is a pre-built module, and a sync step is a plugin;
+//! - the file either names is a regular file within the project: its path,
+//!   with every link followed and every `..` applied, lies under the project
+//!   root resolved the same way.
 //!
-//! A recipe is read and rendered as the project loads, and the steps it
-//! produces are on the list or not like any other. A module or plugin named
-//! by URL is not on it: a download at build time is what a bundle has already
-//! done. The loaded [`Project`] shows every step, so the list is applied to
-//! it: [`vet`] holds a project to it, and [`Vetted`] wraps a loader so that
-//! every load is vetted before the project is handed out. A consumer
-//! composing its own host wraps its loader the same way:
-//!
-//! ```ignore
-//! let project = Vetted::new(ProjectLoadImpl { project_root_locate, recipe, files: files.clone() }, files);
-//! ```
-//!
-//! A checksum on a module is not asked for. It is the bundler's promise about
-//! its own archive, and the same untrusted hand wrote both, so it says nothing
-//! about what the project runs.
+//! A module or plugin named by URL is not on the list, and the steps a recipe
+//! renders to are held to it like any other. A checksum is not asked for: the
+//! same untrusted hand wrote it and the module. [`vet`] applies the list to a
+//! loaded [`Project`], and [`Vetted`] wraps a loader so that every load is
+//! vetted before the project is handed out.
 
 use std::sync::Arc;
 
@@ -43,7 +30,7 @@ use crate::{
     Project, ProjectLoad, ProjectLoadError, UntrustedSnafu,
     files::FileSystem,
     manifest::{
-        adapter::prebuilt::SourceField,
+        adapter::prebuilt::{LocalSource, SourceField},
         canister::{BuildStep, SyncStep},
     },
     prelude::*,
@@ -92,32 +79,37 @@ pub enum Refused {
     UnresolvedRoot { root: PathBuf },
 }
 
-/// Whether `step` is the one build step an untrusted project may have: a
-/// pre-built module from a file. A script is a host subprocess, and a module
-/// fetched from a URL is a download on the strength of an untrusted manifest.
-pub fn build_step_allowed(step: &BuildStep) -> bool {
-    matches!(step, BuildStep::Prebuilt(adapter) if matches!(adapter.source, SourceField::Local(_)))
+/// The file `step` names, if it is the one build step an untrusted project
+/// may have: a pre-built module from a file.
+fn local_module(step: &BuildStep) -> Option<&LocalSource> {
+    match step {
+        BuildStep::Prebuilt(adapter) => local_source(&adapter.source),
+        BuildStep::Script(_) => None,
+    }
 }
 
-/// Whether `step` is the one sync step an untrusted project may have: a
-/// plugin from a file. It runs sandboxed either way; it is a script and a
-/// download that are not on the list.
-pub fn sync_step_allowed(step: &SyncStep) -> bool {
-    matches!(step, SyncStep::Plugin(adapter) if matches!(adapter.source, SourceField::Local(_)))
+/// The file `step` names, if it is the one sync step an untrusted project
+/// may have: a plugin from a file.
+fn local_plugin(step: &SyncStep) -> Option<&LocalSource> {
+    match step {
+        SyncStep::Plugin(adapter) => local_source(&adapter.source),
+        SyncStep::Script(_) => None,
+    }
 }
 
-/// Hold a loaded project to the list: every step [`build_step_allowed`] or
-/// [`sync_step_allowed`], and the file each names a regular file within the
-/// project.
+fn local_source(source: &SourceField) -> Option<&LocalSource> {
+    match source {
+        SourceField::Local(local) => Some(local),
+        SourceField::Remote(_) => None,
+    }
+}
+
+/// Hold a loaded project to the list.
 ///
-/// Within is decided on the real paths: the file's and the root's, each with
-/// every link followed and every `..` applied by `files`, so a link out of
-/// the project is seen for where it leads and a link within it is let be. A
-/// path that does not resolve is refused too, since nothing can be said
-/// about where it would lead. So is one that resolves to something other
-/// than a regular file: a directory cannot be read as a module, and a pipe
-/// is read from whoever is writing to it, which is not the project — and
-/// a read of one that nobody writes to waits forever.
+/// Within is decided on the real paths, the file's and the root's, as
+/// `files` canonicalizes them, so a link is judged by where it leads. A path
+/// that does not resolve is refused, and so is one that is not a regular
+/// file: a read of a pipe nobody writes to waits forever.
 pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refused> {
     let root = files
         .canonicalize(&project.dir)
@@ -126,34 +118,22 @@ pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refuse
 
     for (_, (canister_dir, canister)) in &project.canisters {
         for step in &canister.build.steps {
-            let local = match step {
-                BuildStep::Prebuilt(adapter) if build_step_allowed(step) => match &adapter.source {
-                    SourceField::Local(local) => local,
-                    SourceField::Remote(_) => unreachable!("allowed is local"),
-                },
-                _ => {
-                    return BuildStepSnafu {
-                        canister: &canister.name,
-                        step: one_line(step),
-                    }
-                    .fail();
+            let Some(local) = local_module(step) else {
+                return BuildStepSnafu {
+                    canister: &canister.name,
+                    step: one_line(step),
                 }
+                .fail();
             };
             within(files, &root, canister, &canister_dir.join(&local.path)).await?;
         }
         for step in &canister.sync.steps {
-            let local = match step {
-                SyncStep::Plugin(adapter) if sync_step_allowed(step) => match &adapter.source {
-                    SourceField::Local(local) => local,
-                    SourceField::Remote(_) => unreachable!("allowed is local"),
-                },
-                _ => {
-                    return SyncStepSnafu {
-                        canister: &canister.name,
-                        step: one_line(step),
-                    }
-                    .fail();
+            let Some(local) = local_plugin(step) else {
+                return SyncStepSnafu {
+                    canister: &canister.name,
+                    step: one_line(step),
                 }
+                .fail();
             };
             within(files, &root, canister, &canister_dir.join(&local.path)).await?;
         }
@@ -162,13 +142,9 @@ pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refuse
 }
 
 /// Refuse `path` unless it resolves to a regular file under the resolved
-/// `root`.
-///
-/// Where the path leads is judged on the resolved path; what is there is
-/// asked of the path as spelled. The two answers agree, since a link is
-/// followed either way, and a filesystem that knows paths by how its
-/// caller spells them — one confined to a root reached through a link —
-/// has no answer for the resolved one.
+/// `root`. What is there is asked of the path as spelled, not as resolved: a
+/// link is followed either way, and a filesystem confined to a root reached
+/// through a link has no answer for the resolved one.
 async fn within(
     files: &dyn FileSystem,
     root: &Path,
@@ -202,9 +178,8 @@ async fn within(
     Ok(())
 }
 
-/// A step as it displays, on one line: a step displays its kind and then
-/// its fields or commands one per line, and an error message has room for
-/// one, so the lines after the first are run together with `;` between.
+/// A step as it displays, on one line: its kind, then the lines after the
+/// first run together with `;` between.
 fn one_line(step: &impl std::fmt::Display) -> String {
     let text = step.to_string();
     let mut lines = text.lines().map(str::trim).filter(|line| !line.is_empty());

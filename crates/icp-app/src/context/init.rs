@@ -12,10 +12,7 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{
-    Lazy, ProjectLoad, ProjectLoadImpl, files::HostFileSystem, host::Host, manifest, store_id,
-    untrusted,
-};
+use icp_project::{Lazy, ProjectLoad, ProjectLoadImpl, host::Host, manifest, store_id, untrusted};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -41,11 +38,8 @@ pub enum ContextInitError {
     },
 }
 
-/// `untrusted` holds the project to what one someone else handed over may
-/// run — see [`icp_project::untrusted`] for the list: the loaded project is
-/// vetted for its steps and for where the file each names resolves, before
-/// any command acts on it. Reading is not restricted, so the project is
-/// loaded through the same filesystem and fetchers as the user's own.
+/// With `untrusted`, the loaded project is vetted by [`icp_project::untrusted`]
+/// before any command acts on it.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
@@ -103,20 +97,20 @@ pub fn initialize(
     // holder.
     let pkg_cache = Arc::new(dirs.package_cache().context(PackageCacheSnafu)?);
 
-    // The project's files come from this machine
-    let files = Arc::new(HostFileSystem);
-
     // Wasm modules named by a manifest but not contained in the project
     let wasm = Arc::new(crate::wasm::Fetcher::new(
         http_client.clone(),
         pkg_cache.clone(),
     ));
 
-    // Recipes, fetched from wherever the manifest points
+    // Recipes
     let recipe = Arc::new(RecipeFetcher {
         http_client,
         pkg_cache,
     });
+
+    // The project's files come from this machine.
+    let files = Arc::new(icp_project::files::HostFileSystem);
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));

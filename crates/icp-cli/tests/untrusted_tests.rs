@@ -284,6 +284,62 @@ fn a_relative_project_root_is_taken_from_the_working_directory() {
         .success();
 }
 
+/// The project is where the command stands or where it is pointed, and no
+/// root is searched for: not from a directory under the project, and not up
+/// to a project above that declares this one, which would widen what the
+/// untrusted project may read to the whole of the one above.
+#[test]
+fn the_root_is_where_the_command_stands_and_is_not_searched_for() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                init_args:
+                  path: ../outside.bin
+                  format: bin
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+        "#},
+    );
+    let parent = project_dir.parent().unwrap();
+    write_string(
+        &parent.join("icp.yaml"),
+        indoc! {r#"
+            dependencies:
+              - name: inner
+                path: ./icp
+        "#},
+    )
+    .expect("write parent manifest");
+
+    // Trusted, the project above is the root, and the file is read.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("outside.bin").and(contains("is outside")));
+
+    let src = project_dir.join("src");
+    std::fs::create_dir(&src).expect("mkdir");
+    ctx.icp()
+        .current_dir(&src)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("run from the directory that holds its icp.yaml"));
+}
+
 /// The flag is on the three commands that act on what a project says, and
 /// each refuses before it reaches any network. It is on no other command.
 #[test]

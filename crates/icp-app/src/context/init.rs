@@ -44,7 +44,10 @@ pub enum ContextInitError {
         source: icp_project::fs::lock::LockError,
     },
 
-    #[snafu(display("failed to locate the project to treat as untrusted"))]
+    #[snafu(display(
+        "an untrusted project is run from the directory that holds its icp.yaml, or named with \
+         --project-root-override"
+    ))]
     UntrustedRoot {
         source: manifest::ProjectRootLocateError,
     },
@@ -98,6 +101,17 @@ pub fn initialize(
     // filesystem an untrusted project is confined to matches every path
     // against the root as spelled, so the root has to be a whole path.
     let project_root_override = project_root_override.map(|dir| cwd.join(dir));
+
+    // An untrusted project is the directory the command stands in, or the
+    // one it was pointed at, and nothing is searched for. Finding a root
+    // otherwise means reading manifests above and following the dependencies
+    // they name, before there is a root to hold those reads to, and it lets
+    // a project above adopt this one and widen what it may read.
+    let project_root_override = if untrusted {
+        Some(project_root_override.unwrap_or_else(|| cwd.clone()))
+    } else {
+        project_root_override
+    };
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,
         project_root_override,

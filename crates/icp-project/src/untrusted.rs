@@ -8,7 +8,8 @@
 //!
 //! - what it reads goes through a filesystem confined to the project root —
 //!   on a host, [`Confined`](crate::files::Confined) — so that every path a
-//!   manifest names is under the root and reached through no symlink;
+//!   manifest names is under the root and reached through no symlink. The
+//!   id and artifact stores under `.icp` are held to the same filesystem;
 //! - what it runs is on a list, stated as what is allowed so that a kind of
 //!   step added later is refused until someone decides otherwise: a build
 //!   step is a pre-built module, a sync step is a plugin, and the file either

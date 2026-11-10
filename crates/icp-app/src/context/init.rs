@@ -102,11 +102,26 @@ pub fn initialize(
         project_root_override,
     ));
 
+    // An untrusted project is confined to its directory: what it reads, and
+    // what the CLI keeps under `.icp` on its behalf.
+    let confined = if untrusted {
+        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
+        Some(Confined::new(&root).context(ConfineSnafu)?)
+    } else {
+        None
+    };
+
     // Canister ID Store
-    let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
+    let ids = Arc::new(store_id::AccessImpl::new(
+        project_root_locate.clone(),
+        confined.clone(),
+    ));
 
     // Canister Artifact Store (wasm)
-    let artifacts = Arc::new(ArtifactStore::new(project_root_locate.clone()));
+    let artifacts = Arc::new(ArtifactStore::new(
+        project_root_locate.clone(),
+        confined.clone(),
+    ));
 
     // Prepare http client
     let http_client = reqwest::Client::new();
@@ -124,11 +139,9 @@ pub fn initialize(
 
     // The project's files come from this machine: the whole of it for the
     // user's own project, the project directory alone for an untrusted one.
-    let files: Arc<dyn FileSystem> = if untrusted {
-        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
-        Arc::new(Confined::new(&root).context(ConfineSnafu)?)
-    } else {
-        Arc::new(HostFileSystem)
+    let files: Arc<dyn FileSystem> = match &confined {
+        Some(confined) => Arc::new(confined.clone()),
+        None => Arc::new(HostFileSystem),
     };
 
     // Recipes
@@ -184,6 +197,7 @@ pub fn initialize(
     // Network accessor
     let netaccess = Arc::new(crate::network::Accessor {
         project_root_locate: project_root_locate.clone(),
+        confined,
         descriptors: dirs.port_descriptor(),
         agent: agent_creator.clone(),
     });

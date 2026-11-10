@@ -268,6 +268,60 @@ fn a_symlink_is_refused_as_untrusted_wherever_it_leads() {
         .stderr(contains("args.bin").and(contains("is a symlink")));
 }
 
+/// A path that mentions a symlink is refused even where a `..` after it
+/// would, by the spelling alone, step back to a file of the project's own:
+/// the host follows the link and takes `..` from where it leads.
+#[cfg(unix)]
+#[test]
+fn a_path_that_steps_back_out_of_a_symlink_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: jump/../backend.wasm
+        "#},
+    );
+    let elsewhere = project_dir.parent().unwrap().join("elsewhere/child");
+    std::fs::create_dir_all(&elsewhere).expect("mkdir");
+    std::os::unix::fs::symlink(&elsewhere, project_dir.join("jump")).expect("symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(
+            contains("jump/../backend.wasm").and(contains("not a regular file in the project")),
+        );
+}
+
+/// What the CLI keeps under `.icp` is held to the project too: a symlink
+/// planted where the built module is stored is refused, not written through.
+#[cfg(unix)]
+#[test]
+fn a_symlink_under_dot_icp_is_refused_as_untrusted() {
+    let ctx = TestContext::new();
+    let project_dir = project(&ctx, PREBUILT);
+    let victim = project_dir.parent().unwrap().join("victim");
+    std::fs::write(&victim, b"mine").expect("write victim");
+    let artifacts = project_dir.join(".icp/cache/artifacts");
+    std::fs::create_dir_all(&artifacts).expect("mkdir");
+    std::os::unix::fs::symlink(&victim, artifacts.join("backend")).expect("symlink");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(contains("failed to save wasm artifact"));
+    assert_eq!(std::fs::read(&victim).expect("read victim"), b"mine");
+}
+
 /// The root may be spelled relatively: it is taken from the working directory.
 #[test]
 fn a_relative_project_root_is_taken_from_the_working_directory() {

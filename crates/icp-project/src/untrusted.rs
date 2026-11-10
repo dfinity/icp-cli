@@ -24,6 +24,13 @@
 //! takes a project from elsewhere discards any `.icp` that came with it, and
 //! nothing here vets what one holds.
 //!
+//! The root is the directory that holds the project's `icp.yaml`, named by
+//! whoever asks, and it is not looked for. The CLI takes the directory it is
+//! run from, or the one it is pointed at, and does not travel up to a
+//! project above that declares this one: finding such a root means reading
+//! manifests before there is a root to hold the reads to, and adopting it
+//! would let the untrusted project read the whole of the one above.
+//!
 //! A plugin's runtime opens the plugin, and each file and directory the step
 //! hands it, by path, after [`vet`] has looked. So those have the rule but
 //! not the guarantee a read through the confined filesystem has: a tree

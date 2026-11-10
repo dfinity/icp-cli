@@ -100,6 +100,8 @@ Because a member-scoped deploy does not redeploy the member's dependencies, it f
 
 Force the workspace root with the `--project-root-override` flag or the `ICP_PROJECT_ROOT` environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.
 
+`--untrusted` never walks up either. It expects to be run from the directory that holds `icp.yaml` and takes that directory as the root, so a vendored project run with `--untrusted` is treated as standalone even when a project above declares it, and its dependencies must lie inside it. Use `--project-root-override` to name a different directory.
+
 ## Environments across a workspace
 
 The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.

@@ -48,9 +48,10 @@ pub(crate) struct UntrustedOpt {
     /// Hold the project to what one someone else handed over may do: every
     /// file it reads is under the project root and reached through no
     /// symlink, each build step is a pre-built module and each sync step a
-    /// plugin, and it uses no recipe. Anything else is refused. The project
-    /// is the directory the command is run from, or the one
-    /// `--project-root-override` names: no project root is searched for
+    /// plugin, and it uses no recipe. Anything else is refused. Run it from
+    /// the directory that holds `icp.yaml`: that directory is the project
+    /// root, and no root is looked for in the directories above it. Name
+    /// another directory with `--project-root-override`
     #[arg(long)]
     pub(crate) untrusted: bool,
 }

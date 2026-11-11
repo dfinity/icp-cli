@@ -162,6 +162,14 @@ fn local_source(source: &SourceField) -> Option<&LocalSource> {
 /// The same is asked of what a plugin step hands its plugin, which the
 /// runtime also opens itself: a `dirs` entry is a directory, and a `files`
 /// entry a regular file or a directory.
+///
+/// Containment is not checked here. `vet` asks `files` whether a path is a
+/// file or a directory and takes its word, so `files` has to be a filesystem
+/// that itself refuses a path outside the root or reached through a symlink:
+/// on a host, [`Confined`](crate::files::Confined). Given one that does not —
+/// [`HostFileSystem`](crate::files::HostFileSystem) — a module at
+/// `../../elsewhere.wasm`, or one behind a symlink, passes, and nothing says
+/// that anything is missing.
 pub async fn vet(project: &Project, files: &dyn FileSystem) -> Result<(), Refused> {
     for (_, (canister_dir, canister)) in &project.canisters {
         let build = canister.build.steps.iter().map(|step| {
@@ -241,6 +249,12 @@ pub struct Vetted<L> {
 impl<L> Vetted<L> {
     /// `files` is what the paths are resolved through: the filesystem the
     /// project is on.
+    ///
+    /// It must be the one the project is confined to — on a host,
+    /// [`Confined`](crate::files::Confined) — and the one `loader` reads
+    /// through. [`vet`] checks no containment of its own, so with
+    /// [`HostFileSystem`](crate::files::HostFileSystem) here a path outside
+    /// the root or behind a symlink is accepted without an error.
     pub fn new(loader: L, files: Arc<dyn FileSystem>) -> Self {
         Self { loader, files }
     }

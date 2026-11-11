@@ -6,23 +6,39 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Fri, 30 Oct 2026 10:17:47 GMT</lastBuildDate>
-    <pubDate>Thu, 29 Oct 2026 10:00:42 GMT</pubDate>
+    <lastBuildDate>Wed, 11 Nov 2026 21:00:59 GMT</lastBuildDate>
+    <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>CLI Reference</title>
+      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
+      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
+      <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Dependencies</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
+      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
+      <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
+    <item>
+      <title>Project Model</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
+      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
+      <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Migrating from dfx</title>
       <link>https://cli.internetcomputer.org/main/migration/from-dfx/</link>
       <description>Transition from dfx to icp-cli with a side-by-side comparison of configuration, commands, and deployment models.</description>
       <pubDate>Thu, 29 Oct 2026 10:00:42 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/migration/from-dfx/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>CLI Reference</title>
-      <link>https://cli.internetcomputer.org/main/reference/cli/</link>
-      <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
-      <pubDate>Tue, 27 Oct 2026 13:46:40 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -55,14 +71,6 @@
       <description>Target specific Internet Computer subnets for geographic, replication, or colocation requirements when deploying canisters.</description>
       <pubDate>Wed, 07 Oct 2026 05:24:13 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/guides/deploying-to-specific-subnets/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Dependencies</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
-      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
-      <pubDate>Wed, 09 Sep 2026 08:20:43 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>
@@ -135,14 +143,6 @@
       <description>Understand the three phases that move canister source code to a running, configured state on the Internet Computer.</description>
       <pubDate>Tue, 08 Sep 2026 13:55:36 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/build-deploy-sync/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Model</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
-      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
-      <pubDate>Tue, 08 Sep 2026 13:55:36 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

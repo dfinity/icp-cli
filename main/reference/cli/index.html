@@ -217,6 +217,7 @@
 <h6 id="options-1"><strong>Options:</strong></h6>
 <ul>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to build for. By default, the local environment is used</li>
+<li><code>--untrusted</code> — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds <code>icp.yaml</code>: that directory is the project root, and no root is looked for in the directories above it. Name another directory with <code>--project-root-override</code>. The <code>.icp</code> directory is the tool’s own state and is neither confined nor checked: delete one that came with the project before running</li>
 </ul>
 <h2 id="icp-canister"><code>icp canister</code></h2>
 <p>Perform canister operations against a network</p>
@@ -1131,6 +1132,9 @@ Candid text format</li>
 Raw binary (only valid for file references)</li>
 </ul>
 </li>
+<li>
+<p><code>--untrusted</code> — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds <code>icp.yaml</code>: that directory is the project root, and no root is looked for in the directories above it. Name another directory with <code>--project-root-override</code>. The <code>.icp</code> directory is the tool’s own state and is neither confined nor checked: delete one that came with the project before running</p>
+</li>
 </ul>
 <h2 id="icp-environment"><code>icp environment</code></h2>
 <p>Show information about the current project environments</p>
@@ -1800,6 +1804,7 @@ The ICP_ENVIRONMENT environment variable is also checked when neither network na
 <li><code>--proxy &#x3C;PROXY></code> — Principal of a proxy canister to route sync plugin calls to the target canister through</li>
 <li><code>-e</code>, <code>--environment &#x3C;ENVIRONMENT></code> — Override the environment to connect to. By default, the local environment is used</li>
 <li><code>--identity &#x3C;IDENTITY></code> — The user identity to run this command as</li>
+<li><code>--untrusted</code> — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds <code>icp.yaml</code>: that directory is the project root, and no root is looked for in the directories above it. Name another directory with <code>--project-root-override</code>. The <code>.icp</code> directory is the tool’s own state and is neither confined nor checked: delete one that came with the project before running</li>
 </ul>
 <h2 id="icp-token"><code>icp token</code></h2>
 <p>Perform token transactions</p>

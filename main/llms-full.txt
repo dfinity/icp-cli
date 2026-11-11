@@ -915,6 +915,8 @@ Because a member-scoped deploy does not redeploy the member's dependencies, it f
 
 Force the workspace root with the `--project-root-override` flag or the `ICP_PROJECT_ROOT` environment variable. This uses the given directory as the root with no upward walk — for example, to deploy a vendored project truly on its own.
 
+`--untrusted` never walks up either. It expects to be run from the directory that holds `icp.yaml` and takes that directory as the root, so a vendored project run with `--untrusted` is treated as standalone even when a project above declares it, and its dependencies must lie inside it. Use `--project-root-override` to name a different directory.
+
 ## Environments across a workspace
 
 The workspace root owns the **network** and the **canister-ID store** for every environment; a dependency's own network definitions are ignored when it is deployed as part of a workspace.
@@ -1254,6 +1256,8 @@ icp-cli looks for `icp.yaml` in the current directory and parent directories. Yo
 ```bash
 icp deploy --project-root-override /path/to/project
 ```
+
+With `--untrusted` (on `build`, `deploy` and `sync`), nothing is searched for. Run the command from the directory that holds `icp.yaml`: that directory is the project root, and icp-cli does not look in parent directories. Running from a subdirectory fails. To act on a project somewhere else, name its directory with `--project-root-override`.
 
 ## Next Steps
 
@@ -7542,6 +7546,7 @@ Build canisters
 ###### **Options:**
 
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to build for. By default, the local environment is used
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds `icp.yaml`: that directory is the project root, and no root is looked for in the directories above it. Name another directory with `--project-root-override`. The `.icp` directory is the tool's own state and is neither confined nor checked: delete one that came with the project before running
 
 
 
@@ -8477,6 +8482,7 @@ using --args or --args-file:
   - `bin`:
     Raw binary (only valid for file references)
 
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds `icp.yaml`: that directory is the project root, and no root is looked for in the directories above it. Name another directory with `--project-root-override`. The `.icp` directory is the tool's own state and is neither confined nor checked: delete one that came with the project before running
 
 
 
@@ -9325,6 +9331,7 @@ Synchronize canisters
 * `--proxy <PROXY>` — Principal of a proxy canister to route sync plugin calls to the target canister through
 * `-e`, `--environment <ENVIRONMENT>` — Override the environment to connect to. By default, the local environment is used
 * `--identity <IDENTITY>` — The user identity to run this command as
+* `--untrusted` — Hold the project to what one someone else handed over may do: every file it reads is under the project root and reached through no symlink, each build step is a pre-built module and each sync step a plugin, and it uses no recipe. Anything else is refused. Run it from the directory that holds `icp.yaml`: that directory is the project root, and no root is looked for in the directories above it. Name another directory with `--project-root-override`. The `.icp` directory is the tool's own state and is neither confined nor checked: delete one that came with the project before running
 
 
 

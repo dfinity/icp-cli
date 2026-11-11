@@ -254,6 +254,8 @@ icp-cli looks for `icp.yaml` in the current directory and parent directories. Yo
 icp deploy --project-root-override /path/to/project
 ```
 
+With `--untrusted` (on `build`, `deploy` and `sync`), nothing is searched for. Run the command from the directory that holds `icp.yaml`: that directory is the project root, and icp-cli does not look in parent directories. Running from a subdirectory fails. To act on a project somewhere else, name its directory with `--project-root-override`.
+
 ## Next Steps
 
 - [Build, Deploy, Sync](build-deploy-sync.md) — The deployment lifecycle

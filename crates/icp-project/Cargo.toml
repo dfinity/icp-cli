@@ -17,7 +17,16 @@ default = ["host"]
 #
 # Strictly additive: it may add implementations, never change what the rest of
 # the crate does, or those checks prove nothing about the shipped binary.
-host = ["dep:camino-tempfile", "dep:dunce", "dep:rand", "dep:tar", "tokio/io-std", "tokio/process", "tokio/signal"]
+host = [
+  "dep:camino-tempfile",
+  "dep:cap-std",
+  "dep:dunce",
+  "dep:rand",
+  "dep:tar",
+  "tokio/io-std",
+  "tokio/process",
+  "tokio/signal",
+]
 # Exposes this crate's mocks and fixtures so downstream crates can test against
 # the same seams. Off in a normal build, so none of it ships.
 test-util = []
@@ -28,6 +37,7 @@ bigdecimal = { workspace = true }
 camino = { workspace = true }
 camino-tempfile = { workspace = true, optional = true }
 candid = { workspace = true }
+cap-std = { workspace = true, optional = true }
 candid_parser = { workspace = true }
 clap = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }

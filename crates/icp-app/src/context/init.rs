@@ -12,7 +12,14 @@ use icp_project::store_artifact::ArtifactStore;
 use std::time::Duration;
 
 use crate::{agent, identity, identity::PasswordFunc};
-use icp_project::{Lazy, ProjectLoadImpl, host::Host, manifest, store_id};
+use icp_project::{
+    Lazy, ProjectLoad, ProjectLoadImpl,
+    canister::recipe::Resolve,
+    files::{Confined, FileSystem, HostFileSystem, RootError},
+    host::Host,
+    manifest::{self, ProjectRootLocate as _},
+    store_id, untrusted,
+};
 
 #[derive(Debug, Snafu)]
 pub enum ContextInitError {
@@ -36,13 +43,28 @@ pub enum ContextInitError {
     PackageCache {
         source: icp_project::fs::lock::LockError,
     },
+
+    #[snafu(display(
+        "an untrusted project is run from the directory that holds its icp.yaml, or named with \
+         --project-root-override"
+    ))]
+    UntrustedRoot {
+        source: manifest::ProjectRootLocateError,
+    },
+
+    #[snafu(display("failed to confine the untrusted project to its directory"))]
+    Confine { source: RootError },
 }
 
+/// With `untrusted`, the project is read through a filesystem confined to
+/// its root and vetted by [`icp_project::untrusted`] before any command acts
+/// on it. The root is located up front for that, so there has to be a project.
 pub fn initialize(
     project_root_override: Option<PathBuf>,
     debug: bool,
     password_func: PasswordFunc,
     pem_session_duration: Option<Duration>,
+    untrusted: bool,
 ) -> Result<Context, ContextInitError> {
     // Setup global directory structure
     let dirs = Arc::new(Directories::new().context(DirectoriesSnafu)?);
@@ -75,10 +97,33 @@ pub fn initialize(
     let cwd: PathBuf =
         PathBuf::try_from(current_dir().context(CwdSnafu)?).context(Utf8PathSnafu)?;
 
+    // A relative override is taken from the working directory: the
+    // filesystem an untrusted project is confined to matches every path
+    // against the root as spelled, so the root has to be a whole path.
+    let project_root_override = project_root_override.map(|dir| cwd.join(dir));
+
+    // An untrusted project is the directory the command stands in, or the
+    // one it was pointed at, and nothing is searched for. Finding a root
+    // otherwise means reading manifests above and following the dependencies
+    // they name, before there is a root to hold those reads to, and it lets
+    // a project above adopt this one and widen what it may read.
+    let project_root_override = if untrusted {
+        Some(project_root_override.unwrap_or_else(|| cwd.clone()))
+    } else {
+        project_root_override
+    };
     let project_root_locate = Arc::new(manifest::ProjectRootLocateImpl::new(
         cwd,
         project_root_override,
     ));
+
+    // An untrusted project is confined to its directory in what it reads.
+    let confined = if untrusted {
+        let root = project_root_locate.locate().context(UntrustedRootSnafu)?;
+        Some(Confined::new(&root).context(ConfineSnafu)?)
+    } else {
+        None
+    };
 
     // Canister ID Store
     let ids = Arc::new(store_id::AccessImpl::new(project_root_locate.clone()));
@@ -100,14 +145,23 @@ pub fn initialize(
         pkg_cache.clone(),
     ));
 
-    // Recipes
-    let recipe = Arc::new(RecipeFetcher {
-        http_client,
-        pkg_cache,
-    });
+    // The project's files come from this machine: the whole of it for the
+    // user's own project, the project directory alone for an untrusted one.
+    let files: Arc<dyn FileSystem> = match &confined {
+        Some(confined) => Arc::new(confined.clone()),
+        None => Arc::new(HostFileSystem),
+    };
 
-    // The project's files come from this machine.
-    let files = Arc::new(icp_project::files::HostFileSystem);
+    // Recipes: fetched for the user's own project, refused for an untrusted
+    // one, which states its steps itself.
+    let recipe: Arc<dyn Resolve> = if untrusted {
+        Arc::new(untrusted::NoRecipes)
+    } else {
+        Arc::new(RecipeFetcher {
+            http_client,
+            pkg_cache,
+        })
+    };
 
     // Canister builder
     let builder = Arc::new(Builder::new(wasm.clone(), files.clone()));
@@ -125,8 +179,11 @@ pub fn initialize(
         files: files.clone(),
     };
 
-    let pload = Lazy::new(pload);
-    let pload = Arc::new(pload);
+    let pload: Arc<dyn ProjectLoad> = if untrusted {
+        Arc::new(Lazy::new(untrusted::Vetted::new(pload, files.clone())))
+    } else {
+        Arc::new(Lazy::new(pload))
+    };
 
     // Telemetry data bag (written by subsystems, read at session finish)
     let telemetry_data = Arc::new(crate::telemetry_data::TelemetryData::default());

@@ -32,6 +32,7 @@ bytes = "1.11"
 camino = { version = "1.1.9", features = ["serde1"] }
 cargo-generate = "0.23.7"
 camino-tempfile = "1"
+cap-std = "4"
 candid = "0.10.19"
 candid_parser = "0.3.0"
 clap = { version = "4.5.3", features = ["derive", "env", "string", "unstable-ext"] }

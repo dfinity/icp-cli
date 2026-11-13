@@ -3,7 +3,12 @@ name = "icp-canister-interfaces"
 version.workspace = true
 edition = { workspace = true }
 license = { workspace = true }
-publish.workspace = true
+description = "Candid interfaces and canister ids of the Internet Computer system canisters icp-cli calls."
+repository = { workspace = true }
+readme = "README.md"
+keywords = ["icp", "internet-computer", "dfinity", "candid"]
+# Published to crates.io with each icp-cli release; see README.md.
+publish = true
 
 [dependencies]
 bigdecimal = { workspace = true }

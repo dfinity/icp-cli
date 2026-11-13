@@ -60,11 +60,15 @@ ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.9.0" }
 ic-utils = { version = "0.49.1" }
 icp-app = { path = "crates/icp-app" }
-icp-canister-interfaces = { path = "crates/icp-canister-interfaces" }
-icp-events = { path = "crates/icp-events" }
+# The four below are published to crates.io, so each carries the version a
+# registry build resolves it to. Pinned exactly: they are released together and
+# make no promise to each other across versions. `release-pr.yml` bumps these
+# with the workspace version.
+icp-canister-interfaces = { path = "crates/icp-canister-interfaces", version = "=1.8.0" }
+icp-events = { path = "crates/icp-events", version = "=1.8.0" }
 icp-extension = { path = "crates/icp-extension" }
-icp-project = { path = "crates/icp-project" }
-icp-sync-plugin = { path = "crates/icp-sync-plugin" }
+icp-project = { path = "crates/icp-project", version = "=1.8.0" }
+icp-sync-plugin = { path = "crates/icp-sync-plugin", version = "=1.8.0" }
 ic-identity-hsm = "0.49.1"
 icrc-ledger-types = "0.1.10"
 indexmap = { version = "2", features = ["serde"] }
@@ -120,8 +124,12 @@ tracing-subscriber = "0.3.20"
 url = { version = "2.5.4", features = ["serde"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 wasmparser = "0.255.0"
-wasmtime = { version = "49.0.5", features = ["component-model"] }
-wasmtime-wasi = { version = "49.0.5" }
+# Without the defaults, which are most of what wasmtime can do: the on-disk
+# compilation cache, profilers, core dumps, the GC and threads proposals, the
+# text format, WASI preview 1 and 3. Nothing here turns any of those on, and
+# they come to some forty packages for whoever builds these crates.
+wasmtime = { version = "49.0.5", default-features = false, features = ["anyhow", "backtrace", "component-model", "cranelift", "demangle", "parallel-compilation", "runtime", "std"] }
+wasmtime-wasi = { version = "49.0.5", default-features = false, features = ["p2"] }
 winreg = "0.56.0"
 wslpath2 = "0.1"
 zeroize = "1.8.1"

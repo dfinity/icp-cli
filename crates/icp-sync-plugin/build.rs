@@ -9,7 +9,11 @@ fn main() {
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin-v1/src/lib.rs");
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin-v1/Cargo.toml");
 
-    if wasm32_wasip2_is_installed() {
+    // The fixtures are packages of their own, which `cargo package` leaves out
+    // of this one: built from crates.io there is nothing here to build.
+    let fixtures = Utf8PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("tests/fixtures/test-plugin/Cargo.toml");
+    if fixtures.exists() && wasm32_wasip2_is_installed() {
         // Current-interface fixture, and a legacy-interface one so tests can
         // exercise both load paths.
         build_test_fixture("test-plugin", "test_plugin", "TEST_PLUGIN_WASM");

@@ -84,6 +84,14 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      # Four of these crates go to crates.io with each release (see
+      # release-crates.yml), which refuses things a workspace build accepts: a
+      # dependency on a crate that is not published, or one named by path
+      # alone. `--workspace` takes exactly the members that do not say
+      # `publish = false`. Unverified, since the lint above just built them.
+      - name: Check the published crates package
+        run: cargo publish --workspace --dry-run --no-verify --locked
+
   # `icp-project` is meant to end up runnable inside a canister, so its core
   # must reach nothing that only a host has. Nothing else expresses this: a
   # `--workspace` build unifies the `host` feature back on, because `icp-cli`

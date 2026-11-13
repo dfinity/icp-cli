@@ -3,8 +3,12 @@ name = "icp-sync-plugin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-repository.workspace = true
-publish.workspace = true
+description = "The wasmtime Component Model runtime that runs icp-cli sync plugins."
+repository = { workspace = true }
+readme = "README.md"
+keywords = ["icp", "internet-computer", "dfinity", "wasmtime"]
+# Published to crates.io with each icp-cli release; see README.md.
+publish = true
 
 [dependencies]
 async-trait.workspace = true
@@ -16,7 +20,7 @@ icp-events.workspace = true
 # Only for the seams the runtime is driven through — the plugin invocation and
 # the canister calls it makes — never for `host`-feature code, which is what
 # this crate is an implementation of.
-icp-project = { path = "../icp-project", default-features = false }
+icp-project = { path = "../icp-project", version = "=1.8.0", default-features = false }
 semver.workspace = true
 snafu.workspace = true
 # `rt-multi-thread` for `block_in_place`, which the runtime needs because a

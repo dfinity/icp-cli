@@ -3,7 +3,12 @@ name = "icp-events"
 version.workspace = true
 edition = { workspace = true }
 license = { workspace = true }
-publish.workspace = true
+description = "Typed progress events that icp-cli's operations report and its renderers draw."
+repository = { workspace = true }
+readme = "README.md"
+keywords = ["icp", "internet-computer", "dfinity"]
+# Published to crates.io with each icp-cli release; see README.md.
+publish = true
 
 [dependencies]
 serde = { workspace = true }

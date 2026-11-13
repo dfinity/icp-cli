@@ -124,6 +124,10 @@ See `.claude/testing.md` for test structure, mock helpers, and test requirements
 - Uses **Rust 2024 edition** (requires Rust 1.88.0+)
 - Update `rust-version` in workspace `Cargo.toml` when changing
 
+### Published crates
+
+`icp-events`, `icp-canister-interfaces`, `icp-project` and `icp-sync-plugin` are published to crates.io with each release, for other tools to build on. So they may depend only on crates.io crates and on each other (by exact version, in the workspace `Cargo.toml`), and every dependency they gain is one their consumers build: prefer `default-features = false` and the features actually used. `cargo publish --workspace --dry-run --no-verify --locked` checks they still package.
+
 ### Network Launcher
 
 The `icp-cli-network-launcher` (wraps PocketIC) is automatically downloaded on first use, both for the CLI and tests. Override with `ICP_CLI_NETWORK_LAUNCHER_PATH` for debugging.

@@ -59,6 +59,14 @@ jobs:
             { print }
           ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
 
+          # The crates published to crates.io name each other by exact version,
+          # so those requirements move with it. A pin left behind fails the
+          # `cargo update` below rather than going unnoticed: the workspace no
+          # longer holds a crate at the version it asks for.
+          sed -E -i \
+            "s/^(icp-(canister-interfaces|events|project|sync-plugin) = \{.*version = \")=[^\"]*/\1=$VERSION/" \
+            Cargo.toml crates/icp-sync-plugin/Cargo.toml
+
           # Re-lock only the workspace members' own versions in Cargo.lock.
           # `--workspace` restricts the update to workspace packages; it does NOT
           # touch dependency versions (verified: only the member version lines change).
@@ -85,7 +93,7 @@ jobs:
           {
             echo "BRANCH=release/v$VERSION"
             echo "TITLE=chore: release v$VERSION"
-            echo "FILES=Cargo.toml Cargo.lock CHANGELOG.md"
+            echo "FILES=Cargo.toml crates/icp-sync-plugin/Cargo.toml Cargo.lock CHANGELOG.md"
           } >> "$GITHUB_ENV"
 
           cat > pr-body.md <<EOF
@@ -93,7 +101,7 @@ jobs:
 
           Release v$VERSION.
 
-          - \`Cargo.toml\`: workspace version bumped to \`$VERSION\`
+          - \`Cargo.toml\`, \`crates/icp-sync-plugin/Cargo.toml\`: workspace version, and the published crates' pins on each other, bumped to \`$VERSION\`
           - \`Cargo.lock\`: workspace member versions synced
           - \`CHANGELOG.md\`: \`# Unreleased\` entries promoted under \`# v$VERSION\`
 

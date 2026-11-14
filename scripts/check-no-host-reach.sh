@@ -52,7 +52,7 @@ denied+='|icp_canister_interfaces::engine_canister::engine_canister_id'
 allowed='std::process::abort'
 
 rlib=$(
-  cargo build -p icp-project --no-default-features \
+  cargo build -p icp-project --no-default-features --features icp-funding \
     --target wasm32-unknown-unknown --message-format=json |
     jq -r 'select(.reason == "compiler-artifact" and .target.name == "icp_project")
              | .filenames[] | select(endswith(".rlib"))' |

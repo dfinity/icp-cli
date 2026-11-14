@@ -3742,7 +3742,6 @@ dependencies = [
  "ic-management-canister-types 0.9.0",
  "icp-canister-interfaces",
  "icp-events",
- "icrc-ledger-types",
  "indexmap",
  "indoc",
  "itertools 0.14.0",

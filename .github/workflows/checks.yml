@@ -84,6 +84,14 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      # What a consumer that pays for canisters in cycles alone builds: the
+      # host, without the ICP ledger's types. Nothing in this workspace asks
+      # for `icp-project` that way, so nothing else compiles it.
+      - name: Lint icp-project without ICP funding
+        run: |
+          cargo clippy -p icp-project --no-default-features --features host \
+            --tests -- -D warnings
+
       # Four of these crates go to crates.io with each release (see
       # release-crates.yml), which refuses things a workspace build accepts: a
       # dependency on a crate that is not published, or one named by path
@@ -129,7 +137,7 @@ jobs:
       # host by definition, and `httptest` does not build for wasm at all.
       - name: Check icp-project without a host
         run: |
-          cargo clippy -p icp-project --no-default-features \
+          cargo clippy -p icp-project --no-default-features --features icp-funding \
             --target wasm32-unknown-unknown -- -D warnings
         env:
           RUST_BACKTRACE: 1
@@ -144,7 +152,7 @@ jobs:
       # so they run in that configuration too — on this machine's target,
       # since that is where a test can run at all.
       - name: Test icp-project without a host
-        run: cargo test -p icp-project --no-default-features
+        run: cargo test -p icp-project --no-default-features --features icp-funding
         env:
           RUST_BACKTRACE: 1
 

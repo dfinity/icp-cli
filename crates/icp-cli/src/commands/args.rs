@@ -169,7 +169,7 @@ impl Display for Canister {
     }
 }
 
-pub(crate) use icp_project::parsers::FlexibleAccountId;
+pub(crate) use icp_app::operations::token::account::FlexibleAccountId;
 
 /// Grouped flags for specifying canister install arguments, shared by `canister install`, and `deploy`.
 #[derive(Args, Clone, Debug, Default)]

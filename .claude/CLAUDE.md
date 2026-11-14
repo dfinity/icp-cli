@@ -13,9 +13,9 @@ cargo test -p icp-cli                # Tests for a specific package
 cargo test --test <file> -- <name>   # Specific test
 cargo fmt && cargo clippy            # Run after changes pass tests
 # `icp-project`'s core must reach nothing only a host has — see the boundary below
-cargo clippy -p icp-project --no-default-features --target wasm32-unknown-unknown
+cargo clippy -p icp-project --no-default-features --features icp-funding --target wasm32-unknown-unknown
 ./scripts/check-no-host-reach.sh     # ...which a build alone does not prove
-cargo test -p icp-project --no-default-features
+cargo test -p icp-project --no-default-features --features icp-funding
 ./scripts/generate-cli-docs.sh       # Regenerate CLI docs when commands change
 ./scripts/generate-config-schemas.sh # Regenerate schema when manifest types change
 ```
@@ -66,6 +66,12 @@ reverse:
 Some of those have a host implementation in `icp-project` itself, behind the
 default-on **`host`** feature: `HostFileSystem`, the two stores, `HostScripts`,
 `HostRandom`, and `Builder`. The rest have none there at all.
+
+A second default-on feature, **`icp-funding`**, holds paying for a new canister
+with ICP (`CreateFunding::Icp`), and with it `ic-ledger-types` and the `ic-cdk`
+that crate depends on. It is no part of the host boundary — the checks below
+keep it on — and exists so a consumer that pays in cycles alone, as `deploy`
+does, can build without it. CI lints that configuration too.
 
 `host` must be **strictly additive** — it may add implementations, never change
 what the rest of the crate does; if it changed behaviour rather than adding to

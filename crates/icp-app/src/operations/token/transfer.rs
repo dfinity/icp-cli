@@ -13,9 +13,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use snafu::{ResultExt, Snafu};
 
-use icp_project::parsers::FlexibleAccountId;
-
-use super::{TOKEN_LEDGER_CIDS, TokenAmount};
+use super::{TOKEN_LEDGER_CIDS, TokenAmount, account::FlexibleAccountId};
 
 #[derive(Debug, Snafu)]
 pub enum TokenTransferError {

@@ -3603,7 +3603,7 @@ dependencies = [
 
 [[package]]
 name = "icp-canister-interfaces"
-version = "1.8.0"
+version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "candid",
@@ -3698,7 +3698,7 @@ dependencies = [
 
 [[package]]
 name = "icp-events"
-version = "1.8.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3724,7 +3724,7 @@ dependencies = [
 
 [[package]]
 name = "icp-project"
-version = "1.8.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "bigdecimal",
@@ -3773,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "icp-sync-plugin"
-version = "1.8.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",

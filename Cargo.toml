@@ -61,15 +61,23 @@ ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.9.0" }
 ic-utils = { version = "0.49.1" }
 icp-app = { path = "crates/icp-app" }
-# The four below are published to crates.io, so each carries the version a
-# registry build resolves it to. Pinned exactly: they are released together and
-# make no promise to each other across versions. `release-pr.yml` bumps these
-# with the workspace version.
-icp-canister-interfaces = { path = "crates/icp-canister-interfaces", version = "=1.8.0" }
-icp-events = { path = "crates/icp-events", version = "=1.8.0" }
+# Published crates. The four below go to crates.io with each icp-cli release,
+# for other tools to build on, so each carries the version a registry build
+# resolves it to.
+#
+# They share a version of their own, 0.x, and not the CLI's: their API is the
+# CLI's internals and changes when the CLI needs it to, which a 1.x version
+# would promise it does not. Every CLI release raises the minor — the part of a
+# 0.x version that is allowed to break — and `release-pr.yml` does that, here
+# and in the four manifests.
+#
+# Pinned exactly, since they are built against each other as they stand at one
+# commit.
+icp-canister-interfaces = { path = "crates/icp-canister-interfaces", version = "=0.1.0" }
+icp-events = { path = "crates/icp-events", version = "=0.1.0" }
 icp-extension = { path = "crates/icp-extension" }
-icp-project = { path = "crates/icp-project", version = "=1.8.0" }
-icp-sync-plugin = { path = "crates/icp-sync-plugin", version = "=1.8.0" }
+icp-project = { path = "crates/icp-project", version = "=0.1.0" }
+icp-sync-plugin = { path = "crates/icp-sync-plugin", version = "=0.1.0" }
 ic-identity-hsm = "0.49.1"
 icrc-ledger-types = "0.1.10"
 indexmap = { version = "2", features = ["serde"] }

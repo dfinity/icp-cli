@@ -126,7 +126,7 @@ See `.claude/testing.md` for test structure, mock helpers, and test requirements
 
 ### Published crates
 
-`icp-events`, `icp-canister-interfaces`, `icp-project` and `icp-sync-plugin` are published to crates.io with each release, for other tools to build on. So they may depend only on crates.io crates and on each other (by exact version, in the workspace `Cargo.toml`), and every dependency they gain is one their consumers build: prefer `default-features = false` and the features actually used. `cargo publish --workspace --dry-run --no-verify --locked` checks they still package.
+`icp-events`, `icp-canister-interfaces`, `icp-project` and `icp-sync-plugin` are published to crates.io with each release, for other tools to build on. They share a 0.x version of their own, not the CLI's, whose minor `release-pr.yml` raises at every release — their API is the CLI's internals and makes no promise across releases. They may depend only on crates.io crates and on each other (by exact version, in the workspace `Cargo.toml`), and every dependency they gain is one their consumers build: prefer `default-features = false` and the features actually used. `cargo publish --workspace --dry-run --no-verify --locked` checks they still package.
 
 ### Network Launcher
 

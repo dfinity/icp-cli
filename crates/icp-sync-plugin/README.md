@@ -11,6 +11,7 @@ the component runs on.
 
 This crate is part of [icp-cli](https://github.com/dfinity/icp-cli) and is
 published so other tools can build on the same code the `icp` binary runs. Its
-API is not stable: it is released together with the CLI, under the CLI's
-version, and any release may change it. Depend on it with an exact version
-(`=x.y.z`), and on the same version of the other `icp-*` crates.
+API is the CLI's internals, and is not stable: a new minor version comes out
+with every icp-cli release, and any of them may change it. The other `icp-*`
+crates are released alongside under the same version number; use the same
+version of each.

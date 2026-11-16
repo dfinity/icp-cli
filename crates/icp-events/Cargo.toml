@@ -1,13 +1,13 @@
 [package]
 name = "icp-events"
-version.workspace = true
+# Not the CLI's version: see "Published crates" in the workspace Cargo.toml.
+version = "0.1.0"
 edition = { workspace = true }
 license = { workspace = true }
 description = "Typed progress events that icp-cli's operations report and its renderers draw."
 repository = { workspace = true }
 readme = "README.md"
 keywords = ["icp", "internet-computer", "dfinity"]
-# Published to crates.io with each icp-cli release; see README.md.
 publish = true
 
 [dependencies]

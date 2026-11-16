@@ -4,16 +4,22 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=sync-plugin.wit");
     println!("cargo:rerun-if-changed=sync-plugin-v1.wit");
+
+    // The fixtures are packages of their own, which `cargo package` leaves out
+    // of this one: built from crates.io there is nothing here to build, and
+    // nothing to watch either — cargo takes a watched path that does not exist
+    // as one that changed, and would run this script on every build.
+    let fixtures = Utf8PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("tests/fixtures/test-plugin/Cargo.toml");
+    if !fixtures.exists() {
+        return;
+    }
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin/src/lib.rs");
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin/Cargo.toml");
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin-v1/src/lib.rs");
     println!("cargo:rerun-if-changed=tests/fixtures/test-plugin-v1/Cargo.toml");
 
-    // The fixtures are packages of their own, which `cargo package` leaves out
-    // of this one: built from crates.io there is nothing here to build.
-    let fixtures = Utf8PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("tests/fixtures/test-plugin/Cargo.toml");
-    if fixtures.exists() && wasm32_wasip2_is_installed() {
+    if wasm32_wasip2_is_installed() {
         // Current-interface fixture, and a legacy-interface one so tests can
         // exercise both load paths.
         build_test_fixture("test-plugin", "test_plugin", "TEST_PLUGIN_WASM");

@@ -3,7 +3,8 @@ run-name: Publish the icp-* crates to crates.io from ${{ inputs.version }}
 
 # Publishes the workspace members that do not say `publish = false`:
 # icp-events, icp-canister-interfaces, icp-project and icp-sync-plugin. They are
-# libraries other tools build on, released with the CLI and under its version.
+# libraries other tools build on, released with the CLI under a 0.x version of
+# their own (see "Published crates" in Cargo.toml).
 #
 # A crates.io release is permanent. A bad one can be yanked, which hides it from
 # new dependency resolution, and replaced by a new version, never re-published.
@@ -22,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag to publish from (e.g., v1.9.0)'
+        description: 'Release tag to publish from (e.g., v1.9.0). A tag, not a branch.'
         required: true
         type: string
 
@@ -37,25 +38,41 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      crates-version: ${{ steps.source.outputs.crates-version }}
     steps:
+      # `refs/tags/`, so a branch of the same name is not a release.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.version }}
+          ref: refs/tags/${{ inputs.version }}
 
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
           cache: false
 
-      - name: Check the tag matches the workspace version
+      # The tag is the CLI's version; the crates have their own, and all four
+      # the same one. The commit is recorded so the publish job takes exactly
+      # what was verified here, wherever the tag points by the time that job
+      # is approved.
+      - name: Check the tag and read what it holds
+        id: source
         env:
           TAG: ${{ inputs.version }}
         run: |
-          version=$(cargo metadata --format-version 1 --no-deps \
-            | jq -er '.packages[] | select(.name == "icp-project") | .version')
-          if [[ "v$version" != "$TAG" ]]; then
-            echo "::error::$TAG holds version $version" >&2
+          metadata=$(cargo metadata --format-version 1 --no-deps)
+          cli=$(jq -er '.packages[] | select(.name == "icp-cli") | .version' <<<"$metadata")
+          if [[ "v$cli" != "$TAG" ]]; then
+            echo "::error::$TAG holds icp-cli $cli" >&2
             exit 1
           fi
+          versions=$(jq -er '[.packages[] | select(.publish == null) | .version] | unique | join(" ")' <<<"$metadata")
+          if [[ "$versions" == *" "* ]]; then
+            echo "::error::the published crates are not at one version: $versions" >&2
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "crates-version=$versions" >> "$GITHUB_OUTPUT"
 
       # Builds each crate from its packaged form, against the packaged form of
       # the others, which is what someone depending on them will build.
@@ -70,9 +87,10 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # The commit the verify job built, not the tag again.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.version }}
+          ref: ${{ needs.verify.outputs.sha }}
 
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:
@@ -88,9 +106,9 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-          TAG: ${{ inputs.version }}
+          VERSION: ${{ needs.verify.outputs.crates-version }}
         run: |
-          version="${TAG#v}"
+          version="$VERSION"
           for crate in icp-events icp-canister-interfaces icp-project icp-sync-plugin; do
             # The sparse index files a name of four or more characters under
             # its first two and next two.

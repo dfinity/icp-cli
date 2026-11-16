@@ -124,7 +124,16 @@ wasmparser = "0.255.0"
 # Without the defaults, which are most of what wasmtime can do: the on-disk
 # compilation cache, profilers, core dumps, the GC and threads proposals, the
 # text format, WASI preview 1 and 3. Nothing here turns any of those on.
-wasmtime = { version = "49.0.5", default-features = false, features = ["anyhow", "backtrace", "component-model", "cranelift", "demangle", "parallel-compilation", "runtime", "std"] }
+wasmtime = { version = "49.0.5", default-features = false, features = [
+  "anyhow",
+  "backtrace",
+  "component-model",
+  "cranelift",
+  "demangle",
+  "parallel-compilation",
+  "runtime",
+  "std",
+] }
 wasmtime-wasi = { version = "49.0.5", default-features = false, features = ["p2"] }
 winreg = "0.56.0"
 wslpath2 = "0.1"

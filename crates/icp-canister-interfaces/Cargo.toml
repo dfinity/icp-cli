@@ -8,5 +8,10 @@ publish.workspace = true
 [dependencies]
 bigdecimal = { workspace = true }
 candid = { workspace = true }
+crc32fast = { workspace = true }
 ic-management-canister-types = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+ic-ledger-types = { workspace = true }

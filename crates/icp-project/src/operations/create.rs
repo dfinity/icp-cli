@@ -6,9 +6,6 @@ use crate::parsers::to_token_unit_amount;
 use crate::signal::stop_signal;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use candid::{Decode, Encode, IDLArgs, IDLValue, Nat, Principal};
-use ic_ledger_types::{
-    AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError, TransferResult,
-};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettings, CreateCanisterArgs as MgmtCreateCanisterArgs,
 };
@@ -25,7 +22,10 @@ use icp_canister_interfaces::{
         GET_ENGINE_OPERATOR_BY_SUBNET_METHOD, GetEngineOperatorBySubnetArgs,
         GetEngineOperatorBySubnetResult,
     },
-    icp_ledger::{ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL},
+    icp_ledger::{
+        AccountIdentifier, ICP_LEDGER_BLOCK_FEE_E8S, ICP_LEDGER_PRINCIPAL, Memo, Subaccount,
+        Tokens, TransferArgs, TransferError, TransferResult,
+    },
 };
 use snafu::{OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::OnceCell, time::sleep};
@@ -519,8 +519,10 @@ impl CreateOperation {
         );
         let transfer_args = TransferArgs {
             memo: Memo(MEMO_CREATE_CANISTER),
-            amount: Tokens::from_e8s(e8s),
-            fee: Tokens::from_e8s(ICP_LEDGER_BLOCK_FEE_E8S),
+            amount: Tokens { e8s },
+            fee: Tokens {
+                e8s: ICP_LEDGER_BLOCK_FEE_E8S,
+            },
             from_subaccount: None,
             to,
             created_at_time: None,

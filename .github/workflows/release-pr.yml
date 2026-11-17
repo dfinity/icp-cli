@@ -52,12 +52,41 @@ jobs:
       - name: Prepare version bump
         if: inputs.kind == 'version-bump'
         run: |
+          previous=$(awk -F'"' '/^\[/ { section = $0 } section == "[workspace.package]" && /^version[[:space:]]*=/ { print $2; exit }' Cargo.toml)
+
           # Bump [workspace.package] version (only that section's `version` key)
           awk -v ver="$VERSION" '
             /^\[/ { section = $0 }
             section == "[workspace.package]" && /^version[[:space:]]*=/ { print "version = \"" ver "\""; next }
             { print }
           ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+
+          # The crates published to crates.io have a 0.x version of their own
+          # (see "Published crates" in Cargo.toml), whose minor goes up with
+          # every release. They name each other by exact version, so a manifest
+          # left behind fails the `cargo update` below rather than going
+          # unnoticed: the workspace no longer holds a crate at the version
+          # another asks for. Skipped when the workspace is already at this
+          # version (re-dispatched after merge), or each run would raise it again.
+          CRATES="icp-canister-interfaces icp-events icp-project icp-sync-plugin"
+          current=$(awk -F'"' '/^version[[:space:]]*=/ { print $2; exit }' crates/icp-project/Cargo.toml)
+          if [[ ! "$current" =~ ^0\.([0-9]+)\.[0-9]+$ ]]; then
+            echo "::error::icp-project's version '$current' is not 0.x.y — the crates' versioning has changed and this step has not."
+            exit 1
+          fi
+          if [[ "$previous" == "$VERSION" ]]; then
+            CRATES_VERSION="$current"
+          else
+            CRATES_VERSION="0.$((BASH_REMATCH[1] + 1)).0"
+          fi
+          CRATE_MANIFESTS=""
+          for crate in $CRATES; do
+            sed -E -i "0,/^version[[:space:]]*=.*/s//version = \"$CRATES_VERSION\"/" "crates/$crate/Cargo.toml"
+            CRATE_MANIFESTS="$CRATE_MANIFESTS crates/$crate/Cargo.toml"
+          done
+          sed -E -i \
+            "s/^(icp-(canister-interfaces|events|project|sync-plugin) = \{.*version = \")=[^\"]*/\1=$CRATES_VERSION/" \
+            Cargo.toml crates/icp-sync-plugin/Cargo.toml
 
           # Re-lock only the workspace members' own versions in Cargo.lock.
           # `--workspace` restricts the update to workspace packages; it does NOT
@@ -85,7 +114,7 @@ jobs:
           {
             echo "BRANCH=release/v$VERSION"
             echo "TITLE=chore: release v$VERSION"
-            echo "FILES=Cargo.toml Cargo.lock CHANGELOG.md"
+            echo "FILES=Cargo.toml$CRATE_MANIFESTS Cargo.lock CHANGELOG.md"
           } >> "$GITHUB_ENV"
 
           cat > pr-body.md <<EOF
@@ -94,6 +123,7 @@ jobs:
           Release v$VERSION.
 
           - \`Cargo.toml\`: workspace version bumped to \`$VERSION\`
+          - the crates published to crates.io: \`$current\` -> \`$CRATES_VERSION\`
           - \`Cargo.lock\`: workspace member versions synced
           - \`CHANGELOG.md\`: \`# Unreleased\` entries promoted under \`# v$VERSION\`
 

@@ -46,6 +46,21 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: refs/tags/${{ inputs.version }}
+          # Full history: the ancestry check below needs the commits between
+          # the tag and main, which the default shallow clone does not fetch.
+          fetch-depth: 0
+
+      # A tag can name any commit in the repository, including one that never
+      # went through review: a topic branch, or a commit since rebased away.
+      - name: Check the tag is on main
+        env:
+          TAG: ${{ inputs.version }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$TAG points at a commit that is not on main" >&2
+            exit 1
+          fi
 
       - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # v1.15.4
         with:

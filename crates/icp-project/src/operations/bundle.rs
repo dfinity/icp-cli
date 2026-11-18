@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::File,
     io::{BufWriter, Cursor, Write},
     sync::Arc,
@@ -348,11 +348,20 @@ struct ImageFile {
 /// App-metadata manifest, included in bundles alongside the project manifest.
 const APP_MANIFEST: &str = "icp_appmanifest.yaml";
 
+/// Archive directory, at the archive root, holding one copy of each distinct
+/// plugin wasm as `<sha256>.wasm`. Every instance's sync steps refer to it, a
+/// dependency's through a relative path that rises to the archive root.
+const PLUGIN_STORE_DIR: &str = "plugins";
+
 /// Everything the canister section contributes to the archive, separate from the manifest items.
 #[derive(Default)]
 struct BundleArtifacts {
     wasms: Vec<NamedBytes>,
-    plugin_wasms: Vec<NamedBytes>,
+    /// Plugin wasms by archive path. The path is named by the module's own
+    /// sha256, so a plugin several steps name — in one canister, across
+    /// canisters, or across the workspace's instances — is one entry here and
+    /// one file in the archive. The map also fixes the entries' order.
+    plugin_wasms: BTreeMap<String, Vec<u8>>,
     plugin_dirs: Vec<DirEntry>,
     plugin_files: Vec<PluginFile>,
 }
@@ -620,6 +629,18 @@ fn relative_archive_path(from: &str, to: &str) -> String {
         true => ".".to_owned(),
         false => parts.join("/"),
     }
+}
+
+/// Where a plugin with this sha256 is stored in the archive, and the path an
+/// instance at `prefix` names it by: the store path itself for the root, and a
+/// path rising to the archive root for a dependency.
+fn plugin_store_reference(prefix: &str, sha256: &str) -> (String, String) {
+    let store_path = format!("{PLUGIN_STORE_DIR}/{sha256}.wasm");
+    let reference = match prefix.is_empty() {
+        true => store_path.clone(),
+        false => format!("{}/{store_path}", relative_archive_path(prefix, "")),
+    };
+    (store_path, reference)
 }
 
 /// Point each dependency declaration at the instance's directory *in the
@@ -940,8 +961,6 @@ async fn prepare_plugin_step(
     wasm_fetch: &dyn wasm::Fetch,
     out: &mut BundleArtifacts,
 ) -> Result<SyncStep, BundleError> {
-    let plugin_wasm_path = format!("plugins/{path_name}/{idx}.wasm");
-
     let resolved = wasm_fetch
         .wasm(
             &adapter.source,
@@ -957,11 +976,13 @@ async fn prepare_plugin_step(
     let plugin_bytes = files.read(&resolved).await.context(ReadPluginSnafu {
         canister: canister.name.clone(),
     })?;
+    // Named by the hash of the bytes just read, never by a `sha256:` the source
+    // declared: the store entry must be exactly what its name says.
     let plugin_sha256 = hex::encode(Sha256::digest(&plugin_bytes));
-    out.plugin_wasms.push(NamedBytes {
-        archive_path: archive_join(prefix, &plugin_wasm_path),
-        bytes: plugin_bytes,
-    });
+    let (plugin_store_path, plugin_wasm_path) = plugin_store_reference(prefix, &plugin_sha256);
+    out.plugin_wasms
+        .entry(plugin_store_path)
+        .or_insert(plugin_bytes);
 
     // A `dirs:` entry (which only an `icp:sync-plugin@0.1` plugin takes) goes under a `dirs/`
     // subdir so a user-supplied dir literally named `files` cannot collide with the `files/`
@@ -1623,12 +1644,7 @@ async fn write_archive(
         }))
         .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
         .chain(args_files.iter().map(|f| f.archive_path.as_str()))
-        .chain(
-            artifacts
-                .plugin_wasms
-                .iter()
-                .map(|nb| nb.archive_path.as_str()),
-        )
+        .chain(artifacts.plugin_wasms.keys().map(String::as_str))
         .chain(
             artifacts
                 .plugin_dirs
@@ -1682,8 +1698,8 @@ async fn write_archive(
         archive.bytes(&entry.archive_path, &data)?;
     }
 
-    for nb in &artifacts.plugin_wasms {
-        archive.bytes(&nb.archive_path, &nb.bytes)?;
+    for (archive_path, bytes) in &artifacts.plugin_wasms {
+        archive.bytes(archive_path, bytes)?;
     }
 
     for d in &artifacts.plugin_dirs {

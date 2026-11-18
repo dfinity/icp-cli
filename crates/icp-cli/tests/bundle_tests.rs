@@ -82,6 +82,12 @@ async fn bundle_and_deploy() {
 
     assert!(bundle_path.exists(), "bundle file was not created");
 
+    // The plugin is stored once, at the archive root, named by its content hash.
+    let plugin_sha = hex::encode(Sha256::digest(
+        fs::read(plugin_wasm.as_std_path()).expect("failed to read plugin wasm"),
+    ));
+    let plugin_store_path = format!("plugins/{plugin_sha}.wasm");
+
     // Extract and inspect archive contents.
     let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
     let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
@@ -115,7 +121,7 @@ async fn bundle_and_deploy() {
             "canisters/registry.wasm" => {
                 found_registry_wasm = true;
             }
-            "plugins/registry/0.wasm" => {
+            p if p == plugin_store_path => {
                 found_plugin_wasm = true;
             }
             p if p.starts_with("plugins/registry/0/files/seed-data/") => {
@@ -134,10 +140,7 @@ async fn bundle_and_deploy() {
         found_registry_wasm,
         "canisters/registry.wasm not found in bundle"
     );
-    assert!(
-        found_plugin_wasm,
-        "plugins/registry/0.wasm not found in bundle"
-    );
+    assert!(found_plugin_wasm, "{plugin_store_path} not found in bundle");
     assert!(
         found_seed_data,
         "seed-data files not found under plugins/registry/0/files/seed-data/ in bundle"
@@ -159,6 +162,10 @@ async fn bundle_and_deploy() {
     assert!(
         manifest_yaml.contains("sha256:"),
         "bundle manifest should include sha256 for pre-built wasms"
+    );
+    assert!(
+        manifest_yaml.contains(&format!("path: {plugin_store_path}")),
+        "bundle manifest should point the plugin step at the store: {manifest_yaml}"
     );
 
     // Extract bundle to a fresh directory and deploy from it.
@@ -224,8 +231,9 @@ async fn bundle_and_deploy() {
 
 /// Bundle a workspace whose *dependency* owns the plugin sync step, then deploy the
 /// extracted tree. Covers the paths that only resolve at deploy time: a dependency's
-/// pre-built wasm and plugin wasm are referenced relative to the dependency's own
-/// directory in the archive, and its preopened dir is unpacked under it.
+/// pre-built wasm is referenced relative to the dependency's own directory in the
+/// archive, its plugin wasm through `../../plugins/<sha256>.wasm` at the archive
+/// root, and its preopened dir is unpacked under it.
 #[tokio::test]
 async fn bundle_with_dependency_deploys() {
     let ctx = TestContext::new();
@@ -992,7 +1000,6 @@ fn plugin_project_with_files_entry(ctx: &TestContext, entry: &str) -> PathBuf {
 
 /// Every entry of the archive at `path`, as its archive path, entry type and
 /// contents.
-#[cfg(unix)]
 fn archive_entries(path: &Path) -> Vec<(String, tar::EntryType, Vec<u8>)> {
     let bytes = fs::read(path.as_std_path()).expect("failed to read bundle");
     let gz = GzDecoder::new(BufReader::new(bytes.as_slice()));
@@ -1470,8 +1477,8 @@ fn bundle_accepts_synced_dir_created_by_build_step() {
     );
 }
 
-/// Bundle a canister with two plugin sync steps and verify the archive layout: per-plugin
-/// wasm at `plugins/{canister}/{idx}.wasm`, preopened dirs at `plugins/{canister}/{idx}/dirs/`,
+/// Bundle a canister with two plugin sync steps and verify the archive layout: each plugin
+/// wasm at `plugins/{sha256}.wasm`, preopened dirs at `plugins/{canister}/{idx}/dirs/`,
 /// input files at `plugins/{canister}/{idx}/files/`. Also verify the rewritten manifest
 /// references those paths and includes a sha256 matching the bundled plugin bytes.
 #[test]
@@ -1527,6 +1534,11 @@ fn bundle_packages_plugin_sync_steps() {
         .assert()
         .success();
 
+    let plugin_a_sha = hex::encode(Sha256::digest(plugin_a_bytes));
+    let plugin_b_sha = hex::encode(Sha256::digest(plugin_b_bytes));
+    let plugin_a_path = format!("plugins/{plugin_a_sha}.wasm");
+    let plugin_b_path = format!("plugins/{plugin_b_sha}.wasm");
+
     let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
     let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
     let mut archive = Archive::new(gz);
@@ -1552,14 +1564,14 @@ fn bundle_packages_plugin_sync_steps() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "plugins/my-canister/0.wasm" => {
+            p if p == plugin_a_path => {
                 let mut buf = Vec::new();
                 entry
                     .read_to_end(&mut buf)
                     .expect("failed to read plugin-a wasm");
                 found_plugin_a = Some(buf);
             }
-            "plugins/my-canister/1.wasm" => {
+            p if p == plugin_b_path => {
                 let mut buf = Vec::new();
                 entry
                     .read_to_end(&mut buf)
@@ -1599,23 +1611,15 @@ fn bundle_packages_plugin_sync_steps() {
     let parsed: serde_yaml::Value =
         serde_yaml::from_str(&manifest_yaml).expect("manifest yaml is invalid");
     let steps = &parsed["canisters"][0]["sync"]["steps"];
-    let plugin_a_sha = hex::encode(Sha256::digest(plugin_a_bytes));
-    let plugin_b_sha = hex::encode(Sha256::digest(plugin_b_bytes));
 
-    assert_eq!(
-        steps[0]["path"].as_str(),
-        Some("plugins/my-canister/0.wasm")
-    );
+    assert_eq!(steps[0]["path"].as_str(), Some(plugin_a_path.as_str()));
     assert_eq!(steps[0]["sha256"].as_str(), Some(plugin_a_sha.as_str()));
     assert_eq!(
         steps[0]["dirs"][0].as_str(),
         Some("plugins/my-canister/0/dirs/data-a")
     );
 
-    assert_eq!(
-        steps[1]["path"].as_str(),
-        Some("plugins/my-canister/1.wasm")
-    );
+    assert_eq!(steps[1]["path"].as_str(), Some(plugin_b_path.as_str()));
     assert_eq!(steps[1]["sha256"].as_str(), Some(plugin_b_sha.as_str()));
     assert_eq!(
         steps[1]["dirs"][0].as_str(),
@@ -1625,6 +1629,173 @@ fn bundle_packages_plugin_sync_steps() {
         steps[1]["files"][0].as_str(),
         Some("plugins/my-canister/1/files/config.toml")
     );
+}
+
+/// Plugin wasms are stored once per distinct content in the whole bundle, at
+/// `plugins/<sha256>.wasm` in the archive root, however many steps name them: the
+/// same bytes reached from two different source files, used by two canisters,
+/// twice in one canister, and by a dependency, are one entry; a different plugin
+/// is another. Every step's `path:` and `sha256:` must still resolve to the right
+/// bytes from its own instance's directory, a dependency's through `../../`.
+#[test]
+fn bundle_stores_each_plugin_wasm_once() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+    let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+
+    // Plugin bundling reads bytes and packages them — the wasm content does not need to be
+    // executable here, so any non-empty byte sequence works.
+    let shared_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00shared-plugin";
+    let other_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00other-plugin";
+    // Two source files with the same bytes: dedup is by content, not source path.
+    write(&project_dir.join("shared.wasm"), shared_bytes).expect("failed to write shared");
+    write(&project_dir.join("shared-copy.wasm"), shared_bytes).expect("failed to write copy");
+    write(&project_dir.join("other.wasm"), other_bytes).expect("failed to write other");
+
+    let dep_dir = project_dir.join("vendor/lib");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write(&dep_dir.join("plugin.wasm"), shared_bytes).expect("failed to write dep plugin");
+
+    let build_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
+
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: lib
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: plugin.wasm
+        "#},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: one
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: shared.wasm
+              - name: two
+                {build_step}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: shared-copy.wasm
+                    - type: plugin
+                      path: other.wasm
+                    - type: plugin
+                      path: shared.wasm
+            dependencies:
+              - name: lib
+                path: ./vendor/lib
+                canisters: [lib]
+        "#},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let entries = archive_entries(&bundle_path);
+    let shared_sha = hex::encode(Sha256::digest(shared_bytes));
+    let other_sha = hex::encode(Sha256::digest(other_bytes));
+
+    // Exactly two plugin wasms in the whole archive, each named by its content hash.
+    let mut stored: Vec<(&str, &[u8])> = entries
+        .iter()
+        .filter(|(p, _, _)| p.ends_with(".wasm") && !p.contains("canisters/"))
+        .map(|(p, _, b)| (p.as_str(), b.as_slice()))
+        .collect();
+    stored.sort();
+    let mut expected = [
+        (format!("plugins/{shared_sha}.wasm"), shared_bytes),
+        (format!("plugins/{other_sha}.wasm"), other_bytes),
+    ];
+    expected.sort();
+    assert_eq!(
+        stored,
+        expected
+            .iter()
+            .map(|(p, b)| (p.as_str(), *b))
+            .collect::<Vec<_>>(),
+        "plugin wasms should be stored once each at the archive root"
+    );
+    for (path, _, bytes) in &entries {
+        if let Some(name) = path
+            .strip_prefix("plugins/")
+            .and_then(|n| n.strip_suffix(".wasm"))
+        {
+            assert_eq!(name, hex::encode(Sha256::digest(bytes)), "{path}");
+        }
+    }
+
+    // Every step's `path:`, joined onto its instance's directory, names the store
+    // entry holding the bytes its `sha256:` declares.
+    let manifest = |path: &str| -> serde_yaml::Value {
+        let (_, _, bytes) = entries
+            .iter()
+            .find(|(p, _, _)| p == path)
+            .unwrap_or_else(|| panic!("{path} not found in bundle"));
+        serde_yaml::from_slice(bytes).expect("manifest yaml is invalid")
+    };
+    let resolve = |instance: &str, path: &str| -> String {
+        let mut parts: Vec<&str> = instance.split('/').filter(|s| !s.is_empty()).collect();
+        for part in path.split('/') {
+            match part {
+                ".." => {
+                    assert!(parts.pop().is_some(), "{path} rises above the archive root");
+                }
+                "." | "" => {}
+                p => parts.push(p),
+            }
+        }
+        parts.join("/")
+    };
+    let check = |instance: &str, canister: usize, step: usize, want: &[u8], want_path: &str| {
+        let parsed = manifest(&archive_join(instance, "icp.yaml"));
+        let step = &parsed["canisters"][canister]["sync"]["steps"][step];
+        let path = step["path"].as_str().expect("plugin step has no path");
+        assert_eq!(path, want_path, "{instance} canister {canister}");
+        let sha = step["sha256"].as_str().expect("plugin step has no sha256");
+        assert_eq!(sha, hex::encode(Sha256::digest(want)));
+        let resolved = resolve(instance, path);
+        let (_, _, bytes) = entries
+            .iter()
+            .find(|(p, _, _)| *p == resolved)
+            .unwrap_or_else(|| panic!("{resolved} (from {instance}: {path}) not in bundle"));
+        assert_eq!(bytes.as_slice(), want, "{resolved}");
+    };
+    let shared_root = format!("plugins/{shared_sha}.wasm");
+    let other_root = format!("plugins/{other_sha}.wasm");
+    let shared_dep = format!("../../plugins/{shared_sha}.wasm");
+    check("", 0, 0, shared_bytes, &shared_root);
+    check("", 1, 0, shared_bytes, &shared_root);
+    check("", 1, 1, other_bytes, &other_root);
+    check("", 1, 2, shared_bytes, &shared_root);
+    check("vendor/lib", 0, 0, shared_bytes, &shared_dep);
+}
+
+fn archive_join(prefix: &str, relative: &str) -> String {
+    match prefix.is_empty() {
+        true => relative.to_owned(),
+        false => format!("{prefix}/{relative}"),
+    }
 }
 
 /// A plugin's declared call targets must survive bundling — dropping them would turn a

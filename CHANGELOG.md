@@ -15,6 +15,7 @@ air-gapped signing, extensions
 
 ## Experimental
 
+* feat(bundle): `icp project bundle` stores each distinct plugin wasm once for the whole bundle, at `plugins/<sha256>.wasm` in the archive root, where it used to write a copy for every sync step of every canister in every instance at `<instance>/plugins/<canister>/<idx>.wasm`. A workspace of several frontend canisters using the same assets plugin now carries that plugin once. Each step still names its plugin by `path:` and `sha256:`, so tools that read bundles need no change; a dependency's step reaches the store with a path that rises to the archive root, so a dependency's directory in an extracted bundle no longer works on its own — copied out, or as the root of `--untrusted` — and the bundle is used from its root.
 * fix(bundle): `icp project bundle` holds only regular files and directories. A symlink inside a plugin's `files:` or `dirs:` directory used to be recorded as a link with its target unchecked, so one pointing outside the project reached that file on whatever machine unpacked the bundle. A link to somewhere inside the project is now copied as what it points at; one that leads outside the project, dangles, or leads back to a directory being copied fails the bundle, naming the link and where it leads. The same holds for a `files:` entry that is itself a symlink.
 
 # v1.8.0

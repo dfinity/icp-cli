@@ -5,6 +5,7 @@
 
 use indoc::{formatdoc, indoc};
 use predicates::{prelude::PredicateBooleanExt, str::contains};
+use sha2::{Digest, Sha256};
 
 use crate::common::TestContext;
 use icp_project::fs::write_string;
@@ -172,6 +173,80 @@ fn a_module_outside_the_project_is_refused_as_untrusted() {
         .stderr(
             contains("names '")
                 .and(contains("outside.wasm"))
+                .and(contains("not a regular file in the project")),
+        );
+}
+
+/// A bundle stores each wasm module once at its root, and a member instance
+/// names its canister's module and its plugin from there with paths that rise
+/// out of the member's own directory. The bundle loads as untrusted from its
+/// root, where those paths stay inside the project; the member on its own is a
+/// project they leave, and is refused.
+#[test]
+fn a_bundle_member_reaches_its_wasms_at_the_bundle_root() {
+    let ctx = TestContext::new();
+    let project_dir = project(
+        &ctx,
+        indoc! {r#"
+            canisters:
+              - name: backend
+                build:
+                  steps:
+                    - type: pre-built
+                      path: backend.wasm
+            dependencies:
+              - name: lib
+                path: ./vendor/lib
+                canisters: [lib]
+        "#},
+    );
+
+    let plugin = b"\x00asm\x01\x00\x00\x00plugin";
+    let sha = hex::encode(Sha256::digest(plugin));
+    let store = project_dir.join("plugins");
+    std::fs::create_dir_all(&store).expect("mkdir plugins");
+    std::fs::write(store.join(format!("{sha}.wasm")), plugin).expect("write plugin");
+
+    let module = std::fs::read(project_dir.join("backend.wasm")).expect("read wasm");
+    let module_sha = hex::encode(Sha256::digest(&module));
+    let canisters = project_dir.join("canisters");
+    std::fs::create_dir_all(&canisters).expect("mkdir canisters");
+    std::fs::write(canisters.join(format!("{module_sha}.wasm")), &module).expect("write wasm");
+
+    let member = project_dir.join("vendor/lib");
+    std::fs::create_dir_all(&member).expect("mkdir member");
+    write_string(
+        &member.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: lib
+                build:
+                  steps:
+                    - type: pre-built
+                      path: ../../canisters/{module_sha}.wasm
+                      sha256: {module_sha}
+                sync:
+                  steps:
+                    - type: plugin
+                      path: ../../plugins/{sha}.wasm
+                      sha256: {sha}
+        "#},
+    )
+    .expect("write member manifest");
+
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["build", "--untrusted"])
+        .assert()
+        .success();
+
+    ctx.icp()
+        .current_dir(&member)
+        .args(["build", "--untrusted"])
+        .assert()
+        .failure()
+        .stderr(
+            contains(format!("{module_sha}.wasm"))
                 .and(contains("not a regular file in the project")),
         );
 }

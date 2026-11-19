@@ -177,13 +177,13 @@ fn a_module_outside_the_project_is_refused_as_untrusted() {
         );
 }
 
-/// A bundle stores each plugin once at its root, and a member instance names
-/// it from there with a path that rises out of the member's own directory.
-/// The bundle loads as untrusted from its root, where that path stays inside
-/// the project; the member on its own is a project that path leaves, and is
-/// refused.
+/// A bundle stores each wasm module once at its root, and a member instance
+/// names its canister's module and its plugin from there with paths that rise
+/// out of the member's own directory. The bundle loads as untrusted from its
+/// root, where those paths stay inside the project; the member on its own is a
+/// project they leave, and is refused.
 #[test]
-fn a_bundle_member_reaches_its_plugin_at_the_bundle_root() {
+fn a_bundle_member_reaches_its_wasms_at_the_bundle_root() {
     let ctx = TestContext::new();
     let project_dir = project(
         &ctx,
@@ -207,9 +207,14 @@ fn a_bundle_member_reaches_its_plugin_at_the_bundle_root() {
     std::fs::create_dir_all(&store).expect("mkdir plugins");
     std::fs::write(store.join(format!("{sha}.wasm")), plugin).expect("write plugin");
 
+    let module = std::fs::read(project_dir.join("backend.wasm")).expect("read wasm");
+    let module_sha = hex::encode(Sha256::digest(&module));
+    let canisters = project_dir.join("canisters");
+    std::fs::create_dir_all(&canisters).expect("mkdir canisters");
+    std::fs::write(canisters.join(format!("{module_sha}.wasm")), &module).expect("write wasm");
+
     let member = project_dir.join("vendor/lib");
     std::fs::create_dir_all(&member).expect("mkdir member");
-    std::fs::copy(project_dir.join("backend.wasm"), member.join("lib.wasm")).expect("copy wasm");
     write_string(
         &member.join("icp.yaml"),
         &formatdoc! {r#"
@@ -218,7 +223,8 @@ fn a_bundle_member_reaches_its_plugin_at_the_bundle_root() {
                 build:
                   steps:
                     - type: pre-built
-                      path: lib.wasm
+                      path: ../../canisters/{module_sha}.wasm
+                      sha256: {module_sha}
                 sync:
                   steps:
                     - type: plugin
@@ -239,7 +245,10 @@ fn a_bundle_member_reaches_its_plugin_at_the_bundle_root() {
         .args(["build", "--untrusted"])
         .assert()
         .failure()
-        .stderr(contains(format!("{sha}.wasm")).and(contains("not a regular file in the project")));
+        .stderr(
+            contains(format!("{module_sha}.wasm"))
+                .and(contains("not a regular file in the project")),
+        );
 }
 
 /// A symlink is refused wherever it leads, out of the project or within it:

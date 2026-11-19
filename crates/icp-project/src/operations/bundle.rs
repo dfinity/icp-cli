@@ -297,12 +297,6 @@ pub enum BundleError {
     OutputReachedThroughLink { path: PathBuf, output: PathBuf },
 }
 
-/// In-memory bytes destined for a single tar entry.
-struct NamedBytes {
-    archive_path: String,
-    bytes: Vec<u8>,
-}
-
 /// On-disk directory to be recursively appended at `archive_prefix`.
 struct DirEntry {
     src_path: PathBuf,
@@ -349,6 +343,11 @@ struct ImageFile {
 const APP_MANIFEST: &str = "icp_appmanifest.yaml";
 
 /// Archive directory, at the archive root, holding one copy of each distinct
+/// canister wasm as `<sha256>.wasm`. Every instance's pre-built steps refer to
+/// it, a dependency's through a relative path that rises to the archive root.
+const CANISTER_STORE_DIR: &str = "canisters";
+
+/// Archive directory, at the archive root, holding one copy of each distinct
 /// plugin wasm as `<sha256>.wasm`. Every instance's sync steps refer to it, a
 /// dependency's through a relative path that rises to the archive root.
 const PLUGIN_STORE_DIR: &str = "plugins";
@@ -356,7 +355,11 @@ const PLUGIN_STORE_DIR: &str = "plugins";
 /// Everything the canister section contributes to the archive, separate from the manifest items.
 #[derive(Default)]
 struct BundleArtifacts {
-    wasms: Vec<NamedBytes>,
+    /// Canister wasms by archive path. The path is named by the module's own
+    /// sha256, so canisters built from the same module — in one instance or
+    /// across the workspace's instances — share one entry here and one file in
+    /// the archive. The map also fixes the entries' order.
+    wasms: BTreeMap<String, Vec<u8>>,
     /// Plugin wasms by archive path. The path is named by the module's own
     /// sha256, so a plugin several steps name — in one canister, across
     /// canisters, or across the workspace's instances — is one entry here and
@@ -631,11 +634,11 @@ fn relative_archive_path(from: &str, to: &str) -> String {
     }
 }
 
-/// Where a plugin with this sha256 is stored in the archive, and the path an
-/// instance at `prefix` names it by: the store path itself for the root, and a
-/// path rising to the archive root for a dependency.
-fn plugin_store_reference(prefix: &str, sha256: &str) -> (String, String) {
-    let store_path = format!("{PLUGIN_STORE_DIR}/{sha256}.wasm");
+/// Where a module with this sha256 is stored in the archive's `store_dir`, and
+/// the path an instance at `prefix` names it by: the store path itself for the
+/// root, and a path rising to the archive root for a dependency.
+fn store_reference(store_dir: &str, prefix: &str, sha256: &str) -> (String, String) {
+    let store_path = format!("{store_dir}/{sha256}.wasm");
     let reference = match prefix.is_empty() {
         true => store_path.clone(),
         false => format!("{}/{store_path}", relative_archive_path(prefix, "")),
@@ -817,10 +820,11 @@ async fn prepare_canister(
         .context(LookupArtifactSnafu {
             canister: canister.name.clone(),
         })?;
+    // Named by the hash of the bytes just read, so the store entry is exactly
+    // what its name says. Manifest paths are relative to the instance that
+    // declares the canister; the store sits at the archive root.
     let sha256 = hex::encode(Sha256::digest(&wasm));
-    // Manifest paths are relative to the instance that declares the canister;
-    // archive paths carry the instance's directory as well.
-    let wasm_filename = format!("canisters/{path_name}.wasm");
+    let (wasm_store_path, wasm_filename) = store_reference(CANISTER_STORE_DIR, prefix, &sha256);
 
     let mut bundle_sync_steps = Vec::with_capacity(canister.sync.steps.len());
     let mut plugin_idx: usize = 0;
@@ -861,10 +865,7 @@ async fn prepare_canister(
         steps: bundle_sync_steps,
     });
 
-    out.wasms.push(NamedBytes {
-        archive_path: archive_join(prefix, &wasm_filename),
-        bytes: wasm,
-    });
+    out.wasms.entry(wasm_store_path).or_insert(wasm);
 
     Ok(Item::Manifest(CanisterManifest {
         name: local.to_owned(),
@@ -979,7 +980,8 @@ async fn prepare_plugin_step(
     // Named by the hash of the bytes just read, never by a `sha256:` the source
     // declared: the store entry must be exactly what its name says.
     let plugin_sha256 = hex::encode(Sha256::digest(&plugin_bytes));
-    let (plugin_store_path, plugin_wasm_path) = plugin_store_reference(prefix, &plugin_sha256);
+    let (plugin_store_path, plugin_wasm_path) =
+        store_reference(PLUGIN_STORE_DIR, prefix, &plugin_sha256);
     out.plugin_wasms
         .entry(plugin_store_path)
         .or_insert(plugin_bytes);
@@ -1462,10 +1464,10 @@ async fn prepare_app_manifest(
 /// Reject an entry layout the archive cannot represent.
 ///
 /// Instance directories are workspace-relative, so a dependency vendored at, say,
-/// `canisters/` shares an archive directory with the root's wasms. Two entries at
+/// `canisters/` shares an archive directory with the wasm store. Two entries at
 /// the same path would be silently resolved by whichever is extracted last, and an
-/// entry *nested under* another — a wasm at `canisters/app.wasm` alongside a
-/// manifest at `canisters/app.wasm/icp.yaml` — would need one path to be both a
+/// entry *nested under* another — a wasm at `canisters/<sha256>.wasm` alongside a
+/// manifest at `canisters/<sha256>.wasm/icp.yaml` — would need one path to be both a
 /// file and a directory. Recursively appended directories are covered by the same
 /// rule: everything they contribute lives under the prefix checked here, so a
 /// nested entry is exactly what would collide with their contents.
@@ -1642,7 +1644,7 @@ async fn write_archive(
         .chain(app_manifest.iter().flat_map(|app| {
             std::iter::once(APP_MANIFEST).chain(app.images.iter().map(|i| i.archive_path.as_str()))
         }))
-        .chain(artifacts.wasms.iter().map(|nb| nb.archive_path.as_str()))
+        .chain(artifacts.wasms.keys().map(String::as_str))
         .chain(args_files.iter().map(|f| f.archive_path.as_str()))
         .chain(artifacts.plugin_wasms.keys().map(String::as_str))
         .chain(
@@ -1684,8 +1686,8 @@ async fn write_archive(
         }
     }
 
-    for nb in &artifacts.wasms {
-        archive.bytes(&nb.archive_path, &nb.bytes)?;
+    for (archive_path, bytes) in &artifacts.wasms {
+        archive.bytes(archive_path, bytes)?;
     }
 
     for entry in args_files {

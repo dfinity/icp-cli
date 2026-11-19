@@ -87,6 +87,13 @@ async fn bundle_and_deploy() {
         fs::read(plugin_wasm.as_std_path()).expect("failed to read plugin wasm"),
     ));
     let plugin_store_path = format!("plugins/{plugin_sha}.wasm");
+    // Each canister wasm likewise, at `canisters/<sha256>.wasm`.
+    let canister_store_path = |wasm: &Path| {
+        let bytes = fs::read(wasm.as_std_path()).expect("failed to read canister wasm");
+        format!("canisters/{}.wasm", hex::encode(Sha256::digest(bytes)))
+    };
+    let backend_store_path = canister_store_path(&backend_wasm);
+    let registry_store_path = canister_store_path(&registry_wasm);
 
     // Extract and inspect archive contents.
     let bundle_bytes = fs::read(bundle_path.as_std_path()).expect("failed to read bundle");
@@ -115,10 +122,10 @@ async fn bundle_and_deploy() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "canisters/backend.wasm" => {
+            p if p == backend_store_path => {
                 found_backend_wasm = true;
             }
-            "canisters/registry.wasm" => {
+            p if p == registry_store_path => {
                 found_registry_wasm = true;
             }
             p if p == plugin_store_path => {
@@ -134,11 +141,11 @@ async fn bundle_and_deploy() {
     assert!(found_manifest, "icp.yaml not found in bundle");
     assert!(
         found_backend_wasm,
-        "canisters/backend.wasm not found in bundle"
+        "{backend_store_path} not found in bundle"
     );
     assert!(
         found_registry_wasm,
-        "canisters/registry.wasm not found in bundle"
+        "{registry_store_path} not found in bundle"
     );
     assert!(found_plugin_wasm, "{plugin_store_path} not found in bundle");
     assert!(
@@ -167,6 +174,12 @@ async fn bundle_and_deploy() {
         manifest_yaml.contains(&format!("path: {plugin_store_path}")),
         "bundle manifest should point the plugin step at the store: {manifest_yaml}"
     );
+    for store_path in [&backend_store_path, &registry_store_path] {
+        assert!(
+            manifest_yaml.contains(&format!("path: {store_path}")),
+            "bundle manifest should point each pre-built step at the store: {manifest_yaml}"
+        );
+    }
 
     // Extract bundle to a fresh directory and deploy from it.
     let bundle_dir = project_dir.join("bundle-extracted");
@@ -231,9 +244,9 @@ async fn bundle_and_deploy() {
 
 /// Bundle a workspace whose *dependency* owns the plugin sync step, then deploy the
 /// extracted tree. Covers the paths that only resolve at deploy time: a dependency's
-/// pre-built wasm is referenced relative to the dependency's own directory in the
-/// archive, its plugin wasm through `../../plugins/<sha256>.wasm` at the archive
-/// root, and its preopened dir is unpacked under it.
+/// pre-built wasm is referenced through `../../canisters/<sha256>.wasm` and its
+/// plugin wasm through `../../plugins/<sha256>.wasm`, both at the archive root,
+/// and its preopened dir is unpacked under it.
 #[tokio::test]
 async fn bundle_with_dependency_deploys() {
     let ctx = TestContext::new();
@@ -694,7 +707,8 @@ fn bundle_inlines_external_upgrade_args_file() {
 }
 
 /// A canister name that is a reserved Windows device name (e.g. `CON`) must be
-/// sanitized for archive entry names (prefixed with `_`) while the manifest
+/// sanitized for the archive entry names derived from it (prefixed with `_`) —
+/// its plugin inputs, since its wasm is named by content — while the manifest
 /// preserves the original name. (Other characters can no longer need sanitizing
 /// since the strict name rule limits names to `[A-Za-z0-9_-]`.)
 #[test]
@@ -702,6 +716,12 @@ fn bundle_sanitizes_canister_name_for_paths() {
     let ctx = TestContext::new();
     let project_dir = ctx.create_project_dir("icp");
     let wasm_src = ctx.make_asset("example_icp_mo.wasm");
+    write(
+        &project_dir.join("plugin.wasm"),
+        b"\x00asm\x01\x00\x00\x00plugin",
+    )
+    .expect("failed to write plugin");
+    write_string(&project_dir.join("config.toml"), "key=value").expect("failed to write config");
 
     let pm = formatdoc! {r#"
         canisters:
@@ -710,6 +730,12 @@ fn bundle_sanitizes_canister_name_for_paths() {
               steps:
                 - type: script
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
+            sync:
+              steps:
+                - type: plugin
+                  path: plugin.wasm
+                  files:
+                    - config.toml
     "#};
 
     write_string(&project_dir.join("icp.yaml"), &pm).expect("failed to write project manifest");
@@ -725,7 +751,7 @@ fn bundle_sanitizes_canister_name_for_paths() {
     let gz = GzDecoder::new(BufReader::new(bundle_bytes.as_slice()));
     let mut archive = Archive::new(gz);
 
-    let mut found_wasm = false;
+    let mut found_input = false;
     let mut manifest_yaml = String::new();
 
     for entry in archive.entries().expect("failed to read archive entries") {
@@ -742,17 +768,20 @@ fn bundle_sanitizes_canister_name_for_paths() {
                     .read_to_string(&mut manifest_yaml)
                     .expect("failed to read icp.yaml");
             }
-            "canisters/_CON.wasm" => {
-                found_wasm = true;
+            "plugins/_CON/0/files/config.toml" => {
+                found_input = true;
             }
             _ => {}
         }
     }
 
-    assert!(found_wasm, "canisters/_CON.wasm not found in bundle");
     assert!(
-        manifest_yaml.contains("_CON.wasm"),
-        "bundle manifest should reference sanitized wasm filename"
+        found_input,
+        "plugins/_CON/0/files/config.toml not found in bundle"
+    );
+    assert!(
+        manifest_yaml.contains("plugins/_CON/0/files/config.toml"),
+        "bundle manifest should reference the sanitized plugin input path"
     );
     assert!(
         manifest_yaml.contains("name: CON"),
@@ -1754,19 +1783,6 @@ fn bundle_stores_each_plugin_wasm_once() {
             .unwrap_or_else(|| panic!("{path} not found in bundle"));
         serde_yaml::from_slice(bytes).expect("manifest yaml is invalid")
     };
-    let resolve = |instance: &str, path: &str| -> String {
-        let mut parts: Vec<&str> = instance.split('/').filter(|s| !s.is_empty()).collect();
-        for part in path.split('/') {
-            match part {
-                ".." => {
-                    assert!(parts.pop().is_some(), "{path} rises above the archive root");
-                }
-                "." | "" => {}
-                p => parts.push(p),
-            }
-        }
-        parts.join("/")
-    };
     let check = |instance: &str, canister: usize, step: usize, want: &[u8], want_path: &str| {
         let parsed = manifest(&archive_join(instance, "icp.yaml"));
         let step = &parsed["canisters"][canister]["sync"]["steps"][step];
@@ -1774,7 +1790,7 @@ fn bundle_stores_each_plugin_wasm_once() {
         assert_eq!(path, want_path, "{instance} canister {canister}");
         let sha = step["sha256"].as_str().expect("plugin step has no sha256");
         assert_eq!(sha, hex::encode(Sha256::digest(want)));
-        let resolved = resolve(instance, path);
+        let resolved = resolve_archive_path(instance, path);
         let (_, _, bytes) = entries
             .iter()
             .find(|(p, _, _)| *p == resolved)
@@ -1789,6 +1805,153 @@ fn bundle_stores_each_plugin_wasm_once() {
     check("", 1, 1, other_bytes, &other_root);
     check("", 1, 2, shared_bytes, &shared_root);
     check("vendor/lib", 0, 0, shared_bytes, &shared_dep);
+}
+
+/// Canister wasms are stored once per distinct content in the whole bundle, at
+/// `canisters/<sha256>.wasm` in the archive root: the same module built by two
+/// canisters from two different source files, and by a dependency's canister,
+/// is one entry; a different module is another. Every canister's pre-built
+/// `path:` and `sha256:` must resolve to the right bytes from its own
+/// instance's directory, a dependency's through `../../`.
+#[test]
+fn bundle_stores_each_canister_wasm_once() {
+    let ctx = TestContext::new();
+    let project_dir = ctx.create_project_dir("icp");
+
+    // The build steps copy these bytes as they are, and bundling only reads and
+    // packages the result, so they need not be a module that installs.
+    let shared_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00shared-canister";
+    let other_bytes: &[u8] = b"\x00asm\x01\x00\x00\x00other-canister";
+    // Two source files with the same bytes: dedup is by content, not source path.
+    write(&project_dir.join("shared.wasm"), shared_bytes).expect("failed to write shared");
+    write(&project_dir.join("shared-copy.wasm"), shared_bytes).expect("failed to write copy");
+    write(&project_dir.join("other.wasm"), other_bytes).expect("failed to write other");
+
+    let dep_dir = project_dir.join("vendor/lib");
+    create_dir_all(&dep_dir).expect("failed to create dependency dir");
+    write(&dep_dir.join("lib.wasm"), shared_bytes).expect("failed to write dep wasm");
+
+    let build = |file: &str| {
+        formatdoc! {r#"
+            build:
+                  steps:
+                    - type: script
+                      command: cp {file} "$ICP_WASM_OUTPUT_PATH"
+        "#}
+    };
+
+    write_string(
+        &dep_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: lib
+                {}
+        "#, build("lib.wasm")},
+    )
+    .expect("failed to write dependency manifest");
+
+    write_string(
+        &project_dir.join("icp.yaml"),
+        &formatdoc! {r#"
+            canisters:
+              - name: one
+                {}
+              - name: two
+                {}
+              - name: three
+                {}
+            dependencies:
+              - name: lib
+                path: ./vendor/lib
+                canisters: [lib]
+        "#, build("shared.wasm"), build("shared-copy.wasm"), build("other.wasm")},
+    )
+    .expect("failed to write project manifest");
+
+    let bundle_path = project_dir.join("bundle.tar.gz");
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args(["project", "bundle", "--output", bundle_path.as_str()])
+        .assert()
+        .success();
+
+    let entries = archive_entries(&bundle_path);
+    let shared_sha = hex::encode(Sha256::digest(shared_bytes));
+    let other_sha = hex::encode(Sha256::digest(other_bytes));
+
+    // Exactly two canister wasms in the whole archive, each named by its content hash.
+    let mut stored: Vec<(&str, &[u8])> = entries
+        .iter()
+        .filter(|(p, _, _)| p.ends_with(".wasm"))
+        .map(|(p, _, b)| (p.as_str(), b.as_slice()))
+        .collect();
+    stored.sort();
+    let mut expected = [
+        (format!("canisters/{shared_sha}.wasm"), shared_bytes),
+        (format!("canisters/{other_sha}.wasm"), other_bytes),
+    ];
+    expected.sort();
+    assert_eq!(
+        stored,
+        expected
+            .iter()
+            .map(|(p, b)| (p.as_str(), *b))
+            .collect::<Vec<_>>(),
+        "canister wasms should be stored once each at the archive root"
+    );
+
+    // Every canister's pre-built `path:`, joined onto its instance's directory,
+    // names the store entry holding the bytes its `sha256:` declares.
+    let check = |instance: &str, canister: usize, want: &[u8], want_path: &str| {
+        let manifest_path = archive_join(instance, "icp.yaml");
+        let (_, _, yaml) = entries
+            .iter()
+            .find(|(p, _, _)| *p == manifest_path)
+            .unwrap_or_else(|| panic!("{manifest_path} not found in bundle"));
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_slice(yaml).expect("manifest yaml is invalid");
+        let step = &parsed["canisters"][canister]["build"]["steps"][0];
+        assert_eq!(step["type"].as_str(), Some("pre-built"));
+        let path = step["path"].as_str().expect("pre-built step has no path");
+        assert_eq!(path, want_path, "{instance} canister {canister}");
+        let sha = step["sha256"]
+            .as_str()
+            .expect("pre-built step has no sha256");
+        assert_eq!(sha, hex::encode(Sha256::digest(want)));
+        let resolved = resolve_archive_path(instance, path);
+        let (_, _, bytes) = entries
+            .iter()
+            .find(|(p, _, _)| *p == resolved)
+            .unwrap_or_else(|| panic!("{resolved} (from {instance}: {path}) not in bundle"));
+        assert_eq!(bytes.as_slice(), want, "{resolved}");
+    };
+    let shared_root = format!("canisters/{shared_sha}.wasm");
+    let other_root = format!("canisters/{other_sha}.wasm");
+    check("", 0, shared_bytes, &shared_root);
+    check("", 1, shared_bytes, &shared_root);
+    check("", 2, other_bytes, &other_root);
+    check(
+        "vendor/lib",
+        0,
+        shared_bytes,
+        &format!("../../{shared_root}"),
+    );
+}
+
+/// `path`, as an instance at `instance` names it, as a path from the archive
+/// root. Panics if it rises above the root, which no reader would follow.
+fn resolve_archive_path(instance: &str, path: &str) -> String {
+    let mut parts: Vec<&str> = instance.split('/').filter(|s| !s.is_empty()).collect();
+    for part in path.split('/') {
+        match part {
+            ".." => {
+                assert!(parts.pop().is_some(), "{path} rises above the archive root");
+            }
+            "." | "" => {}
+            p => parts.push(p),
+        }
+    }
+    parts.join("/")
 }
 
 fn archive_join(prefix: &str, relative: &str) -> String {
@@ -2466,27 +2629,35 @@ fn bundle_preserves_dependency_structure() {
         entries.push(path);
     }
 
+    // Every canister is built from the same module, which the archive holds
+    // once, at its root.
+    let wasm_sha = hex::encode(Sha256::digest(
+        fs::read(wasm_src.as_std_path()).expect("failed to read wasm"),
+    ));
+    let store_path = format!("canisters/{wasm_sha}.wasm");
     for expected in [
         "icp.yaml",
-        "canisters/frontend.wasm",
+        store_path.as_str(),
         "umbrella/service-a/icp.yaml",
-        "umbrella/service-a/canisters/service.wasm",
         "umbrella/service-b/icp.yaml",
-        "umbrella/service-b/canisters/service.wasm",
         "umbrella/openemail/icp.yaml",
-        "umbrella/openemail/canisters/backend.wasm",
     ] {
         assert!(
             entries.iter().any(|e| e == expected),
             "{expected} not found in bundle; entries: {entries:?}"
         );
     }
+    assert_eq!(
+        entries.iter().filter(|e| e.ends_with(".wasm")).count(),
+        1,
+        "the shared module should be archived exactly once; entries: {entries:?}"
+    );
 
-    // The shared dependency is one instance, so it is archived once.
+    // The shared dependency is one instance, so its manifest is archived once.
     assert_eq!(
         entries
             .iter()
-            .filter(|e| e.as_str() == "umbrella/openemail/canisters/backend.wasm")
+            .filter(|e| e.as_str() == "umbrella/openemail/icp.yaml")
             .count(),
         1,
         "shared dependency should be archived exactly once"
@@ -2505,11 +2676,17 @@ fn bundle_preserves_dependency_structure() {
         "member manifest should keep its sibling dependency edge: {member_manifest}"
     );
 
-    // Each instance declares its canisters under their local names, pre-built.
+    // Each instance declares its canisters under their local names, pre-built
+    // from the store at the archive root.
+    assert!(
+        manifests["icp.yaml"].contains(&format!("path: {store_path}")),
+        "root manifest should name the stored module: {}",
+        manifests["icp.yaml"]
+    );
     let dep_manifest = &manifests["umbrella/openemail/icp.yaml"];
     assert!(
         dep_manifest.contains("name: backend")
-            && dep_manifest.contains("path: canisters/backend.wasm")
+            && dep_manifest.contains(&format!("path: ../../{store_path}"))
             && dep_manifest.contains("pre-built")
             && dep_manifest.contains("sha256:"),
         "dependency manifest should declare a pre-built local canister: {dep_manifest}"
@@ -2576,6 +2753,16 @@ fn bundle_carries_only_the_environments_canisters() {
                 - type: script
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
     "#};
+    // The canisters staging leaves out are built from a module of their own, so
+    // that carrying one of them would show up in the archive.
+    let left_out_src = project_dir.join("left-out.wasm");
+    write(&left_out_src, b"\x00asm\x01\x00\x00\x00left-out").expect("failed to write wasm");
+    let left_out_step = formatdoc! {r#"
+        build:
+              steps:
+                - type: script
+                  command: cp '{left_out_src}' "$ICP_WASM_OUTPUT_PATH"
+    "#};
 
     let dep_dir = project_dir.join("vendor/openemail");
     create_dir_all(&dep_dir).expect("failed to create dependency dir");
@@ -2586,7 +2773,7 @@ fn bundle_carries_only_the_environments_canisters() {
               - name: registry
                 {build_step}
               - name: archive
-                {build_step}
+                {left_out_step}
 
             environments:
               - name: staging
@@ -2611,7 +2798,7 @@ fn bundle_carries_only_the_environments_canisters() {
                   controllers: [backend]
                 {build_step}
               - name: backend
-                {build_step}
+                {left_out_step}
 
             dependencies:
               - name: openemail
@@ -2671,14 +2858,15 @@ fn bundle_carries_only_the_environments_canisters() {
         entries.push(path);
     }
 
+    // `frontend` and `registry` share one module, stored once; the left-out
+    // canisters' module is not carried at all.
+    let wasm_sha = hex::encode(Sha256::digest(
+        fs::read(wasm_src.as_std_path()).expect("failed to read wasm"),
+    ));
+    let store_path = format!("canisters/{wasm_sha}.wasm");
     assert_eq!(
         entries,
-        [
-            "icp.yaml",
-            "vendor/openemail/icp.yaml",
-            "canisters/frontend.wasm",
-            "vendor/openemail/canisters/registry.wasm",
-        ],
+        ["icp.yaml", "vendor/openemail/icp.yaml", store_path.as_str(),],
         "bundle should carry only the staging canisters"
     );
 
@@ -2984,9 +3172,15 @@ fn bundle_rejects_nested_archive_entry() {
                   command: cp '{wasm_src}' "$ICP_WASM_OUTPUT_PATH"
     "#};
 
-    // The root's `app` canister bundles its wasm to `canisters/app.wasm`, and this
-    // dependency's manifest would land at `canisters/app.wasm/icp.yaml`.
-    let dep_dir = project_dir.join("canisters/app.wasm");
+    // The root's `app` canister bundles its wasm to `canisters/<sha256>.wasm`, and
+    // this dependency's manifest would land at `canisters/<sha256>.wasm/icp.yaml`.
+    let store_path = format!(
+        "canisters/{}.wasm",
+        hex::encode(Sha256::digest(
+            fs::read(wasm_src.as_std_path()).expect("failed to read wasm"),
+        ))
+    );
+    let dep_dir = project_dir.join(&store_path);
     create_dir_all(&dep_dir).expect("failed to create dependency dir");
     write_string(
         &dep_dir.join("icp.yaml"),
@@ -3007,7 +3201,7 @@ fn bundle_rejects_nested_archive_entry() {
 
             dependencies:
               - name: openemail
-                path: ./canisters/app.wasm
+                path: ./{store_path}
         "#},
     )
     .expect("failed to write project manifest");
@@ -3017,7 +3211,7 @@ fn bundle_rejects_nested_archive_entry() {
         .args(["project", "bundle", "--output", "bundle.tar.gz"])
         .assert()
         .failure()
-        .stderr(contains("canisters/app.wasm").and(contains("cannot be extracted")));
+        .stderr(contains(store_path.as_str()).and(contains("cannot be extracted")));
 }
 
 /// A dependency that resolves outside the workspace root cannot be bundled: the

@@ -3,7 +3,7 @@ use {
     crate::common::{ENVIRONMENT_RANDOM_PORT, NETWORK_RANDOM_PORT, TestContext, clients},
     icp_project::{fs::write_string, prelude::*},
     indoc::formatdoc,
-    predicates::str::contains,
+    predicates::{prelude::PredicateBooleanExt, str::contains},
 };
 
 mod common;
@@ -1396,6 +1396,26 @@ async fn canister_migrate_id() {
         .assert()
         .success();
 
+    // The source canister does not hold the 10T cycles the migration costs yet.
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "migrate-id",
+            "source-canister",
+            "--replace",
+            "target-canister",
+            "--yes",
+            "--environment",
+            "random-environment",
+            "--skip-watch",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Canister 'source-canister' has").and(contains(
+            "10T for the migration, plus enough to stay above its freezing threshold for 12 hours",
+        )));
+
     // Top up source canister to ensure it has enough cycles for migration (15T)
     ctx.icp()
         .current_dir(&project_dir)
@@ -1410,6 +1430,73 @@ async fn canister_migrate_id() {
         ])
         .assert()
         .success();
+
+    // A target canister that is about to freeze is refused, too. A memory allocation makes
+    // its idle burn rate large enough that the fees of the commands below do not matter, and
+    // the freezing threshold then leaves it about 6 hours from freezing.
+    let update_target_settings = |settings: &[&str]| {
+        ctx.icp()
+            .current_dir(&project_dir)
+            .args(["canister", "settings", "update", "target-canister"])
+            .args(settings)
+            .args(["--environment", "random-environment"])
+            .assert()
+            .success();
+    };
+    update_target_settings(&["--memory-allocation", "1gib"]);
+    let output = ctx
+        .icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "status",
+            "target-canister",
+            "--json",
+            "--environment",
+            "random-environment",
+        ])
+        .output()
+        .expect("failed to get canister status");
+    let status: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("failed to parse canister status JSON");
+    let amount = |field: &str| -> u128 {
+        status[field]
+            .as_str()
+            .unwrap_or_else(|| panic!("canister status has no {field}"))
+            .replace('_', "")
+            .parse()
+            .unwrap_or_else(|_| panic!("{field} is not a number"))
+    };
+    const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+    let seconds_until_out_of_cycles =
+        amount("cycles") * SECONDS_PER_DAY / amount("idle_cycles_burned_per_day");
+    let freezing_threshold = seconds_until_out_of_cycles - 6 * 60 * 60;
+    update_target_settings(&["--freezing-threshold", &freezing_threshold.to_string()]);
+    ctx.icp()
+        .current_dir(&project_dir)
+        .args([
+            "canister",
+            "migrate-id",
+            "source-canister",
+            "--replace",
+            "target-canister",
+            "--yes",
+            "--environment",
+            "random-environment",
+            "--skip-watch",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("Canister 'target-canister' has").and(contains(
+            "to stay above its freezing threshold for 12 hours",
+        )));
+    // Back to the defaults: 30 days, and no memory allocation.
+    update_target_settings(&[
+        "--freezing-threshold",
+        "2592000",
+        "--memory-allocation",
+        "0",
+    ]);
 
     // Run migrate-id command. This takes six minutes so we will cut it early and then time-travel.
     ctx.icp()

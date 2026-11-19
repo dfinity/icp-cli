@@ -59,7 +59,10 @@ pub enum CanisterMigrationError {
 /// - Both canisters must be stopped
 /// - The NNS migration canister must be a controller of both canisters
 /// - The canisters must be on different subnets
-/// - The migrated canister must have at least 10T cycles
+/// - The migrated canister must have 10T cycles for the migration, plus enough
+///   to stay above its freezing threshold for 12 hours
+/// - The replaced canister must have enough cycles to stay above its freezing
+///   threshold for 12 hours
 /// - The replaced canister must have no snapshots
 pub async fn migrate_canister(
     agent: &Agent,

@@ -6,23 +6,23 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Mon, 16 Nov 2026 19:25:55 GMT</lastBuildDate>
-    <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
+    <lastBuildDate>Thu, 19 Nov 2026 15:49:19 GMT</lastBuildDate>
+    <pubDate>Thu, 19 Nov 2026 15:48:14 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Project Dependencies</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
+      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
+      <pubDate>Thu, 19 Nov 2026 15:48:14 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>CLI Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/cli/</link>
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
       <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Dependencies</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-dependencies/</link>
-      <description>How one icp project can depend on another vendored icp project, deploy it as part of a workspace, and share a single set of canister IDs.</description>
-      <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-dependencies/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

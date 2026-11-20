@@ -116,6 +116,20 @@ struct RunStats {
     memory_bytes: usize,
     /// Table elements, summed across every table.
     table_elements: usize,
+    /// When the host call under way began, if one is. A run dropped at the
+    /// wall-clock limit leaves it set.
+    in_flight: Option<Instant>,
+}
+
+impl RunStats {
+    /// Count the time a host call cut off by the wall-clock limit had spent,
+    /// so it is not taken for compute. Nothing is refunded for it: the run
+    /// is over.
+    fn settle_in_flight(&mut self) {
+        if let Some(start) = self.in_flight.take() {
+            self.host_call_time += start.elapsed();
+        }
+    }
 }
 
 /// Most instances, memories and tables one plugin may create. Real
@@ -281,7 +295,7 @@ impl HostState {
             call = call.direct();
         }
 
-        let start = Instant::now();
+        let start = self.host_call_started();
         let result = off_fiber(async move {
             match query {
                 false => calls.update(call).await,
@@ -292,7 +306,7 @@ impl HostState {
             .map_err(|err| error::flatten(&err))
         })
         .await;
-        self.refund_host_call_time(start);
+        self.host_call_finished(start);
         if let Ok(reply) = &result {
             self.stats.bytes_received += reply.len() as u64;
         }
@@ -320,7 +334,7 @@ impl HostState {
             false => Authority::Mediated,
         };
 
-        let start = Instant::now();
+        let start = self.host_call_started();
         let result = off_fiber(async move {
             calls
                 .metadata_section(target, &name, authority)
@@ -328,21 +342,31 @@ impl HostState {
                 .map_err(|err| error::flatten(&err))
         })
         .await;
-        self.refund_host_call_time(start);
+        self.host_call_finished(start);
         if let Ok(Some(section)) = &result {
             self.stats.bytes_received += section.len() as u64;
         }
         result
     }
 
-    /// Return the wall-clock time a host call spent off-wasm to the compute
-    /// budget, so network latency doesn't count against the plugin's limit.
-    fn refund_host_call_time(&mut self, start: Instant) {
+    /// Count a host call as it is made, so one the wall-clock limit cuts off
+    /// is tallied too (see [`RunStats::settle_in_flight`]).
+    fn host_call_started(&mut self) -> Instant {
+        let start = Instant::now();
+        self.stats.host_calls += 1;
+        self.stats.in_flight = Some(start);
+        start
+    }
+
+    /// Record the time a host call spent off-wasm, and return it to the
+    /// compute budget, so network latency doesn't count against the plugin's
+    /// limit.
+    fn host_call_finished(&mut self, start: Instant) {
         let elapsed = start.elapsed();
         let elapsed_ticks = elapsed.as_secs() + 1;
         self.epoch_extension
             .fetch_add(elapsed_ticks, Ordering::Relaxed);
-        self.stats.host_calls += 1;
+        self.stats.in_flight = None;
         self.stats.host_call_time += elapsed;
         self.stats.refunded_secs += elapsed_ticks;
     }
@@ -1103,6 +1127,7 @@ async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String
     stderr_capture.finalize();
 
     let state = store.data_mut();
+    state.stats.settle_in_flight();
     state.stats.memory_bytes = state.usage.memory_bytes;
     state.stats.table_elements = state.usage.table_elements;
     log_run_stats(
@@ -1696,6 +1721,24 @@ mod tests {
         assert_eq!(stats.bytes_received, 2 * b"reply".len() as u64);
         assert_eq!(stats.cycles_requested, 25_000_000);
         assert!(stats.refunded_secs >= 2);
+    }
+
+    /// A host call the wall-clock limit cuts off is still tallied, and the
+    /// time it had spent waiting counted as host time rather than compute.
+    #[test]
+    fn a_host_call_cut_off_is_still_tallied() {
+        let calls = Arc::new(RecordingCalls::default());
+        let host = Principal::from_slice(&[1; 4]);
+        let mut state = host_state(host, CallableCanisters::default(), calls);
+
+        state.host_call_started();
+        std::thread::sleep(Duration::from_millis(20));
+        state.stats.settle_in_flight();
+
+        assert_eq!(state.stats.host_calls, 1);
+        assert!(state.stats.host_call_time >= Duration::from_millis(20));
+        assert_eq!(state.stats.refunded_secs, 0);
+        assert!(state.stats.in_flight.is_none());
     }
 
     /// Growth is summed across memories and tables, and a growth the engine

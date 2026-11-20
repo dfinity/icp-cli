@@ -266,7 +266,7 @@ The compute-time limit is enforced with wasmtime's epoch interruption: a
 background thread calls `Engine::increment_epoch` once per second, and the store
 deadline (`set_epoch_deadline`) bounds pure wasm execution. Because a host
 call blocks the guest while the host awaits the network, both imports record the
-elapsed time (`refund_host_call_time`) and the `epoch_deadline_callback` grants
+elapsed time (`host_call_finished`) and the `epoch_deadline_callback` grants
 it back via `epoch_extension` — so network latency is *not* charged against the
 limit. The
 ticker thread stops when its RAII guard drops at the end of the run.

@@ -103,8 +103,10 @@ struct RunStats {
     bytes_sent: u64,
     /// Reply and metadata bytes the plugin received.
     bytes_received: u64,
-    /// Cycles the plugin attached to its calls.
-    cycles_attached: u128,
+    /// Cycles the plugin asked to attach to its calls. Whether they ride along
+    /// is the call route's business: only a proxied update carries any, and
+    /// the runtime does not know whether a proxy is configured.
+    cycles_requested: u128,
     /// Linear memory, summed across every memory the component has. Wasm
     /// memory never shrinks, so this is also the peak.
     memory_bytes: usize,
@@ -215,7 +217,7 @@ impl HostState {
         let calls = Arc::clone(&self.calls);
         let query = matches!(call_type, CallType::Query);
         self.stats.bytes_sent += arg_bytes.len() as u64;
-        self.stats.cycles_attached += u128::from(cycles);
+        self.stats.cycles_requested += u128::from(cycles);
         let mut call = Call::new(target, method, arg_bytes).with_cycles(cycles.into());
         // A query goes to the target itself whichever way the plugin asked,
         // which is what the interface documents: an intermediary that only
@@ -815,100 +817,105 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
     // target and receive the canister ID table; v0.1.0 plugins get neither and
     // always call the canister being synced.
     let run_start = Instant::now();
-    let call_result = match abi {
-        PluginAbi::V2 => {
-            let mut linker: Linker<HostState> = Linker::new(&engine);
-            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-                path: wasm_path.clone(),
-            })?;
-            v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
-                InstantiateSnafu {
+    // Outer `Err`: instantiation failed; inner: what `exec` came to.
+    let run_result: wasmtime::Result<wasmtime::Result<Result<(), String>>> = 'run: {
+        match abi {
+            PluginAbi::V2 => {
+                let mut linker: Linker<HostState> = Linker::new(&engine);
+                wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
                     path: wasm_path.clone(),
-                },
-            )?;
-            let plugin = v2::SyncPlugin::instantiate(&mut store, &component, &linker).context(
-                InstantiateSnafu {
+                })?;
+                v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                    InstantiateSnafu {
+                        path: wasm_path.clone(),
+                    },
+                )?;
+                // Instantiation runs the component's start functions, so it is
+                // guest code like `exec`: its failure is logged with the rest.
+                let plugin = match v2::SyncPlugin::instantiate(&mut store, &component, &linker) {
+                    Ok(plugin) => plugin,
+                    Err(err) => break 'run Err(err),
+                };
+                // The manifest declares directories and files together under
+                // `files:`; the interface keeps them apart, so split by what the
+                // host found on disk. `check_declared_forms` has established that
+                // every entry carries a key and that `dirs:` was left unwritten.
+                let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
+                    .into_iter()
+                    .partition(|entry| entry.content.is_none());
+                let input = v2::SyncExecInput {
+                    canister_id: canister_id_text,
+                    environment,
+                    api_url: api_url.to_string(),
+                    gateway_url: gateway_url.map(|url| url.to_string()),
+                    dirs: dir_inputs
+                        .into_iter()
+                        .map(|entry| v2::DirInput {
+                            key: entry.key.expect("v0.2.0 entries all carry a key"),
+                            path: entry.path,
+                        })
+                        .collect(),
+                    files: file_inputs
+                        .into_iter()
+                        .map(|entry| v2::FileInput {
+                            key: entry.key.expect("v0.2.0 entries all carry a key"),
+                            name: entry.path,
+                            content: entry.content.expect("a file entry carries its content"),
+                        })
+                        .collect(),
+                    fields: fields
+                        .into_iter()
+                        .map(|(name, value)| v2::FieldInput { name, value })
+                        .collect(),
+                    identity_principal: identity_text,
+                    proxy_canister_id: proxy_text,
+                    canister_ids: canister_ids
+                        .into_iter()
+                        .map(|(name, id)| CanisterIdEntry {
+                            name,
+                            id: id.to_text(),
+                        })
+                        .collect(),
+                };
+                Ok(plugin.call_exec(&mut store, &input))
+            }
+            PluginAbi::V1 => {
+                let mut linker: Linker<HostState> = Linker::new(&engine);
+                wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
                     path: wasm_path.clone(),
-                },
-            )?;
-            // The manifest declares directories and files together under
-            // `files:`; the interface keeps them apart, so split by what the
-            // host found on disk. `check_declared_forms` has established that
-            // every entry carries a key and that `dirs:` was left unwritten.
-            let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
-                .into_iter()
-                .partition(|entry| entry.content.is_none());
-            let input = v2::SyncExecInput {
-                canister_id: canister_id_text,
-                environment,
-                api_url: api_url.to_string(),
-                gateway_url: gateway_url.map(|url| url.to_string()),
-                dirs: dir_inputs
-                    .into_iter()
-                    .map(|entry| v2::DirInput {
-                        key: entry.key.expect("v0.2.0 entries all carry a key"),
-                        path: entry.path,
-                    })
-                    .collect(),
-                files: file_inputs
-                    .into_iter()
-                    .map(|entry| v2::FileInput {
-                        key: entry.key.expect("v0.2.0 entries all carry a key"),
-                        name: entry.path,
-                        content: entry.content.expect("a file entry carries its content"),
-                    })
-                    .collect(),
-                fields: fields
-                    .into_iter()
-                    .map(|(name, value)| v2::FieldInput { name, value })
-                    .collect(),
-                identity_principal: identity_text,
-                proxy_canister_id: proxy_text,
-                canister_ids: canister_ids
-                    .into_iter()
-                    .map(|(name, id)| CanisterIdEntry {
-                        name,
-                        id: id.to_text(),
-                    })
-                    .collect(),
-            };
-            plugin.call_exec(&mut store, &input)
-        }
-        PluginAbi::V1 => {
-            let mut linker: Linker<HostState> = Linker::new(&engine);
-            wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-                path: wasm_path.clone(),
-            })?;
-            v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
-                InstantiateSnafu {
-                    path: wasm_path.clone(),
-                },
-            )?;
-            let plugin = v1::SyncPlugin::instantiate(&mut store, &component, &linker).context(
-                InstantiateSnafu {
-                    path: wasm_path.clone(),
-                },
-            )?;
-            let input = v1::SyncExecInput {
-                canister_id: canister_id_text,
-                environment,
-                // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
-                // neither record has a key — `check_declared_forms` has
-                // established that no entry carries one.
-                dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
-                files: file_entries
-                    .into_iter()
-                    .map(|entry| v1::FileInput {
-                        name: entry.path,
-                        content: entry
-                            .content
-                            .expect("a v0.1.0 entry is always read as a file"),
-                    })
-                    .collect(),
-                identity_principal: identity_text,
-                proxy_canister_id: proxy_text,
-            };
-            plugin.call_exec(&mut store, &input)
+                })?;
+                v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
+                    InstantiateSnafu {
+                        path: wasm_path.clone(),
+                    },
+                )?;
+                // Instantiation runs the component's start functions, so it is
+                // guest code like `exec`: its failure is logged with the rest.
+                let plugin = match v1::SyncPlugin::instantiate(&mut store, &component, &linker) {
+                    Ok(plugin) => plugin,
+                    Err(err) => break 'run Err(err),
+                };
+                let input = v1::SyncExecInput {
+                    canister_id: canister_id_text,
+                    environment,
+                    // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
+                    // neither record has a key — `check_declared_forms` has
+                    // established that no entry carries one.
+                    dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
+                    files: file_entries
+                        .into_iter()
+                        .map(|entry| v1::FileInput {
+                            name: entry.path,
+                            content: entry
+                                .content
+                                .expect("a v0.1.0 entry is always read as a file"),
+                        })
+                        .collect(),
+                    identity_principal: identity_text,
+                    proxy_canister_id: proxy_text,
+                };
+                Ok(plugin.call_exec(&mut store, &input))
+            }
         }
     };
 
@@ -925,9 +932,12 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
         compile_time,
         run_start.elapsed(),
         &state.stats,
-        &call_result,
+        &run_result,
     );
 
+    let call_result = run_result.context(InstantiateSnafu {
+        path: wasm_path.clone(),
+    })?;
     match call_result.context(CallExecSnafu { path: wasm_path })? {
         Ok(()) => {}
         Err(message) => return PluginFailedSnafu { message }.fail(),
@@ -944,12 +954,13 @@ fn log_run_stats(
     compile_time: Duration,
     run_time: Duration,
     stats: &RunStats,
-    call_result: &wasmtime::Result<Result<(), String>>,
+    run_result: &wasmtime::Result<wasmtime::Result<Result<(), String>>>,
 ) {
-    let outcome = match call_result {
-        Ok(Ok(())) => "succeeded",
-        Ok(Err(_)) => "failed",
-        Err(_) => "trapped",
+    let outcome = match run_result {
+        Ok(Ok(Ok(()))) => "succeeded",
+        Ok(Ok(Err(_))) => "failed",
+        Ok(Err(_)) => "trapped",
+        Err(_) => "trapped while instantiating",
     };
     // Instantiation, WASI calls and output capture count as compute here;
     // only canister calls and metadata reads are taken out.
@@ -965,7 +976,7 @@ fn log_run_stats(
         refunded_secs = stats.refunded_secs,
         bytes_sent = stats.bytes_sent,
         bytes_received = stats.bytes_received,
-        cycles_attached = %stats.cycles_attached,
+        cycles_requested = %stats.cycles_requested,
         memory_bytes = stats.memory_bytes as u64,
         table_elements = stats.table_elements as u64,
         "sync plugin run stats"
@@ -1431,8 +1442,8 @@ mod tests {
         assert_eq!(updates[0].cycles, 25_000_000);
     }
 
-    /// Every call is tallied: what went out, what came back, the cycles that
-    /// rode along, and the second at least that it handed back to the budget.
+    /// Every call is tallied: what went out, what came back, the cycles it
+    /// asked to attach, and the second at least that it handed back to the budget.
     #[tokio::test(flavor = "multi_thread")]
     async fn host_calls_are_tallied_in_the_run_stats() {
         let calls = Arc::new(RecordingCalls::default());
@@ -1453,7 +1464,7 @@ mod tests {
         assert_eq!(stats.host_calls, 2);
         assert_eq!(stats.bytes_sent, 2 * b"arg".len() as u64);
         assert_eq!(stats.bytes_received, 2 * b"reply".len() as u64);
-        assert_eq!(stats.cycles_attached, 25_000_000);
+        assert_eq!(stats.cycles_requested, 25_000_000);
         assert!(stats.refunded_secs >= 2);
     }
 

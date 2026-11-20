@@ -59,6 +59,10 @@ pub enum ContextInitError {
     InvalidPluginLimit { var: &'static str, value: String },
 }
 
+/// Seconds of compute one sync plugin run may use, time spent waiting on
+/// canister calls not counted. Unset, the runtime's default (60).
+pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
+
 /// The most linear memory one sync plugin may use, in MiB. Unset, the
 /// runtime's default (4 GiB).
 pub const PLUGIN_MEMORY_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB";
@@ -72,6 +76,9 @@ pub const PLUGIN_WALL_CLOCK_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_S
 /// cannot leave an operator believing a limit is in force when it is not.
 fn plugin_limits() -> Result<icp_sync_plugin::Limits, ContextInitError> {
     let mut limits = icp_sync_plugin::Limits::default();
+    if let Some(secs) = positive_env(PLUGIN_COMPUTE_LIMIT_ENV)? {
+        limits.compute_secs = secs;
+    }
     if let Some(mib) = positive_env(PLUGIN_MEMORY_LIMIT_ENV)? {
         limits.memory_bytes = mib.saturating_mul(1 << 20);
     }

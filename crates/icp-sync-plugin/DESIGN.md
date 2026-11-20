@@ -99,7 +99,7 @@ a compute deadline, and a filesystem to open the declared paths on.
 `dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
 `calls` (how canister calls and metadata reads are made — see below), `proxy`,
 `environment`, `api_url` and `gateway_url` (where the network is reached —
-informational, since the guest has no sockets), `compute_limit_secs`, the
+informational, since the guest has no sockets), the
 exposed `canister_ids` table, the `callable: CallableCanisters` enforcement
 set, and `reporter`. The identity surfaced to the plugin is `calls.caller()`,
 and `proxy` is informational too: which canister a call is routed through is
@@ -279,17 +279,17 @@ once the epoch reaches the deadline, the time refunded since is granted from
 there, and with none to grant the run traps. This is the same budget a deadline
 set on the store directly would give.
 
-The deadline in seconds is the invocation's `compute_limit_secs`. `icp-project`
-resolves it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable,
-defaulting to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset — before the
-wasm is fetched, so a malformed value fails fast.
+The deadline in seconds is `Limits::compute_secs` (60 by default), set with the
+other limits below.
 
 ### Limits set by whoever runs the plugin
 
 `Wasmtime::new(Limits)` holds every run to limits the embedder chooses and the
-project cannot: the CLI reads them from `ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB` and
-`ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`. Their defaults stop nothing a plugin
-can do today.
+project cannot: the compute budget above, memory, and wall-clock time. The CLI
+reads them from `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`,
+`ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB` and `ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`
+when it starts, and a malformed value fails it there. Their defaults stop
+nothing a plugin can do today.
 
 - **Memory.** The store's limiter (`UsageTracker`) sums linear memory and table
   elements across the whole component, since a component may hold many core

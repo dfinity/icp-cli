@@ -18,7 +18,7 @@ use candid::Principal;
 use icp_project::calls::{Authority, Call, CanisterCalls};
 use icp_project::canister::sync::declared::covering_dirs;
 use icp_project::canister::sync::plugin::{
-    CallableCanisters, Invocation, KeyedPath, PLUGIN_COMPUTE_LIMIT_ENV, Run, RunError,
+    CallableCanisters, Invocation, KeyedPath, Run, RunError,
 };
 use icp_project::error;
 use semver::{Version, VersionReq};
@@ -455,7 +455,7 @@ impl v1::SyncPluginImports for HostState {
 // so .into() converts it via anyhow's blanket From<impl StdError + Send + Sync>.
 #[derive(Debug, Snafu)]
 #[snafu(display(
-    "plugin exceeded the {limit_secs}s compute-time limit. If this plugin legitimately needs more compute time (e.g. brotli-compressing a large asset bundle), raise the limit by setting {PLUGIN_COMPUTE_LIMIT_ENV} above {limit_secs}s."
+    "plugin exceeded the {limit_secs}s compute-time limit. If this plugin legitimately needs more compute time (e.g. brotli-compressing a large asset bundle), whoever runs it can raise the limit above {limit_secs}s; for icp, set ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS."
 ))]
 struct ComputeTimeLimitExceeded {
     limit_secs: u64,
@@ -753,12 +753,17 @@ fn resolve_entries<'a>(
 /// projects it was handed — and never to the project: a manifest cannot raise
 /// them. The defaults stop nothing a plugin can do today; a service running
 /// projects it does not trust sets its own.
-///
-/// The compute-time limit is not here: it is resolved per sync step (see
-/// [`Invocation::compute_limit_secs`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Limits {
+    /// Seconds of compute: the time the plugin's wasm runs, with what it
+    /// spends waiting on a canister call or metadata read given back. Checked
+    /// once a second, so it is a whole number of them.
+    ///
+    /// Defaults to 60. A runaway guard rather than a security boundary on its
+    /// own, since a plugin waiting on the host is never charged; the wall
+    /// clock bounds that.
+    pub compute_secs: u64,
     /// Linear memory, summed across every memory the plugin's component has.
     /// A growth past it is refused, as a wasm `memory.grow` that fails.
     ///
@@ -777,6 +782,7 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
+            compute_secs: 60,
             memory_bytes: 4 << 30,
             table_elements: 1_000_000,
             wall_clock: None,
@@ -828,7 +834,6 @@ async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String
         environment,
         api_url,
         gateway_url,
-        compute_limit_secs,
         canister_ids,
         callable,
         reporter,
@@ -979,6 +984,7 @@ async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String
     // kept as a deadline on the mirrored epoch: once the epoch reaches it, the
     // time refunded for host calls since is granted from there, and with none
     // to grant the plugin is stopped.
+    let compute_limit_secs = limits.compute_secs;
     let mut compute_deadline = epoch.load(Ordering::Relaxed) + compute_limit_secs;
     let wall_clock = limits.wall_clock;
     store.set_epoch_deadline(1);
@@ -1379,7 +1385,6 @@ mod tests {
 
     use candid::Principal;
     use icp_project::calls::{CallError, RouteTo, UnimplementedMockCalls};
-    use icp_project::canister::sync::plugin::DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS;
     use url::Url;
 
     fn anon() -> Principal {
@@ -1429,7 +1434,6 @@ mod tests {
             environment: environment.to_string(),
             api_url: Url::parse("http://127.0.0.1:4943").expect("valid api url"),
             gateway_url: None,
-            compute_limit_secs: DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS,
             canister_ids: BTreeMap::new(),
             callable: CallableCanisters::default(),
             reporter: StepReporter::null(),
@@ -1979,13 +1983,16 @@ mod tests {
     fn compute_time_limit_error_reflects_the_configured_limit() {
         // The remediation must anchor to the actual limit (not a hardcoded
         // literal), so it reads correctly whether the limit is the default or
-        // an env-var override. Use a distinctive value to catch a regression.
+        // one the embedder set. Use a distinctive value to catch a regression.
         let msg = ComputeTimeLimitExceeded { limit_secs: 120 }.to_string();
         assert!(msg.contains("exceeded the 120s"), "got: {msg}");
         // The suggestion tells the user to go above the current limit — the
         // value must flow into the remediation clause too.
         assert!(msg.contains("above 120s"), "got: {msg}");
-        assert!(msg.contains(PLUGIN_COMPUTE_LIMIT_ENV), "got: {msg}");
+        assert!(
+            msg.contains("ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS"),
+            "got: {msg}"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -2325,14 +2332,18 @@ mod tests {
         };
         // The "spin" fixture busy-loops forever; a 1-second limit keeps the
         // test fast while still exercising the epoch-interruption trap.
-        let mut inv = invocation(wasm_path, "spin");
-        inv.compute_limit_secs = 1;
-        let err = run_plugin(inv).expect_err("spinning plugin should hit the compute limit");
+        let limits = Limits {
+            compute_secs: 1,
+            ..Limits::default()
+        };
+        let err = run_plugin_with(invocation(wasm_path, "spin"), limits)
+            .expect_err("spinning plugin should hit the compute limit");
         // The trap surfaces through the CallExec source chain, so flatten it
         // and assert the message names both the limit and the override env var.
         let chain = error::flatten(&err);
         assert!(
-            chain.contains("compute-time limit") && chain.contains(PLUGIN_COMPUTE_LIMIT_ENV),
+            chain.contains("compute-time limit")
+                && chain.contains("ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS"),
             "unexpected error chain: {chain}"
         );
     }

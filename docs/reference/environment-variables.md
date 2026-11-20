@@ -179,7 +179,7 @@ Legitimately heavy plugins — for example, brotli-compressing a large asset bun
 export ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS=300
 ```
 
-An invalid value (non-integer or `0`) is rejected rather than silently ignored, so a typo can't leave you thinking you raised the limit when you didn't.
+An invalid value (non-integer or `0`) is rejected when `icp` starts, whatever the command, rather than silently ignored, so a typo can't leave you thinking you raised the limit when you didn't.
 
 **Use cases:**
 - CI jobs syncing large asset bundles that trip the default limit

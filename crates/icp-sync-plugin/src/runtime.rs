@@ -41,6 +41,8 @@ mod v2 {
     wasmtime::component::bindgen!({
         world: "sync-plugin",
         path: "sync-plugin.wit",
+        imports: { default: async },
+        exports: { default: async },
     });
 }
 
@@ -48,6 +50,8 @@ mod v1 {
     wasmtime::component::bindgen!({
         world: "sync-plugin",
         path: "sync-plugin-v1.wit",
+        imports: { default: async },
+        exports: { default: async },
     });
 }
 
@@ -114,15 +118,42 @@ struct RunStats {
     table_elements: usize,
 }
 
-/// A [`ResourceLimiter`](wasmtime::ResourceLimiter) that limits nothing: it
-/// records what the plugin's memories and tables grow to and allows it all.
-#[derive(Debug, Default)]
+/// Most instances, memories and tables one plugin may create. Real
+/// components have a handful of each; these only stop a component that would
+/// reserve address space or host memory by the thousand.
+const MAX_INSTANCES: usize = 1_000;
+const MAX_MEMORIES: usize = 100;
+const MAX_TABLES: usize = 1_000;
+
+/// The store's [`ResourceLimiter`](wasmtime::ResourceLimiter): it holds memory
+/// and tables to [`Limits`], summed across all of them, and records what they
+/// grew to.
+#[derive(Debug)]
 struct UsageTracker {
+    memory_limit: u64,
+    table_limit: u64,
     memory_bytes: usize,
     table_elements: usize,
+    /// Whether a memory growth was refused for the limit, so that a run that
+    /// then fails can be reported as having run into it.
+    memory_refused: bool,
     /// The last growth allowed, taken back if the engine then fails it.
     last_memory_growth: usize,
     last_table_growth: usize,
+}
+
+impl UsageTracker {
+    fn new(limits: Limits) -> Self {
+        Self {
+            memory_limit: limits.memory_bytes,
+            table_limit: limits.table_elements,
+            memory_bytes: 0,
+            table_elements: 0,
+            memory_refused: false,
+            last_memory_growth: 0,
+            last_table_growth: 0,
+        }
+    }
 }
 
 impl wasmtime::ResourceLimiter for UsageTracker {
@@ -132,13 +163,19 @@ impl wasmtime::ResourceLimiter for UsageTracker {
         desired: usize,
         maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
+        self.last_memory_growth = 0;
         // A growth past the memory's own maximum fails whatever is returned
-        // here, so it is not counted.
-        self.last_memory_growth = match maximum {
-            Some(max) if desired > max => 0,
-            _ => desired - current,
-        };
-        self.memory_bytes += self.last_memory_growth;
+        // here, so it is neither counted nor taken as the limit's doing.
+        if maximum.is_some_and(|max| desired > max) {
+            return Ok(true);
+        }
+        let growth = desired - current;
+        if (self.memory_bytes + growth) as u64 > self.memory_limit {
+            self.memory_refused = true;
+            return Ok(false);
+        }
+        self.last_memory_growth = growth;
+        self.memory_bytes += growth;
         Ok(true)
     }
 
@@ -153,17 +190,34 @@ impl wasmtime::ResourceLimiter for UsageTracker {
         desired: usize,
         maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        self.last_table_growth = match maximum {
-            Some(max) if desired > max => 0,
-            _ => desired - current,
-        };
-        self.table_elements += self.last_table_growth;
+        self.last_table_growth = 0;
+        if maximum.is_some_and(|max| desired > max) {
+            return Ok(true);
+        }
+        let growth = desired - current;
+        if (self.table_elements + growth) as u64 > self.table_limit {
+            return Ok(false);
+        }
+        self.last_table_growth = growth;
+        self.table_elements += growth;
         Ok(true)
     }
 
     fn table_grow_failed(&mut self, _error: wasmtime::Error) -> wasmtime::Result<()> {
         self.table_elements -= std::mem::take(&mut self.last_table_growth);
         Ok(())
+    }
+
+    fn instances(&self) -> usize {
+        MAX_INSTANCES
+    }
+
+    fn memories(&self) -> usize {
+        MAX_MEMORIES
+    }
+
+    fn tables(&self) -> usize {
+        MAX_TABLES
     }
 }
 
@@ -205,7 +259,7 @@ impl HostState {
     /// Perform a canister call to an already-resolved target principal. Shared
     /// by both interface versions: the v0.1.0 import always passes the canister
     /// being synced; the v0.2.0 import passes the resolved `call-target`.
-    fn do_canister_call(
+    async fn do_canister_call(
         &mut self,
         target: Principal,
         method: String,
@@ -227,10 +281,8 @@ impl HostState {
             call = call.direct();
         }
 
-        // We are already inside tokio::task::block_in_place (see `Wasmtime`),
-        // so blocking the thread here is safe.
         let start = Instant::now();
-        let result = tokio::runtime::Handle::current().block_on(async move {
+        let result = off_fiber(async move {
             match query {
                 false => calls.update(call).await,
                 true => calls.query(call).await,
@@ -238,7 +290,8 @@ impl HostState {
             // The guest gets one string, and a `CallError`'s own message names
             // only the call it was; the reason it failed is down the chain.
             .map_err(|err| error::flatten(&err))
-        });
+        })
+        .await;
         self.refund_host_call_time(start);
         if let Ok(reply) = &result {
             self.stats.bytes_received += reply.len() as u64;
@@ -255,7 +308,7 @@ impl HostState {
     /// gated on: the sync identity itself, or whatever is acting on its behalf.
     /// Everything that takes — a certificate to verify, a management-canister
     /// call to make — is behind the seam.
-    fn do_canister_metadata_section(
+    async fn do_canister_metadata_section(
         &mut self,
         target: Principal,
         name: String,
@@ -268,12 +321,13 @@ impl HostState {
         };
 
         let start = Instant::now();
-        let result = tokio::runtime::Handle::current().block_on(async move {
+        let result = off_fiber(async move {
             calls
                 .metadata_section(target, &name, authority)
                 .await
                 .map_err(|err| error::flatten(&err))
-        });
+        })
+        .await;
         self.refund_host_call_time(start);
         if let Ok(Some(section)) = &result {
             self.stats.bytes_received += section.len() as u64;
@@ -294,13 +348,36 @@ impl HostState {
     }
 }
 
+/// Run a host call as a task of its own rather than on the plugin's fiber.
+///
+/// wasmtime polls a host import on the fiber stack the plugin runs on, and
+/// code that measures how much stack it has left — candid's decoder does, to
+/// bound its recursion — reads that from the thread's bounds, which the fiber
+/// is not within, and refuses to go on. If the run is dropped, at the
+/// wall-clock limit, the task is aborted with it.
+async fn off_fiber<T: Send + 'static>(work: impl Future<Output = T> + Send + 'static) -> T {
+    struct AbortOnDrop(tokio::task::AbortHandle);
+    impl Drop for AbortOnDrop {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+
+    let task = tokio::spawn(work);
+    let _abort = AbortOnDrop(task.abort_handle());
+    match task.await {
+        Ok(value) => value,
+        Err(err) => std::panic::resume_unwind(err.into_panic()),
+    }
+}
+
 // -- v0.2.0 interface: the plugin chooses the target via `call-target`. --------
 
 // `types::Host` is an empty marker trait generated for the `types` interface.
 impl v2::icp::sync_plugin::types::Host for HostState {}
 
 impl v2::SyncPluginImports for HostState {
-    fn canister_call(
+    async fn canister_call(
         &mut self,
         req: v2::icp::sync_plugin::types::CanisterCallRequest,
     ) -> Result<Vec<u8>, String> {
@@ -313,14 +390,16 @@ impl v2::SyncPluginImports for HostState {
             req.direct,
             req.cycles,
         )
+        .await
     }
 
-    fn canister_metadata_section(
+    async fn canister_metadata_section(
         &mut self,
         req: v2::icp::sync_plugin::types::MetadataSectionRequest,
     ) -> Result<Option<Vec<u8>>, String> {
         let target = resolve_call_target(&req.target, self.host_canister_id, &self.callable)?;
         self.do_canister_metadata_section(target, req.name, req.direct)
+            .await
     }
 }
 
@@ -329,7 +408,7 @@ impl v2::SyncPluginImports for HostState {
 impl v1::icp::sync_plugin::types::Host for HostState {}
 
 impl v1::SyncPluginImports for HostState {
-    fn canister_call(
+    async fn canister_call(
         &mut self,
         req: v1::icp::sync_plugin::types::CanisterCallRequest,
     ) -> Result<Vec<u8>, String> {
@@ -343,6 +422,7 @@ impl v1::SyncPluginImports for HostState {
         self.do_canister_call(
             target, req.method, req.arg, call_type, req.direct, req.cycles,
         )
+        .await
     }
 }
 
@@ -356,6 +436,12 @@ impl v1::SyncPluginImports for HostState {
 struct ComputeTimeLimitExceeded {
     limit_secs: u64,
 }
+
+/// The trap the deadline callback raises when the wall-clock limit has passed,
+/// recognized afterwards and reported as [`RunPluginError::WallClockLimit`].
+#[derive(Debug, Snafu)]
+#[snafu(display("plugin exceeded the wall-clock limit"))]
+struct WallClockTrap;
 
 #[derive(Debug, Snafu)]
 pub enum RunPluginError {
@@ -450,6 +536,17 @@ pub enum RunPluginError {
 
     #[snafu(display("plugin returned error: {message}"))]
     PluginFailed { message: String },
+
+    #[snafu(display("plugin exceeded the {limit_secs}s wall-clock limit for one plugin run"))]
+    WallClockLimit { limit_secs: u64 },
+
+    /// The plugin's own account of the failure is in its stderr, which the
+    /// caller reports; the trap that followed adds only a wasm backtrace.
+    #[snafu(display(
+        "plugin ran out of memory: it was refused more than the {} MiB limit for one plugin run",
+        limit_bytes >> 20
+    ))]
+    MemoryLimit { limit_bytes: u64 },
 }
 
 /// Which version of the sync-plugin interface a component was built against.
@@ -626,24 +723,74 @@ fn resolve_entries<'a>(
     Ok(entries)
 }
 
+/// What one plugin run may consume on the machine that runs it.
+///
+/// These belong to whoever runs the plugin — the CLI, or a service deploying
+/// projects it was handed — and never to the project: a manifest cannot raise
+/// them. The defaults stop nothing a plugin can do today; a service running
+/// projects it does not trust sets its own.
+///
+/// The compute-time limit is not here: it is resolved per sync step (see
+/// [`Invocation::compute_limit_secs`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Limits {
+    /// Linear memory, summed across every memory the plugin's component has.
+    /// A growth past it is refused, as a wasm `memory.grow` that fails.
+    ///
+    /// Defaults to 4 GiB, what a single wasm32 memory can reach anyway.
+    pub memory_bytes: u64,
+    /// Table elements, summed across every table. Defaults to one million.
+    pub table_elements: u64,
+    /// How long one run may take from start to finish, canister calls and
+    /// anything the plugin waits on included. Unlike the compute-time limit,
+    /// nothing is refunded against it.
+    ///
+    /// Defaults to none.
+    pub wall_clock: Option<Duration>,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            memory_bytes: 4 << 30,
+            table_elements: 1_000_000,
+            wall_clock: None,
+        }
+    }
+}
+
 /// The wasmtime Component Model runtime for sync plugins: the host half of the
 /// `icp:sync-plugin` world, which loads a plugin component, hands it a
 /// read-only WASI sandbox, and serves the imports it declares.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct Wasmtime;
+pub struct Wasmtime {
+    limits: Limits,
+}
+
+impl Wasmtime {
+    /// A runtime that holds every plugin it runs to `limits`.
+    pub fn new(limits: Limits) -> Self {
+        Self { limits }
+    }
+}
 
 #[async_trait]
 impl Run for Wasmtime {
     async fn run(&self, invocation: Invocation) -> Result<Vec<String>, RunError> {
-        // The runtime is synchronous — a wasm import cannot suspend — and it
-        // blocks on the calls the plugin makes, so it needs a thread it is
-        // allowed to occupy. Only the runtime knows that; the operation
-        // driving the sync does not.
-        tokio::task::block_in_place(|| run_plugin(invocation)).map_err(RunError::new)
+        // Compiling the plugin and running its wasm between host calls both
+        // occupy the thread, so the run needs one it is allowed to block.
+        // Only the runtime knows that; the operation driving the sync does not.
+        let limits = self.limits;
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(run_plugin(invocation, limits))
+        })
+        .map_err(RunError::new)
     }
 }
 
-fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
+async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String>, RunPluginError> {
+    let started = Instant::now();
     let Invocation {
         wasm_path,
         base_dir,
@@ -666,8 +813,8 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.max_wasm_stack(MAX_WASM_STACK);
-    // Linear memory is implicitly bounded by the wasm32 address space (4 GiB).
-    // If wasm64 support is ever added, set Config::memory_maximum() explicitly.
+    // Memory is held to `Limits` by the store's limiter, across all of the
+    // component's memories rather than each on its own.
     config.epoch_interruption(true);
     let engine = Engine::new(&config).context(CreateEngineSnafu {
         path: wasm_path.clone(),
@@ -676,13 +823,19 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
     // Increment the engine epoch every second from a background thread.
     // The store deadline is set below; the ticker stops when this guard is dropped.
     // AtomicBool is sufficient here — it's a one-way stop signal between two threads.
+    //
+    // `epoch` mirrors the engine's own count, which wasmtime keeps to itself,
+    // so the deadline callback can tell how far the compute budget has run.
     let ticker_stop = Arc::new(AtomicBool::new(false));
+    let epoch = Arc::new(AtomicU64::new(0));
     let _ticker_guard = {
         let engine_ticker = engine.clone();
         let stop = ticker_stop.clone();
+        let epoch = epoch.clone();
         let handle = std::thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_secs(1));
+                epoch.fetch_add(1, Ordering::Relaxed);
                 engine_ticker.increment_epoch();
             }
         });
@@ -791,22 +944,38 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
         wasi_table: wasmtime_wasi::ResourceTable::new(),
         epoch_extension: epoch_extension.clone(),
         stats: RunStats::default(),
-        usage: UsageTracker::default(),
+        usage: UsageTracker::new(limits),
     };
 
     let mut store = Store::new(&engine, host_state);
     store.limiter(|state| &mut state.usage);
-    store.set_epoch_deadline(compute_limit_secs);
+
+    // The callback runs at every tick the plugin's wasm is running through, so
+    // that it can hold the plugin to the wall clock. The compute budget is
+    // kept as a deadline on the mirrored epoch: once the epoch reaches it, the
+    // time refunded for host calls since is granted from there, and with none
+    // to grant the plugin is stopped.
+    let mut compute_deadline = epoch.load(Ordering::Relaxed) + compute_limit_secs;
+    let wall_clock = limits.wall_clock;
+    store.set_epoch_deadline(1);
     store.epoch_deadline_callback(move |_| {
-        let extra = epoch_extension.swap(0, Ordering::Relaxed);
-        if extra > 0 {
-            Ok(wasmtime::UpdateDeadline::Continue(extra))
-        } else {
-            Err(ComputeTimeLimitExceeded {
-                limit_secs: compute_limit_secs,
-            }
-            .into())
+        if let Some(limit) = wall_clock
+            && started.elapsed() >= limit
+        {
+            return Err(WallClockTrap.into());
         }
+        let now = epoch.load(Ordering::Relaxed);
+        if now >= compute_deadline {
+            let extra = epoch_extension.swap(0, Ordering::Relaxed);
+            if extra == 0 {
+                return Err(ComputeTimeLimitExceeded {
+                    limit_secs: compute_limit_secs,
+                }
+                .into());
+            }
+            compute_deadline = now + extra;
+        }
+        Ok(wasmtime::UpdateDeadline::Continue(1))
     });
 
     let canister_id_text = host_canister_id.to_text();
@@ -816,107 +985,116 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
     // Both interfaces are served in parallel: v0.2.0 plugins choose a call
     // target and receive the canister ID table; v0.1.0 plugins get neither and
     // always call the canister being synced.
+    let mut linker: Linker<HostState> = Linker::new(&engine);
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker).context(InstantiateSnafu {
+        path: wasm_path.clone(),
+    })?;
+    match abi {
+        PluginAbi::V2 => v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s),
+        PluginAbi::V1 => v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s),
+    }
+    .context(InstantiateSnafu {
+        path: wasm_path.clone(),
+    })?;
+
+    // Everything from here runs the plugin's code: instantiation runs its
+    // start functions, then `exec`. It is all held to the wall clock, and
+    // whatever it comes to is logged and reported below.
     let run_start = Instant::now();
-    // Outer `Err`: instantiation failed; inner: what `exec` came to.
-    let run_result: wasmtime::Result<wasmtime::Result<Result<(), String>>> = 'run: {
-        match abi {
-            PluginAbi::V2 => {
-                let mut linker: Linker<HostState> = Linker::new(&engine);
-                wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-                    path: wasm_path.clone(),
-                })?;
-                v2::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
-                    InstantiateSnafu {
-                        path: wasm_path.clone(),
-                    },
-                )?;
-                // Instantiation runs the component's start functions, so it is
-                // guest code like `exec`: its failure is logged with the rest.
-                let plugin = match v2::SyncPlugin::instantiate(&mut store, &component, &linker) {
-                    Ok(plugin) => plugin,
-                    Err(err) => break 'run Err(err),
-                };
-                // The manifest declares directories and files together under
-                // `files:`; the interface keeps them apart, so split by what the
-                // host found on disk. `check_declared_forms` has established that
-                // every entry carries a key and that `dirs:` was left unwritten.
-                let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
-                    .into_iter()
-                    .partition(|entry| entry.content.is_none());
-                let input = v2::SyncExecInput {
-                    canister_id: canister_id_text,
-                    environment,
-                    api_url: api_url.to_string(),
-                    gateway_url: gateway_url.map(|url| url.to_string()),
-                    dirs: dir_inputs
+    let guest =
+        async {
+            match abi {
+                PluginAbi::V2 => {
+                    let plugin =
+                        match v2::SyncPlugin::instantiate_async(&mut store, &component, &linker)
+                            .await
+                        {
+                            Ok(plugin) => plugin,
+                            Err(trap) => return GuestOutcome::Instantiate(trap),
+                        };
+                    // The manifest declares directories and files together under
+                    // `files:`; the interface keeps them apart, so split by what the
+                    // host found on disk. `check_declared_forms` has established that
+                    // every entry carries a key and that `dirs:` was left unwritten.
+                    let (dir_inputs, file_inputs): (Vec<_>, Vec<_>) = file_entries
                         .into_iter()
-                        .map(|entry| v2::DirInput {
-                            key: entry.key.expect("v0.2.0 entries all carry a key"),
-                            path: entry.path,
-                        })
-                        .collect(),
-                    files: file_inputs
-                        .into_iter()
-                        .map(|entry| v2::FileInput {
-                            key: entry.key.expect("v0.2.0 entries all carry a key"),
-                            name: entry.path,
-                            content: entry.content.expect("a file entry carries its content"),
-                        })
-                        .collect(),
-                    fields: fields
-                        .into_iter()
-                        .map(|(name, value)| v2::FieldInput { name, value })
-                        .collect(),
-                    identity_principal: identity_text,
-                    proxy_canister_id: proxy_text,
-                    canister_ids: canister_ids
-                        .into_iter()
-                        .map(|(name, id)| CanisterIdEntry {
-                            name,
-                            id: id.to_text(),
-                        })
-                        .collect(),
-                };
-                Ok(plugin.call_exec(&mut store, &input))
+                        .partition(|entry| entry.content.is_none());
+                    let input = v2::SyncExecInput {
+                        canister_id: canister_id_text,
+                        environment,
+                        api_url: api_url.to_string(),
+                        gateway_url: gateway_url.map(|url| url.to_string()),
+                        dirs: dir_inputs
+                            .into_iter()
+                            .map(|entry| v2::DirInput {
+                                key: entry.key.expect("v0.2.0 entries all carry a key"),
+                                path: entry.path,
+                            })
+                            .collect(),
+                        files: file_inputs
+                            .into_iter()
+                            .map(|entry| v2::FileInput {
+                                key: entry.key.expect("v0.2.0 entries all carry a key"),
+                                name: entry.path,
+                                content: entry.content.expect("a file entry carries its content"),
+                            })
+                            .collect(),
+                        fields: fields
+                            .into_iter()
+                            .map(|(name, value)| v2::FieldInput { name, value })
+                            .collect(),
+                        identity_principal: identity_text,
+                        proxy_canister_id: proxy_text,
+                        canister_ids: canister_ids
+                            .into_iter()
+                            .map(|(name, id)| CanisterIdEntry {
+                                name,
+                                id: id.to_text(),
+                            })
+                            .collect(),
+                    };
+                    GuestOutcome::Exec(plugin.call_exec(&mut store, &input).await)
+                }
+                PluginAbi::V1 => {
+                    let plugin =
+                        match v1::SyncPlugin::instantiate_async(&mut store, &component, &linker)
+                            .await
+                        {
+                            Ok(plugin) => plugin,
+                            Err(trap) => return GuestOutcome::Instantiate(trap),
+                        };
+                    let input = v1::SyncExecInput {
+                        canister_id: canister_id_text,
+                        environment,
+                        // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
+                        // neither record has a key — `check_declared_forms` has
+                        // established that no entry carries one.
+                        dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
+                        files: file_entries
+                            .into_iter()
+                            .map(|entry| v1::FileInput {
+                                name: entry.path,
+                                content: entry
+                                    .content
+                                    .expect("a v0.1.0 entry is always read as a file"),
+                            })
+                            .collect(),
+                        identity_principal: identity_text,
+                        proxy_canister_id: proxy_text,
+                    };
+                    GuestOutcome::Exec(plugin.call_exec(&mut store, &input).await)
+                }
             }
-            PluginAbi::V1 => {
-                let mut linker: Linker<HostState> = Linker::new(&engine);
-                wasmtime_wasi::p2::add_to_linker_sync(&mut linker).context(InstantiateSnafu {
-                    path: wasm_path.clone(),
-                })?;
-                v1::SyncPlugin::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s).context(
-                    InstantiateSnafu {
-                        path: wasm_path.clone(),
-                    },
-                )?;
-                // Instantiation runs the component's start functions, so it is
-                // guest code like `exec`: its failure is logged with the rest.
-                let plugin = match v1::SyncPlugin::instantiate(&mut store, &component, &linker) {
-                    Ok(plugin) => plugin,
-                    Err(err) => break 'run Err(err),
-                };
-                let input = v1::SyncExecInput {
-                    canister_id: canister_id_text,
-                    environment,
-                    // v0.1.0 keeps the manifest's own `dirs:`/`files:` split, and
-                    // neither record has a key — `check_declared_forms` has
-                    // established that no entry carries one.
-                    dirs: dir_entries.into_iter().map(|entry| entry.path).collect(),
-                    files: file_entries
-                        .into_iter()
-                        .map(|entry| v1::FileInput {
-                            name: entry.path,
-                            content: entry
-                                .content
-                                .expect("a v0.1.0 entry is always read as a file"),
-                        })
-                        .collect(),
-                    identity_principal: identity_text,
-                    proxy_canister_id: proxy_text,
-                };
-                Ok(plugin.call_exec(&mut store, &input))
-            }
-        }
+        };
+    // The deadline callback stops a plugin computing past the limit, but it
+    // only fires while wasm runs; this stops one waiting on the host — a
+    // canister call, or a WASI sleep or poll. Dropping `guest` drops the
+    // plugin with it, and the run is accounted for below all the same.
+    let outcome = match wall_clock {
+        None => guest.await,
+        Some(limit) => tokio::time::timeout(limit.saturating_sub(started.elapsed()), guest)
+            .await
+            .unwrap_or(GuestOutcome::TimedOut),
     };
 
     // Flush any partial line and emit the truncation note (if any) before
@@ -932,19 +1110,52 @@ fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
         compile_time,
         run_start.elapsed(),
         &state.stats,
-        &run_result,
+        &outcome,
     );
 
-    let call_result = run_result.context(InstantiateSnafu {
-        path: wasm_path.clone(),
-    })?;
-    match call_result.context(CallExecSnafu { path: wasm_path })? {
-        Ok(()) => {}
-        Err(message) => return PluginFailedSnafu { message }.fail(),
+    // A limit is reported as itself whichever phase ran into it. A plugin
+    // refused memory fails however it handles that — a Rust one aborts — so
+    // any failure after a refusal is put down to the limit.
+    let memory_refused = store.data().usage.memory_refused;
+    let wall_clock_limit = || WallClockLimitSnafu {
+        limit_secs: wall_clock.map_or(0, |limit| limit.as_secs()),
+    };
+    match outcome {
+        GuestOutcome::Exec(Ok(Ok(()))) => {}
+        GuestOutcome::TimedOut => return wall_clock_limit().fail(),
+        GuestOutcome::Instantiate(trap) | GuestOutcome::Exec(Err(trap))
+            if trap.downcast_ref::<WallClockTrap>().is_some() =>
+        {
+            return wall_clock_limit().fail();
+        }
+        _ if memory_refused => {
+            return MemoryLimitSnafu {
+                limit_bytes: limits.memory_bytes,
+            }
+            .fail();
+        }
+        GuestOutcome::Instantiate(source) => {
+            return Err(source).context(InstantiateSnafu { path: wasm_path });
+        }
+        GuestOutcome::Exec(Err(source)) => {
+            return Err(source).context(CallExecSnafu { path: wasm_path });
+        }
+        GuestOutcome::Exec(Ok(Err(message))) => return PluginFailedSnafu { message }.fail(),
     }
 
     let lines = std::mem::take(&mut *persistent_stderr.lock().unwrap());
     Ok(lines)
+}
+
+/// What running the plugin's code came to.
+enum GuestOutcome {
+    /// Instantiation failed: a start function trapped, or memory the
+    /// component declares was refused.
+    Instantiate(wasmtime::Error),
+    /// `exec` ran: it trapped, or returned the plugin's own verdict.
+    Exec(wasmtime::Result<Result<(), String>>),
+    /// The wall-clock limit passed while the plugin waited on the host.
+    TimedOut,
 }
 
 /// Log what one run consumed. It is logged however the run ended — a plugin
@@ -954,13 +1165,14 @@ fn log_run_stats(
     compile_time: Duration,
     run_time: Duration,
     stats: &RunStats,
-    run_result: &wasmtime::Result<wasmtime::Result<Result<(), String>>>,
+    outcome: &GuestOutcome,
 ) {
-    let outcome = match run_result {
-        Ok(Ok(Ok(()))) => "succeeded",
-        Ok(Ok(Err(_))) => "failed",
-        Ok(Err(_)) => "trapped",
-        Err(_) => "trapped while instantiating",
+    let outcome = match outcome {
+        GuestOutcome::Exec(Ok(Ok(()))) => "succeeded",
+        GuestOutcome::Exec(Ok(Err(_))) => "failed",
+        GuestOutcome::Exec(Err(_)) => "trapped",
+        GuestOutcome::Instantiate(_) => "trapped while instantiating",
+        GuestOutcome::TimedOut => "stopped at the wall-clock limit",
     };
     // Instantiation, WASI calls and output capture count as compute here;
     // only canister calls and metadata reads are taken out.
@@ -1354,6 +1566,27 @@ mod tests {
         }
     }
 
+    /// Run a plugin with the default limits, from a test that may or may not
+    /// be inside a runtime. Shadows the runtime's own `run_plugin`.
+    fn run_plugin(invocation: Invocation) -> Result<Vec<String>, RunPluginError> {
+        run_plugin_with(invocation, Limits::default())
+    }
+
+    fn run_plugin_with(
+        invocation: Invocation,
+        limits: Limits,
+    ) -> Result<Vec<String>, RunPluginError> {
+        let run = super::run_plugin(invocation, limits);
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(run)),
+            Err(_) => tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("a test runtime should start")
+                .block_on(run),
+        }
+    }
+
     /// The host state a plugin's imports are served from, with an empty WASI
     /// sandbox: these tests call the imports directly rather than through a
     /// component, so nothing reads it.
@@ -1370,7 +1603,7 @@ mod tests {
             wasi_table: wasmtime_wasi::ResourceTable::new(),
             epoch_extension: Arc::new(AtomicU64::new(0)),
             stats: RunStats::default(),
-            usage: UsageTracker::default(),
+            usage: UsageTracker::new(Limits::default()),
         }
     }
 
@@ -1399,12 +1632,11 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), calls.clone());
 
-        let reply = tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(CallTarget::Host, CallType::Update, false, 0),
-            )
-        })
+        let reply = v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(CallTarget::Host, CallType::Update, false, 0),
+        )
+        .await
         .expect("the call should reach the seam");
 
         assert_eq!(reply, b"reply");
@@ -1429,12 +1661,11 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), calls.clone());
 
-        tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(CallTarget::Host, CallType::Update, true, 25_000_000),
-            )
-        })
+        v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(CallTarget::Host, CallType::Update, true, 25_000_000),
+        )
+        .await
         .expect("the call should reach the seam");
 
         let updates = calls.updates.lock().unwrap();
@@ -1450,15 +1681,14 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), calls);
 
-        tokio::task::block_in_place(|| {
-            for cycles in [0, 25_000_000] {
-                v2::SyncPluginImports::canister_call(
-                    &mut state,
-                    call_request(CallTarget::Host, CallType::Update, true, cycles),
-                )
-                .expect("the call should reach the seam");
-            }
-        });
+        for cycles in [0, 25_000_000] {
+            v2::SyncPluginImports::canister_call(
+                &mut state,
+                call_request(CallTarget::Host, CallType::Update, true, cycles),
+            )
+            .await
+            .expect("the call should reach the seam");
+        }
 
         let stats = &state.stats;
         assert_eq!(stats.host_calls, 2);
@@ -1475,7 +1705,7 @@ mod tests {
         use wasmtime::ResourceLimiter;
 
         const PAGE: usize = 64 * 1024;
-        let mut usage = UsageTracker::default();
+        let mut usage = UsageTracker::new(Limits::default());
 
         // Two memories coming into being, then one of them growing.
         assert!(usage.memory_growing(0, 2 * PAGE, None).unwrap());
@@ -1508,6 +1738,31 @@ mod tests {
             .table_grow_failed(wasmtime::Error::msg("out of memory"))
             .unwrap();
         assert_eq!(usage.table_elements, 15);
+        assert!(!usage.memory_refused);
+    }
+
+    /// Growth that would take the sum past the limit is refused, and the
+    /// refusal is remembered; growth within it still goes through.
+    #[test]
+    fn usage_tracker_refuses_growth_past_the_limits() {
+        use wasmtime::ResourceLimiter;
+
+        const PAGE: usize = 64 * 1024;
+        let mut usage = UsageTracker::new(Limits {
+            memory_bytes: 4 * PAGE as u64,
+            table_elements: 10,
+            ..Limits::default()
+        });
+
+        assert!(usage.memory_growing(0, 3 * PAGE, None).unwrap());
+        assert!(!usage.memory_growing(0, 2 * PAGE, None).unwrap());
+        assert!(usage.memory_refused);
+        assert!(usage.memory_growing(0, PAGE, None).unwrap());
+        assert_eq!(usage.memory_bytes, 4 * PAGE);
+
+        assert!(usage.table_growing(0, 10, None).unwrap());
+        assert!(!usage.table_growing(10, 11, None).unwrap());
+        assert_eq!(usage.table_elements, 10);
     }
 
     /// A query is made by the caller itself however the plugin asked, which is
@@ -1519,12 +1774,11 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), calls.clone());
 
-        tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(CallTarget::Host, CallType::Query, false, 0),
-            )
-        })
+        v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(CallTarget::Host, CallType::Query, false, 0),
+        )
+        .await
         .expect("the call should reach the seam");
 
         assert!(calls.updates.lock().unwrap().is_empty());
@@ -1547,17 +1801,16 @@ mod tests {
         };
         let mut state = host_state(host, callable, calls.clone());
 
-        tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(
-                    CallTarget::Name("backend".into()),
-                    CallType::Update,
-                    false,
-                    0,
-                ),
-            )
-        })
+        v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(
+                CallTarget::Name("backend".into()),
+                CallType::Update,
+                false,
+                0,
+            ),
+        )
+        .await
         .expect("a declared target should be callable");
 
         assert_eq!(calls.updates.lock().unwrap()[0].canister, dep);
@@ -1571,17 +1824,16 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), calls.clone());
 
-        let err = tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(
-                    CallTarget::Name("frontend".into()),
-                    CallType::Update,
-                    false,
-                    0,
-                ),
-            )
-        })
+        let err = v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(
+                CallTarget::Name("frontend".into()),
+                CallType::Update,
+                false,
+                0,
+            ),
+        )
+        .await
         .expect_err("an undeclared target must be rejected");
 
         assert!(err.contains("not permitted"), "got: {err}");
@@ -1598,16 +1850,15 @@ mod tests {
         let mut state = host_state(host, CallableCanisters::default(), calls.clone());
 
         for direct in [true, false] {
-            let section = tokio::task::block_in_place(|| {
-                v2::SyncPluginImports::canister_metadata_section(
-                    &mut state,
-                    MetadataRequest {
-                        target: CallTarget::Host,
-                        name: "candid:service".to_string(),
-                        direct,
-                    },
-                )
-            })
+            let section = v2::SyncPluginImports::canister_metadata_section(
+                &mut state,
+                MetadataRequest {
+                    target: CallTarget::Host,
+                    name: "candid:service".to_string(),
+                    direct,
+                },
+            )
+            .await
             .expect("the read should reach the seam");
             assert_eq!(section.as_deref(), Some(&b"section"[..]));
         }
@@ -1629,12 +1880,11 @@ mod tests {
         let host = Principal::from_slice(&[1; 4]);
         let mut state = host_state(host, CallableCanisters::default(), Arc::new(FailingCalls));
 
-        let err = tokio::task::block_in_place(|| {
-            v2::SyncPluginImports::canister_call(
-                &mut state,
-                call_request(CallTarget::Host, CallType::Update, false, 0),
-            )
-        })
+        let err = v2::SyncPluginImports::canister_call(
+            &mut state,
+            call_request(CallTarget::Host, CallType::Update, false, 0),
+        )
+        .await
         .expect_err("the call must fail");
 
         assert!(err.contains("call to 'register'"), "got: {err}");
@@ -1653,18 +1903,17 @@ mod tests {
         };
         let mut state = host_state(host, callable, calls.clone());
 
-        tokio::task::block_in_place(|| {
-            v1::SyncPluginImports::canister_call(
-                &mut state,
-                v1::icp::sync_plugin::types::CanisterCallRequest {
-                    method: "register".to_string(),
-                    arg: b"arg".to_vec(),
-                    call_type: v1::icp::sync_plugin::types::CallType::Update,
-                    direct: true,
-                    cycles: 7,
-                },
-            )
-        })
+        v1::SyncPluginImports::canister_call(
+            &mut state,
+            v1::icp::sync_plugin::types::CanisterCallRequest {
+                method: "register".to_string(),
+                arg: b"arg".to_vec(),
+                call_type: v1::icp::sync_plugin::types::CallType::Update,
+                direct: true,
+                cycles: 7,
+            },
+        )
+        .await
         .expect("the call should reach the seam");
 
         let updates = calls.updates.lock().unwrap();
@@ -2078,6 +2327,87 @@ mod tests {
                 .any(|(stream, line)| matches!(stream, EventStream::Stdout)
                     && line.contains("stdout from plugin")),
             "got: {lines:?}"
+        );
+    }
+
+    /// A plugin waiting on the host runs no wasm, so the compute limit never
+    /// sees it; the wall-clock limit ends it all the same.
+    #[test]
+    fn plugin_waiting_on_the_host_is_stopped_by_the_wall_clock_limit() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let limits = Limits {
+            wall_clock: Some(Duration::from_secs(2)),
+            ..Limits::default()
+        };
+        let started = Instant::now();
+        let err = run_plugin_with(invocation(wasm_path, "sleep"), limits)
+            .expect_err("a sleeping plugin should hit the wall-clock limit");
+        assert!(
+            matches!(err, RunPluginError::WallClockLimit { limit_secs: 2 }),
+            "expected WallClockLimit, got: {err:?}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    /// A plugin computing past the wall-clock limit is stopped by it even
+    /// with compute budget to spare.
+    #[test]
+    fn plugin_computing_past_the_wall_clock_limit_is_trapped() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let limits = Limits {
+            wall_clock: Some(Duration::from_secs(2)),
+            ..Limits::default()
+        };
+        let err = run_plugin_with(invocation(wasm_path, "spin"), limits)
+            .expect_err("a spinning plugin should hit the wall-clock limit");
+        assert!(
+            matches!(err, RunPluginError::WallClockLimit { limit_secs: 2 }),
+            "expected WallClockLimit, got: {err:?}"
+        );
+    }
+
+    /// A plugin is refused memory past the limit, and its failure is reported
+    /// as the limit it ran into; under the default it gets what it asks for.
+    #[test]
+    fn plugin_past_the_memory_limit_fails_naming_it() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let limits = Limits {
+            memory_bytes: 64 << 20,
+            ..Limits::default()
+        };
+        let err = run_plugin_with(invocation(wasm_path, "grow"), limits)
+            .expect_err("a plugin past the memory limit should fail");
+        assert!(
+            matches!(err, RunPluginError::MemoryLimit { limit_bytes, .. } if limit_bytes == 64 << 20),
+            "expected MemoryLimit, got: {err:?}"
+        );
+
+        run_plugin(invocation(wasm_path, "grow")).expect("256 MiB is within the default");
+    }
+
+    /// A limit below the memory the component declares is hit while it is
+    /// instantiated, before `exec` runs, and is reported as the limit all the
+    /// same rather than as a failure to instantiate.
+    #[test]
+    fn plugin_refused_its_initial_memory_fails_naming_the_limit() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let limits = Limits {
+            memory_bytes: 1,
+            ..Limits::default()
+        };
+        let err = run_plugin_with(invocation(wasm_path, "hello"), limits)
+            .expect_err("a plugin refused its initial memory should fail");
+        assert!(
+            matches!(err, RunPluginError::MemoryLimit { limit_bytes: 1, .. }),
+            "expected MemoryLimit, got: {err:?}"
         );
     }
 

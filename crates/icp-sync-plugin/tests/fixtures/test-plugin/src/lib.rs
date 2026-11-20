@@ -98,6 +98,19 @@ impl Guest for TestPlugin {
                     std::hint::black_box(x);
                 }
             }
+            // Wait on the host for an hour. The wait is a WASI poll, during
+            // which no wasm runs, so only a wall-clock limit can end it.
+            "sleep" => {
+                std::thread::sleep(std::time::Duration::from_secs(3600));
+                Ok(())
+            }
+            // Take 256 MiB of memory and touch all of it, to exercise the
+            // host's memory limit.
+            "grow" => {
+                let buf = std::hint::black_box(vec![1u8; 256 << 20]);
+                eprintln!("held {} bytes", buf.iter().map(|&b| b as usize).sum::<usize>());
+                Ok(())
+            }
             _ => Ok(()),
         }
     }

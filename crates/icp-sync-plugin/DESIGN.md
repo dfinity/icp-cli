@@ -271,10 +271,46 @@ it back via `epoch_extension` — so network latency is *not* charged against th
 limit. The
 ticker thread stops when its RAII guard drops at the end of the run.
 
+The callback runs at every tick the guest's wasm runs through
+(`UpdateDeadline::Continue(1)`), so that it can also check the wall clock. The
+compute budget is kept as a deadline on a mirror of the engine's epoch, which
+the ticker increments alongside it since wasmtime keeps its own count private:
+once the epoch reaches the deadline, the time refunded since is granted from
+there, and with none to grant the run traps. This is the same budget a deadline
+set on the store directly would give.
+
 The deadline in seconds is the invocation's `compute_limit_secs`. `icp-project`
 resolves it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable,
 defaulting to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset — before the
 wasm is fetched, so a malformed value fails fast.
+
+### Limits set by whoever runs the plugin
+
+`Wasmtime::new(Limits)` holds every run to limits the embedder chooses and the
+project cannot: the CLI reads them from `ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB` and
+`ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`. Their defaults stop nothing a plugin
+can do today.
+
+- **Memory.** The store's limiter (`UsageTracker`) sums linear memory and table
+  elements across the whole component, since a component may hold many core
+  modules each with memories of their own, and refuses growth past the limit
+  as a failed `memory.grow` would. It also caps the number of instances,
+  memories and tables. A run that fails after a refusal is reported as
+  `MemoryLimit`.
+- **Wall clock.** The runtime is async (`imports`/`exports: async`,
+  `add_to_linker_async`), so a plugin waiting on the host — a canister call, or
+  a WASI sleep or poll, which wasmtime-wasi otherwise blocks the thread on —
+  is a pending future. `run_plugin` wraps everything that runs the plugin's
+  code — instantiation, whose start functions are guest code too, and `exec` —
+  in `tokio::time::timeout`, which drops it at the limit; the deadline callback
+  covers a plugin computing past it, which never yields. Output capture is
+  finalized and the run's usage logged after either, so a run stopped at the
+  limit is accounted for like any other.
+- Either limit is reported as itself whether it was hit while instantiating or
+  while running `exec`.
+
+The run still takes its thread with `block_in_place`: compiling the component
+and running wasm between host calls both block it.
 
 ### stdio capture
 

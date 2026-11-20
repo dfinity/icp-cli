@@ -1,4 +1,4 @@
 mod path;
 mod runtime;
 
-pub use runtime::Wasmtime;
+pub use runtime::{Limits, Wasmtime};

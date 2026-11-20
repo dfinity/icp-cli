@@ -185,6 +185,36 @@ An invalid value (non-integer or `0`) is rejected rather than silently ignored, 
 - CI jobs syncing large asset bundles that trip the default limit
 - Compression-heavy or otherwise compute-intensive sync plugins
 
+### `ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB`
+
+Maximum linear memory, in MiB, one [sync plugin](../concepts/sync-plugins.md) may use, summed across every memory its component has. Defaults to 4 GiB, which is what a single wasm32 memory can reach anyway.
+
+A growth past the limit is refused the way a failed wasm `memory.grow` is, and a plugin that then fails reports the limit it ran into. For reference, the certified-assets sync plugin uses about 60 MiB plus four to six times the size of the asset directory it uploads.
+
+```bash
+export ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB=512
+```
+
+An invalid value (non-integer or `0`) is rejected.
+
+**Use cases:**
+- A service deploying projects it does not trust, holding each plugin to a memory budget
+
+### `ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`
+
+Maximum seconds one [sync plugin](../concepts/sync-plugins.md) run may take from start to finish, canister calls and anything the plugin waits on included. Unset by default: there is no limit.
+
+Unlike [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](#icp_cli_plugin_compute_limit_secs), nothing is granted back against it, so it also stops a plugin that keeps making canister calls without end, or that waits on the host and never returns.
+
+```bash
+export ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS=600
+```
+
+An invalid value (non-integer or `0`) is rejected.
+
+**Use cases:**
+- A service deploying projects it does not trust, bounding how long one deploy can hold it
+
 ### `ENGINE_CANISTER_ID`
 
 The engine canister that `--engine` resolves cloud engine names through, and that cloud engine subnets are looked up in when creating canisters. When set to a canister id, it overrides the built-in mainnet engine canister. An empty value is ignored; an invalid one is an error.

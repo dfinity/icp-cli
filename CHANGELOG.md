@@ -12,6 +12,7 @@ air-gapped signing, extensions
 * chore: macOS on Intel (`x86_64-apple-darwin`) is no longer a release target. Releases ship no Intel macOS archive, the shell installer refuses that platform, and npm no longer publishes `@icp-sdk/icp-cli-darwin-x64`, so installing `@icp-sdk/icp-cli` on an Intel Mac warns of an unsupported platform. Homebrew dropped Intel macOS in September 2026, and GitHub is retiring its Intel macOS runners. v1.8.0 is the last release with an Intel macOS build.
 * fix: `icp token transfer` reports a 64-character hex receiver whose checksum is wrong as an invalid account identifier, where it panicked.
 * chore: a sync plugin supplied as `.wat` text no longer loads; supply the compiled `.wasm` component. wasmtime is built with only the features the plugin runtime uses, which drops the text format among others.
+* fix: `icp build` and `icp deploy` no longer write a pre-built module to a temporary file before storing it as the build artifact. A `pre-built` step used to copy its module to the build's temporary output file, which was then read back and written again to `.icp/cache/artifacts`, so the module was on disk three times while it was built — the source, the temporary copy and the artifact — where it is now there twice. The temporary copy is still made when another build step follows, since that step finds the module at `ICP_WASM_OUTPUT_PATH` and may change it there. A `pre-built` step whose file cannot be read now fails with `failed to read wasm file '<path>'`, where it said `failed to copy wasm to output file`.
 
 ## Experimental
 

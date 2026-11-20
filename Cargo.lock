@@ -3786,6 +3786,7 @@ dependencies = [
  "semver",
  "snafu",
  "tokio",
+ "tracing",
  "url",
  "wasmtime",
  "wasmtime-wasi",

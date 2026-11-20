@@ -26,6 +26,7 @@ snafu.workspace = true
 # `rt-multi-thread` for `block_in_place`, which the runtime needs because a
 # wasm import cannot suspend while a canister call is in flight.
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 

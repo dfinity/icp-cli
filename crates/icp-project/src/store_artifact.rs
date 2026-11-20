@@ -9,7 +9,7 @@ use crate::{
     fs::{
         create_dir_all,
         lock::{DirectoryStructureLock, PathsAccess},
-        read, read_dir, read_to_string, remove_file, rename, write, write_string,
+        read, read_dir, remove_file, rename, write, write_string,
     },
     manifest::ProjectRootLocate,
     prelude::*,
@@ -73,8 +73,8 @@ pub enum LookupArtifactError {
 ///
 /// ```text
 /// artifacts/
-/// ├── modules/<sha256>.wasm    one per distinct module
-/// └── refs/<canister>          the SHA-256 of that canister's module
+/// ├── .modules/<sha256>.wasm    one per distinct module
+/// └── .refs/<canister>          the SHA-256 of that canister's module
 /// ```
 ///
 /// Canisters built to the same bytes — several frontends on one asset canister,
@@ -128,12 +128,16 @@ fn artifact_name_overflow(name: &str) -> Option<usize> {
 
 #[cfg(feature = "host")]
 impl ArtifactPaths {
+    // Both directories are named with a leading `.`, which no canister name
+    // may contain: a store from before modules were shared kept each module in
+    // a file named for its canister, directly in the store, and neither
+    // directory can be where one of those files is.
     fn modules_dir(&self) -> PathBuf {
-        self.dir.join("modules")
+        self.dir.join(".modules")
     }
 
     fn refs_dir(&self) -> PathBuf {
-        self.dir.join("refs")
+        self.dir.join(".refs")
     }
 
     /// Where the module with this SHA-256 is kept.
@@ -146,17 +150,12 @@ impl ArtifactPaths {
         self.refs_dir().join(sanitize_artifact_name(name))
     }
 
-    /// Where a canister's whole module was kept before modules were shared.
-    fn legacy_by_name(&self, name: &str) -> PathBuf {
-        self.dir.join(sanitize_artifact_name(name))
-    }
-
     /// Record `wasm` as the module `name` was built to.
     fn save(&self, name: &str, wasm: &[u8]) -> Result<(), StoreCause> {
         let sha256 = hex::encode(Sha256::digest(wasm));
 
-        ensure_dir(&self.modules_dir())?;
-        ensure_dir(&self.refs_dir())?;
+        create_dir_all(&self.modules_dir()).map_err(StoreCause::new)?;
+        create_dir_all(&self.refs_dir()).map_err(StoreCause::new)?;
 
         let reference = self.ref_by_name(name);
         let previous = read_ref(&reference)?;
@@ -171,13 +170,6 @@ impl ArtifactPaths {
             rename(&partial, &module).map_err(StoreCause::new)?;
         }
         write_string(&reference, &sha256).map_err(StoreCause::new)?;
-
-        // A store written before modules were shared holds this canister's
-        // module whole, and nothing reads it any more.
-        let legacy = self.legacy_by_name(name);
-        if legacy.is_file() {
-            remove_file(&legacy).map_err(StoreCause::new)?;
-        }
 
         // Only this save can have orphaned the module it replaced.
         if let Some(previous) = previous.filter(|previous| *previous != sha256)
@@ -215,19 +207,6 @@ impl ArtifactPaths {
     }
 }
 
-/// Create one of the store's directories.
-///
-/// A store written before modules were shared kept each module in a file named
-/// for its canister, directly in the store, so a canister called `modules` or
-/// `refs` left a file where the directory now goes.
-#[cfg(feature = "host")]
-fn ensure_dir(dir: &Path) -> Result<(), StoreCause> {
-    if dir.is_file() {
-        remove_file(dir).map_err(StoreCause::new)?;
-    }
-    create_dir_all(dir).map_err(StoreCause::new)
-}
-
 /// The SHA-256 a canister's entry names, or `None` when there is no entry or it
 /// does not hold one — which is read as nothing having been built, since a
 /// rebuild is what puts it right.
@@ -236,7 +215,12 @@ fn read_ref(reference: &Path) -> Result<Option<String>, StoreCause> {
     if !reference.is_file() {
         return Ok(None);
     }
-    let contents = read_to_string(reference).map_err(StoreCause::new)?;
+    // Read as bytes: an entry that is not text is one that does not hold a
+    // SHA-256, not a failure to read it.
+    let contents = read(reference).map_err(StoreCause::new)?;
+    let Ok(contents) = std::str::from_utf8(&contents) else {
+        return Ok(None);
+    };
     let sha256 = contents.trim();
     let is_sha256 = sha256.len() == 64
         && sha256
@@ -423,7 +407,7 @@ mod tests {
 
     /// The file names under the store's `modules` directory.
     fn modules(dir: &Path) -> Vec<String> {
-        read_dir(&dir.join("modules"))
+        read_dir(&dir.join(".modules"))
             .unwrap()
             .iter()
             .map(|p| p.file_name().unwrap().to_owned())
@@ -469,7 +453,7 @@ mod tests {
 
         assert_eq!(modules(&dir), [format!("{EMPTY_SHA256}.wasm")]);
         assert_eq!(
-            read_to_string(&dir.join("refs/backend")).unwrap(),
+            read_to_string(&dir.join(".refs/backend")).unwrap(),
             EMPTY_SHA256
         );
     }
@@ -505,7 +489,7 @@ mod tests {
     async fn an_entry_whose_module_is_gone_is_not_found() {
         let (_project, store, dir) = store();
         store.save("backend", b"").await.unwrap();
-        std::fs::remove_file(dir.join(format!("modules/{EMPTY_SHA256}.wasm"))).unwrap();
+        std::fs::remove_file(dir.join(format!(".modules/{EMPTY_SHA256}.wasm"))).unwrap();
 
         assert!(matches!(
             store.lookup("backend").await,
@@ -514,41 +498,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_entry_that_is_not_a_sha256_is_not_found() {
-        let (_project, store, dir) = store();
-        store.save("backend", b"module").await.unwrap();
-        write(&dir.join("refs/backend"), b"../../../somewhere").unwrap();
+    async fn an_entry_that_is_not_a_sha256_is_not_found_and_a_rebuild_replaces_it() {
+        for entry in [&b"../../../somewhere"[..], &[0xff, 0xfe, 0x00]] {
+            let (_project, store, dir) = store();
+            store.save("backend", b"module").await.unwrap();
+            store.save("other", b"old").await.unwrap();
+            write(&dir.join(".refs/backend"), entry).unwrap();
 
-        assert!(matches!(
-            store.lookup("backend").await,
-            Err(LookupArtifactError::LookupArtifactNotFound { .. })
-        ));
+            assert!(matches!(
+                store.lookup("backend").await,
+                Err(LookupArtifactError::LookupArtifactNotFound { .. })
+            ));
+
+            // Neither its own rebuild nor another canister's is held up by it.
+            store.save("other", b"new").await.unwrap();
+            store.save("backend", b"module").await.unwrap();
+            assert_eq!(store.lookup("backend").await.unwrap(), b"module");
+        }
     }
 
     /// A store from before modules were shared kept each one whole, in a file
-    /// named for its canister.
+    /// named for its canister. It is not read: the canister is rebuilt.
     #[tokio::test]
-    async fn a_store_from_before_modules_were_shared_is_replaced_as_canisters_rebuild() {
+    async fn an_artifact_from_before_modules_were_shared_is_not_found() {
         let (_project, store, dir) = store();
         std::fs::create_dir_all(&dir).unwrap();
-        for name in ["backend", "modules", "refs", "untouched"] {
-            write(&dir.join(name), b"whole module").unwrap();
-        }
+        write(&dir.join("backend"), b"whole module").unwrap();
 
-        // Not read: the canister is rebuilt instead.
         assert!(matches!(
             store.lookup("backend").await,
             Err(LookupArtifactError::LookupArtifactNotFound { .. })
         ));
 
         store.save("backend", b"module").await.unwrap();
-        assert!(!dir.join("backend").exists());
-        assert!(dir.join("modules").is_dir());
-        assert!(dir.join("refs").is_dir());
         assert_eq!(store.lookup("backend").await.unwrap(), b"module");
-
-        // Another canister's is left for its own rebuild.
-        assert!(dir.join("untouched").is_file());
     }
 
     #[test]

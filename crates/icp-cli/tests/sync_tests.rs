@@ -838,8 +838,8 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
     clients::icp(&ctx, &project_dir, Some("random-environment".to_string()))
         .mint_cycles(10 * TRILLION);
 
-    // deploy runs the sync step, which reads ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS.
-    // A non-integer value must abort with a message that names the variable and
+    // ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS is read when the command starts, so a
+    // non-integer value must abort with a message that names the variable and
     // echoes the offending value.
     ctx.icp()
         .current_dir(&project_dir)
@@ -849,7 +849,7 @@ async fn sync_plugin_rejects_invalid_compute_limit_env() {
         .assert()
         .failure()
         .stderr(
-            contains("invalid ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS value")
+            contains("ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS must be a whole number")
                 .and(contains("not-a-number")),
         );
 }

@@ -412,10 +412,6 @@ mod tests {
         assert_eq!(invocation.environment, params.environment);
         assert_eq!(invocation.api_url, params.urls.api_url);
         assert_eq!(invocation.gateway_url, params.urls.http_gateway_url);
-        assert_eq!(
-            invocation.compute_limit_secs,
-            plugin::DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS
-        );
         // The syncing canister's own subproject names its siblings by their
         // bare local names...
         assert_eq!(invocation.canister_ids.get("frontend"), Some(&sibling));

@@ -23,9 +23,10 @@ icp-events.workspace = true
 icp-project = { path = "../icp-project", version = "=0.1.0", default-features = false }
 semver.workspace = true
 snafu.workspace = true
-# `rt-multi-thread` for `block_in_place`, which the runtime needs because a
-# wasm import cannot suspend while a canister call is in flight.
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+# `rt-multi-thread` for `block_in_place`: compiling a plugin and running its
+# wasm between host calls both occupy the thread. `time` for the wall-clock
+# limit.
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 tracing.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true

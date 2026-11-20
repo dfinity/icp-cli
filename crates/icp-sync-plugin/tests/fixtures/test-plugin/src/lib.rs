@@ -104,6 +104,21 @@ impl Guest for TestPlugin {
                 std::thread::sleep(std::time::Duration::from_secs(3600));
                 Ok(())
             }
+            // Make one update call to the canister being synced, and report
+            // how it went. Used with a host whose call never returns, to
+            // exercise the wall-clock limit cutting off a call in flight.
+            "call-host" => {
+                let reply = canister_call(&CanisterCallRequest {
+                    target: CallTarget::Host,
+                    method: "hang".to_string(),
+                    arg: vec![],
+                    call_type: icp::sync_plugin::types::CallType::Update,
+                    direct: true,
+                    cycles: 0,
+                })?;
+                eprintln!("reply of {} bytes", reply.len());
+                Ok(())
+            }
             // Take 256 MiB of memory and touch all of it, to exercise the
             // host's memory limit.
             "grow" => {

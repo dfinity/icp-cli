@@ -2405,6 +2405,104 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(30));
     }
 
+    /// A canister call that never returns: it records that it began, and
+    /// that its future was dropped — which is the only way it ends.
+    #[derive(Default)]
+    struct HangingCalls {
+        started: AtomicBool,
+        dropped: Arc<AtomicBool>,
+    }
+
+    #[async_trait]
+    impl CanisterCalls for HangingCalls {
+        fn caller(&self) -> Principal {
+            Principal::from_slice(&[5; 4])
+        }
+
+        async fn update(&self, _call: Call) -> Result<Vec<u8>, CallError> {
+            struct SetOnDrop(Arc<AtomicBool>);
+            impl Drop for SetOnDrop {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::SeqCst);
+                }
+            }
+            let _dropped = SetOnDrop(self.dropped.clone());
+            self.started.store(true, Ordering::SeqCst);
+            std::future::pending().await
+        }
+
+        async fn query(&self, _call: Call) -> Result<Vec<u8>, CallError> {
+            unimplemented!("HangingCalls::query")
+        }
+
+        async fn metadata_section(
+            &self,
+            _canister: Principal,
+            _path: &str,
+            _authority: Authority,
+        ) -> Result<Option<Vec<u8>>, CallError> {
+            unimplemented!("HangingCalls::metadata_section")
+        }
+
+        async fn controllers(
+            &self,
+            _canister: Principal,
+        ) -> Result<Option<Vec<Principal>>, CallError> {
+            unimplemented!("HangingCalls::controllers")
+        }
+
+        async fn module_hash(&self, _canister: Principal) -> Result<Option<Vec<u8>>, CallError> {
+            unimplemented!("HangingCalls::module_hash")
+        }
+
+        async fn subnet_of(&self, _canister: Principal) -> Result<Principal, CallError> {
+            unimplemented!("HangingCalls::subnet_of")
+        }
+
+        async fn subnet_uses_engine_operator(&self, _subnet: Principal) -> Result<bool, CallError> {
+            unimplemented!("HangingCalls::subnet_uses_engine_operator")
+        }
+    }
+
+    /// A canister call in flight when the wall-clock limit passes is aborted
+    /// with the run, not left running on the host after the plugin is gone.
+    /// The runtime here outlives the run, so nothing but the abort can end it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_canister_call_in_flight_at_the_wall_clock_limit_is_aborted() {
+        let Some(wasm_path) = option_env!("TEST_PLUGIN_WASM") else {
+            return;
+        };
+        let calls = Arc::new(HangingCalls::default());
+        let mut inv = invocation(wasm_path, "call-host");
+        inv.calls = calls.clone();
+        let limits = Limits {
+            wall_clock: Some(Duration::from_secs(2)),
+            ..Limits::default()
+        };
+
+        let err = run_plugin_with(inv, limits)
+            .expect_err("a plugin waiting on a call that never returns should hit the limit");
+        assert!(
+            matches!(err, RunPluginError::WallClockLimit { limit_secs: 2 }),
+            "expected WallClockLimit, got: {err:?}"
+        );
+        assert!(
+            calls.started.load(Ordering::SeqCst),
+            "the call should have been made"
+        );
+
+        // Aborting a task takes effect when the runtime next gets to it, so
+        // allow it a moment.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !calls.dropped.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "the in-flight call should have been aborted with the run"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
     /// A plugin computing past the wall-clock limit is stopped by it even
     /// with compute budget to spare.
     #[test]

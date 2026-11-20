@@ -31,6 +31,7 @@ pub enum ValidationError {
     ReplacedCanisterNotStopped,
     ReplacedCanisterHasSnapshots,
     MigratedCanisterInsufficientCycles,
+    ReplacedCanisterInsufficientCycles,
     CallFailed { reason: String },
 }
 
@@ -94,7 +95,13 @@ impl fmt::Display for ValidationError {
             ValidationError::MigratedCanisterInsufficientCycles => {
                 write!(
                     f,
-                    "The migrated canister does not have enough cycles for migration. Top up with at least 10T cycles"
+                    "The migrated canister does not have enough cycles. It needs 10T cycles for the migration, plus enough to stay above its freezing threshold for 12 hours"
+                )
+            }
+            ValidationError::ReplacedCanisterInsufficientCycles => {
+                write!(
+                    f,
+                    "The replaced canister does not have enough cycles. It needs enough to stay above its freezing threshold for 12 hours"
                 )
             }
             ValidationError::CallFailed { reason } => {

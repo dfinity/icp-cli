@@ -2,6 +2,7 @@ use std::io::{IsTerminal, stdin};
 use std::time::{Duration, Instant};
 
 use anyhow::bail;
+use candid::Nat;
 use clap::Args;
 use clap_complete::ArgValueCandidates;
 use dialoguer::Confirm;
@@ -11,7 +12,6 @@ use ic_management_canister_types::{
 use icp_app::context::Context;
 use icp_canister_interfaces::nns_migration::{MigrationStatus, NNS_MIGRATION_PRINCIPAL};
 use indicatif::{ProgressBar, ProgressStyle};
-use num_traits::ToPrimitive;
 use tracing::{info, warn};
 
 use crate::commands::args::{self, Canister};
@@ -22,10 +22,15 @@ use icp_project::host::CanisterSelection;
 use icp_project::operations::misc::format_timestamp;
 use icp_project::operations::proxy_management;
 
-/// Minimum cycles required for migration (10T).
-const MIN_CYCLES_FOR_MIGRATION: u128 = 10_000_000_000_000;
-/// Cycles threshold for warning (15T).
-const WARN_CYCLES_THRESHOLD: u128 = 15_000_000_000_000;
+/// Cycles the migration itself costs (10T). The source canister needs them
+/// on top of the cycles that keep it from freezing.
+const CYCLES_COST_PER_MIGRATION: u128 = 10_000_000_000_000;
+/// The NNS migration canister requires both canisters to hold enough cycles to
+/// stay above their freezing threshold for this long (12 hours).
+const MIN_SECONDS_UNTIL_FROZEN: u64 = 12 * 60 * 60;
+/// Cycles the source canister may hold beyond what the migration requires
+/// before the command warns that they will be burned (5T).
+const WARN_EXTRA_CYCLES: u128 = 5_000_000_000_000;
 
 /// Migrate a canister ID from one subnet to another
 #[derive(Debug, Args)]
@@ -141,22 +146,38 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
             );
         }
 
-        // Check cycles balance
-        let cycles = source_status
-            .cycles
-            .0
-            .to_u128()
-            .expect("unable to parse cycles");
-
-        if cycles < MIN_CYCLES_FOR_MIGRATION {
+        // Check cycles balances
+        let source_cycles = &source_status.cycles;
+        let source_required = Nat::from(CYCLES_COST_PER_MIGRATION)
+            + cycles_until_frozen(
+                &source_status.idle_cycles_burned_per_day,
+                &source_status.settings.freezing_threshold,
+            );
+        if *source_cycles < source_required {
             bail!(
-                "Canister '{source_name}' has less than 10T cycles ({cycles} cycles). Top up before migrating"
+                "Canister '{source_name}' has {source_cycles} cycles but needs at least {source_required}: \
+                 10T for the migration, plus enough to stay above its freezing threshold for 12 hours. \
+                 Top up before migrating"
             );
         }
 
-        if !args.yes && cycles > WARN_CYCLES_THRESHOLD {
+        let target_cycles = &target_status.cycles;
+        let target_required = cycles_until_frozen(
+            &target_status.idle_cycles_burned_per_day,
+            &target_status.settings.freezing_threshold,
+        );
+        if *target_cycles < target_required {
+            bail!(
+                "Canister '{target_name}' has {target_cycles} cycles but needs at least {target_required} \
+                 to stay above its freezing threshold for 12 hours. Top up before migrating"
+            );
+        }
+
+        if !args.yes && *source_cycles > source_required.clone() + Nat::from(WARN_EXTRA_CYCLES) {
             if can_confirm {
-                warn!("Canister '{source_name}' has more than 15T cycles ({cycles} cycles).");
+                warn!(
+                    "Canister '{source_name}' has {source_cycles} cycles, more than the {source_required} the migration requires."
+                );
                 warn!("The extra cycles will get burned during the migration.");
 
                 let confirmed = Confirm::new()
@@ -169,7 +190,8 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
                 }
             } else {
                 bail!(
-                    "Canister '{source_name}' has more than 15T cycles ({cycles} cycles). The extra cycles will get burned during the migration. Rerun with --yes to proceed anyway"
+                    "Canister '{source_name}' has {source_cycles} cycles, more than the {source_required} the migration requires. \
+                     The extra cycles will get burned during the migration. Rerun with --yes to proceed anyway"
                 );
             }
         }
@@ -324,6 +346,18 @@ pub(crate) async fn exec(ctx: &Context, args: &MigrateIdArgs) -> Result<(), anyh
     Ok(())
 }
 
+/// The cycles a canister needs to stay above its freezing threshold for
+/// `MIN_SECONDS_UNTIL_FROZEN`, burning cycles at its current idle rate.
+///
+/// The NNS migration canister requires this balance of the target canister and,
+/// on top of `CYCLES_COST_PER_MIGRATION`, of the source canister. Like the
+/// migration canister, this does not count a canister's reserved cycles.
+fn cycles_until_frozen(idle_cycles_burned_per_day: &Nat, freezing_threshold: &Nat) -> Nat {
+    const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+    idle_cycles_burned_per_day.clone() * (freezing_threshold.clone() + MIN_SECONDS_UNTIL_FROZEN)
+        / SECONDS_PER_DAY
+}
+
 fn ensure_canister_stopped(status: CanisterStatusType, name: &str) -> Result<(), anyhow::Error> {
     match status {
         CanisterStatusType::Stopped => Ok(()),
@@ -333,5 +367,48 @@ fn ensure_canister_stopped(status: CanisterStatusType, name: &str) -> Result<(),
         CanisterStatusType::Stopping => {
             bail!("Canister '{name}' is stopping. Wait a few seconds and try again")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cycles_until_frozen_covers_freezing_threshold_and_twelve_hours() {
+        // 30 days of freezing threshold plus 12 hours, at 2T cycles per day.
+        let per_day = Nat::from(2_000_000_000_000_u128);
+        let thirty_days = Nat::from(30_u64 * 24 * 60 * 60);
+        assert_eq!(
+            cycles_until_frozen(&per_day, &thirty_days),
+            Nat::from(61_000_000_000_000_u128)
+        );
+    }
+
+    #[test]
+    fn cycles_until_frozen_without_freezing_threshold_is_twelve_hours_of_burn() {
+        let per_day = Nat::from(2_000_000_000_000_u128);
+        assert_eq!(
+            cycles_until_frozen(&per_day, &Nat::from(0_u64)),
+            Nat::from(1_000_000_000_000_u128)
+        );
+    }
+
+    #[test]
+    fn cycles_until_frozen_of_idle_free_canister_is_zero() {
+        let one_year = Nat::from(365_u64 * 24 * 60 * 60);
+        assert_eq!(
+            cycles_until_frozen(&Nat::from(0_u64), &one_year),
+            Nat::from(0_u64)
+        );
+    }
+
+    #[test]
+    fn cycles_until_frozen_does_not_overflow() {
+        // The largest freezing threshold a canister can have, at a burn rate
+        // whose product with it exceeds `u128`.
+        let per_day = Nat::from(u128::MAX);
+        let threshold = Nat::from(u64::MAX);
+        assert!(cycles_until_frozen(&per_day, &threshold) > u128::MAX);
     }
 }

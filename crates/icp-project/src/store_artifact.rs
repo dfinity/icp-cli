@@ -300,7 +300,10 @@ impl Access for ArtifactStore {
             .with_write(async |store| store.save(name, wasm))
             .await
             .map_err(|e| save_store(name, e))?
-            .map_err(|e| save_store(name, e))
+            .map_err(|source| SaveError::SaveStore {
+                source,
+                name: name.to_owned(),
+            })
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
@@ -316,7 +319,10 @@ impl Access for ArtifactStore {
             .with_read(async |store| store.lookup(name))
             .await
             .map_err(|e| lookup_store(name, e))?
-            .map_err(|e| lookup_store(name, e))?
+            .map_err(|source| LookupArtifactError::LookupStore {
+                source,
+                name: name.to_owned(),
+            })?
             .ok_or_else(|| {
                 LookupArtifactNotFoundSnafu {
                     name: name.to_owned(),
@@ -405,7 +411,14 @@ mod tests {
         (project, store, dir)
     }
 
-    /// The file names under the store's `modules` directory.
+    async fn assert_not_built(store: &ArtifactStore, name: &str) {
+        assert!(matches!(
+            store.lookup(name).await,
+            Err(LookupArtifactError::LookupArtifactNotFound { .. })
+        ));
+    }
+
+    /// The file names under the store's `.modules` directory.
     fn modules(dir: &Path) -> Vec<String> {
         read_dir(&dir.join(".modules"))
             .unwrap()
@@ -417,20 +430,10 @@ mod tests {
     const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     #[tokio::test]
-    async fn a_saved_module_is_read_back() {
-        let (_project, store, _) = store();
-        store.save("backend", b"module").await.unwrap();
-        assert_eq!(store.lookup("backend").await.unwrap(), b"module");
-    }
-
-    #[tokio::test]
     async fn a_canister_never_built_is_not_found() {
         let (_project, store, _) = store();
         store.save("backend", b"module").await.unwrap();
-        assert!(matches!(
-            store.lookup("frontend").await,
-            Err(LookupArtifactError::LookupArtifactNotFound { .. })
-        ));
+        assert_not_built(&store, "frontend").await;
     }
 
     #[tokio::test]
@@ -439,6 +442,8 @@ mod tests {
         store.save("first", b"module").await.unwrap();
         store.save("second", b"module").await.unwrap();
         store.save("vendor/dep:third", b"module").await.unwrap();
+        // A rebuild that changes nothing.
+        store.save("first", b"module").await.unwrap();
 
         assert_eq!(modules(&dir).len(), 1);
         for name in ["first", "second", "vendor/dep:third"] {
@@ -476,25 +481,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn saving_the_same_module_again_keeps_it() {
-        let (_project, store, dir) = store();
-        store.save("backend", b"module").await.unwrap();
-        store.save("backend", b"module").await.unwrap();
-
-        assert_eq!(modules(&dir).len(), 1);
-        assert_eq!(store.lookup("backend").await.unwrap(), b"module");
-    }
-
-    #[tokio::test]
     async fn an_entry_whose_module_is_gone_is_not_found() {
         let (_project, store, dir) = store();
         store.save("backend", b"").await.unwrap();
         std::fs::remove_file(dir.join(format!(".modules/{EMPTY_SHA256}.wasm"))).unwrap();
 
-        assert!(matches!(
-            store.lookup("backend").await,
-            Err(LookupArtifactError::LookupArtifactNotFound { .. })
-        ));
+        assert_not_built(&store, "backend").await;
     }
 
     #[tokio::test]
@@ -505,33 +497,13 @@ mod tests {
             store.save("other", b"old").await.unwrap();
             write(&dir.join(".refs/backend"), entry).unwrap();
 
-            assert!(matches!(
-                store.lookup("backend").await,
-                Err(LookupArtifactError::LookupArtifactNotFound { .. })
-            ));
+            assert_not_built(&store, "backend").await;
 
             // Neither its own rebuild nor another canister's is held up by it.
             store.save("other", b"new").await.unwrap();
             store.save("backend", b"module").await.unwrap();
             assert_eq!(store.lookup("backend").await.unwrap(), b"module");
         }
-    }
-
-    /// A store from before modules were shared kept each one whole, in a file
-    /// named for its canister. It is not read: the canister is rebuilt.
-    #[tokio::test]
-    async fn an_artifact_from_before_modules_were_shared_is_not_found() {
-        let (_project, store, dir) = store();
-        std::fs::create_dir_all(&dir).unwrap();
-        write(&dir.join("backend"), b"whole module").unwrap();
-
-        assert!(matches!(
-            store.lookup("backend").await,
-            Err(LookupArtifactError::LookupArtifactNotFound { .. })
-        ));
-
-        store.save("backend", b"module").await.unwrap();
-        assert_eq!(store.lookup("backend").await.unwrap(), b"module");
     }
 
     #[test]

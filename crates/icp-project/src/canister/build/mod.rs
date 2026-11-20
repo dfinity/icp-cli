@@ -23,6 +23,40 @@ pub struct Params {
     pub environment: String,
 }
 
+/// Where a build step left the module.
+///
+/// The steps of a build hand the module on through one file, [`Params::output`]:
+/// a step may write it there, or change what an earlier step wrote. A step
+/// that makes nothing, and only names a module that already exists, says where
+/// that is instead. Copying it to `output` would put the module on disk again
+/// for no reader that could not read the original — and where the disk is
+/// memory, every such copy is as large as the module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Module {
+    /// At [`Params::output`], if the build has one yet: this step wrote it
+    /// there, changed it there, or left alone what the steps before it made.
+    AtOutput,
+    /// In a file of someone else's, and not at [`Params::output`]. It replaces
+    /// whatever the steps before it made.
+    Borrowed(Borrowed),
+}
+
+/// A module in a file the build does not own: the user's own, or an entry in a
+/// cache every project shares.
+///
+/// It is read where it is and never written, moved or removed. Whoever runs
+/// the steps copies it to [`Params::output`] only if another step follows,
+/// since that step may change what it finds there; otherwise the file itself
+/// is the build's result, and any number of canisters may name the same one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Borrowed {
+    pub path: PathBuf,
+    /// The SHA-256 of the file's contents as the step read them, in lowercase
+    /// hex. The file can change after the step returns, and this is what tells
+    /// a later reader that it has.
+    pub sha256: String,
+}
+
 #[derive(Debug, Snafu)]
 pub enum BuildError {
     #[cfg(feature = "host")]
@@ -58,11 +92,12 @@ pub trait Build: Sync + Send {
         step: &BuildStep,
         params: &Params,
         reporter: &StepReporter,
-    ) -> Result<(), BuildError>;
+    ) -> Result<Module, BuildError>;
 }
 
 /// Runs each build step where it has to be run: a script step in a subprocess,
-/// a pre-built step by asking [`wasm::Fetch`] for the module.
+/// a pre-built step by asking [`wasm::Fetch`] where the module is and reading
+/// it through `files` for its hash.
 ///
 /// Only a host can run the script half, so this whole implementation is
 /// host-side; somewhere without subprocesses supplies its own [`Build`].
@@ -87,17 +122,22 @@ impl Build for Builder {
         step: &BuildStep,
         params: &Params,
         reporter: &StepReporter,
-    ) -> Result<(), BuildError> {
+    ) -> Result<Module, BuildError> {
         match step {
-            BuildStep::Prebuilt(adapter) => Ok(prebuilt::build(
-                adapter,
-                params,
-                reporter,
-                self.wasm.as_ref(),
-                self.files.as_ref(),
-            )
-            .await?),
-            BuildStep::Script(adapter) => Ok(script::build(adapter, params, reporter).await?),
+            BuildStep::Prebuilt(adapter) => Ok(Module::Borrowed(
+                prebuilt::build(
+                    adapter,
+                    params,
+                    reporter,
+                    self.wasm.as_ref(),
+                    self.files.as_ref(),
+                )
+                .await?,
+            )),
+            BuildStep::Script(adapter) => {
+                script::build(adapter, params, reporter).await?;
+                Ok(Module::AtOutput)
+            }
         }
     }
 }
@@ -115,7 +155,7 @@ impl Build for UnimplementedMockBuilder {
         _step: &BuildStep,
         _params: &Params,
         _reporter: &StepReporter,
-    ) -> Result<(), BuildError> {
+    ) -> Result<Module, BuildError> {
         unimplemented!("UnimplementedMockBuilder::build")
     }
 }

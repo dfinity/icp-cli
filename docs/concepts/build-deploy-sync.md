@@ -60,6 +60,8 @@ build:
       sha256: abc123...  # Optional integrity check
 ```
 
+A pre-built WASM is not copied into the project's `.icp/` directory. The build records where the file is — your own file, or the cached download for a `url` — together with its SHA-256, and deploying reads it from there, so any number of canisters built from one WASM share a single file. If that file changes or is removed after `icp build`, `icp canister install` refuses it and asks you to build again. A WASM is copied only when another build step follows the `pre-built` one, since that step may modify it.
+
 **Assets** — Bundle static files:
 
 ```yaml

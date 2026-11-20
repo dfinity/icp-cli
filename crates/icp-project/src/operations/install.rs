@@ -10,6 +10,7 @@ use icp_events::TaskOutcome;
 
 use crate::calls::{CanisterCalls, TypedCallError};
 use crate::operations::task::{Reporter, Task};
+use crate::store_artifact::LookupArtifactError;
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, Snafu};
 use std::sync::Arc;
@@ -50,6 +51,9 @@ pub async fn is_eop_canister(calls: &dyn CanisterCalls, canister_id: &Principal)
 pub enum InstallOperationError {
     #[snafu(display("Could not find build artifact for canister '{canister_name}'"))]
     ArtifactNotFound { canister_name: String },
+
+    #[snafu(transparent)]
+    LinkedArtifact { source: LookupArtifactError },
 
     #[snafu(display("Failed to stop canister '{canister_name}' before upgrade"))]
     StopCanister {
@@ -344,11 +348,20 @@ pub async fn install_many(
 
         futs.push_back(async move {
             let result = async {
-                let wasm = artifacts.lookup(&name).await.map_err(|_| {
-                    InstallOperationError::ArtifactNotFound {
-                        canister_name: name.clone(),
-                    }
-                })?;
+                let wasm = artifacts
+                    .lookup(&name)
+                    .await
+                    .map_err(|source| match source {
+                        // The canister was built; what it was built from is gone
+                        // or changed, and the store's own error says which file.
+                        LookupArtifactError::LookupLinkedRead { .. }
+                        | LookupArtifactError::LookupLinkedChanged { .. } => {
+                            InstallOperationError::LinkedArtifact { source }
+                        }
+                        _ => InstallOperationError::ArtifactNotFound {
+                            canister_name: name.clone(),
+                        },
+                    })?;
 
                 install_canister(
                     calls.as_ref(),

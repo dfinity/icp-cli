@@ -985,7 +985,11 @@ async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String
     // time refunded for host calls since is granted from there, and with none
     // to grant the plugin is stopped.
     let compute_limit_secs = limits.compute_secs;
-    let mut compute_deadline = epoch.load(Ordering::Relaxed) + compute_limit_secs;
+    // Saturating, so an embedder that sets an enormous limit to mean "none"
+    // gets that rather than a deadline wrapped round to the start.
+    let mut compute_deadline = epoch
+        .load(Ordering::Relaxed)
+        .saturating_add(compute_limit_secs);
     let wall_clock = limits.wall_clock;
     store.set_epoch_deadline(1);
     store.epoch_deadline_callback(move |_| {
@@ -1003,7 +1007,7 @@ async fn run_plugin(invocation: Invocation, limits: Limits) -> Result<Vec<String
                 }
                 .into());
             }
-            compute_deadline = now + extra;
+            compute_deadline = now.saturating_add(extra);
         }
         Ok(wasmtime::UpdateDeadline::Continue(1))
     });

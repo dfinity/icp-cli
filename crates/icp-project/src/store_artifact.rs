@@ -9,7 +9,7 @@ use crate::{
     fs::{
         create_dir_all,
         lock::{DirectoryStructureLock, PathsAccess},
-        read, read_dir, remove_file, rename, write, write_string,
+        read, read_dir, remove_file, rename, write_durable, write_string,
     },
     manifest::ProjectRootLocate,
     prelude::*,
@@ -161,12 +161,15 @@ impl ArtifactPaths {
         let previous = read_ref(&reference)?;
 
         let module = self.module_by_sha256(&sha256);
-        if !module.is_file() {
-            // Written beside its final name and moved into place, so a module
-            // is never there half-written: that it exists is all that is
-            // checked before the write is skipped.
+        // The write is skipped only for a module that holds these bytes, not
+        // for one that is merely there: a file damaged since it was written
+        // would otherwise outlive every rebuild.
+        if !holds(&module, &sha256)? {
+            // Written beside its final name, flushed to the disk, and only
+            // then moved into place, so a crash leaves no module half-written
+            // under its final name.
             let partial = module.with_extension("partial");
-            write(&partial, wasm).map_err(StoreCause::new)?;
+            write_durable(&partial, wasm).map_err(StoreCause::new)?;
             rename(&partial, &module).map_err(StoreCause::new)?;
         }
         write_string(&reference, &sha256).map_err(StoreCause::new)?;
@@ -205,6 +208,16 @@ impl ArtifactPaths {
         }
         Ok(false)
     }
+}
+
+/// Whether `module` is a file whose contents hash to `sha256`.
+#[cfg(feature = "host")]
+fn holds(module: &Path, sha256: &str) -> Result<bool, StoreCause> {
+    if !module.is_file() {
+        return Ok(false);
+    }
+    let contents = read(module).map_err(StoreCause::new)?;
+    Ok(hex::encode(Sha256::digest(contents)) == sha256)
 }
 
 /// The SHA-256 a canister's entry names, or `None` when there is no entry or it
@@ -487,6 +500,26 @@ mod tests {
         std::fs::remove_file(dir.join(format!(".modules/{EMPTY_SHA256}.wasm"))).unwrap();
 
         assert_not_built(&store, "backend").await;
+    }
+
+    #[tokio::test]
+    async fn a_damaged_module_is_replaced_by_a_rebuild() {
+        // Truncated, emptied, and altered without changing its length.
+        for damage in [&b"mod"[..], b"", b"modulE"] {
+            let (_project, store, dir) = store();
+            store.save("first", b"module").await.unwrap();
+            store.save("second", b"module").await.unwrap();
+            let [module] = &modules(&dir)[..] else {
+                panic!("expected one module");
+            };
+            write(&dir.join(".modules").join(module), damage).unwrap();
+
+            // One canister's rebuild puts the module right for all that share it.
+            store.save("first", b"module").await.unwrap();
+            assert_eq!(store.lookup("first").await.unwrap(), b"module");
+            assert_eq!(store.lookup("second").await.unwrap(), b"module");
+            assert_eq!(modules(&dir).len(), 1);
+        }
     }
 
     #[tokio::test]

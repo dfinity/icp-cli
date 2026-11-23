@@ -88,6 +88,16 @@ pub fn write_string(path: &Path, contents: &str) -> Result<(), IoError> {
     std::fs::write(path, contents.as_bytes()).context(IoSnafu { path })
 }
 
+/// Writes `contents` to a file and has the system flush it to the disk before
+/// returning, so that after a crash or a power loss the file holds all of
+/// `contents` whenever a later [`rename`] of it has survived.
+pub fn write_durable(path: &Path, contents: &[u8]) -> Result<(), IoError> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path).context(IoSnafu { path })?;
+    file.write_all(contents).context(IoSnafu { path })?;
+    file.sync_all().context(IoSnafu { path })
+}
+
 /// Writes `contents` to a file only its owner can read or write.
 ///
 /// On Unix the file is created `0600`, and a file that already exists is

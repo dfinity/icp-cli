@@ -10,7 +10,6 @@ use icp_events::{StepOutcome, TaskOutcome};
 
 use crate::operations::task::{Reporter, Task, TaskReporter};
 use snafu::{ResultExt, Snafu};
-use tracing::debug;
 
 #[derive(Debug, Snafu)]
 pub enum BuildOperationError {
@@ -142,12 +141,8 @@ pub async fn build_many(
 
     // Once for the whole build rather than after each save, and whether or not
     // every canister built: one that keeps failing does not hold up the rest's
-    // cleanup. A sweep that fails leaves every artifact as the build saved it
-    // and only some disk space unreclaimed, which the next build's sweep
-    // recovers, so it is no reason to fail this one.
-    if let Err(error) = artifacts.sweep().await {
-        debug!("{}", crate::error::flatten(&error));
-    }
+    // cleanup.
+    artifacts.sweep().await;
 
     if !failed.is_empty() {
         return BuildManySnafu { names: failed }.fail();
@@ -170,15 +165,13 @@ mod tests {
         canister::build::UnimplementedMockBuilder,
         files::UnimplementedMockFileSystem,
         operations::task::Reporter,
-        store_artifact::{Access, LookupArtifactError, SaveError, SweepError},
-        store_id::StoreCause,
+        store_artifact::{Access, LookupArtifactError, SaveError},
     };
 
-    /// Counts its sweeps, each of which fails if `fails` is set.
+    /// Counts its sweeps.
     #[derive(Default)]
     struct Sweeps {
         count: AtomicUsize,
-        fails: bool,
     }
 
     #[async_trait]
@@ -191,44 +184,24 @@ mod tests {
             unimplemented!()
         }
 
-        async fn sweep(&self) -> Result<(), SweepError> {
+        async fn sweep(&self) {
             self.count.fetch_add(1, Ordering::SeqCst);
-            if self.fails {
-                return Err(SweepError::SweepStore {
-                    source: StoreCause::new(std::io::Error::other("disk gone")),
-                });
-            }
-            Ok(())
         }
-    }
-
-    async fn build_nothing(artifacts: Arc<Sweeps>) {
-        build_many(
-            vec![],
-            "local",
-            Arc::new(UnimplementedMockBuilder),
-            artifacts,
-            &UnimplementedMockFileSystem,
-            &Reporter::null(),
-        )
-        .await
-        .unwrap();
     }
 
     #[tokio::test]
     async fn a_build_sweeps_the_artifact_store_once() {
         let artifacts = Arc::new(Sweeps::default());
-        build_nothing(artifacts.clone()).await;
-        assert_eq!(artifacts.count.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn a_failed_sweep_does_not_fail_the_build() {
-        let artifacts = Arc::new(Sweeps {
-            fails: true,
-            ..Default::default()
-        });
-        build_nothing(artifacts.clone()).await;
+        build_many(
+            vec![],
+            "local",
+            Arc::new(UnimplementedMockBuilder),
+            artifacts.clone(),
+            &UnimplementedMockFileSystem,
+            &Reporter::null(),
+        )
+        .await
+        .unwrap();
         assert_eq!(artifacts.count.load(Ordering::SeqCst), 1);
     }
 }

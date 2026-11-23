@@ -19,6 +19,8 @@ use async_trait::async_trait;
 #[cfg(feature = "host")]
 use sha2::{Digest, Sha256};
 use snafu::Snafu;
+#[cfg(feature = "host")]
+use tracing::warn;
 
 #[async_trait]
 /// Trait for accessing and managing canister build artifacts.
@@ -33,18 +35,13 @@ pub trait Access: Sync + Send {
     /// longer. A build calls this once, after its saves, rather than each save
     /// doing it.
     ///
+    /// It cannot fail: it only reclaims space, so every artifact is as it was
+    /// saved whether or not this manages to, and what one sweep leaves the
+    /// next removes. A store that could not do it says so in its log.
+    ///
     /// A store that keeps nothing beyond the artifacts themselves has nothing
     /// to remove, which is the default.
-    async fn sweep(&self) -> Result<(), SweepError> {
-        Ok(())
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum SweepError {
-    /// As [`SaveError::SaveStore`].
-    #[snafu(display("failed to remove unused modules from the build artifact store"))]
-    SweepStore { source: crate::store_id::StoreCause },
+    async fn sweep(&self) {}
 }
 
 #[derive(Debug, Snafu)]
@@ -371,14 +368,20 @@ impl Access for ArtifactStore {
             })
     }
 
-    async fn sweep(&self) -> Result<(), SweepError> {
-        let sweep_store = |source| SweepError::SweepStore { source };
-        self.lock()
-            .map_err(|e| sweep_store(StoreCause::new(e)))?
-            .with_write(async |store| store.sweep())
-            .await
-            .map_err(|e| sweep_store(StoreCause::new(e)))?
-            .map_err(sweep_store)
+    async fn sweep(&self) {
+        let swept = async {
+            self.lock()
+                .map_err(StoreCause::new)?
+                .with_write(async |store| store.sweep())
+                .await
+                .map_err(StoreCause::new)?
+        };
+        if let Err(error) = swept.await {
+            warn!(
+                "failed to remove unused modules from the build artifact store: {}",
+                crate::error::flatten(&error)
+            );
+        }
     }
 }
 
@@ -521,14 +524,14 @@ mod tests {
 
         // `second` still names the old module.
         store.save("first", b"new").await.unwrap();
-        store.sweep().await.unwrap();
+        store.sweep().await;
         assert_eq!(modules(&dir).len(), 2);
         assert_eq!(store.lookup("second").await.unwrap(), b"old");
 
         // A save leaves the module it replaced for the sweep.
         store.save("second", b"new").await.unwrap();
         assert_eq!(modules(&dir).len(), 2);
-        store.sweep().await.unwrap();
+        store.sweep().await;
         assert_eq!(modules(&dir).len(), 1);
         assert_eq!(store.lookup("first").await.unwrap(), b"new");
         assert_eq!(store.lookup("second").await.unwrap(), b"new");
@@ -537,7 +540,30 @@ mod tests {
     #[tokio::test]
     async fn a_sweep_of_a_store_nothing_was_saved_to_does_nothing() {
         let (_project, store, _) = store();
-        store.sweep().await.unwrap();
+        store.sweep().await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_sweep_that_cannot_read_an_entry_removes_nothing() {
+        use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+
+        let (_project, store, dir) = store();
+        store.save("first", b"one").await.unwrap();
+        store.save("second", b"two").await.unwrap();
+        // `second` names its module, but the sweep cannot find that out.
+        let entry = dir.join(".refs/second");
+        std::fs::set_permissions(&entry, Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&entry).is_ok() {
+            // Running as a user permissions do not hold back.
+            return;
+        }
+
+        store.sweep().await;
+
+        assert_eq!(modules(&dir).len(), 2);
+        std::fs::set_permissions(&entry, Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(store.lookup("second").await.unwrap(), b"two");
     }
 
     #[tokio::test]
@@ -554,7 +580,7 @@ mod tests {
         write(&dir.join(".modules/README"), b"").unwrap();
 
         store.save("third", b"one").await.unwrap();
-        store.sweep().await.unwrap();
+        store.sweep().await;
 
         let mut left = modules(&dir);
         left.retain(|name| name != "README");

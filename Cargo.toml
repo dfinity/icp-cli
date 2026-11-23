@@ -25,7 +25,7 @@ axum = "0.8"
 base64 = "0.22"
 backoff = { version = "0.4", features = ["tokio"] }
 bigdecimal = "0.4.10"
-bip32 = "0.5.0"
+bip32 = { version = "0.6.0", features = ["alloc"] }
 bollard = "0.20.2"
 byte-unit = "5.1.6"
 bytes = "1.11"
@@ -45,8 +45,8 @@ directories = "6.0.0"
 dunce = "1.0.5"
 ed25519-consensus = "2.1.0"
 crc32fast = "1.5.2"
-crypto-bigint = { version = "0.5.5", features = ["zeroize"] }
-elliptic-curve = { version = "0.13.8", features = ["sec1", "std", "pkcs8"] }
+crypto-bigint = { version = "0.7.11", features = ["zeroize"] }
+elliptic-curve = { version = "0.14.3", features = ["sec1", "std", "pkcs8"] }
 flate2 = { version = "1.1.8", default-features = false, features = ["zlib-rs"] }
 futures = "0.3.31"
 glob = "0.3.2"
@@ -55,11 +55,11 @@ hex = { version = "0.4.3", features = ["serde"] }
 hmac = { version = "0.13", features = ["zeroize"] }
 hybrid-array = { version = "0.4.10", features = ["zeroize"] }
 httptest = "0.16.3"
-ic-agent = { version = "0.49.1" }
+ic-agent = { version = "0.50.0" }
 ic-ed25519 = "0.6.0"
 ic-ledger-types = "0.16.0"
 ic-management-canister-types = { version = "0.9.0" }
-ic-utils = { version = "0.49.1" }
+ic-utils = { version = "0.50.0" }
 icp-app = { path = "crates/icp-app" }
 # Published crates. The four below go to crates.io with each icp-cli release,
 # for other tools to build on, so each carries the version a registry build
@@ -78,14 +78,14 @@ icp-events = { path = "crates/icp-events", version = "=0.1.0" }
 icp-extension = { path = "crates/icp-extension" }
 icp-project = { path = "crates/icp-project", version = "=0.1.0" }
 icp-sync-plugin = { path = "crates/icp-sync-plugin", version = "=0.1.0" }
-ic-identity-hsm = "0.49.1"
+ic-identity-hsm = "0.50.0"
 icrc-ledger-types = "0.1.10"
 indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.18.0"
 indoc = "2.0.6"
 itertools = "0.14.0"
 jsonschema = "0.45.0"
-k256 = { version = "0.13.4", features = ["pem", "pkcs8", "std"] }
+k256 = { version = "0.14.0", features = ["pem", "pkcs8", "std"] }
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 lazy_static = "1.5.0"
 mockall = "0.14.0"
@@ -96,18 +96,18 @@ open = "5"
 qrcode = { version = "0.14.1", default-features = false }
 num-integer = "0.1.46"
 num-traits = "0.2.19"
-p256 = { version = "0.13.2", features = ["pem", "pkcs8", "std"] }
+p256 = { version = "0.14.0", features = ["pem", "pkcs8", "std"] }
 pathdiff = { version = "0.2.3", features = ["camino"] }
 predicates = "3"
 pem = "3.0.5"
 phf = { version = "0.13.1", features = ["macros"] }
-pkcs8 = { version = "0.10.2", features = ["encryption", "std"] }
+pkcs8 = { version = "0.11.0", features = ["encryption", "std"] }
 rand = "0.10.1"
 regex = "1.12.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "stream"] }
 schemars = { version = "1.0.4", features = ["derive", "indexmap2", "url2"] }
-scrypt = "0.11.0"
-sec1 = { version = "0.7.3", features = ["pkcs8"] }
+scrypt = "0.12.0"
+sec1 = { version = "0.8.1", features = ["der"] }
 send_ctrlc = "0.6"
 semver = "1"
 serial_test = { version = "3.2.0", features = ["file_locks"] }

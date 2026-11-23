@@ -166,10 +166,13 @@ The plugin runs with a deliberately narrow capability surface.
 |----------|-------|
 | Wasm call-stack depth | 512 KiB |
 | Pure compute time | 60 seconds (default) |
-| Linear memory | wasm32 address space (≤ 4 GiB) |
+| Wall-clock time | none (default) |
+| Linear memory, all memories together | 4 GiB (default) |
 | stdout / stderr per stream | 1 MiB |
 
 The compute-time budget defaults to 60 seconds and is overridable with the [`ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_compute_limit_secs) environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (`canister-call`, `canister-metadata-section`) to return over the network is **not** charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.
+
+Whoever runs icp can also bound the run as a whole: [`ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`](../reference/environment-variables.md#icp_cli_plugin_wall_clock_limit_secs) limits its wall-clock time, canister calls included, and [`ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB`](../reference/environment-variables.md#icp_cli_plugin_memory_limit_mib) its memory. These are settings of the machine, not of the project, and a manifest cannot change them.
 
 ## Next Steps
 

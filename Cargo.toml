@@ -138,6 +138,9 @@ wasmparser = "0.255.0"
 # text format, WASI preview 1 and 3. Nothing here turns any of those on.
 wasmtime = { version = "49.0.5", default-features = false, features = [
   "anyhow",
+  # The sync-plugin runtime runs plugins async, so a deadline can cancel one
+  # that is blocked in a host call.
+  "async",
   "backtrace",
   "component-model",
   "cranelift",

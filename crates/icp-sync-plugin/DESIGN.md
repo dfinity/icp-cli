@@ -99,7 +99,7 @@ a compute deadline, and a filesystem to open the declared paths on.
 `dirs`, `files`, `fields`, `host_canister_id` (the canister being synced),
 `calls` (how canister calls and metadata reads are made — see below), `proxy`,
 `environment`, `api_url` and `gateway_url` (where the network is reached —
-informational, since the guest has no sockets), `compute_limit_secs`, the
+informational, since the guest has no sockets), the
 exposed `canister_ids` table, the `callable: CallableCanisters` enforcement
 set, and `reporter`. The identity surfaced to the plugin is `calls.caller()`,
 and `proxy` is informational too: which canister a call is routed through is
@@ -266,15 +266,51 @@ The compute-time limit is enforced with wasmtime's epoch interruption: a
 background thread calls `Engine::increment_epoch` once per second, and the store
 deadline (`set_epoch_deadline`) bounds pure wasm execution. Because a host
 call blocks the guest while the host awaits the network, both imports record the
-elapsed time (`refund_host_call_time`) and the `epoch_deadline_callback` grants
+elapsed time (`host_call_finished`) and the `epoch_deadline_callback` grants
 it back via `epoch_extension` — so network latency is *not* charged against the
 limit. The
 ticker thread stops when its RAII guard drops at the end of the run.
 
-The deadline in seconds is the invocation's `compute_limit_secs`. `icp-project`
-resolves it from the `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS` environment variable,
-defaulting to `DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS` (60) when unset — before the
-wasm is fetched, so a malformed value fails fast.
+The callback runs at every tick the guest's wasm runs through
+(`UpdateDeadline::Continue(1)`), so that it can also check the wall clock. The
+compute budget is kept as a deadline on a mirror of the engine's epoch, which
+the ticker increments alongside it since wasmtime keeps its own count private:
+once the epoch reaches the deadline, the time refunded since is granted from
+there, and with none to grant the run traps. This is the same budget a deadline
+set on the store directly would give.
+
+The deadline in seconds is `Limits::compute_secs` (60 by default), set with the
+other limits below.
+
+### Limits set by whoever runs the plugin
+
+`Wasmtime::new(Limits)` holds every run to limits the embedder chooses and the
+project cannot: the compute budget above, memory, and wall-clock time. The CLI
+reads them from `ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS`,
+`ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB` and `ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS`
+when it starts, and a malformed value fails it there. Their defaults stop
+nothing a plugin can do today.
+
+- **Memory.** The store's limiter (`UsageTracker`) sums linear memory and table
+  elements across the whole component, since a component may hold many core
+  modules each with memories of their own, and refuses growth past the limit
+  as a failed `memory.grow` would. It also caps the number of instances,
+  memories and tables. A run that fails after a refusal is reported as
+  `MemoryLimit`.
+- **Wall clock.** The runtime is async (`imports`/`exports: async`,
+  `add_to_linker_async`), so a plugin waiting on the host — a canister call, or
+  a WASI sleep or poll, which wasmtime-wasi otherwise blocks the thread on —
+  is a pending future. `run_plugin` wraps everything that runs the plugin's
+  code — instantiation, whose start functions are guest code too, and `exec` —
+  in `tokio::time::timeout`, which drops it at the limit; the deadline callback
+  covers a plugin computing past it, which never yields. Output capture is
+  finalized and the run's usage logged after either, so a run stopped at the
+  limit is accounted for like any other.
+- Either limit is reported as itself whether it was hit while instantiating or
+  while running `exec`.
+
+The run still takes its thread with `block_in_place`: compiling the component
+and running wasm between host calls both block it.
 
 ### stdio capture
 

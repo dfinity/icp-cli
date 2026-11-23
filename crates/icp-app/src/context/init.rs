@@ -54,6 +54,52 @@ pub enum ContextInitError {
 
     #[snafu(display("failed to confine the untrusted project to its directory"))]
     Confine { source: RootError },
+
+    #[snafu(display("{var} must be a whole number of at least 1, but is '{value}'"))]
+    InvalidPluginLimit { var: &'static str, value: String },
+}
+
+/// Seconds of compute one sync plugin run may use, time spent waiting on
+/// canister calls not counted. Unset, the runtime's default (60).
+pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
+
+/// The most linear memory one sync plugin may use, in MiB. Unset, the
+/// runtime's default (4 GiB).
+pub const PLUGIN_MEMORY_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB";
+
+/// The longest one sync plugin may run, in seconds, canister calls included.
+/// Unset, there is no limit.
+pub const PLUGIN_WALL_CLOCK_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS";
+
+/// The limits sync plugins are held to on this machine, read from the
+/// environment. A malformed value fails rather than falling back, so a typo
+/// cannot leave an operator believing a limit is in force when it is not.
+fn plugin_limits() -> Result<icp_sync_plugin::Limits, ContextInitError> {
+    let mut limits = icp_sync_plugin::Limits::default();
+    if let Some(secs) = positive_env(PLUGIN_COMPUTE_LIMIT_ENV)? {
+        limits.compute_secs = secs;
+    }
+    if let Some(mib) = positive_env(PLUGIN_MEMORY_LIMIT_ENV)? {
+        limits.memory_bytes = mib.saturating_mul(1 << 20);
+    }
+    if let Some(secs) = positive_env(PLUGIN_WALL_CLOCK_LIMIT_ENV)? {
+        limits.wall_clock = Some(Duration::from_secs(secs));
+    }
+    Ok(limits)
+}
+
+fn positive_env(var: &'static str) -> Result<Option<u64>, ContextInitError> {
+    let Some(raw) = std::env::var_os(var) else {
+        return Ok(None);
+    };
+    match raw.to_str().map(|value| value.trim().parse::<u64>()) {
+        Some(Ok(value)) if value >= 1 => Ok(Some(value)),
+        _ => InvalidPluginLimitSnafu {
+            var,
+            value: raw.to_string_lossy().into_owned(),
+        }
+        .fail(),
+    }
 }
 
 /// With `untrusted`, the project is read through a filesystem confined to
@@ -169,7 +215,7 @@ pub fn initialize(
     // Canister syncer
     let syncer = Arc::new(Syncer::host(
         wasm.clone(),
-        Arc::new(icp_sync_plugin::Wasmtime),
+        Arc::new(icp_sync_plugin::Wasmtime::new(plugin_limits()?)),
     ));
 
     // Project loader

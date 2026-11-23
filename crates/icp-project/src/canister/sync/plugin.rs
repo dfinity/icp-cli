@@ -16,16 +16,6 @@ use crate::{
 
 use super::Params;
 
-/// Default seconds of compute a plugin may use. This is a runaway guard, not a
-/// security boundary: it protects the machine running `icp sync` from a plugin
-/// that never terminates. Legitimately heavy plugins (e.g.
-/// brotli-compressing a large asset bundle) can exceed it, especially on
-/// slower CI runners, so it is overridable via the [`PLUGIN_COMPUTE_LIMIT_ENV`]
-/// environment variable.
-pub const DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS: u64 = 60;
-/// Environment variable that overrides [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
-pub const PLUGIN_COMPUTE_LIMIT_ENV: &str = "ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS";
-
 /// A path a step declared, tagged with the map key it was declared under.
 ///
 /// The key is `None` when the manifest wrote the setting as a plain list, and
@@ -91,9 +81,6 @@ pub struct Invocation {
     pub api_url: Url,
     /// The network's HTTP gateway, when it exposes one.
     pub gateway_url: Option<Url>,
-    /// Compute-time budget in seconds. See
-    /// [`DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS`].
-    pub compute_limit_secs: u64,
     /// The project's canister ID table for this environment, as exposed to the
     /// plugin. Same-project canisters appear both under their fully-qualified
     /// key and their bare local name.
@@ -168,11 +155,6 @@ pub enum PluginError {
     #[snafu(transparent)]
     Wasm { source: wasm::FetchError },
 
-    #[snafu(display(
-        "invalid {PLUGIN_COMPUTE_LIMIT_ENV} value '{value}': expected a positive integer number of seconds"
-    ))]
-    InvalidComputeLimit { value: String },
-
     #[snafu(display("failed to run plugin"))]
     RunPlugin { source: RunError },
 
@@ -183,42 +165,6 @@ pub enum PluginError {
     UnknownCallableCanister { name: String, environment: String },
 }
 
-/// Resolve the plugin compute-time limit, honoring the
-/// [`PLUGIN_COMPUTE_LIMIT_ENV`] override. Fails loudly on a malformed value so
-/// a typo doesn't silently fall back to the default and leave the caller
-/// wondering why their raised limit had no effect.
-#[cfg(feature = "host")]
-fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
-    match std::env::var(PLUGIN_COMPUTE_LIMIT_ENV) {
-        Ok(value) => parse_compute_limit(&value),
-        // Only a genuinely unset variable selects the default. A variable that
-        // is present but not valid UTF-8 is a malformed value, not "unset", so
-        // it must be rejected to honor the fail-loudly contract.
-        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS),
-        Err(std::env::VarError::NotUnicode(raw)) => InvalidComputeLimitSnafu {
-            value: raw.to_string_lossy().into_owned(),
-        }
-        .fail(),
-    }
-}
-
-/// The default, where there are no environment variables to override it with.
-#[cfg(not(feature = "host"))]
-fn resolve_compute_limit_secs() -> Result<u64, PluginError> {
-    Ok(DEFAULT_PLUGIN_COMPUTE_LIMIT_SECS)
-}
-
-#[cfg(feature = "host")]
-fn parse_compute_limit(value: &str) -> Result<u64, PluginError> {
-    match value.trim().parse::<u64>() {
-        Ok(secs) if secs >= 1 => Ok(secs),
-        _ => InvalidComputeLimitSnafu {
-            value: value.to_owned(),
-        }
-        .fail(),
-    }
-}
-
 pub(super) async fn sync(
     adapter: &Adapter,
     params: &Params,
@@ -227,11 +173,6 @@ pub(super) async fn sync(
     wasm_fetch: &dyn wasm::Fetch,
     plugins: &dyn Run,
 ) -> Result<Vec<String>, PluginError> {
-    // 0. Resolve the compute-time limit up front so a malformed
-    //    ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS fails fast — before downloading the
-    //    wasm or touching the network — rather than after doing that work.
-    let compute_limit_secs = resolve_compute_limit_secs()?;
-
     // 1. Determine the on-disk path for the wasm. The runner needs a path, not raw bytes.
     //    - Local: sha256 is verified if present, then the original path is returned.
     //    - Remote: downloaded to cache (sha256 required, enforced at parse time) and the
@@ -275,7 +216,6 @@ pub(super) async fn sync(
             environment: params.environment.clone(),
             api_url: params.urls.api_url.clone(),
             gateway_url: params.urls.http_gateway_url.clone(),
-            compute_limit_secs,
             canister_ids,
             callable,
             reporter: reporter.clone(),
@@ -364,27 +304,6 @@ fn resolve_callable(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(feature = "host")]
-    #[test]
-    fn parse_compute_limit_accepts_positive_integers() {
-        assert_eq!(parse_compute_limit("300").unwrap(), 300);
-        // Surrounding whitespace is tolerated.
-        assert_eq!(parse_compute_limit("  42 ").unwrap(), 42);
-    }
-
-    #[cfg(feature = "host")]
-    #[test]
-    fn parse_compute_limit_rejects_invalid_values() {
-        for bad in ["0", "abc", "30O", "-5", "1.5", ""] {
-            let err =
-                parse_compute_limit(bad).expect_err(&format!("expected '{bad}' to be rejected"));
-            assert!(
-                matches!(err, PluginError::InvalidComputeLimit { .. }),
-                "unexpected error for '{bad}': {err}"
-            );
-        }
-    }
 
     use crate::manifest::adapter::prebuilt::{LocalSource, SourceField};
     use crate::network::NetworkUrls;

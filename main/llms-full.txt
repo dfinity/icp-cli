@@ -1217,7 +1217,7 @@ icp-cli creates a `.icp/` directory in your project root to store build artifact
 ```
 <project-root>/.icp/
 ├── cache/                    # Temporary/recreatable data
-│   ├── artifacts/            # Built WASM files
+│   ├── artifacts/            # Built WASM files, each distinct one stored once
 │   ├── mappings/             # Canister IDs for managed networks
 │   └── networks/             # Local network state
 └── data/

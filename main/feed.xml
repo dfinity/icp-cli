@@ -6,9 +6,17 @@
     <description>Command-line tool for developing and deploying applications on the Internet Computer Protocol (ICP).</description>
     <language>en-us</language>
     <copyright>DFINITY Foundation</copyright>
-    <lastBuildDate>Mon, 23 Nov 2026 09:14:46 GMT</lastBuildDate>
-    <pubDate>Mon, 23 Nov 2026 09:13:40 GMT</pubDate>
+    <lastBuildDate>Mon, 23 Nov 2026 23:34:46 GMT</lastBuildDate>
+    <pubDate>Mon, 23 Nov 2026 23:33:37 GMT</pubDate>
     <atom:link href="https://cli.internetcomputer.org/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Project Model</title>
+      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
+      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
+      <pubDate>Mon, 23 Nov 2026 23:33:37 GMT</pubDate>
+      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
+      <dc:creator>DFINITY Foundation</dc:creator>
+    </item>
     <item>
       <title>Environment Variables Reference</title>
       <link>https://cli.internetcomputer.org/main/reference/environment-variables/</link>
@@ -39,14 +47,6 @@
       <description>Auto-generated reference of all icp CLI commands, subcommands, and flags with usage examples.</description>
       <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
       <guid isPermaLink="true">https://cli.internetcomputer.org/main/reference/cli/</guid>
-      <dc:creator>DFINITY Foundation</dc:creator>
-    </item>
-    <item>
-      <title>Project Model</title>
-      <link>https://cli.internetcomputer.org/main/concepts/project-model/</link>
-      <description>How icp-cli discovers, loads, and consolidates project configuration from icp.yaml and related manifest files.</description>
-      <pubDate>Wed, 11 Nov 2026 20:59:51 GMT</pubDate>
-      <guid isPermaLink="true">https://cli.internetcomputer.org/main/concepts/project-model/</guid>
       <dc:creator>DFINITY Foundation</dc:creator>
     </item>
     <item>

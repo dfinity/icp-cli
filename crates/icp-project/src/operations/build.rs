@@ -139,9 +139,69 @@ pub async fn build_many(
         }
     }
 
+    // Once for the whole build rather than after each save, and whether or not
+    // every canister built: one that keeps failing does not hold up the rest's
+    // cleanup.
+    artifacts.sweep().await;
+
     if !failed.is_empty() {
         return BuildManySnafu { names: failed }.fail();
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use async_trait::async_trait;
+
+    use super::build_many;
+    use crate::{
+        canister::build::UnimplementedMockBuilder,
+        files::UnimplementedMockFileSystem,
+        operations::task::Reporter,
+        store_artifact::{Access, LookupArtifactError, SaveError},
+    };
+
+    /// Counts its sweeps.
+    #[derive(Default)]
+    struct Sweeps {
+        count: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl Access for Sweeps {
+        async fn save(&self, _name: &str, _wasm: &[u8]) -> Result<(), SaveError> {
+            unimplemented!()
+        }
+
+        async fn lookup(&self, _name: &str) -> Result<Vec<u8>, LookupArtifactError> {
+            unimplemented!()
+        }
+
+        async fn sweep(&self) {
+            self.count.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_build_sweeps_the_artifact_store_once() {
+        let artifacts = Arc::new(Sweeps::default());
+        build_many(
+            vec![],
+            "local",
+            Arc::new(UnimplementedMockBuilder),
+            artifacts.clone(),
+            &UnimplementedMockFileSystem,
+            &Reporter::null(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(artifacts.count.load(Ordering::SeqCst), 1);
+    }
 }

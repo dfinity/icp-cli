@@ -1,21 +1,26 @@
-#[cfg(feature = "host")]
-use std::sync::Arc;
 #[cfg(any(test, feature = "test-util"))]
 use std::{collections::HashMap, sync::Mutex};
+#[cfg(feature = "host")]
+use std::{collections::HashSet, sync::Arc};
 
 #[cfg(feature = "host")]
 use crate::{
     CACHE_DIR, ICP_BASE,
     fs::{
+        create_dir_all,
         lock::{DirectoryStructureLock, PathsAccess},
-        read, write,
+        read, read_dir, remove_file, rename, write_durable, write_string,
     },
     manifest::ProjectRootLocate,
     prelude::*,
     store_id::StoreCause,
 };
 use async_trait::async_trait;
+#[cfg(feature = "host")]
+use sha2::{Digest, Sha256};
 use snafu::Snafu;
+#[cfg(feature = "host")]
+use tracing::warn;
 
 #[async_trait]
 /// Trait for accessing and managing canister build artifacts.
@@ -25,6 +30,18 @@ pub trait Access: Sync + Send {
 
     /// Lookup a canister artifact (WASM) from the store.
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError>;
+
+    /// Remove what the store holds that no canister's artifact needs any
+    /// longer. A build calls this once, after its saves, rather than each save
+    /// doing it.
+    ///
+    /// It cannot fail: it only reclaims space, so every artifact is as it was
+    /// saved whether or not this manages to, and what one sweep leaves the
+    /// next removes. A store that could not do it says so in its log.
+    ///
+    /// A store that keeps nothing beyond the artifacts themselves has nothing
+    /// to remove, which is the default.
+    async fn sweep(&self) {}
 }
 
 #[derive(Debug, Snafu)]
@@ -63,6 +80,23 @@ pub enum LookupArtifactError {
     },
 }
 
+/// The project's build artifacts, under `.icp/cache/artifacts`.
+///
+/// Each distinct module is kept once, named by its SHA-256, and a canister's
+/// entry is a small file naming the module it was last built to:
+///
+/// ```text
+/// artifacts/
+/// ├── .modules/<sha256>.wasm    one per distinct module
+/// └── .refs/<canister>          the SHA-256 of that canister's module
+/// ```
+///
+/// Canisters built to the same bytes — several frontends on one asset canister,
+/// say — share the one file, and a rebuild that changes nothing writes no
+/// module. A [sweep](Access::sweep), which a build ends with, removes the
+/// modules no entry names. An entry is only ever replaced, never removed: the
+/// store is not told which canisters a project has, so one dropped from it
+/// keeps its entry, and with it its module.
 #[cfg(feature = "host")]
 pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
@@ -110,9 +144,126 @@ fn artifact_name_overflow(name: &str) -> Option<usize> {
 
 #[cfg(feature = "host")]
 impl ArtifactPaths {
-    fn artifact_by_name(&self, name: &str) -> PathBuf {
-        self.dir.join(sanitize_artifact_name(name))
+    // Both directories are named with a leading `.`, which no canister name
+    // may contain: a store from before modules were shared kept each module in
+    // a file named for its canister, directly in the store, and neither
+    // directory can be where one of those files is.
+    fn modules_dir(&self) -> PathBuf {
+        self.dir.join(".modules")
     }
+
+    fn refs_dir(&self) -> PathBuf {
+        self.dir.join(".refs")
+    }
+
+    /// Where the module with this SHA-256 is kept.
+    fn module_by_sha256(&self, sha256: &str) -> PathBuf {
+        self.modules_dir().join(format!("{sha256}.wasm"))
+    }
+
+    /// The file naming the module a canister was last built to.
+    fn ref_by_name(&self, name: &str) -> PathBuf {
+        self.refs_dir().join(sanitize_artifact_name(name))
+    }
+
+    /// Record `wasm` as the module `name` was built to.
+    fn save(&self, name: &str, wasm: &[u8]) -> Result<(), StoreCause> {
+        let sha256 = hex::encode(Sha256::digest(wasm));
+
+        create_dir_all(&self.modules_dir()).map_err(StoreCause::new)?;
+        create_dir_all(&self.refs_dir()).map_err(StoreCause::new)?;
+
+        let module = self.module_by_sha256(&sha256);
+        // The write is skipped only for a module that holds these bytes, not
+        // for one that is merely there: a file damaged since it was written
+        // would otherwise outlive every rebuild.
+        if !holds(&module, &sha256)? {
+            // Written beside its final name, flushed to the disk, and only
+            // then moved into place, so a crash leaves no module half-written
+            // under its final name.
+            let partial = module.with_extension("partial");
+            write_durable(&partial, wasm).map_err(StoreCause::new)?;
+            rename(&partial, &module).map_err(StoreCause::new)?;
+        }
+        write_string(&self.ref_by_name(name), &sha256).map_err(StoreCause::new)
+    }
+
+    /// Remove the modules no canister's entry names, and any module left
+    /// half-written.
+    ///
+    /// Every module is looked at rather than only those a save replaced,
+    /// because that is not the only way one loses its last entry: the entry
+    /// may have been damaged, or a build may have died before getting here. A
+    /// `.partial` is always stale — this holds the store's write lock, as a
+    /// save does, so none is being written now.
+    fn sweep(&self) -> Result<(), StoreCause> {
+        // Nothing has been saved yet.
+        if !self.modules_dir().is_dir() {
+            return Ok(());
+        }
+        let mut named = HashSet::new();
+        if self.refs_dir().is_dir() {
+            for reference in read_dir(&self.refs_dir()).map_err(StoreCause::new)? {
+                named.extend(read_ref(&reference)?);
+            }
+        }
+        for file in read_dir(&self.modules_dir()).map_err(StoreCause::new)? {
+            let stale = match (file.file_stem(), file.extension()) {
+                (Some(sha256), Some("wasm")) => !named.contains(sha256),
+                (_, Some("partial")) => true,
+                // Not something the store wrote.
+                _ => false,
+            };
+            if stale && file.is_file() {
+                remove_file(&file).map_err(StoreCause::new)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The module `name` was last built to, if the store has one.
+    fn lookup(&self, name: &str) -> Result<Option<Vec<u8>>, StoreCause> {
+        let Some(sha256) = read_ref(&self.ref_by_name(name))? else {
+            return Ok(None);
+        };
+        let module = self.module_by_sha256(&sha256);
+        if !module.is_file() {
+            return Ok(None);
+        }
+        read(&module).map(Some).map_err(StoreCause::new)
+    }
+}
+
+/// Whether `module` is a file whose contents hash to `sha256`.
+#[cfg(feature = "host")]
+fn holds(module: &Path, sha256: &str) -> Result<bool, StoreCause> {
+    if !module.is_file() {
+        return Ok(false);
+    }
+    let contents = read(module).map_err(StoreCause::new)?;
+    Ok(hex::encode(Sha256::digest(contents)) == sha256)
+}
+
+/// The SHA-256 a canister's entry names, or `None` when there is no entry or it
+/// does not hold one — which is read as nothing having been built, since a
+/// rebuild is what puts it right.
+#[cfg(feature = "host")]
+fn read_ref(reference: &Path) -> Result<Option<String>, StoreCause> {
+    if !reference.is_file() {
+        return Ok(None);
+    }
+    // Read as bytes: an entry that is not text is one that does not hold a
+    // SHA-256, not a failure to read it.
+    let contents = read(reference).map_err(StoreCause::new)?;
+    let Ok(contents) = std::str::from_utf8(&contents) else {
+        return Ok(None);
+    };
+    let sha256 = contents.trim();
+    let is_sha256 = sha256.len() == 64
+        && sha256
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    Ok(is_sha256.then(|| sha256.to_owned()))
 }
 
 #[cfg(feature = "host")]
@@ -183,11 +334,13 @@ impl Access for ArtifactStore {
         }
         self.lock()
             .map_err(|e| save_store(name, e))?
-            .with_write(async |store| {
-                write(&store.artifact_by_name(name), wasm).map_err(|e| save_store(name, e))
-            })
+            .with_write(async |store| store.save(name, wasm))
             .await
             .map_err(|e| save_store(name, e))?
+            .map_err(|source| SaveError::SaveStore {
+                source,
+                name: name.to_owned(),
+            })
     }
 
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError> {
@@ -200,20 +353,35 @@ impl Access for ArtifactStore {
         }
         self.lock()
             .map_err(|e| lookup_store(name, e))?
-            .with_read(async |store| {
-                let artifact = store.artifact_by_name(name);
-                // Not Found
-                if !artifact.exists() {
-                    return LookupArtifactNotFoundSnafu {
-                        name: name.to_owned(),
-                    }
-                    .fail();
-                }
-
-                read(&artifact).map_err(|e| lookup_store(name, e))
-            })
+            .with_read(async |store| store.lookup(name))
             .await
             .map_err(|e| lookup_store(name, e))?
+            .map_err(|source| LookupArtifactError::LookupStore {
+                source,
+                name: name.to_owned(),
+            })?
+            .ok_or_else(|| {
+                LookupArtifactNotFoundSnafu {
+                    name: name.to_owned(),
+                }
+                .build()
+            })
+    }
+
+    async fn sweep(&self) {
+        let swept = async {
+            self.lock()
+                .map_err(StoreCause::new)?
+                .with_write(async |store| store.sweep())
+                .await
+                .map_err(StoreCause::new)?
+        };
+        if let Err(error) = swept.await {
+            warn!(
+                "failed to remove unused modules from the build artifact store: {}",
+                crate::error::flatten(&error)
+            );
+        }
     }
 }
 
@@ -263,7 +431,213 @@ impl Access for MockInMemoryArtifactStore {
 
 #[cfg(all(test, feature = "host"))]
 mod tests {
-    use super::{artifact_name_overflow, sanitize_artifact_name};
+    use std::sync::Arc;
+
+    use camino_tempfile::Utf8TempDir;
+
+    use super::{
+        Access, ArtifactStore, LookupArtifactError, artifact_name_overflow, sanitize_artifact_name,
+    };
+    use crate::{
+        fs::{read_dir, read_to_string, write},
+        manifest::{ProjectRootLocate, ProjectRootLocateError},
+        prelude::*,
+    };
+
+    struct Root(PathBuf);
+
+    impl ProjectRootLocate for Root {
+        fn locate(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.0.clone())
+        }
+
+        fn locate_member(&self) -> Result<PathBuf, ProjectRootLocateError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    /// A store in a project of its own, and the directory it keeps artifacts in.
+    fn store() -> (Utf8TempDir, ArtifactStore, PathBuf) {
+        let project = Utf8TempDir::new().unwrap();
+        let store = ArtifactStore::new(Arc::new(Root(project.path().to_owned())));
+        let dir = project.path().join(".icp/cache/artifacts");
+        (project, store, dir)
+    }
+
+    async fn assert_not_built(store: &ArtifactStore, name: &str) {
+        assert!(matches!(
+            store.lookup(name).await,
+            Err(LookupArtifactError::LookupArtifactNotFound { .. })
+        ));
+    }
+
+    /// The file names under the store's `.modules` directory.
+    fn modules(dir: &Path) -> Vec<String> {
+        read_dir(&dir.join(".modules"))
+            .unwrap()
+            .iter()
+            .map(|p| p.file_name().unwrap().to_owned())
+            .collect()
+    }
+
+    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    #[tokio::test]
+    async fn a_canister_never_built_is_not_found() {
+        let (_project, store, _) = store();
+        store.save("backend", b"module").await.unwrap();
+        assert_not_built(&store, "frontend").await;
+    }
+
+    #[tokio::test]
+    async fn canisters_built_to_the_same_bytes_share_one_module() {
+        let (_project, store, dir) = store();
+        store.save("first", b"module").await.unwrap();
+        store.save("second", b"module").await.unwrap();
+        store.save("vendor/dep:third", b"module").await.unwrap();
+        // A rebuild that changes nothing.
+        store.save("first", b"module").await.unwrap();
+
+        assert_eq!(modules(&dir).len(), 1);
+        for name in ["first", "second", "vendor/dep:third"] {
+            assert_eq!(store.lookup(name).await.unwrap(), b"module");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_module_is_named_by_its_sha256() {
+        let (_project, store, dir) = store();
+        store.save("backend", b"").await.unwrap();
+
+        assert_eq!(modules(&dir), [format!("{EMPTY_SHA256}.wasm")]);
+        assert_eq!(
+            read_to_string(&dir.join(".refs/backend")).unwrap(),
+            EMPTY_SHA256
+        );
+    }
+
+    #[tokio::test]
+    async fn a_sweep_removes_a_replaced_module_once_nothing_names_it() {
+        let (_project, store, dir) = store();
+        store.save("first", b"old").await.unwrap();
+        store.save("second", b"old").await.unwrap();
+
+        // `second` still names the old module.
+        store.save("first", b"new").await.unwrap();
+        store.sweep().await;
+        assert_eq!(modules(&dir).len(), 2);
+        assert_eq!(store.lookup("second").await.unwrap(), b"old");
+
+        // A save leaves the module it replaced for the sweep.
+        store.save("second", b"new").await.unwrap();
+        assert_eq!(modules(&dir).len(), 2);
+        store.sweep().await;
+        assert_eq!(modules(&dir).len(), 1);
+        assert_eq!(store.lookup("first").await.unwrap(), b"new");
+        assert_eq!(store.lookup("second").await.unwrap(), b"new");
+    }
+
+    #[tokio::test]
+    async fn a_sweep_of_a_store_nothing_was_saved_to_does_nothing() {
+        let (_project, store, _) = store();
+        store.sweep().await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_sweep_that_cannot_read_an_entry_removes_nothing() {
+        use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+
+        let (_project, store, dir) = store();
+        store.save("first", b"one").await.unwrap();
+        store.save("second", b"two").await.unwrap();
+        // `second` names its module, but the sweep cannot find that out.
+        let entry = dir.join(".refs/second");
+        std::fs::set_permissions(&entry, Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&entry).is_ok() {
+            // Running as a user permissions do not hold back.
+            return;
+        }
+
+        store.sweep().await;
+
+        assert_eq!(modules(&dir).len(), 2);
+        std::fs::set_permissions(&entry, Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(store.lookup("second").await.unwrap(), b"two");
+    }
+
+    #[tokio::test]
+    async fn a_sweep_removes_modules_no_entry_names_and_half_written_ones() {
+        let (_project, store, dir) = store();
+        store.save("first", b"one").await.unwrap();
+        store.save("second", b"two").await.unwrap();
+        // An entry damaged after its module was written no longer names it.
+        write(&dir.join(".refs/second"), b"not a sha256").unwrap();
+        // A module whose entry was never written, and one never finished.
+        write(&dir.join(format!(".modules/{EMPTY_SHA256}.wasm")), b"").unwrap();
+        write(&dir.join(".modules/abc.partial"), b"half").unwrap();
+        // Something the store did not put there.
+        write(&dir.join(".modules/README"), b"").unwrap();
+
+        store.save("third", b"one").await.unwrap();
+        store.sweep().await;
+
+        let mut left = modules(&dir);
+        left.retain(|name| name != "README");
+        let [module] = &left[..] else {
+            panic!("expected one module, found {left:?}");
+        };
+        assert!(module.ends_with(".wasm"));
+        assert_eq!(store.lookup("first").await.unwrap(), b"one");
+        assert_eq!(store.lookup("third").await.unwrap(), b"one");
+        assert!(dir.join(".modules/README").is_file());
+    }
+
+    #[tokio::test]
+    async fn an_entry_whose_module_is_gone_is_not_found() {
+        let (_project, store, dir) = store();
+        store.save("backend", b"").await.unwrap();
+        std::fs::remove_file(dir.join(format!(".modules/{EMPTY_SHA256}.wasm"))).unwrap();
+
+        assert_not_built(&store, "backend").await;
+    }
+
+    #[tokio::test]
+    async fn a_damaged_module_is_replaced_by_a_rebuild() {
+        // Truncated, emptied, and altered without changing its length.
+        for damage in [&b"mod"[..], b"", b"modulE"] {
+            let (_project, store, dir) = store();
+            store.save("first", b"module").await.unwrap();
+            store.save("second", b"module").await.unwrap();
+            let [module] = &modules(&dir)[..] else {
+                panic!("expected one module");
+            };
+            write(&dir.join(".modules").join(module), damage).unwrap();
+
+            // One canister's rebuild puts the module right for all that share it.
+            store.save("first", b"module").await.unwrap();
+            assert_eq!(store.lookup("first").await.unwrap(), b"module");
+            assert_eq!(store.lookup("second").await.unwrap(), b"module");
+            assert_eq!(modules(&dir).len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn an_entry_that_is_not_a_sha256_is_not_found_and_a_rebuild_replaces_it() {
+        for entry in [&b"../../../somewhere"[..], &[0xff, 0xfe, 0x00]] {
+            let (_project, store, dir) = store();
+            store.save("backend", b"module").await.unwrap();
+            store.save("other", b"old").await.unwrap();
+            write(&dir.join(".refs/backend"), entry).unwrap();
+
+            assert_not_built(&store, "backend").await;
+
+            // Neither its own rebuild nor another canister's is held up by it.
+            store.save("other", b"new").await.unwrap();
+            store.save("backend", b"module").await.unwrap();
+            assert_eq!(store.lookup("backend").await.unwrap(), b"module");
+        }
+    }
 
     #[test]
     fn plain_names_unchanged() {

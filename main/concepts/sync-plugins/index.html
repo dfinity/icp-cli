@@ -340,8 +340,13 @@
 
 
 
-<table><thead><tr><th>Resource</th><th>Limit</th></tr></thead><tbody><tr><td>Wasm call-stack depth</td><td>512 KiB</td></tr><tr><td>Pure compute time</td><td>60 seconds (default)</td></tr><tr><td>Linear memory</td><td>wasm32 address space (≤ 4 GiB)</td></tr><tr><td>stdout / stderr per stream</td><td>1 MiB</td></tr></tbody></table>
+
+
+
+
+<table><thead><tr><th>Resource</th><th>Limit</th></tr></thead><tbody><tr><td>Wasm call-stack depth</td><td>512 KiB</td></tr><tr><td>Pure compute time</td><td>60 seconds (default)</td></tr><tr><td>Wall-clock time</td><td>none (default)</td></tr><tr><td>Linear memory, all memories together</td><td>4 GiB (default)</td></tr><tr><td>stdout / stderr per stream</td><td>1 MiB</td></tr></tbody></table>
 <p>The compute-time budget defaults to 60 seconds and is overridable with the <a href="/main/reference/environment-variables/#icp_cli_plugin_compute_limit_secs"><code>ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS</code></a> environment variable — raise it for compute-heavy plugins (e.g. compressing a large asset bundle) that legitimately need more time, especially on slower CI runners. The budget counts only wasm instruction execution: time spent waiting for a host call (<code>canister-call</code>, <code>canister-metadata-section</code>) to return over the network is <strong>not</strong> charged against it — the host grants that time back when the call completes. A plugin can make as many canister calls as it needs without the network latency eating into its compute limit.</p>
+<p>Whoever runs icp can also bound the run as a whole: <a href="/main/reference/environment-variables/#icp_cli_plugin_wall_clock_limit_secs"><code>ICP_CLI_PLUGIN_WALL_CLOCK_LIMIT_SECS</code></a> limits its wall-clock time, canister calls included, and <a href="/main/reference/environment-variables/#icp_cli_plugin_memory_limit_mib"><code>ICP_CLI_PLUGIN_MEMORY_LIMIT_MIB</code></a> its memory. These are settings of the machine, not of the project, and a manifest cannot change them.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="/main/guides/writing-sync-plugins/">Writing a Sync Plugin</a> — Author your own plugin in Rust</li>

@@ -1,7 +1,7 @@
-#[cfg(feature = "host")]
-use std::sync::Arc;
 #[cfg(any(test, feature = "test-util"))]
 use std::{collections::HashMap, sync::Mutex};
+#[cfg(feature = "host")]
+use std::{collections::HashSet, sync::Arc};
 
 #[cfg(feature = "host")]
 use crate::{
@@ -79,8 +79,9 @@ pub enum LookupArtifactError {
 ///
 /// Canisters built to the same bytes — several frontends on one asset canister,
 /// say — share the one file, and a rebuild that changes nothing writes no
-/// module. A module is removed when the last canister naming it is rebuilt to
-/// something else.
+/// module. Every save removes the modules no entry names. An entry is only ever
+/// replaced, never removed: the store is not told which canisters a project
+/// has, so one dropped from it keeps its entry, and with it its module.
 #[cfg(feature = "host")]
 pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
@@ -157,9 +158,6 @@ impl ArtifactPaths {
         create_dir_all(&self.modules_dir()).map_err(StoreCause::new)?;
         create_dir_all(&self.refs_dir()).map_err(StoreCause::new)?;
 
-        let reference = self.ref_by_name(name);
-        let previous = read_ref(&reference)?;
-
         let module = self.module_by_sha256(&sha256);
         // The write is skipped only for a module that holds these bytes, not
         // for one that is merely there: a file damaged since it was written
@@ -172,18 +170,35 @@ impl ArtifactPaths {
             write_durable(&partial, wasm).map_err(StoreCause::new)?;
             rename(&partial, &module).map_err(StoreCause::new)?;
         }
-        write_string(&reference, &sha256).map_err(StoreCause::new)?;
+        write_string(&self.ref_by_name(name), &sha256).map_err(StoreCause::new)?;
 
-        // Only this save can have orphaned the module it replaced.
-        if let Some(previous) = previous.filter(|previous| *previous != sha256)
-            && !self.is_referenced(&previous)?
-        {
-            let orphan = self.module_by_sha256(&previous);
-            if orphan.is_file() {
-                remove_file(&orphan).map_err(StoreCause::new)?;
+        self.sweep()
+    }
+
+    /// Remove the modules no canister's entry names, and any module left
+    /// half-written.
+    ///
+    /// Every module is looked at rather than only the one this save replaced,
+    /// because that is not the only way one loses its last entry: the entry
+    /// may have been damaged, or an earlier save may have died after writing
+    /// its entry and before getting here. A `.partial` is always stale — saves
+    /// hold the store's lock, so none is being written now.
+    fn sweep(&self) -> Result<(), StoreCause> {
+        let mut named = HashSet::new();
+        for reference in read_dir(&self.refs_dir()).map_err(StoreCause::new)? {
+            named.extend(read_ref(&reference)?);
+        }
+        for file in read_dir(&self.modules_dir()).map_err(StoreCause::new)? {
+            let stale = match (file.file_stem(), file.extension()) {
+                (Some(sha256), Some("wasm")) => !named.contains(sha256),
+                (_, Some("partial")) => true,
+                // Not something the store wrote.
+                _ => false,
+            };
+            if stale && file.is_file() {
+                remove_file(&file).map_err(StoreCause::new)?;
             }
         }
-
         Ok(())
     }
 
@@ -197,16 +212,6 @@ impl ArtifactPaths {
             return Ok(None);
         }
         read(&module).map(Some).map_err(StoreCause::new)
-    }
-
-    /// Whether any canister's entry names this module.
-    fn is_referenced(&self, sha256: &str) -> Result<bool, StoreCause> {
-        for reference in read_dir(&self.refs_dir()).map_err(StoreCause::new)? {
-            if read_ref(&reference)?.as_deref() == Some(sha256) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 }
 
@@ -491,6 +496,33 @@ mod tests {
         assert_eq!(modules(&dir).len(), 1);
         assert_eq!(store.lookup("first").await.unwrap(), b"new");
         assert_eq!(store.lookup("second").await.unwrap(), b"new");
+    }
+
+    #[tokio::test]
+    async fn a_save_removes_modules_no_entry_names_and_half_written_ones() {
+        let (_project, store, dir) = store();
+        store.save("first", b"one").await.unwrap();
+        store.save("second", b"two").await.unwrap();
+        // An entry damaged after its module was written no longer names it.
+        write(&dir.join(".refs/second"), b"not a sha256").unwrap();
+        // A module whose entry was never written, and one never finished.
+        write(&dir.join(format!(".modules/{EMPTY_SHA256}.wasm")), b"").unwrap();
+        write(&dir.join(".modules/abc.partial"), b"half").unwrap();
+        // Something the store did not put there.
+        write(&dir.join(".modules/README"), b"").unwrap();
+
+        // Any canister's save clears them, not only one that replaces an entry.
+        store.save("third", b"one").await.unwrap();
+
+        let mut left = modules(&dir);
+        left.retain(|name| name != "README");
+        let [module] = &left[..] else {
+            panic!("expected one module, found {left:?}");
+        };
+        assert!(module.ends_with(".wasm"));
+        assert_eq!(store.lookup("first").await.unwrap(), b"one");
+        assert_eq!(store.lookup("third").await.unwrap(), b"one");
+        assert!(dir.join(".modules/README").is_file());
     }
 
     #[tokio::test]

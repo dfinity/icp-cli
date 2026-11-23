@@ -32,9 +32,14 @@ pub enum BuildOperationError {
 }
 
 #[derive(Debug, Snafu)]
-#[snafu(display("Canister(s) {names:?} failed to build."))]
-pub struct BuildManyError {
-    names: Vec<String>,
+pub enum BuildManyError {
+    #[snafu(display("Canister(s) {names:?} failed to build."))]
+    BuildMany { names: Vec<String> },
+
+    #[snafu(transparent)]
+    SweepArtifacts {
+        source: crate::store_artifact::SweepError,
+    },
 }
 
 pub async fn build(
@@ -139,9 +144,92 @@ pub async fn build_many(
         }
     }
 
+    // Once for the whole build rather than after each save, and whether or not
+    // every canister built: one that keeps failing does not hold up the rest's
+    // cleanup. A failed build is still the error to report.
+    let swept = artifacts.sweep().await;
+
     if !failed.is_empty() {
         return BuildManySnafu { names: failed }.fail();
     }
 
-    Ok(())
+    Ok(swept?)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use async_trait::async_trait;
+
+    use super::{BuildManyError, build_many};
+    use crate::{
+        canister::build::UnimplementedMockBuilder,
+        files::UnimplementedMockFileSystem,
+        operations::task::Reporter,
+        store_artifact::{Access, LookupArtifactError, SaveError, SweepError},
+        store_id::StoreCause,
+    };
+
+    /// Counts its sweeps, each of which fails if `fails` is set.
+    #[derive(Default)]
+    struct Sweeps {
+        count: AtomicUsize,
+        fails: bool,
+    }
+
+    #[async_trait]
+    impl Access for Sweeps {
+        async fn save(&self, _name: &str, _wasm: &[u8]) -> Result<(), SaveError> {
+            unimplemented!()
+        }
+
+        async fn lookup(&self, _name: &str) -> Result<Vec<u8>, LookupArtifactError> {
+            unimplemented!()
+        }
+
+        async fn sweep(&self) -> Result<(), SweepError> {
+            self.count.fetch_add(1, Ordering::SeqCst);
+            if self.fails {
+                return Err(SweepError::SweepStore {
+                    source: StoreCause::new(std::io::Error::other("disk gone")),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    async fn build_nothing(artifacts: Arc<Sweeps>) -> Result<(), BuildManyError> {
+        build_many(
+            vec![],
+            "local",
+            Arc::new(UnimplementedMockBuilder),
+            artifacts,
+            &UnimplementedMockFileSystem,
+            &Reporter::null(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn a_build_sweeps_the_artifact_store_once() {
+        let artifacts = Arc::new(Sweeps::default());
+        build_nothing(artifacts.clone()).await.unwrap();
+        assert_eq!(artifacts.count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_failed_sweep_fails_the_build() {
+        let artifacts = Arc::new(Sweeps {
+            fails: true,
+            ..Default::default()
+        });
+        assert!(matches!(
+            build_nothing(artifacts).await,
+            Err(BuildManyError::SweepArtifacts { .. })
+        ));
+    }
 }

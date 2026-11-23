@@ -28,6 +28,23 @@ pub trait Access: Sync + Send {
 
     /// Lookup a canister artifact (WASM) from the store.
     async fn lookup(&self, name: &str) -> Result<Vec<u8>, LookupArtifactError>;
+
+    /// Remove what the store holds that no canister's artifact needs any
+    /// longer. A build calls this once, after its saves, rather than each save
+    /// doing it.
+    ///
+    /// A store that keeps nothing beyond the artifacts themselves has nothing
+    /// to remove, which is the default.
+    async fn sweep(&self) -> Result<(), SweepError> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum SweepError {
+    /// As [`SaveError::SaveStore`].
+    #[snafu(display("failed to remove unused modules from the build artifact store"))]
+    SweepStore { source: crate::store_id::StoreCause },
 }
 
 #[derive(Debug, Snafu)]
@@ -79,9 +96,10 @@ pub enum LookupArtifactError {
 ///
 /// Canisters built to the same bytes — several frontends on one asset canister,
 /// say — share the one file, and a rebuild that changes nothing writes no
-/// module. Every save removes the modules no entry names. An entry is only ever
-/// replaced, never removed: the store is not told which canisters a project
-/// has, so one dropped from it keeps its entry, and with it its module.
+/// module. A [sweep](Access::sweep), which a build ends with, removes the
+/// modules no entry names. An entry is only ever replaced, never removed: the
+/// store is not told which canisters a project has, so one dropped from it
+/// keeps its entry, and with it its module.
 #[cfg(feature = "host")]
 pub struct ArtifactStore {
     project_root_locate: Arc<dyn ProjectRootLocate>,
@@ -170,23 +188,27 @@ impl ArtifactPaths {
             write_durable(&partial, wasm).map_err(StoreCause::new)?;
             rename(&partial, &module).map_err(StoreCause::new)?;
         }
-        write_string(&self.ref_by_name(name), &sha256).map_err(StoreCause::new)?;
-
-        self.sweep()
+        write_string(&self.ref_by_name(name), &sha256).map_err(StoreCause::new)
     }
 
     /// Remove the modules no canister's entry names, and any module left
     /// half-written.
     ///
-    /// Every module is looked at rather than only the one this save replaced,
+    /// Every module is looked at rather than only those a save replaced,
     /// because that is not the only way one loses its last entry: the entry
-    /// may have been damaged, or an earlier save may have died after writing
-    /// its entry and before getting here. A `.partial` is always stale — saves
-    /// hold the store's lock, so none is being written now.
+    /// may have been damaged, or a build may have died before getting here. A
+    /// `.partial` is always stale — this holds the store's write lock, as a
+    /// save does, so none is being written now.
     fn sweep(&self) -> Result<(), StoreCause> {
+        // Nothing has been saved yet.
+        if !self.modules_dir().is_dir() {
+            return Ok(());
+        }
         let mut named = HashSet::new();
-        for reference in read_dir(&self.refs_dir()).map_err(StoreCause::new)? {
-            named.extend(read_ref(&reference)?);
+        if self.refs_dir().is_dir() {
+            for reference in read_dir(&self.refs_dir()).map_err(StoreCause::new)? {
+                named.extend(read_ref(&reference)?);
+            }
         }
         for file in read_dir(&self.modules_dir()).map_err(StoreCause::new)? {
             let stale = match (file.file_stem(), file.extension()) {
@@ -348,6 +370,16 @@ impl Access for ArtifactStore {
                 .build()
             })
     }
+
+    async fn sweep(&self) -> Result<(), SweepError> {
+        let sweep_store = |source| SweepError::SweepStore { source };
+        self.lock()
+            .map_err(|e| sweep_store(StoreCause::new(e)))?
+            .with_write(async |store| store.sweep())
+            .await
+            .map_err(|e| sweep_store(StoreCause::new(e)))?
+            .map_err(sweep_store)
+    }
 }
 
 #[cfg(any(test, feature = "test-util"))]
@@ -482,24 +514,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_replaced_module_is_removed_once_nothing_names_it() {
+    async fn a_sweep_removes_a_replaced_module_once_nothing_names_it() {
         let (_project, store, dir) = store();
         store.save("first", b"old").await.unwrap();
         store.save("second", b"old").await.unwrap();
 
         // `second` still names the old module.
         store.save("first", b"new").await.unwrap();
+        store.sweep().await.unwrap();
         assert_eq!(modules(&dir).len(), 2);
         assert_eq!(store.lookup("second").await.unwrap(), b"old");
 
+        // A save leaves the module it replaced for the sweep.
         store.save("second", b"new").await.unwrap();
+        assert_eq!(modules(&dir).len(), 2);
+        store.sweep().await.unwrap();
         assert_eq!(modules(&dir).len(), 1);
         assert_eq!(store.lookup("first").await.unwrap(), b"new");
         assert_eq!(store.lookup("second").await.unwrap(), b"new");
     }
 
     #[tokio::test]
-    async fn a_save_removes_modules_no_entry_names_and_half_written_ones() {
+    async fn a_sweep_of_a_store_nothing_was_saved_to_does_nothing() {
+        let (_project, store, _) = store();
+        store.sweep().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_sweep_removes_modules_no_entry_names_and_half_written_ones() {
         let (_project, store, dir) = store();
         store.save("first", b"one").await.unwrap();
         store.save("second", b"two").await.unwrap();
@@ -511,8 +553,8 @@ mod tests {
         // Something the store did not put there.
         write(&dir.join(".modules/README"), b"").unwrap();
 
-        // Any canister's save clears them, not only one that replaces an entry.
         store.save("third", b"one").await.unwrap();
+        store.sweep().await.unwrap();
 
         let mut left = modules(&dir);
         left.retain(|name| name != "README");

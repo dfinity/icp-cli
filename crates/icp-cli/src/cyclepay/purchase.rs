@@ -9,12 +9,12 @@
 //!
 //! Nothing here prints. [`wait_for_order`] tells its caller each
 //! [`PurchasePhase`] the order enters, and hands the last order it saw back
-//! inside its error when it is interrupted, so the caller can say where it
-//! stands.
+//! inside its error when it ends unsettled, so the caller can say where the
+//! order stands.
 
 use std::future::Future;
 use std::pin::pin;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use candid::Principal;
 use ic_agent::AgentError;
@@ -25,7 +25,10 @@ use icp_project::prelude::IC_ROOT_KEY;
 use num_traits::ToPrimitive;
 use snafu::{OptionExt, Snafu};
 use std::fmt;
-use tokio::{select, time::sleep};
+use tokio::{
+    select,
+    time::{Instant, sleep, timeout},
+};
 use url::Url;
 
 use super::interface::{
@@ -200,6 +203,16 @@ pub enum CyclesPurchaseError {
         caller: Principal,
     },
 
+    #[snafu(display(
+        "cycles gateway {gateway} did not answer a poll of order {id} within {}s",
+        after.as_secs()
+    ))]
+    PollTimedOut {
+        gateway: Principal,
+        id: String,
+        after: Duration,
+    },
+
     #[snafu(display("interrupted while waiting for order {}", order.id))]
     Interrupted { order: Box<OrderView> },
 
@@ -207,6 +220,18 @@ pub enum CyclesPurchaseError {
         "gave up waiting for order {} (last status: {})", order.id, order.status_text()
     ))]
     WaitTimedOut { order: Box<OrderView> },
+
+    /// Polls kept failing until the wait gave up. `order` is the order as
+    /// last seen, and `source` the last poll's failure.
+    #[snafu(display(
+        "lost contact with cycles gateway {gateway} while waiting for order {}",
+        order.id
+    ))]
+    ContactLost {
+        gateway: Principal,
+        order: Box<OrderView>,
+        source: Box<CyclesPurchaseError>,
+    },
 }
 
 /// What the buyer asked for: a sum to spend, or cycles to receive.
@@ -576,16 +601,21 @@ async fn fetch_order(
     Ok(view.map(OrderView::read))
 }
 
-/// Bounds on [`wait_for_order`].
+/// Bounds on [`wait_for_order`]. The two that judge silence count time, not
+/// polls, so that they hold whether a network refuses a poll at once or
+/// stalls it until [`WaitOptions::poll_timeout`].
 #[derive(Clone, Debug)]
 pub struct WaitOptions {
     /// Time between polls.
     pub poll_interval: Duration,
-    /// Consecutive polls that said nothing of the order (unanswered,
-    /// refused, or finding none) before the wait gives up: five minutes of
-    /// them at [`POLL_INTERVAL`], longer than CyclePay's backend is stopped
-    /// for during an upgrade.
-    pub max_consecutive_misses: u32,
+    /// How long one poll may go unanswered before it counts as failed. A
+    /// connection that stalls rather than drops would otherwise hold the
+    /// wait for as long as the HTTP client allows a call, six minutes.
+    pub poll_timeout: Duration,
+    /// How long since a poll last found the order before the wait gives up
+    /// on it: polls unanswered, refused, or answered with no order. Longer
+    /// than CyclePay's backend is stopped for during an upgrade.
+    pub give_up_after: Duration,
     /// How long the order is waited on in one run. Its deadline is a day
     /// away; a buyer who has not paid by now is told where it stands.
     pub timeout: Duration,
@@ -595,7 +625,8 @@ impl Default for WaitOptions {
     fn default() -> Self {
         Self {
             poll_interval: POLL_INTERVAL,
-            max_consecutive_misses: 100,
+            poll_timeout: Duration::from_secs(10),
+            give_up_after: Duration::from_secs(5 * 60),
             timeout: Duration::from_secs(60 * 60),
         }
     }
@@ -651,13 +682,16 @@ impl<F: FnMut(PurchasePhase)> Phases<F> {
 /// `interrupt` is raced against every poll as well as the sleep between
 /// them, so an interrupt lands even while a call is stalled.
 ///
-/// A poll that says nothing of the order is tried again, up to
-/// [`WaitOptions::max_consecutive_misses`] in a row: one the network never
-/// answered, one the backend refused (as it does for a few minutes during
-/// an upgrade), or one answered `null` (a replica that has not caught up
-/// with a new order, or an unpaid order forgotten once it expired). A
-/// terminal status is a success here whatever it is — a refund is an answer
-/// — and the caller decides what each one means.
+/// A poll that says nothing of the order is tried again: one the network
+/// never answered, one the backend refused (as it does for a few minutes
+/// during an upgrade), or one answered `null` (a replica that has not caught
+/// up with a new order, or an unpaid order forgotten once it expired). A poll
+/// gets [`WaitOptions::poll_timeout`] to answer. Once the polls have said
+/// nothing of the order for [`WaitOptions::give_up_after`], the wait gives
+/// up: with [`CyclesPurchaseError::ContactLost`], carrying the order as last
+/// seen, if the last poll failed, and [`CyclesPurchaseError::OrderNotFound`]
+/// if it was answered. A terminal status is a success here whatever it is
+/// (a refund is an answer), and the caller decides what each one means.
 pub async fn wait_for_order(
     calls: &dyn CanisterCalls,
     gateway: &Gateway,
@@ -683,11 +717,16 @@ pub async fn wait_for_order(
             .map_or(Some(CardOrderStatus::AwaitingPayment), |o| o.status),
     );
     let mut last = initial;
-    let mut misses = 0u32;
     let started = Instant::now();
+    // When a poll last found the order.
+    let mut found = started;
+    // What the last poll said, when it said nothing of the order: a
+    // failure, or `None` for an answer with no order in it. Judged only
+    // against `found`, so one that found it leaves this stale.
+    let mut missed: Option<Option<CyclesPurchaseError>> = None;
 
-    let interrupted = |last: Option<OrderView>| {
-        let order = last.unwrap_or_else(|| OrderView {
+    let known = |last: Option<OrderView>| {
+        last.unwrap_or_else(|| OrderView {
             id: id.to_owned(),
             status: Some(CardOrderStatus::AwaitingPayment),
             amount: Money::from_minor_units(0, Currency::Usd),
@@ -699,48 +738,72 @@ pub async fn wait_for_order(
             refunded: None,
             detail: None,
             destination: None,
-        });
+        })
+    };
+    let interrupted = |last: Option<OrderView>| {
         InterruptedSnafu {
-            order: Box::new(order),
+            order: Box::new(known(last)),
         }
         .fail()
     };
+    // Given up on: out of contact if the last poll failed; not found if the
+    // gateway answered that it has no such order.
+    let gave_up = |last: Option<OrderView>, missed: Option<CyclesPurchaseError>| match missed {
+        Some(source) => Err(CyclesPurchaseError::ContactLost {
+            gateway: gateway.canister,
+            order: Box::new(known(last)),
+            source: Box::new(source),
+        }),
+        None => OrderNotFoundSnafu {
+            gateway: gateway.canister,
+            id,
+            caller: calls.caller(),
+        }
+        .fail(),
+    };
 
     loop {
+        let poll = timeout(options.poll_timeout, fetch_order(calls, gateway, id));
         let polled = select! {
-            polled = fetch_order(calls, gateway, id) => polled,
+            biased;
             _ = &mut interrupt => return interrupted(last),
+            polled = poll => polled.unwrap_or_else(|_| {
+                PollTimedOutSnafu {
+                    gateway: gateway.canister,
+                    id,
+                    after: options.poll_timeout,
+                }
+                .fail()
+            }),
         };
         match polled {
             Ok(Some(order)) => {
-                misses = 0;
+                found = Instant::now();
                 if order.is_settled() {
                     return Ok(order);
                 }
                 phases.enter(order.status);
-                if started.elapsed() > options.timeout {
-                    return WaitTimedOutSnafu {
-                        order: Box::new(order),
-                    }
-                    .fail();
-                }
                 last = Some(order);
             }
-            Ok(None) | Err(_) if misses < options.max_consecutive_misses => misses += 1,
-            Ok(None) => {
-                return OrderNotFoundSnafu {
-                    gateway: gateway.canister,
-                    id,
-                    caller: calls.caller(),
-                }
-                .fail();
+            Ok(None) => missed = Some(None),
+            Err(error) => missed = Some(Some(error)),
+        }
+        // Both limits are judged after every poll, answered or not, so that
+        // each holds while the gateway is out of reach.
+        if let Some(missed) = missed.take_if(|_| found.elapsed() > options.give_up_after) {
+            return gave_up(last, missed);
+        }
+        if started.elapsed() > options.timeout {
+            return WaitTimedOutSnafu {
+                order: Box::new(known(last)),
             }
-            Err(error) => return Err(error),
+            .fail();
         }
 
         select! {
-            _ = sleep(options.poll_interval) => {}
+            biased;
             _ = &mut interrupt => return interrupted(last),
+            _ = sleep(options.poll_interval) => {}
         }
     }
 }

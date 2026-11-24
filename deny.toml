@@ -17,11 +17,6 @@ unmaintained = "none"
 # Not a vulnerability, and usually clears on the next `cargo update`.
 yanked = "warn"
 ignore = [
-  # crypto-bigint 0.5 has no patched release, and ic-agent's elliptic-curve
-  # 0.13 stack pins it. A timing side channel is a remote risk for a local CLI
-  # that signs only with the user's own keys. Remove once ic-agent ships the
-  # 0.14 stack (dfinity/agent-rs#745) and icp-cli moves to it.
-  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by ic-agent; fix in dfinity/agent-rs#745" },
   # zstd 0.13 and zstd-safe 7 have no patched release on their line, and
   # wasmtime's cache crate requires `zstd = "0.13"`; the patched versions are a
   # semver-major bump, and as of 2026-10-26 no wasmtime release or open PR moves

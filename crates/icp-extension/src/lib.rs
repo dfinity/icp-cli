@@ -13,7 +13,7 @@ mod validate;
 use serde::{Deserialize, Serialize};
 
 pub use runtime::{DescribeError, RunError, Terminal, describe, run};
-pub use validate::{InvalidInfo, RESERVED_LONGS, RESERVED_SHORTS, validate};
+pub use validate::{InvalidInfo, RESERVED_LONGS, RESERVED_SHORTS, escape_unprintable, validate};
 
 /// Which flag set icp-cli attaches to a command. See `standard-opt`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

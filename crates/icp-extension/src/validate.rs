@@ -58,6 +58,12 @@ pub enum InvalidInfo {
     ))]
     ManagementCanister,
 
+    #[snafu(display(
+        "the {field} contains a control or bidirectional-formatting character, \
+         which could rewrite what the terminal shows"
+    ))]
+    UnprintableText { field: String },
+
     #[snafu(display("'{segment}' in command '{path}' is not a valid command name"))]
     CommandName { path: String, segment: String },
 
@@ -131,6 +137,45 @@ fn is_arg_name(s: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
+/// A character that could make the terminal show something other than the
+/// text: C0/C1 controls (escape sequences, carriage return, backspace…) and
+/// the Unicode bidirectional overrides, embeddings, isolates and marks.
+fn is_unprintable(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
+}
+
+/// Refuse free text the extension chose that `icp` prints: a label or summary
+/// carrying escape sequences could erase lines of the install prompt, a ledger
+/// and its warning among them. `multiline` lets `\n` through, for help text.
+fn ensure_printable(
+    text: &str,
+    multiline: bool,
+    field: impl FnOnce() -> String,
+) -> Result<(), InvalidInfo> {
+    ensure!(
+        !text
+            .chars()
+            .any(|c| is_unprintable(c) && !(multiline && c == '\n')),
+        UnprintableTextSnafu { field: field() }
+    );
+    Ok(())
+}
+
+/// `text` with every character `validate` would refuse in it escaped, for
+/// printing what an extension declared before `validate` checked for them.
+pub fn escape_unprintable(text: &str) -> String {
+    text.chars()
+        .map(|c| match is_unprintable(c) {
+            true => c.escape_unicode().to_string(),
+            false => c.to_string(),
+        })
+        .collect()
+}
+
 /// Check what an extension declared. Whether its name collides with a
 /// built-in command is for the caller to check, which knows the built-ins.
 pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
@@ -148,6 +193,12 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
             .any(|c| c.id == candid::Principal::management_canister()),
         ManagementCanisterSnafu
     );
+    ensure_printable(&info.summary, false, || "summary".into())?;
+    for canister in &info.canisters {
+        ensure_printable(&canister.label, false, || {
+            format!("label of canister {}", canister.id)
+        })?;
+    }
 
     let mut paths = BTreeSet::new();
     for command in &info.commands {
@@ -168,6 +219,14 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
             paths.insert(&command.path),
             DuplicateCommandSnafu { path: &path }
         );
+        ensure_printable(&command.about, true, || {
+            format!("description of command '{path}'")
+        })?;
+        if let Some(network) = &command.default_network {
+            ensure_printable(network, false, || {
+                format!("default network of command '{path}'")
+            })?;
+        }
 
         let mut names = BTreeSet::new();
         let mut flags = BTreeSet::new();
@@ -195,6 +254,17 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
                     arg: name
                 }
             );
+            let field = |what: &str| format!("{what} of argument '{name}' of command '{path}'");
+            ensure_printable(&arg.help, true, || field("help"))?;
+            if let Some(value_name) = &arg.value_name {
+                ensure_printable(value_name, false, || field("value name"))?;
+            }
+            if let Some(default) = &arg.default_value {
+                ensure_printable(default, false, || field("default value"))?;
+            }
+            for value in &arg.possible_values {
+                ensure_printable(value, false, || field("possible value"))?;
+            }
             if let Some(long) = &arg.long {
                 ensure!(
                     is_arg_name(long),
@@ -486,6 +556,71 @@ mod tests {
             validate(&bad),
             Err(InvalidInfo::ManagementCanister)
         ));
+    }
+
+    #[test]
+    fn text_that_could_rewrite_the_terminal_is_refused() {
+        // Erase the line, move up, erase that one too: hides the line above.
+        let hide = "rate\x1b[2K\x1b[1A\x1b[2K\r";
+        let canister = |label: &str| crate::AllowedCanister {
+            id: candid::Principal::anonymous(),
+            label: label.into(),
+        };
+
+        let mut bad = info(vec![]);
+        bad.canisters = vec![canister("ledger"), canister(hide)];
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+
+        let mut bad = info(vec![]);
+        bad.canisters = vec![canister("ICP \u{202E}regdel")];
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+
+        let mut bad = info(vec![]);
+        bad.summary = hide.into();
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+
+        let mut arg = option("x", Some("x"), None, ArgKind::Value);
+        arg.help = hide.into();
+        let bad = info(vec![command(&["x"], vec![arg.clone()])]);
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+
+        let mut bad = info(vec![command(&["x"], vec![])]);
+        bad.commands[0].about = "fine\nthen\rnot".into();
+        assert!(matches!(
+            validate(&bad),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+
+        // A line break in help text is fine; in a label it is not.
+        arg.help = "First line.\nSecond line, with ünïcödé.".into();
+        let mut good = info(vec![command(&["x"], vec![arg])]);
+        good.canisters = vec![canister("Exchange rate canister")];
+        validate(&good).unwrap();
+        good.canisters = vec![canister("two\nlines")];
+        assert!(matches!(
+            validate(&good),
+            Err(InvalidInfo::UnprintableText { .. })
+        ));
+    }
+
+    #[test]
+    fn unprintable_text_is_escaped_for_display() {
+        assert_eq!(
+            escape_unprintable("rate\x1b[2K\r \u{202E}x ünï"),
+            "rate\\u{1b}[2K\\u{d} \\u{202e}x ünï"
+        );
     }
 
     #[test]

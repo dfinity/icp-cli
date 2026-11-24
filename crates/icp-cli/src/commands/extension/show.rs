@@ -26,6 +26,9 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
     }
 
     let info = &installed.info;
+    // An extension installed before `validate` refused escape sequences may
+    // still carry them; escape rather than let them rewrite this listing.
+    let text = icp_extension::escape_unprintable;
     let state = match icp_app::extension::intact(&installed) {
         true => "",
         false => {
@@ -35,7 +38,9 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
     println!("Name:       {}", installed.name);
     println!(
         "Extension:  {} {} — {}",
-        info.name, info.version, info.summary
+        info.name,
+        info.version,
+        text(&info.summary)
     );
     println!("Source:     {}", installed.source);
     println!("SHA-256:    {}{state}", installed.sha256);
@@ -46,7 +51,7 @@ pub(crate) async fn exec(ctx: &Context, args: &ShowArgs) -> Result<(), anyhow::E
         false => {
             println!("Calls on mainnet:");
             for canister in &info.canisters {
-                println!("  {}  {}", canister.id, canister.label);
+                println!("  {}  {}", canister.id, text(&canister.label));
             }
         }
     }

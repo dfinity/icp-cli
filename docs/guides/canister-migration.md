@@ -134,7 +134,7 @@ icp canister create --detached -n ic --subnet <target-subnet-id>
 
 Note the canister ID from the output — you'll use it in all subsequent steps. Add `--quiet` to print just the canister ID (useful for scripting).
 
-Top up the target canister with enough cycles for ongoing operation, since the source canister's cycles will be burned during the ID migration:
+Top up the target canister with enough cycles for ongoing operation, since the source canister's cycles will be burned during the ID migration. The ID migration also requires the target to hold enough cycles to stay above its freezing threshold for 12 hours:
 
 ```bash
 icp canister top-up <target-id> --amount 5T -n ic
@@ -217,7 +217,7 @@ This command:
 4. Initiates the migration through the NNS migration canister
 5. Polls migration status until complete
 
-> **Cycles warning:** The source canister requires a minimum cycle balance for migration. **All remaining cycles on the source canister are burned** when it is deleted — they are not transferred to the target. If your source canister has a large cycle balance, consider reducing it before migrating. The command will warn you if the balance is high enough to warrant attention.
+> **Cycles warning:** The source canister needs 10T cycles for the migration, plus enough to stay above its freezing threshold for 12 hours. The target canister needs enough to stay above its freezing threshold for 12 hours. **All remaining cycles on the source canister are burned** when it is deleted — they are not transferred to the target. If your source canister has a large cycle balance, consider reducing it before migrating. The command will warn you if the balance is high enough to warrant attention.
 
 ### 6. Wait for Completion
 
@@ -299,10 +299,14 @@ icp canister snapshot delete <target-id> <snapshot-id> -n ic
 
 **Insufficient cycles**
 
-Top up the source canister to meet the minimum balance required for migration:
+The error names the canister that is short, the balance it has and the balance it needs. The source canister needs 10T cycles for the migration, plus enough to stay above its freezing threshold for 12 hours; the target canister needs enough to stay above its freezing threshold for 12 hours. The amount that takes depends on the canister's idle burn rate and freezing threshold, both shown by `icp canister status`. Top up the canister that is short:
 
 ```bash
+# Source canister
 icp canister top-up my-canister --amount 1T -e ic
+
+# Target canister
+icp canister top-up <target-id> --amount 1T -n ic
 ```
 
 **Migration timed out**

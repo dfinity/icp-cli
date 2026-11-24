@@ -1,7 +1,7 @@
 [package]
 name = "icp-events"
 # Not the CLI's version: see "Published crates" in the workspace Cargo.toml.
-version = "0.1.0"
+version = "0.2.0"
 edition = { workspace = true }
 license = { workspace = true }
 description = "Typed progress events that icp-cli's operations report and its renderers draw."

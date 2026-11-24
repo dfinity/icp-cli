@@ -256,13 +256,14 @@ pub fn validate(info: &Info) -> Result<(), InvalidInfo> {
             );
             let field = |what: &str| format!("{what} of argument '{name}' of command '{path}'");
             ensure_printable(&arg.help, true, || field("help"))?;
-            for value in arg
-                .value_name
-                .iter()
-                .chain(&arg.default_value)
-                .chain(&arg.possible_values)
-            {
-                ensure_printable(value, false, || field("value name or possible value"))?;
+            if let Some(value_name) = &arg.value_name {
+                ensure_printable(value_name, false, || field("value name"))?;
+            }
+            if let Some(default) = &arg.default_value {
+                ensure_printable(default, false, || field("default value"))?;
+            }
+            for value in &arg.possible_values {
+                ensure_printable(value, false, || field("possible value"))?;
             }
             if let Some(long) = &arg.long {
                 ensure!(

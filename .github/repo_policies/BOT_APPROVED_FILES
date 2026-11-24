@@ -12,3 +12,7 @@ CHANGELOG.md
 Cargo.toml
 Cargo.lock
 docs-site/versions.json
+crates/icp-canister-interfaces/Cargo.toml
+crates/icp-events/Cargo.toml
+crates/icp-project/Cargo.toml
+crates/icp-sync-plugin/Cargo.toml
